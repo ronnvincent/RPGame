@@ -268,12 +268,53 @@ export class DialogueSystem {
         animation: bossBannerSlide 3.5s forwards ease-in-out;
       }
 
-      @keyframes bossBannerSlide {
-        0% { transform: translateY(-40px) scale(0.9); opacity: 0; }
-        15% { transform: translateY(0) scale(1.05); opacity: 1; }
-        25% { transform: translateY(0) scale(1); opacity: 1; }
-        80% { transform: translateY(0) scale(1); opacity: 1; }
-        100% { transform: translateY(-30px); opacity: 0; }
+      /* Mobile Media Queries */
+      @media (max-width: 768px) {
+        .dialogue-modal-backdrop {
+          padding-bottom: max(10px, env(safe-area-inset-bottom));
+          padding-left: max(8px, env(safe-area-inset-left));
+          padding-right: max(8px, env(safe-area-inset-right));
+        }
+        .dialogue-box-frame {
+          width: 96vw;
+          padding: 10px 12px;
+          gap: 8px;
+        }
+        .dialogue-speaker-name {
+          font-size: 15px;
+        }
+        .dialogue-speaker-title {
+          font-size: 9.5px;
+        }
+        .dialogue-content-row {
+          gap: 10px;
+          min-height: 60px;
+        }
+        .dialogue-portrait {
+          width: 48px;
+          height: 48px;
+          font-size: 24px;
+        }
+        .dialogue-text-body {
+          font-size: 13px;
+          min-height: 40px;
+        }
+        .dialogue-btn {
+          font-size: 11px;
+          padding: 5px 10px;
+        }
+        .prologue-scroll {
+          padding: 20px 24px;
+          width: 94vw;
+          gap: 12px;
+        }
+        .prologue-title {
+          font-size: 18px;
+        }
+        .prologue-body {
+          font-size: 13px;
+          min-height: 80px;
+        }
       }
     `;
     document.head.appendChild(style);

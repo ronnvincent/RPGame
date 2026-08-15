@@ -90,8 +90,8 @@ export class GameHUD {
       /* Top Left: Player Status with Authentic Kenney Sprite Frame */
       .player-status-panel {
         position: absolute;
-        top: 10px;
-        left: 10px;
+        top: max(8px, env(safe-area-inset-top));
+        left: max(8px, env(safe-area-inset-left));
         background: url('/assets/kenney-rpg-ui/panel_brown.png') repeat;
         background-size: 100% 100%;
         padding: 8px 14px 10px 10px;
@@ -217,10 +217,10 @@ export class GameHUD {
       /* Top Right: Gold & Navigation Buttons */
       .hud-top-right {
         position: absolute;
-        top: 10px;
-        right: 10px;
+        top: max(8px, env(safe-area-inset-top));
+        right: max(8px, env(safe-area-inset-right));
         display: flex;
-        gap: 6px;
+        gap: 5px;
         pointer-events: auto;
         z-index: 10;
         align-items: center;
@@ -264,9 +264,16 @@ export class GameHUD {
         color: #fef08a !important;
       }
 
-      .inv-btn-town {
-        background-image: url('/assets/kenney-rpg-ui/buttonLong_beige.png') !important;
-        color: #1e293b !important;
+      .inv-btn-fs {
+        background-image: url('/assets/kenney-rpg-ui/buttonSquare_brown.png') !important;
+        color: #ffd700 !important;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
       }
 
       /* Mini Quest Tracker Widget */
@@ -545,8 +552,8 @@ export class GameHUD {
       /* Left-Side Virtual Touch Joystick & D-Pad */
       .mobile-joystick-area {
         position: absolute;
-        bottom: 20px;
-        left: 24px;
+        bottom: max(16px, env(safe-area-inset-bottom));
+        left: max(16px, env(safe-area-inset-left));
         width: 140px;
         height: 140px;
         pointer-events: auto;
@@ -615,12 +622,12 @@ export class GameHUD {
       /* Right-Side Virtual Action Buttons (Jump & Dash) */
       .mobile-action-hub {
         position: absolute;
-        bottom: 20px;
-        right: 24px;
+        bottom: max(16px, env(safe-area-inset-bottom));
+        right: max(16px, env(safe-area-inset-right));
         display: flex;
         flex-direction: column;
         align-items: flex-end;
-        gap: 12px;
+        gap: 10px;
         pointer-events: auto;
       }
 
@@ -634,7 +641,7 @@ export class GameHUD {
         cursor: pointer;
         user-select: none;
         -webkit-user-select: none;
-        touch-action: manipulation;
+        touch-action: none;
         transition: transform 0.08s ease;
         position: relative;
         overflow: hidden;
@@ -646,8 +653,8 @@ export class GameHUD {
       }
 
       .jump-touch-btn {
-        width: 72px;
-        height: 72px;
+        width: 68px;
+        height: 68px;
         background: url('/assets/kenney-rpg-ui/buttonRound_brown.png') no-repeat center center;
         background-size: 100% 100%;
         box-shadow: 0 0 18px rgba(245, 158, 11, 0.65);
@@ -658,8 +665,8 @@ export class GameHUD {
       }
 
       .dash-touch-btn {
-        width: 60px;
-        height: 60px;
+        width: 56px;
+        height: 56px;
         background: url('/assets/kenney-rpg-ui/buttonRound_blue.png') no-repeat center center;
         background-size: 100% 100%;
         box-shadow: 0 0 16px rgba(14, 165, 233, 0.65);
@@ -720,64 +727,67 @@ export class GameHUD {
           font-size: 8px;
         }
         .hud-top-right {
-          top: 6px;
-          right: 6px;
-          gap: 4px;
+          top: max(6px, env(safe-area-inset-top));
+          right: max(6px, env(safe-area-inset-right));
+          gap: 3px;
         }
         .gold-badge {
           padding: 3px 6px;
-          font-size: 9.5px;
+          font-size: 9px;
         }
         .inv-btn {
-          padding: 3px 8px;
-          font-size: 9.5px;
+          padding: 4px 6px;
+          font-size: 8.5px;
+        }
+        .mini-quest-tracker {
+          display: none; /* Hide on small mobile to avoid screen clutter */
         }
 
         /* Shift Hotbar up slightly so it doesn't overlap action buttons */
         .skills-hotbar {
-          bottom: 16px;
+          bottom: max(10px, env(safe-area-inset-bottom));
           gap: 4px;
           padding: 3px 5px;
         }
         .hotbar-slot {
-          width: 38px;
-          height: 38px;
+          width: 36px;
+          height: 36px;
         }
         .slot-skill-name {
           display: none;
         }
         .slot-key-badge {
-          font-size: 7px;
+          font-size: 6.5px;
           padding: 0 2px;
         }
         .mobile-joystick-area {
-          bottom: 12px;
-          left: 12px;
-          width: 110px;
-          height: 110px;
+          bottom: max(8px, env(safe-area-inset-bottom));
+          left: max(8px, env(safe-area-inset-left));
+          width: 105px;
+          height: 105px;
         }
         .joystick-base {
-          width: 100px;
-          height: 100px;
+          width: 95px;
+          height: 95px;
         }
         .joystick-knob {
-          width: 44px;
-          height: 44px;
+          width: 40px;
+          height: 40px;
         }
         .mobile-action-hub {
-          bottom: 12px;
-          right: 12px;
+          bottom: max(8px, env(safe-area-inset-bottom));
+          right: max(8px, env(safe-area-inset-right));
           gap: 8px;
         }
         .jump-touch-btn {
-          width: 58px;
-          height: 58px;
-          font-size: 10px;
+          width: 56px;
+          height: 56px;
+          font-size: 9.5px;
         }
         .dash-touch-btn {
-          width: 48px;
-          height: 48px;
-          font-size: 9px;
+          width: 46px;
+          height: 46px;
+          font-size: 8.5px;
         }
       }
 
@@ -962,11 +972,12 @@ export class GameHUD {
 
       <!-- Top Right: Gold & Navigation Buttons -->
       <div class="hud-top-right">
-        <div class="gold-badge">GOLD: <span id="hud-gold-text">${p.gold}</span></div>
+        <div class="gold-badge">🪙 <span id="hud-gold-text">${p.gold}</span></div>
         <button class="inv-btn inv-btn-quest" id="toggle-quests-btn">QUESTS [ J ]</button>
         <button class="inv-btn inv-btn-quest" id="toggle-map-btn">MAP [ M ]</button>
         <button class="inv-btn inv-btn-town" id="return-town-btn" style="display: ${this.engine.isTownMode ? 'none' : 'block'};">TOWN [ T ]</button>
         <button class="inv-btn" id="toggle-inv-btn">BAG [ I ]</button>
+        <button class="inv-btn inv-btn-fs" id="toggle-fullscreen-btn" title="Toggle Fullscreen">⛶</button>
       </div>
 
       <!-- Mini Quest Tracker -->
@@ -1126,6 +1137,18 @@ export class GameHUD {
       e.stopPropagation();
       audio.playTeleport();
       this.game?.loadTownHub();
+    });
+
+    // Fullscreen Toggle button
+    const fsBtn = this.container.querySelector('#toggle-fullscreen-btn');
+    fsBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      audio.playClick();
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
     });
 
     // Mini Quest Tracker Click

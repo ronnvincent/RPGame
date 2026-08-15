@@ -14,22 +14,39 @@
       * {
         box-sizing: border-box;
         -webkit-tap-highlight-color: transparent;
-        touch-action: manipulation;
+        touch-action: none;
       }
-      body, html, #rpg {
+      html, body {
+        position: fixed;
+        inset: 0;
         margin: 0;
         padding: 0;
-        height: 100%;
-        width: 100%;
+        width: 100vw;
+        height: 100vh;
+        height: 100dvh;
+        height: -webkit-fill-available;
         overflow: hidden;
+        overscroll-behavior: none;
+        -webkit-overflow-scrolling: auto;
         background: #09090b;
         font-family: 'Outfit', 'Cinzel', 'Inter', sans-serif;
         user-select: none;
         -webkit-user-select: none;
         -webkit-touch-callout: none;
       }
+      #rpg {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+        height: 100dvh;
+        height: -webkit-fill-available;
+        overflow: hidden;
+        overscroll-behavior: none;
+        touch-action: none;
+      }
 
-      /* Landscape Enforcement Shield for Mobile Devices */
+      /* Dismissable / Orientation Warning for Mobile Devices */
       #orientation-rotate-shield {
         display: none;
         position: fixed;
@@ -43,9 +60,10 @@
         padding: 24px;
         color: #f8fafc;
         user-select: none;
+        touch-action: manipulation;
       }
 
-      @media screen and (orientation: portrait) {
+      @media screen and (max-width: 600px) and (orientation: portrait) {
         #orientation-rotate-shield {
           display: flex !important;
         }
@@ -56,7 +74,7 @@
         height: 64px;
         border: 4px solid #ffd700;
         border-radius: 12px;
-        margin-bottom: 24px;
+        margin-bottom: 20px;
         animation: rotateDevice 2.2s infinite ease-in-out;
         box-shadow: 0 0 25px rgba(255, 215, 0, 0.5);
         position: relative;
@@ -89,10 +107,10 @@
 
       .rotate-title {
         font-family: 'Cinzel', serif;
-        font-size: 22px;
+        font-size: 20px;
         font-weight: 900;
         color: #ffd700;
-        margin: 0 0 10px 0;
+        margin: 0 0 8px 0;
         letter-spacing: 2px;
         text-shadow: 0 0 15px rgba(255, 215, 0, 0.6);
       }
@@ -103,15 +121,30 @@
         max-width: 320px;
         line-height: 1.5;
         font-weight: 600;
+        margin-bottom: 18px;
+      }
+
+      .rotate-dismiss-btn {
+        background: url('/assets/kenney-rpg-ui/buttonLong_brown.png') no-repeat center center;
+        background-size: 100% 100%;
+        border: none;
+        color: #ffd700;
+        font-family: 'Cinzel', serif;
+        font-weight: 900;
+        font-size: 12px;
+        padding: 10px 24px;
+        cursor: pointer;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.8);
       }
     </style>
   </head>
   <body>
-    <!-- Landscape Lock Modal -->
+    <!-- Landscape Orientation Guide (Dismissable) -->
     <div id="orientation-rotate-shield">
       <div class="rotate-phone-anim"></div>
-      <h2 class="rotate-title">ROTATE YOUR DEVICE</h2>
-      <p class="rotate-desc">For the best Action RPG experience, please rotate your device to <strong>Landscape Mode</strong>.</p>
+      <h2 class="rotate-title">LANDSCAPE MODE</h2>
+      <p class="rotate-desc">For the best Action RPG experience, rotate your device to <strong>Landscape</strong> or tap below to continue.</p>
+      <button class="rotate-dismiss-btn" onclick="document.getElementById('orientation-rotate-shield').style.display='none'">PLAY ANYWAY ⚔️</button>
     </div>
 
     <div id="rpg"></div>

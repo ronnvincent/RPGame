@@ -43,14 +43,28 @@ export class SideViewGame {
     this.canvas.style.background = '#09090b';
 
     this.ctx = this.canvas.getContext('2d')!;
-    this.container.style.position = 'relative';
+    this.container.style.position = 'fixed';
+    this.container.style.inset = '0';
     this.container.style.width = '100vw';
-    this.container.style.height = '100vh';
+    this.container.style.height = '100dvh';
     this.container.style.overflow = 'hidden';
+    this.container.style.touchAction = 'none';
     this.container.appendChild(this.canvas);
+
+    // Completely prevent browser pull-down refresh and bounce scrolling
+    this.container.addEventListener('touchmove', (e) => {
+      // Allow scrolling only inside scrollable modal bodies
+      const target = e.target as HTMLElement;
+      if (!target.closest('.dialogue-box-frame, .inventory-modal, .world-map-modal, .quest-log-modal')) {
+        e.preventDefault();
+      }
+    }, { passive: false });
 
     this.handleResize();
     window.addEventListener('resize', () => this.handleResize());
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', () => this.handleResize());
+    }
 
     // Show Character Selection Screen
     new CharacterSelectUI(this.container, (selectedClass) => {
@@ -59,11 +73,16 @@ export class SideViewGame {
   }
 
   private handleResize() {
-    this.canvas.width = window.innerWidth;
-    this.canvas.height = window.innerHeight;
+    const width = window.visualViewport ? window.visualViewport.width : window.innerWidth;
+    const height = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    this.canvas.width = Math.floor(width);
+    this.canvas.height = Math.floor(height);
+
     if (this.engine) {
-      this.engine.groundY = window.innerHeight - 90;
-      this.engine.arenaHeight = window.innerHeight;
+      this.engine.canvasWidth = this.canvas.width;
+      this.engine.canvasHeight = this.canvas.height;
+      this.engine.groundY = Math.floor(height - Math.min(100, Math.max(75, height * 0.16)));
+      this.engine.arenaHeight = this.canvas.height;
     }
   }
 

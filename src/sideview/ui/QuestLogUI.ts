@@ -35,28 +35,31 @@ export class QuestLogUI {
     this.modalEl = document.createElement('div');
     this.modalEl.className = 'dialogue-modal-backdrop';
     this.modalEl.style.justifyContent = 'center';
-    this.modalEl.style.paddingBottom = '0';
+    this.modalEl.style.padding = 'max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left))';
 
     const frame = document.createElement('div');
-    frame.className = 'dialogue-box-frame';
+    frame.className = 'dialogue-box-frame quest-log-modal';
     frame.style.maxWidth = '880px';
-    frame.style.height = '82vh';
+    frame.style.width = '94vw';
+    frame.style.height = '85dvh';
+    frame.style.maxHeight = '85dvh';
     frame.style.display = 'flex';
     frame.style.flexDirection = 'column';
+    frame.style.touchAction = 'pan-y';
 
     // Header
     const header = document.createElement('div');
     header.className = 'dialogue-header-row';
     header.innerHTML = `
-      <div style="font-size: 20px; font-weight: 900; color: #ffd700; display: flex; align-items: center; gap: 8px;">
+      <div style="font-size: 18px; font-weight: 900; color: #ffd700; display: flex; align-items: center; gap: 8px;">
         <span>📜 QUEST LOG & LORE ARCHIVE</span>
       </div>
-      <div style="font-size: 12px; color: #94a3b8;">[J / Esc to Close]</div>
+      <div style="font-size: 11px; color: #94a3b8;">[J / Esc to Close]</div>
     `;
 
     // Tabs Row
     const tabsRow = document.createElement('div');
-    tabsRow.style.cssText = 'display: flex; gap: 8px; margin: 8px 0 12px 0; border-bottom: 2px solid rgba(255,255,255,0.1); padding-bottom: 8px;';
+    tabsRow.style.cssText = 'display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px 0; border-bottom: 2px solid rgba(255,255,255,0.1); padding-bottom: 6px;';
     
     const tabs: { id: 'main' | 'side' | 'completed' | 'lore'; label: string; icon: string }[] = [
       { id: 'main', label: 'Main Story', icon: '⚔️' },

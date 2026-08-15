@@ -143,29 +143,32 @@ export class WorldMapUI {
     this.modalEl = document.createElement('div');
     this.modalEl.className = 'dialogue-modal-backdrop';
     this.modalEl.style.justifyContent = 'center';
-    this.modalEl.style.paddingBottom = '0';
+    this.modalEl.style.padding = 'max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left))';
 
     const frame = document.createElement('div');
-    frame.className = 'dialogue-box-frame';
+    frame.className = 'dialogue-box-frame world-map-modal';
     frame.style.maxWidth = '850px';
-    frame.style.maxHeight = '90vh';
+    frame.style.width = '94vw';
+    frame.style.maxHeight = '88dvh';
     frame.style.overflowY = 'auto';
+    frame.style.touchAction = 'pan-y';
+    frame.style.padding = '12px 16px';
 
     // Header
     const header = document.createElement('div');
     header.className = 'dialogue-header-row';
     header.innerHTML = `
-      <div style="font-size: 20px; font-weight: 900; color: #ffd700; display: flex; align-items: center; gap: 8px;">
-        <span>🗺️ WORLD MAP & GATEWAY ARCH</span>
+      <div style="font-size: 18px; font-weight: 900; color: #ffd700; display: flex; align-items: center; gap: 8px;">
+        <span>🗺️ WORLD MAP & GATEWAYS</span>
       </div>
-      <div style="font-size: 13px; color: #cbd5e1; font-weight: 700;">
+      <div style="font-size: 12px; color: #cbd5e1; font-weight: 700;">
         Runes Restored: ${Array.from(quests.unlockedRunes).length}/4
       </div>
     `;
 
     // Rune Status Bar
     const runeBar = document.createElement('div');
-    runeBar.style.cssText = 'display: flex; gap: 10px; margin: 8px 0 14px 0; background: rgba(0,0,0,0.5); padding: 8px 14px; border-radius: 6px; align-items: center; justify-content: space-around;';
+    runeBar.style.cssText = 'display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 12px 0; background: rgba(0,0,0,0.5); padding: 6px 12px; border-radius: 6px; align-items: center; justify-content: space-around;';
     const runeDefs = [
       { id: 'verdant', name: 'Verdant Rune', icon: '🟢', color: '#4ade80' },
       { id: 'shadow', name: 'Shadow Rune', icon: '🟣', color: '#c084fc' },
@@ -175,16 +178,16 @@ export class WorldMapUI {
     runeBar.innerHTML = runeDefs.map(r => {
       const isRestored = quests.unlockedRunes.has(r.id);
       return `
-        <div style="display: flex; align-items: center; gap: 6px; opacity: ${isRestored ? '1' : '0.35'};">
-          <span style="font-size: 18px;">${r.icon}</span>
-          <span style="font-size: 11px; font-weight: 800; color: ${r.color};">${r.name} ${isRestored ? '✓' : '(Locked)'}</span>
+        <div style="display: flex; align-items: center; gap: 4px; opacity: ${isRestored ? '1' : '0.35'};">
+          <span style="font-size: 15px;">${r.icon}</span>
+          <span style="font-size: 10.5px; font-weight: 800; color: ${r.color};">${r.name} ${isRestored ? '✓' : '(Locked)'}</span>
         </div>
       `;
     }).join('');
 
     // Locations Grid
     const grid = document.createElement('div');
-    grid.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 10px; margin-bottom: 12px;';
+    grid.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; margin-bottom: 12px;';
 
     WorldMapUI.LOCATIONS.forEach((loc) => {
       const isTown = loc.id === 'town_eldermoor';
