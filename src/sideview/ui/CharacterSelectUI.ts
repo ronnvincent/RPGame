@@ -102,6 +102,7 @@ export class CharacterSelectUI {
           flex-direction: column;
           align-items: center;
           width: 100%;
+          height: 100%;
           max-width: 1080px;
           gap: 10px;
         }
@@ -233,6 +234,8 @@ export class CharacterSelectUI {
           grid-template-columns: 1.15fr 1.25fr;
           gap: 18px;
           width: 100%;
+          flex: 1;
+          min-height: 0;
           box-sizing: border-box;
           position: relative;
         }
@@ -347,6 +350,12 @@ export class CharacterSelectUI {
         }
 
         /* Right: 6 Skills Section with Kyrise 32x32 Icons */
+        .skills-section {
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+        }
+        
         .skills-section h3 {
           margin: 0 0 8px 0;
           font-size: 13px;
@@ -355,15 +364,17 @@ export class CharacterSelectUI {
           text-shadow: 1px 1px 0 #000;
           border-bottom: 2px solid #2d2042;
           padding-bottom: 4px;
+          flex-shrink: 0;
         }
 
         .skills-list {
           display: flex;
           flex-direction: column;
           gap: 6px;
-          max-height: 285px;
+          flex: 1;
           overflow-y: auto;
           padding-right: 6px;
+          min-height: 0;
         }
 
         .skill-item {
