@@ -152,9 +152,11 @@ export class CharacterSelectUI {
         /* 10 Hero Cards Carousel */
         .classes-carousel {
           display: flex;
-          gap: 8px;
+          gap: 10px;
           overflow-x: auto;
-          padding: 6px 4px;
+          overflow-y: hidden;
+          padding: 16px 8px 24px 8px;
+          margin-bottom: -8px;
           max-width: 100%;
           scrollbar-width: thin;
           scrollbar-color: #f4b41b #181425;
