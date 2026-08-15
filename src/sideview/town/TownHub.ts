@@ -87,7 +87,7 @@ export class TownHub {
       name: 'Portal Master Donald',
       title: 'Keeper of Dimensional Gateways',
       icon: '🌀',
-      x: 2520,
+      x: 2440,
       y: 0,
       width: 54,
       height: 72,

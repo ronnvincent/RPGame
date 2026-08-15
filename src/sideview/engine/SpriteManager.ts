@@ -2013,6 +2013,102 @@ export class SpriteManager {
   }
 
   /**
+   * Draw Epic Animated Dimensional Portal with Ancient Stone Arch, Rune Circle, and Cosmic Vortex
+   */
+  public drawDimensionalPortal(ctx: CanvasRenderingContext2D, x: number, y: number) {
+    const time = Date.now() / 1000;
+    const gateImg = this.images['wc_gate1'] || this.images['wc_gate2'];
+    const runeImg = this.images['vfx_protection'];
+    const vortexImg = this.images['vfx_vortex'] || this.images['vfx_dark2'];
+
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+
+    // 1. Glowing Floor Magic Rune Circle (100x100, 15 frames)
+    if (runeImg && runeImg.complete && runeImg.naturalWidth > 0) {
+      const runeFrames = 15;
+      const runeFrame = Math.floor(this.animTimer * 10) % runeFrames;
+      const frameSize = 100;
+      ctx.save();
+      ctx.translate(x, y - 6);
+      ctx.scale(1.2, 0.4); // perspective ellipse on floor
+      ctx.shadowColor = '#818cf8';
+      ctx.shadowBlur = 18;
+      ctx.drawImage(
+        runeImg,
+        runeFrame * frameSize,
+        0,
+        frameSize,
+        frameSize,
+        -frameSize / 2,
+        -frameSize / 2,
+        frameSize,
+        frameSize
+      );
+      ctx.restore();
+    }
+
+    // 2. Ancient Carved Stone Gateway Arch (64x110 scaled to ~84x140)
+    if (gateImg && gateImg.complete && gateImg.naturalWidth > 0) {
+      const archW = 84;
+      const archH = 140;
+      ctx.drawImage(gateImg, x - archW / 2, y - archH, archW, archH);
+    }
+
+    // 3. Swirling Animated Dimensional Vortex (100x100, 16 frames)
+    if (vortexImg && vortexImg.complete && vortexImg.naturalWidth > 0) {
+      const vortexFrames = 15;
+      const vortexFrame = Math.floor(this.animTimer * 12) % vortexFrames;
+      const frameSize = 100;
+      const scale = 1.35;
+      const destSize = frameSize * scale;
+
+      ctx.save();
+      ctx.translate(x, y - 65);
+      ctx.shadowColor = '#a855f7';
+      ctx.shadowBlur = 24;
+      ctx.drawImage(
+        vortexImg,
+        vortexFrame * frameSize,
+        0,
+        frameSize,
+        frameSize,
+        -destSize / 2,
+        -destSize / 2,
+        destSize,
+        destSize
+      );
+      ctx.restore();
+    }
+
+    // 4. Ethereal Cosmic Sparkles & Floating Particles
+    for (let s = 0; s < 7; s++) {
+      const angle = time * 2.8 + (s * Math.PI * 2 / 7);
+      const radiusX = 22 + Math.sin(time * 3 + s) * 8;
+      const radiusY = 38 + Math.cos(time * 2.5 + s) * 12;
+      const px = x + Math.cos(angle) * radiusX;
+      const py = (y - 65) + Math.sin(angle) * radiusY;
+
+      ctx.fillStyle = s % 2 === 0 ? '#ffd700' : '#c084fc';
+      ctx.shadowColor = '#eab308';
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.arc(px, py, 2.5 + Math.sin(time * 6 + s) * 1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 5. Sleek Header Title with Glowing Runes (No ugly boxes!)
+    ctx.font = 'bold 12px "Cinzel", serif';
+    ctx.fillStyle = '#ffd700';
+    ctx.shadowColor = '#f59e0b';
+    ctx.shadowBlur = 12;
+    ctx.textAlign = 'center';
+    ctx.fillText('❖ DIMENSIONAL GATEWAY ❖', x, y - 148);
+
+    ctx.restore();
+  }
+
+  /**
    * Draw Clean, High-Contrast Parallax Backgrounds, Themed Grounds, and Atmosphere
    * Uses 100% Authentic GothicVania Environment Layers & Tilesets
    */

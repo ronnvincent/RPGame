@@ -1954,45 +1954,9 @@ export class SideViewEngine {
 
     ctx.restore();
 
-    // 2. Draw Dimensional Portal Gateway at x = 2520
-    const portalX = 2520;
-    const portalY = this.groundY - 70;
-    ctx.save();
-    // Portal Stone Arch Pillars
-    ctx.fillStyle = '#1e1b4b';
-    ctx.strokeStyle = '#6366f1';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(portalX - 55, portalY - 90, 110, 160);
-    ctx.fillRect(portalX - 55, portalY - 90, 110, 160);
-
-    // Inner Swirling Vortex
-    const vortexGrad = ctx.createRadialGradient(portalX, portalY - 10, 10, portalX, portalY - 10, 50);
-    vortexGrad.addColorStop(0, '#ffffff');
-    vortexGrad.addColorStop(0.3, '#818cf8');
-    vortexGrad.addColorStop(0.7, '#4338ca');
-    vortexGrad.addColorStop(1, 'transparent');
-    ctx.fillStyle = vortexGrad;
-    ctx.beginPath();
-    ctx.ellipse(portalX, portalY - 10, 38 + Math.sin(now * 4) * 4, 60 + Math.cos(now * 3) * 4, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Swirling Portal Stars
-    for (let s = 0; s < 6; s++) {
-      const angle = now * 2.5 + (s * Math.PI / 3);
-      const dist = 28 + Math.sin(now * 3 + s) * 10;
-      const px = portalX + Math.cos(angle) * dist * 0.7;
-      const py = (portalY - 10) + Math.sin(angle) * dist;
-      ctx.fillStyle = s % 2 === 0 ? '#ffd700' : '#c7d2fe';
-      ctx.beginPath();
-      ctx.arc(px, py, 3, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    ctx.font = 'bold 12px "Cinzel", sans-serif';
-    ctx.fillStyle = '#ffd700';
-    ctx.textAlign = 'center';
-    ctx.fillText('DIMENSIONAL GATEWAY', portalX, portalY - 105);
-    ctx.restore();
+    // 2. Draw Epic Animated Dimensional Portal Gateway at x = 2560
+    const portalX = 2560;
+    (sprites as any).drawDimensionalPortal(ctx, portalX, this.groundY);
 
     // 3. Draw Each Town NPC with Authentic GothicVania Townspeople Sprites
     const npcSpriteTypeMap: { [id: string]: 'oldman' | 'bearded' | 'hatman' | 'woman' } = {
@@ -2090,17 +2054,32 @@ export class SideViewEngine {
 
       // Proximity Prompt: [E] Talk
       if (activeNpc && activeNpc.id === npc.id) {
-        const promptY = npcY - 128 + Math.sin(now * 4) * 2;
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
-        ctx.strokeStyle = '#ffd700';
-        ctx.lineWidth = 2;
-        ctx.fillRect(npc.x - 42, promptY - 10, 84, 22);
-        ctx.strokeRect(npc.x - 42, promptY - 10, 84, 22);
+        const promptY = npcY - 112 + Math.sin(now * 4) * 2;
+        ctx.save();
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 1.5;
+        ctx.shadowColor = '#d97706';
+        ctx.shadowBlur = 8;
+
+        const bw = 74;
+        const bh = 20;
+        if (ctx.roundRect) {
+          ctx.beginPath();
+          ctx.roundRect(npc.x - bw / 2, promptY - bh / 2, bw, bh, 10);
+          ctx.fill();
+          ctx.stroke();
+        } else {
+          ctx.fillRect(npc.x - bw / 2, promptY - bh / 2, bw, bh);
+          ctx.strokeRect(npc.x - bw / 2, promptY - bh / 2, bw, bh);
+        }
+
         ctx.font = 'bold 11px "Cinzel", sans-serif';
-        ctx.fillStyle = '#ffd700';
+        ctx.fillStyle = '#fef08a';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('[E] TALK', npc.x, promptY + 1);
+        ctx.fillText('[E] TALK', npc.x, promptY);
+        ctx.restore();
       }
 
       ctx.restore();
