@@ -1807,6 +1807,9 @@ export class SideViewEngine {
         ctx.fillStyle = '#ffd700';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
+        ctx.fillText('[E] TALK', npc.x, promptY + 1);
+      }
+
       ctx.restore();
     });
   }
