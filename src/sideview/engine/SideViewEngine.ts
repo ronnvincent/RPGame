@@ -136,6 +136,8 @@ export class SideViewEngine {
   public canvasHeight: number = 540;
   public isTownMode: boolean = true;
   public townHub: TownHub | null = null;
+  public readonly portalX: number = 2560;
+  public isPlayerNearPortal: boolean = false;
   public hitStopTimer: number = 0;
   public battleTheme: BattleTheme = 'catacombs';
   private readonly cameraFollowSpeed = 10;

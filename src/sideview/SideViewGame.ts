@@ -324,9 +324,23 @@ export class SideViewGame {
       if (this.engine) {
         this.engine.update(dt);
 
-        // In Town Mode: update NPC proximity
+        // In Town Mode: update NPC proximity + Portal auto-detection
         if (this.engine.isTownMode && this.townHub) {
           this.townHub.update(this.engine.player.x, this.engine.player.y);
+
+          // --- Portal Proximity Auto-Detection ---
+          const portalDist = Math.abs(this.engine.player.x - this.engine.portalX);
+          const wasNear = this.engine.isPlayerNearPortal;
+          this.engine.isPlayerNearPortal = portalDist < 100;
+
+          // Auto-open WorldMap when player enters portal zone
+          if (this.engine.isPlayerNearPortal && !wasNear && !this.dialogue?.isOpen) {
+            this.worldMap?.open();
+          }
+          // Auto-close WorldMap when player leaves portal zone
+          if (!this.engine.isPlayerNearPortal && wasNear) {
+            this.worldMap?.close();
+          }
         }
 
         // In Dungeon Mode: check wave progression

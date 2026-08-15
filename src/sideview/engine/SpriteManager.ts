@@ -433,7 +433,10 @@ export class SpriteManager {
       wc_stone_head: '/assets/warped-files/warped-files/Assets/PNG/environment/props/stone-head.png',
       wc_stone: '/assets/warped-files/warped-files/Assets/PNG/environment/props/stone.png',
       wc_plant_big: '/assets/warped-files/warped-files/Assets/PNG/environment/props/plant-big.png',
-      wc_plant_small: '/assets/warped-files/warped-files/Assets/PNG/environment/props/plant-small.png'
+      wc_plant_small: '/assets/warped-files/warped-files/Assets/PNG/environment/props/plant-small.png',
+
+      // 27. Green Portal Animated Sprite Sheet (512x192, 8 frames x 3 rows, 64x64 per frame)
+      green_portal: '/assets/green-portal.png'
     };
 
     Object.entries(assetsToLoad).forEach(([key, src]) => {
@@ -2013,97 +2016,89 @@ export class SpriteManager {
   }
 
   /**
-   * Draw Epic Animated Dimensional Portal with Ancient Stone Arch, Rune Circle, and Cosmic Vortex
+   * Draw Animated Green Portal Sprite Sheet (512x192, 8 cols x 3 rows, 64x64 per frame)
+   * Row 0 = Idle loop, Row 1 = Opening, Row 2 = Closing
    */
   public drawDimensionalPortal(ctx: CanvasRenderingContext2D, x: number, y: number) {
     const time = Date.now() / 1000;
-    const gateImg = this.images['wc_gate1'] || this.images['wc_gate2'];
-    const runeImg = this.images['vfx_protection'];
-    const vortexImg = this.images['vfx_vortex'] || this.images['vfx_dark2'];
+    const portalImg = this.images['green_portal'];
 
     ctx.save();
     ctx.imageSmoothingEnabled = false;
 
-    // 1. Glowing Floor Magic Rune Circle (100x100, 15 frames)
-    if (runeImg && runeImg.complete && runeImg.naturalWidth > 0) {
-      const runeFrames = 15;
-      const runeFrame = Math.floor(this.animTimer * 10) % runeFrames;
-      const frameSize = 100;
-      ctx.save();
-      ctx.translate(x, y - 6);
-      ctx.scale(1.2, 0.4); // perspective ellipse on floor
-      ctx.shadowColor = '#818cf8';
-      ctx.shadowBlur = 18;
+    // --- 1. Ambient Green Glow Aura on the Ground ---
+    const glowRadius = 75 + Math.sin(time * 3) * 8;
+    const groundGlow = ctx.createRadialGradient(x, y - 60, 10, x, y - 60, glowRadius);
+    groundGlow.addColorStop(0, 'rgba(74, 222, 128, 0.35)');
+    groundGlow.addColorStop(0.5, 'rgba(34, 197, 94, 0.12)');
+    groundGlow.addColorStop(1, 'transparent');
+    ctx.fillStyle = groundGlow;
+    ctx.beginPath();
+    ctx.arc(x, y - 60, glowRadius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // --- 2. Animated Green Portal Sprite ---
+    if (portalImg && portalImg.complete && portalImg.naturalWidth > 0) {
+      const cols = 8;
+      const rows = 3;
+      const frameW = portalImg.naturalWidth / cols;   // 64
+      const frameH = portalImg.naturalHeight / rows;  // 64
+      const row = 0; // idle loop row
+      const frameIndex = Math.floor(this.animTimer * 10) % cols;
+
+      const scale = 3.0; // Scale up from 64px to ~192px
+      const destW = frameW * scale;
+      const destH = frameH * scale;
+
+      ctx.shadowColor = '#22c55e';
+      ctx.shadowBlur = 20;
       ctx.drawImage(
-        runeImg,
-        runeFrame * frameSize,
-        0,
-        frameSize,
-        frameSize,
-        -frameSize / 2,
-        -frameSize / 2,
-        frameSize,
-        frameSize
+        portalImg,
+        frameIndex * frameW,
+        row * frameH,
+        frameW,
+        frameH,
+        x - destW / 2,
+        y - destH + 10, // anchor to ground
+        destW,
+        destH
       );
-      ctx.restore();
-    }
-
-    // 2. Ancient Carved Stone Gateway Arch (64x110 scaled to ~84x140)
-    if (gateImg && gateImg.complete && gateImg.naturalWidth > 0) {
-      const archW = 84;
-      const archH = 140;
-      ctx.drawImage(gateImg, x - archW / 2, y - archH, archW, archH);
-    }
-
-    // 3. Swirling Animated Dimensional Vortex (100x100, 16 frames)
-    if (vortexImg && vortexImg.complete && vortexImg.naturalWidth > 0) {
-      const vortexFrames = 15;
-      const vortexFrame = Math.floor(this.animTimer * 12) % vortexFrames;
-      const frameSize = 100;
-      const scale = 1.35;
-      const destSize = frameSize * scale;
-
-      ctx.save();
-      ctx.translate(x, y - 65);
-      ctx.shadowColor = '#a855f7';
-      ctx.shadowBlur = 24;
-      ctx.drawImage(
-        vortexImg,
-        vortexFrame * frameSize,
-        0,
-        frameSize,
-        frameSize,
-        -destSize / 2,
-        -destSize / 2,
-        destSize,
-        destSize
-      );
-      ctx.restore();
-    }
-
-    // 4. Ethereal Cosmic Sparkles & Floating Particles
-    for (let s = 0; s < 7; s++) {
-      const angle = time * 2.8 + (s * Math.PI * 2 / 7);
-      const radiusX = 22 + Math.sin(time * 3 + s) * 8;
-      const radiusY = 38 + Math.cos(time * 2.5 + s) * 12;
-      const px = x + Math.cos(angle) * radiusX;
-      const py = (y - 65) + Math.sin(angle) * radiusY;
-
-      ctx.fillStyle = s % 2 === 0 ? '#ffd700' : '#c084fc';
-      ctx.shadowColor = '#eab308';
-      ctx.shadowBlur = 10;
+    } else {
+      // Fallback: Draw a nice radial gradient portal if sprite not loaded
+      const fallbackGrad = ctx.createRadialGradient(x, y - 70, 8, x, y - 70, 50);
+      fallbackGrad.addColorStop(0, '#ffffff');
+      fallbackGrad.addColorStop(0.3, '#4ade80');
+      fallbackGrad.addColorStop(0.7, '#15803d');
+      fallbackGrad.addColorStop(1, 'transparent');
+      ctx.fillStyle = fallbackGrad;
       ctx.beginPath();
-      ctx.arc(px, py, 2.5 + Math.sin(time * 6 + s) * 1, 0, Math.PI * 2);
+      ctx.ellipse(x, y - 70, 45 + Math.sin(time * 4) * 4, 65 + Math.cos(time * 3) * 4, 0, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // 5. Sleek Header Title with Glowing Runes (No ugly boxes!)
-    ctx.font = 'bold 12px "Cinzel", serif';
-    ctx.fillStyle = '#ffd700';
-    ctx.shadowColor = '#f59e0b';
-    ctx.shadowBlur = 12;
+    // --- 3. Floating Emerald Sparkle Particles ---
+    for (let s = 0; s < 8; s++) {
+      const angle = time * 2.2 + (s * Math.PI * 2 / 8);
+      const radiusX = 35 + Math.sin(time * 2.5 + s) * 12;
+      const radiusY = 50 + Math.cos(time * 2 + s) * 15;
+      const px = x + Math.cos(angle) * radiusX;
+      const py = (y - 80) + Math.sin(angle) * radiusY;
+
+      ctx.fillStyle = s % 3 === 0 ? '#ffd700' : s % 3 === 1 ? '#4ade80' : '#86efac';
+      ctx.shadowColor = '#22c55e';
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.arc(px, py, 2 + Math.sin(time * 5 + s) * 1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // --- 4. Glowing Title Above Portal ---
+    ctx.font = 'bold 13px "Cinzel", serif';
+    ctx.fillStyle = '#4ade80';
+    ctx.shadowColor = '#22c55e';
+    ctx.shadowBlur = 14;
     ctx.textAlign = 'center';
-    ctx.fillText('❖ DIMENSIONAL GATEWAY ❖', x, y - 148);
+    ctx.fillText('❖ DIMENSIONAL GATEWAY ❖', x, y - 185);
 
     ctx.restore();
   }
