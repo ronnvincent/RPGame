@@ -282,7 +282,7 @@ export class SpriteManager {
       vfx_ansimuz_explosion: '/assets/vfx/ansimuz/Explosions pack/explosion-1-g/spritesheet.png',
 
       // 18c. Real Animated Dragon Boss, Grim Reaper & Holy Spell Packs
-      reaper_sheet: '/assets/reaper/spritesheet/Bringer-of-Death-SpritSheet.png',
+      reaper_sheet: '/assets/reaper/SpriteSheet/Bringer-of-Death-SpritSheet.png',
       nightborne: '/assets/nightborne/nightborne.png',
       holy_spell_00: '/assets/vfx/holy_pack/00.png',
       holy_spell_01: '/assets/vfx/holy_pack/01.png',
@@ -477,28 +477,30 @@ export class SpriteManager {
     this.addToArray(this.priestessHealImgs, (i) => `/assets/priestess/png/11_heal/heal_${i}.png`, 1, 12);
     this.addToArray(this.priestessDeathImgs, (i) => `/assets/priestess/png/14_death/death_${i}.png`, 1, 16);
 
-    // Preload Dragon Attack frames (40 frames from attack)
+    // Fallback Dragon pack using Dragoon hero frames (dragon assets are unavailable in this asset pack)
+    const getDragonFrame = (i: number) => {
+      const idx = ((i - 1) % 3) + 1;
+      return `/assets/warrior3/Sprites/Attack${idx}.png`;
+    };
+
+    // Preload Dragon Attack frames (40 frames from dragoon attack fallback)
     for (let i = 1; i <= 40; i++) {
-      const idx = String(Math.min(160, i * 4)).padStart(3, '0');
-      this.addImage(`dragon_atk_${i}`, `/assets/dragon/attack/${idx}.png`);
+      this.addImage(`dragon_atk_${i}`, getDragonFrame(i));
     }
 
-    // Preload Dragon Attack 2 frames (40 frames from attack2)
+    // Preload Dragon Attack 2 frames (40 frames from dragoon attack fallback)
     for (let i = 1; i <= 40; i++) {
-      const idx = String(Math.min(200, i * 5)).padStart(3, '0');
-      this.addImage(`dragon_atk2_${i}`, `/assets/dragon/attack2/${idx}.png`);
+      this.addImage(`dragon_atk2_${i}`, getDragonFrame(i));
     }
 
-    // Preload Dragon Walk frames (40 frames from walk)
+    // Preload Dragon Walk frames (40 frames from dragoon movement fallback)
     for (let i = 1; i <= 40; i++) {
-      const idx = String(Math.min(160, i * 4)).padStart(3, '0');
-      this.addImage(`dragon_walk_${i}`, `/assets/dragon/walk/${idx}.png`);
+      this.addImage(`dragon_walk_${i}`, '/assets/warrior3/Sprites/Run.png');
     }
 
-    // Preload Dragon Idle frames (40 frames from idle_battle)
+    // Preload Dragon Idle frames (40 frames from dragoon idle fallback)
     for (let i = 1; i <= 40; i++) {
-      const idx = String(Math.min(140, i * 3)).padStart(3, '0');
-      this.addImage(`dragon_idle_${i}`, `/assets/dragon/idle_battle/${idx}.png`);
+      this.addImage(`dragon_idle_${i}`, '/assets/warrior3/Sprites/Idle.png');
     }
 
     // Preload Reaper Attack, Spell, Cast, Idle, and Walk frames (Clean paths)

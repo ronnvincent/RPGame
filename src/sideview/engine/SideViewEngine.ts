@@ -747,8 +747,9 @@ export class SideViewEngine {
     }
     if (skill.id === 'd_6') {
       // 7. DRAGOON ULTIMATE: Active Elder Dragon Companion & Flame Descent
+      this.particles.spawnDragonDescent(p.x, p.y, p.facing);
       this.particles.spawnDragonMinion(p.x, this.groundY, p.facing, Math.round(damage * 0.85));
-      this.executeAreaDamage(p.x + p.facing * 120, attackY, skill);
+      this.executeAreaDamage(p.x + p.facing * 120, this.groundY, skill);
       return;
     }
 
@@ -1662,9 +1663,6 @@ export class SideViewEngine {
     }
   }
 
-  public setBattleTheme(theme: BattleTheme) {
-    this.battleTheme = theme;
-  }
 
   public useOrEquipItem(invIdx: number) {
     const p = this.player;

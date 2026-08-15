@@ -236,6 +236,32 @@ export class ParticleSystem {
   public screenShakeTime: number = 0;
   public screenShakeMagnitude: number = 0;
 
+  private isDrawableImage(img: HTMLImageElement | null | undefined): img is HTMLImageElement {
+    return !!img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0;
+  }
+
+  private resolveDragonFallback(): HTMLImageElement | null {
+    const fallbackKeys = ['drag_atk1', 'drag_atk2', 'drag_atk3', 'drag_idle', 'drag_run'];
+    for (const key of fallbackKeys) {
+      const img = sprites.getImage(key);
+      if (this.isDrawableImage(img)) {
+        return img;
+      }
+    }
+    return null;
+  }
+
+  private resolveReaperFallback(): HTMLImageElement | null {
+    const fallbackKeys = ['reaper_idle_1', 'reaper_atk_1', 'reaper_walk_1'];
+    for (const key of fallbackKeys) {
+      const img = sprites.getImage(key);
+      if (this.isDrawableImage(img)) {
+        return img;
+      }
+    }
+    return null;
+  }
+
   /**
    * Add Fading Ghost Trail (Afterimage)
    */
@@ -624,6 +650,9 @@ export class ParticleSystem {
   }
 
   public spawnDragonMinion(x: number, groundY: number, facing: number, damage: number): SummonedMinionEntity {
+    // Keep only one Elder Dragon companion active
+    this.summonedMinions = this.summonedMinions.filter(m => m.type !== 'dragon');
+
     this.triggerScreenShake(24, 1.2);
     // Removed blinding #ff7849 screen flash to fix the "pink screen" issue where the player cannot see the game
     this.addFlameLash(x + facing * 80, groundY - 20, facing, 2.4);
@@ -1455,15 +1484,18 @@ export class ParticleSystem {
           dragonImg = sprites.getImage(`dragon_idle_${frameNum}`);
         }
 
-        if (!dragonImg || !dragonImg.complete) {
+        if (!this.isDrawableImage(dragonImg)) {
           dragonImg = sprites.getImage(`dragon_idle_1`);
+        }
+        if (!this.isDrawableImage(dragonImg)) {
+          dragonImg = this.resolveDragonFallback();
         }
 
         const destW = 480;
         const destH = 295;
         const feetYOffset = Math.round(destH * 0.78); // Exactly 230px from top of image
 
-        if (dragonImg && dragonImg.complete) {
+        if (this.isDrawableImage(dragonImg)) {
           ctx.shadowColor = '#ff5722';
           ctx.shadowBlur = 24;
           // Mathematical precision: feet land perfectly on y = 0
@@ -1515,20 +1547,23 @@ export class ParticleSystem {
           reaperImg = sprites.getImage(`reaper_idle_${frame}`);
         }
 
-        if (!reaperImg || !reaperImg.complete) {
+        if (!this.isDrawableImage(reaperImg)) {
           reaperImg = sprites.getImage(`reaper_idle_1`) || sprites.getImage(`reaper_atk_1`);
+        }
+        if (!this.isDrawableImage(reaperImg)) {
+          reaperImg = this.resolveReaperFallback();
         }
 
         const destW = 300;
         const destH = 200;
         const feetYOffset = Math.round(destH * 0.98); // 196px from top of image
 
-        if (reaperImg && reaperImg.complete) {
+        if (this.isDrawableImage(reaperImg)) {
           ctx.drawImage(reaperImg, -destW * 0.75, -feetYOffset, destW, destH);
         } else {
           // Robust sheet fallback
           const sheetImg = sprites.getImage('reaper_sheet');
-          if (sheetImg && sheetImg.complete) {
+          if (this.isDrawableImage(sheetImg)) {
             ctx.drawImage(sheetImg, 0, 0, 140, 93, -destW * 0.75, -feetYOffset, destW, destH);
           }
         }
@@ -1594,7 +1629,7 @@ export class ParticleSystem {
         const feetYOffset = Math.round(destH * 0.7875); // 189px from top of dest rect
         const centerXOffset = Math.round(destW * 0.45); // 108px
 
-        if (sheetImg && sheetImg.complete) {
+        if (this.isDrawableImage(sheetImg)) {
           ctx.shadowBlur = 0;
           ctx.drawImage(sheetImg, sx, sy, 80, 80, -centerXOffset, -feetYOffset, destW, destH);
         }
@@ -1626,8 +1661,11 @@ export class ParticleSystem {
       if (d.facing < 0) ctx.scale(-1, 1);
 
       const frameNum = Math.min(40, Math.max(1, Math.floor(progress * 40) + 1));
-      const dragonImg = sprites.getImage(`dragon_atk_${frameNum}`);
-      if (dragonImg && dragonImg.complete) {
+      let dragonImg = sprites.getImage(`dragon_atk_${frameNum}`);
+      if (!this.isDrawableImage(dragonImg)) {
+        dragonImg = sprites.getImage('dragon_atk_1') || this.resolveDragonFallback();
+      }
+      if (this.isDrawableImage(dragonImg)) {
         const destW = 540;
         const destH = 330;
         ctx.drawImage(dragonImg, -destW * 0.35, -destH * 0.55, destW, destH);
@@ -1649,8 +1687,11 @@ export class ParticleSystem {
         ? Math.min(16, Math.max(1, Math.floor((progress / 0.45) * 16) + 1))
         : Math.min(10, Math.max(1, Math.floor(((progress - 0.45) / 0.55) * 10) + 1));
 
-      const reaperImg = sprites.getImage(isSpell ? `reaper_spell_${frameNum}` : `reaper_atk_${frameNum}`);
-      if (reaperImg && reaperImg.complete) {
+      let reaperImg = sprites.getImage(isSpell ? `reaper_spell_${frameNum}` : `reaper_atk_${frameNum}`);
+      if (!this.isDrawableImage(reaperImg)) {
+        reaperImg = this.resolveReaperFallback();
+      }
+      if (this.isDrawableImage(reaperImg)) {
         const destW = 280;
         const destH = 186;
         ctx.drawImage(reaperImg, -destW / 2, -destH + 50, destW, destH);
@@ -1682,7 +1723,7 @@ export class ParticleSystem {
     // 9. Draw Animated Spell Sprites
     this.spellAnimations.forEach(spell => {
       const img = sprites.getImage(spell.spriteKey);
-      if (!img || !img.complete) return;
+      if (!this.isDrawableImage(img)) return;
 
       const frameW = spell.frameW;
       const frameH = spell.frameH;

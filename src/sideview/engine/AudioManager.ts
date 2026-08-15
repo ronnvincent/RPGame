@@ -129,21 +129,6 @@ class AudioManager {
     } catch (e) {}
   }
 
-  public playClick() {
-    if (!this.soundEnabled) return;
-    this.initCtx();
-    this.playTone(800, 0.05);
-  }
-
-  public playVictory() {
-    if (!this.soundEnabled) return;
-    this.initCtx();
-    this.playTone(523.25, 0.1);
-    setTimeout(() => this.playTone(659.25, 0.1), 100);
-    setTimeout(() => this.playTone(783.99, 0.2), 200);
-    setTimeout(() => this.playTone(1046.50, 0.4), 300);
-  }
-
   /**
    * Sword Slash / Physical Attack SFX
    */
@@ -608,9 +593,39 @@ class AudioManager {
     });
   }
 
+  public playTone(freq: number, duration: number = 0.12, volume: number = 0.12) {
+    if (!this.soundEnabled) return;
+    this.initCtx();
+    if (!this.ctx || !this.masterGain) return;
+    if (!Number.isFinite(freq) || freq <= 0) return;
+
+    try {
+      const now = this.ctx.currentTime;
+      const safeFreq = Math.max(80, Math.min(2400, Math.abs(freq)));
+      const safeDuration = Math.max(0.03, Math.max(0.01, duration));
+      const safeVolume = Math.max(0.01, Math.min(0.32, volume));
+
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(safeFreq, now);
+      osc.frequency.exponentialRampToValueAtTime(Math.max(60, safeFreq * 0.35), now + safeDuration);
+
+      gain.gain.setValueAtTime(safeVolume, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + safeDuration);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+
+      osc.start(now);
+      osc.stop(now + safeDuration);
+    } catch (e) {}
+  }
+
   /**
    * Book Page Turn / UI Paper Sound
-   */
+  */
   public playPageTurn() {
     if (!this.soundEnabled) return;
     this.initCtx();
