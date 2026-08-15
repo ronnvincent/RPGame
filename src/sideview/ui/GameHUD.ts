@@ -1164,7 +1164,6 @@ export class GameHUD {
     };
 
     toggleBtn?.addEventListener('click', openInv);
-    toggleBtn?.addEventListener('touchstart', openInv, { passive: true });
 
     const closeInv = (e: Event) => {
       e.stopPropagation();
@@ -1174,7 +1173,6 @@ export class GameHUD {
     };
 
     closeBtn?.addEventListener('click', closeInv);
-    closeBtn?.addEventListener('touchstart', closeInv, { passive: true });
 
     // Quests button
     const questsBtn = this.container.querySelector('#toggle-quests-btn');
