@@ -10,6 +10,8 @@ import { ItemData } from '../items/ItemDatabase';
 import { ParticleSystem } from './ParticleSystem';
 import { audio } from './AudioManager';
 import { sprites } from './SpriteManager';
+import { quests } from '../quests/QuestManager';
+import { TownHub } from '../town/TownHub';
 
 export interface PlayerEquipment {
   helmet?: ItemData;
@@ -119,6 +121,8 @@ export class SideViewEngine {
   public cameraX: number = 0;
   public canvasWidth: number = 960;
   public canvasHeight: number = 540;
+  public isTownMode: boolean = true;
+  public townHub: TownHub | null = null;
   private battleTheme: BattleTheme = 'catacombs';
   private readonly cameraFollowSpeed = 10;
   private readonly cameraLookAheadPx = 140;
@@ -132,6 +136,15 @@ export class SideViewEngine {
     this.particles = new ParticleSystem();
     this.player = this.createInitialPlayer(characterClass);
     this.recomputeStats();
+  }
+
+  public recalculateStats() {
+    this.recomputeStats();
+  }
+
+  public addItemToInventory(item: ItemData) {
+    this.player.inventory.push(item);
+    audio.playClick();
   }
 
   private createInitialPlayer(charClass: CharacterClass): PlayerState {
@@ -761,6 +774,7 @@ export class SideViewEngine {
     if (hitAny) {
       p.comboCount++;
       p.comboTimer = 3.0;
+      quests.onComboReached(p.comboCount);
     }
   }
 
@@ -785,6 +799,9 @@ export class SideViewEngine {
   private onEnemyDefeated(enemy: EnemyInstance) {
     enemy.isDead = true;
     enemy.hp = 0;
+
+    // Trigger quest kill tracker
+    quests.onEnemyKilled(enemy.name, enemy.type === 'boss');
 
     // Track corpse position for Necromancer Corpse Explosion
     this.recentCorpsePositions.push({ x: enemy.x, y: enemy.y });
@@ -1540,41 +1557,45 @@ export class SideViewEngine {
       ctx.restore();
     }
 
-    // 3. Render Enemies
-    for (const enemy of this.enemies) {
-      if (enemy.isDead) continue;
-      
-      // Draw Animated Mob Sprite
-      sprites.drawMob(
-        ctx,
-        enemy.x,
-        enemy.y,
-        enemy.name,
-        enemy.hitStun > 0 ? 'hit' : (Math.abs(enemy.vx) > 0.1 ? 'run' : 'idle'),
-        enemy.facing,
-        enemy.type === 'boss',
-        enemy.hitStun
-      );
+    // 3. Render Enemies or Town NPCs
+    if (this.isTownMode && this.townHub) {
+      this.renderTownEntities(ctx);
+    } else {
+      for (const enemy of this.enemies) {
+        if (enemy.isDead) continue;
+        
+        // Draw Animated Mob Sprite
+        sprites.drawMob(
+          ctx,
+          enemy.x,
+          enemy.y,
+          enemy.name,
+          enemy.hitStun > 0 ? 'hit' : (Math.abs(enemy.vx) > 0.1 ? 'run' : 'idle'),
+          enemy.facing,
+          enemy.type === 'boss',
+          enemy.hitStun
+        );
 
-      // Enemy Health Bar
-      ctx.save();
-      ctx.translate(enemy.x, enemy.y);
-      const hpPercent = Math.max(0, enemy.hp / enemy.maxHp);
-      const barW = Math.max(48, enemy.width * 1.3);
-      const barH = enemy.type === 'boss' ? 7 : 5;
-      const barY = -enemy.height / 2 - (enemy.type === 'boss' ? 24 : 14);
+        // Enemy Health Bar
+        ctx.save();
+        ctx.translate(enemy.x, enemy.y);
+        const hpPercent = Math.max(0, enemy.hp / enemy.maxHp);
+        const barW = Math.max(48, enemy.width * 1.3);
+        const barH = enemy.type === 'boss' ? 7 : 5;
+        const barY = -enemy.height / 2 - (enemy.type === 'boss' ? 24 : 14);
 
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-      ctx.fillRect(-barW / 2, barY, barW, barH);
-      ctx.fillStyle = enemy.type === 'boss' ? '#ef4444' : enemy.type === 'elite' ? '#f59e0b' : '#22c55e';
-      ctx.fillRect(-barW / 2, barY, barW * hpPercent, barH);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        ctx.fillRect(-barW / 2, barY, barW, barH);
+        ctx.fillStyle = enemy.type === 'boss' ? '#ef4444' : enemy.type === 'elite' ? '#f59e0b' : '#22c55e';
+        ctx.fillRect(-barW / 2, barY, barW * hpPercent, barH);
 
-      // Enemy Name
-      ctx.font = `bold ${enemy.type === 'boss' ? '12px' : '10px'} "Outfit", sans-serif`;
-      ctx.fillStyle = '#ffffff';
-      ctx.textAlign = 'center';
-      ctx.fillText(enemy.name, 0, barY - 4);
-      ctx.restore();
+        // Enemy Name
+        ctx.font = `bold ${enemy.type === 'boss' ? '12px' : '10px'} "Outfit", sans-serif`;
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.fillText(enemy.name, 0, barY - 4);
+        ctx.restore();
+      }
     }
 
     // 4. Render Player
@@ -1606,5 +1627,187 @@ export class SideViewEngine {
     this.particles.draw(ctx);
 
     ctx.restore();
+  }
+
+  /**
+   * Render Town NPCs, Buildings, Dimensional Gateway Arch, and Quest Badges
+   */
+  private renderTownEntities(ctx: CanvasRenderingContext2D) {
+    if (!this.townHub) return;
+    const now = Date.now() / 1000;
+    const activeNpc = this.townHub.getActiveNpc();
+
+    // 1. Draw High Forest Town Buildings & Trees in Background
+    const buildingImg = (sprites as any).images?.['buildings'];
+    const treeGolden = (sprites as any).images?.['tree_golden'];
+    const treeGreen = (sprites as any).images?.['tree_green'];
+    const treeRed = (sprites as any).images?.['tree_red'];
+
+    if (treeGreen && treeGreen.complete) {
+      ctx.drawImage(treeGreen, 120, this.groundY - 190, 120, 190);
+      ctx.drawImage(treeGreen, 1120, this.groundY - 190, 120, 190);
+      ctx.drawImage(treeGreen, 2180, this.groundY - 190, 120, 190);
+    }
+    if (treeGolden && treeGolden.complete) {
+      ctx.drawImage(treeGolden, 640, this.groundY - 195, 120, 195);
+      ctx.drawImage(treeGolden, 1640, this.groundY - 195, 120, 195);
+    }
+
+    if (buildingImg && buildingImg.complete) {
+      // Village houses behind NPCs
+      ctx.drawImage(buildingImg, 0, 0, 160, 140, 360, this.groundY - 140, 160, 140);
+      ctx.drawImage(buildingImg, 160, 0, 160, 140, 860, this.groundY - 140, 160, 140);
+      ctx.drawImage(buildingImg, 0, 0, 160, 140, 1360, this.groundY - 140, 160, 140);
+      ctx.drawImage(buildingImg, 160, 0, 160, 140, 1860, this.groundY - 140, 160, 140);
+    }
+
+    // 2. Draw Dimensional Portal Gateway at x = 2520
+    const portalX = 2520;
+    const portalY = this.groundY - 70;
+    ctx.save();
+    // Portal Stone Arch Pillars
+    ctx.fillStyle = '#1e1b4b';
+    ctx.strokeStyle = '#6366f1';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(portalX - 55, portalY - 90, 110, 160);
+    ctx.fillRect(portalX - 55, portalY - 90, 110, 160);
+
+    // Inner Swirling Vortex
+    const vortexGrad = ctx.createRadialGradient(portalX, portalY - 10, 10, portalX, portalY - 10, 50);
+    vortexGrad.addColorStop(0, '#ffffff');
+    vortexGrad.addColorStop(0.3, '#818cf8');
+    vortexGrad.addColorStop(0.7, '#4338ca');
+    vortexGrad.addColorStop(1, 'transparent');
+    ctx.fillStyle = vortexGrad;
+    ctx.beginPath();
+    ctx.ellipse(portalX, portalY - 10, 38 + Math.sin(now * 4) * 4, 60 + Math.cos(now * 3) * 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Swirling Portal Stars
+    for (let s = 0; s < 6; s++) {
+      const angle = now * 2.5 + (s * Math.PI / 3);
+      const dist = 28 + Math.sin(now * 3 + s) * 10;
+      const px = portalX + Math.cos(angle) * dist * 0.7;
+      const py = (portalY - 10) + Math.sin(angle) * dist;
+      ctx.fillStyle = s % 2 === 0 ? '#ffd700' : '#c7d2fe';
+      ctx.beginPath();
+      ctx.arc(px, py, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.font = 'bold 12px "Cinzel", sans-serif';
+    ctx.fillStyle = '#ffd700';
+    ctx.textAlign = 'center';
+    ctx.fillText('DIMENSIONAL GATEWAY', portalX, portalY - 105);
+    ctx.restore();
+
+    // 3. Draw Each Town NPC with dedicated sprite characters
+    const npcClassMap: { [id: string]: string } = {
+      elder_justinian: 'mage',
+      captain_valerie: 'warrior',
+      blacksmith_keith: 'berserker',
+      alchemist_morwenna: 'priest',
+      portal_donald: 'necromancer'
+    };
+
+    this.townHub.npcs.forEach((npc) => {
+      const npcY = this.groundY - 10;
+      const bob = Math.sin(now * 2.5 + npc.x * 0.01) * 1.5;
+
+      ctx.save();
+      // Draw Animated Character Sprite for NPC
+      const classId = npcClassMap[npc.id] || 'mage';
+      sprites.drawHero(ctx, npc.x, npcY + bob, classId, 'idle', -1, 0, npc.color);
+
+      // Scenery Props per NPC
+      if (npc.id === 'blacksmith_keith') {
+        // Anvil & Molten Hearth
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(npc.x - 42, this.groundY - 16, 24, 16);
+        ctx.fillStyle = '#f97316';
+        ctx.fillRect(npc.x - 38, this.groundY - 18, 16, 4); // Glowing hot iron bar
+      } else if (npc.id === 'alchemist_morwenna') {
+        // Cauldron
+        ctx.fillStyle = '#1e293b';
+        ctx.beginPath();
+        ctx.arc(npc.x + 36, this.groundY - 14, 14, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#22c55e';
+        ctx.beginPath();
+        ctx.arc(npc.x + 36, this.groundY - 20, 9, 0, Math.PI);
+        ctx.fill();
+      }
+
+      // Name & Title Tag
+      ctx.font = 'bold 12px "Outfit", sans-serif';
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = '#000';
+      ctx.shadowBlur = 5;
+      ctx.textAlign = 'center';
+      ctx.fillText(npc.name, npc.x, npcY - 80);
+      ctx.font = '10px "Outfit", sans-serif';
+      ctx.fillStyle = '#fef08a';
+      ctx.fillText(npc.title, npc.x, npcY - 68);
+      ctx.shadowBlur = 0;
+
+      // Quest Indicator Badge
+      const indicator = quests.getNpcIndicator(npc.id);
+      if (indicator) {
+        const badgeY = npcY - 105 + Math.sin(now * 5) * 3;
+        ctx.save();
+        if (indicator === 'turn_in') {
+          ctx.fillStyle = '#eab308';
+          ctx.shadowColor = '#facc15';
+          ctx.shadowBlur = 15;
+          ctx.beginPath();
+          ctx.arc(npc.x, badgeY, 13, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.font = 'bold 16px "Cinzel", sans-serif';
+          ctx.fillStyle = '#000000';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('?', npc.x, badgeY + 1);
+        } else if (indicator === 'main_available') {
+          ctx.fillStyle = '#f59e0b';
+          ctx.shadowColor = '#fbbf24';
+          ctx.shadowBlur = 14;
+          ctx.beginPath();
+          ctx.arc(npc.x, badgeY, 12, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.font = 'bold 15px "Cinzel", sans-serif';
+          ctx.fillStyle = '#000000';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('!', npc.x, badgeY + 1);
+        } else if (indicator === 'side_available') {
+          ctx.fillStyle = '#94a3b8';
+          ctx.shadowColor = '#cbd5e1';
+          ctx.shadowBlur = 10;
+          ctx.beginPath();
+          ctx.arc(npc.x, badgeY, 11, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.font = 'bold 14px "Cinzel", sans-serif';
+          ctx.fillStyle = '#000000';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('!', npc.x, badgeY + 1);
+        }
+        ctx.restore();
+      }
+
+      // Proximity Prompt: [E] Talk
+      if (activeNpc && activeNpc.id === npc.id) {
+        const promptY = npcY - 128 + Math.sin(now * 4) * 2;
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 2;
+        ctx.fillRect(npc.x - 42, promptY - 10, 84, 22);
+        ctx.strokeRect(npc.x - 42, promptY - 10, 84, 22);
+        ctx.font = 'bold 11px "Cinzel", sans-serif';
+        ctx.fillStyle = '#ffd700';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+      ctx.restore();
+    });
   }
 }

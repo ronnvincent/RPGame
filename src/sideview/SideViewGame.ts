@@ -1,6 +1,6 @@
 /**
  * Main Side-View Action RPG Game Controller
- * Manages canvas rendering loop, input handling, dungeons, waves, and victory screens.
+ * Manages canvas rendering loop, input handling, Town Hub, Dungeons, Quests, Dialogues, and Cutscenes.
  */
 
 import { CharacterClass } from './classes/ClassDefinitions';
@@ -10,6 +10,10 @@ import { GameHUD } from './ui/GameHUD';
 import { DUNGEONS, DungeonDefinition, spawnWaveEnemies } from './dungeons/DungeonManager';
 import { audio } from './engine/AudioManager';
 import { sprites } from './engine/SpriteManager';
+import { TownHub } from './town/TownHub';
+import { DialogueSystem } from './dialogue/DialogueSystem';
+import { WorldMapUI } from './ui/WorldMapUI';
+import { quests } from './quests/QuestManager';
 
 export class SideViewGame {
   private container: HTMLElement;
@@ -17,11 +21,15 @@ export class SideViewGame {
   private ctx: CanvasRenderingContext2D;
   private engine: SideViewEngine | null = null;
   private hud: GameHUD | null = null;
+  private townHub: TownHub | null = null;
+  private dialogue: DialogueSystem | null = null;
+  private worldMap: WorldMapUI | null = null;
   private currentDungeonIndex: number = 0;
   private currentWaveIndex: number = 0;
   private lastTime: number = 0;
   private isRunning: boolean = false;
   private keysPressed: { [key: string]: boolean } = {};
+  public touchMoveDir: number = 0;
 
   constructor(rootElement: HTMLElement) {
     this.container = rootElement;
@@ -64,18 +72,61 @@ export class SideViewGame {
     this.engine.groundY = this.canvas.height - 90;
     this.engine.arenaHeight = this.canvas.height;
 
+    this.townHub = new TownHub();
+    this.engine.townHub = this.townHub;
+
+    this.dialogue = new DialogueSystem(this.container);
+    this.worldMap = new WorldMapUI(this.container, (locationId) => {
+      this.onSelectLocation(locationId);
+    });
+
     this.hud = new GameHUD(this.container, this.engine, this);
+    this.hud.worldMapUI = this.worldMap;
+
     this.setupInputListeners();
 
-    // Start First Dungeon
-    this.loadDungeon(0);
+    // Start with Epic Story Prologue Cutscene
+    this.dialogue.playPrologue(() => {
+      this.loadTownHub();
+    });
 
     this.isRunning = true;
     this.lastTime = performance.now();
     requestAnimationFrame((t) => this.gameLoop(t));
   }
 
-  private loadDungeon(dungeonIndex: number) {
+  public loadTownHub() {
+    if (!this.engine) return;
+    this.engine.isTownMode = true;
+    this.engine.enemies = [];
+    this.engine.player.x = 450;
+    this.engine.player.y = this.engine.groundY;
+    this.engine.player.vx = 0;
+    this.engine.player.vy = 0;
+    this.engine.setBattleTheme('catacombs');
+    this.hud?.showToast('🏰 Arrived at Haven of Eldermoor');
+  }
+
+  public onSelectLocation(locationId: string) {
+    if (locationId === 'town_eldermoor') {
+      this.loadTownHub();
+      return;
+    }
+
+    const dungeonIdx = DUNGEONS.findIndex(d => d.id === locationId);
+    if (dungeonIdx !== -1) {
+      this.loadDungeon(dungeonIdx);
+    }
+  }
+
+  public loadDungeon(dungeonIndex: number) {
+    if (!this.engine) return;
+    this.engine.isTownMode = false;
+    this.engine.player.x = 300;
+    this.engine.player.y = this.engine.groundY;
+    this.engine.player.vx = 0;
+    this.engine.player.vy = 0;
+
     this.currentDungeonIndex = dungeonIndex % DUNGEONS.length;
     this.currentWaveIndex = 0;
     this.spawnNextWave();
@@ -99,28 +150,123 @@ export class SideViewGame {
     );
     this.engine.enemies = enemies;
     audio.playSlash('heavy');
+
+    const bossEnemy = enemies.find(e => e.type === 'boss');
+    if (bossEnemy) {
+      this.dialogue?.showBossBanner(bossEnemy.name, dungeon.subtitle);
+    }
+
     this.hud?.setWaveInfo(`${dungeon.name} - Wave ${this.currentWaveIndex + 1}/${dungeon.waves.length}`, enemies.length);
     this.engine.particles.addImpactBurst(this.engine.player.x, this.engine.groundY, 12, dungeon.ambientParticles, 'spark');
   }
 
   private onDungeonCleared() {
-    audio.playHeal();
-    this.engine?.particles.addHolyPillar(this.engine.player.x, this.engine.player.y);
-    this.engine?.particles.addFloatingText(this.engine.player.x, this.engine.player.y - 60, '🏆 DUNGEON CLEARED! 🏆', '#ffd700', true, 28);
+    if (!this.engine) return;
+    const dungeon = DUNGEONS[this.currentDungeonIndex];
+    audio.playFanfare();
+    this.engine.particles.addHolyPillar(this.engine.player.x, this.engine.player.y);
+    this.engine.particles.addFloatingText(this.engine.player.x, this.engine.player.y - 60, '🏆 DUNGEON CLEARED! 🏆', '#ffd700', true, 28);
+
+    // If final Void Nexus dungeon cleared
+    if (dungeon.id === 'void_nexus') {
+      this.dialogue?.showDialogue({
+        speakerName: 'Elder Justinian',
+        speakerTitle: 'Sage of Aethelgard',
+        portraitIcon: '🧙‍♂️',
+        sentences: [
+          "Elder Justinian: 🌟 THE VOID OVERLORD HAS FALLEN! 🌟",
+          "Elder Justinian: The Five Primordial Runes are reunited in radiance! Peace returns to Aethelgard!",
+          "Elder Justinian: You have proven yourself as the True Champion of the Realm!"
+        ],
+        options: [
+          {
+            label: 'Return to Town Sanctuary',
+            icon: '🏰',
+            type: 'custom',
+            onSelect: () => this.loadTownHub()
+          },
+          {
+            label: 'Enter Endless Celestial Arena',
+            icon: '⭐',
+            type: 'custom',
+            onSelect: () => this.onSelectLocation('endless_arena')
+          }
+        ]
+      });
+      return;
+    }
 
     setTimeout(() => {
-      // Advance to next dungeon
-      this.loadDungeon(this.currentDungeonIndex + 1);
-    }, 3500);
+      this.dialogue?.showDialogue({
+        speakerName: 'Victory Portal',
+        speakerTitle: 'Realm Gateway',
+        portraitIcon: '🌀',
+        sentences: [
+          `You have successfully cleansed ${dungeon.name}!`,
+          "Would you like to return to Eldermoor Town to turn in quests, or advance to the next realm?"
+        ],
+        options: [
+          {
+            label: 'Return to Town Hub [T]',
+            icon: '🏰',
+            type: 'custom',
+            onSelect: () => this.loadTownHub()
+          },
+          {
+            label: 'Advance to Next Dungeon ➔',
+            icon: '⚔️',
+            type: 'custom',
+            onSelect: () => this.loadDungeon(this.currentDungeonIndex + 1)
+          }
+        ]
+      });
+    }, 2800);
   }
 
-  public touchMoveDir: number = 0;
+  public interactWithActiveNpc() {
+    if (!this.engine || !this.townHub || !this.dialogue || !this.engine.isTownMode) return;
+    const activeNpc = this.townHub.getActiveNpc();
+    if (activeNpc) {
+      this.townHub.interactWithNpc(activeNpc, this.engine, this.dialogue, () => {
+        this.worldMap?.open();
+      });
+    }
+  }
 
   private setupInputListeners() {
     window.addEventListener('keydown', (e) => {
       this.keysPressed[e.code] = true;
 
       if (!this.engine) return;
+
+      // Dialogue advance or close with Space / Enter
+      if (this.dialogue?.isOpen) {
+        if (e.code === 'Space' || e.code === 'Enter' || e.code === 'KeyE') {
+          this.dialogue.advanceText();
+          return;
+        }
+      }
+
+      // NPC Interaction: KeyE
+      if (e.code === 'KeyE') {
+        this.interactWithActiveNpc();
+      }
+
+      // Quest Log toggle: KeyJ
+      if (e.code === 'KeyJ') {
+        this.hud?.questLogUI?.toggle();
+      }
+
+      // World Map toggle: KeyM
+      if (e.code === 'KeyM') {
+        this.worldMap?.open();
+      }
+
+      // Return to Town: KeyT
+      if (e.code === 'KeyT') {
+        audio.playTeleport();
+        this.loadTownHub();
+      }
 
       // Jump: W, Space, ArrowUp
       if (e.code === 'Space' || e.code === 'KeyW' || e.code === 'ArrowUp') {
@@ -134,7 +280,7 @@ export class SideViewGame {
 
       // Skills: 1-6 or Q, E, R, F, Z, X
       if (e.code === 'Digit1' || e.code === 'KeyQ') this.engine.castSkill(0);
-      if (e.code === 'Digit2' || e.code === 'KeyE') this.engine.castSkill(1);
+      if (e.code === 'Digit2') this.engine.castSkill(1);
       if (e.code === 'Digit3' || e.code === 'KeyR') this.engine.castSkill(2);
       if (e.code === 'Digit4' || e.code === 'KeyF') this.engine.castSkill(3);
       if (e.code === 'Digit5' || e.code === 'KeyZ') this.engine.castSkill(4);
@@ -145,10 +291,14 @@ export class SideViewGame {
       this.keysPressed[e.code] = false;
     });
 
-    // Mouse Left Click for Primary Skill on canvas
+    // Mouse Left Click for Primary Skill or Dialogue Advance
     this.canvas.addEventListener('mousedown', (e) => {
-      if (e.button === 0 && this.engine) {
-        this.engine.castSkill(0);
+      if (e.button === 0) {
+        if (this.dialogue?.isOpen) {
+          this.dialogue.advanceText();
+        } else if (this.engine && !this.engine.isTownMode) {
+          this.engine.castSkill(0);
+        }
       }
     });
   }
@@ -173,14 +323,21 @@ export class SideViewGame {
       if (this.engine) {
         this.engine.update(dt);
 
-        // Check wave progression
-        const livingEnemies = this.engine.enemies.filter(e => !e.isDead);
-        const dungeon = DUNGEONS[this.currentDungeonIndex];
-        this.hud?.setWaveInfo(`${dungeon.name} - Wave ${this.currentWaveIndex + 1}/${dungeon.waves.length}`, livingEnemies.length);
+        // In Town Mode: update NPC proximity
+        if (this.engine.isTownMode && this.townHub) {
+          this.townHub.update(this.engine.player.x, this.engine.player.y);
+        }
 
-        if (livingEnemies.length === 0 && this.engine.enemies.length > 0) {
-          this.currentWaveIndex++;
-          this.spawnNextWave();
+        // In Dungeon Mode: check wave progression
+        if (!this.engine.isTownMode) {
+          const livingEnemies = this.engine.enemies.filter(e => !e.isDead);
+          const dungeon = DUNGEONS[this.currentDungeonIndex];
+          this.hud?.setWaveInfo(`${dungeon.name} - Wave ${this.currentWaveIndex + 1}/${dungeon.waves.length}`, livingEnemies.length);
+
+          if (livingEnemies.length === 0 && this.engine.enemies.length > 0) {
+            this.currentWaveIndex++;
+            this.spawnNextWave();
+          }
         }
 
         this.hud?.update();
@@ -198,4 +355,3 @@ export class SideViewGame {
     requestAnimationFrame((t) => this.gameLoop(t));
   }
 }
-

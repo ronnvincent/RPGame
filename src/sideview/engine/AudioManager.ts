@@ -428,6 +428,112 @@ class AudioManager {
     noise.start(now);
     noise.stop(now + duration);
   }
+
+  /**
+   * Dialogue Speech Blip Sound
+   */
+  public playDialogueBlip(pitch: number = 440) {
+    if (!this.soundEnabled) return;
+    this.initCtx();
+    if (!this.ctx || !this.masterGain) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(pitch + (Math.random() * 40 - 20), now);
+    osc.frequency.exponentialRampToValueAtTime(pitch * 0.7, now + 0.04);
+    gain.gain.setValueAtTime(0.08, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    osc.start(now);
+    osc.stop(now + 0.05);
+  }
+
+  /**
+   * Quest Accepted Sound: Bright rising chime
+   */
+  public playQuestAccept() {
+    if (!this.soundEnabled) return;
+    this.initCtx();
+    const notes = [440, 554, 659, 880];
+    notes.forEach((freq, i) => {
+      setTimeout(() => this.playTone(freq, 0.15), i * 70);
+    });
+  }
+
+  /**
+   * Quest Completed Sound: Victorious triumphant arpeggio
+   */
+  public playQuestComplete() {
+    if (!this.soundEnabled) return;
+    this.initCtx();
+    const notes = [523.25, 659.25, 783.99, 1046.5, 1318.5];
+    notes.forEach((freq, i) => {
+      setTimeout(() => this.playTone(freq, 0.25), i * 90);
+    });
+  }
+
+  /**
+   * Grand Boss Victory Fanfare
+   */
+  public playFanfare() {
+    if (!this.soundEnabled) return;
+    this.initCtx();
+    const melody = [
+      { f: 523.25, d: 0.15, t: 0 },
+      { f: 523.25, d: 0.15, t: 160 },
+      { f: 523.25, d: 0.15, t: 320 },
+      { f: 659.25, d: 0.35, t: 480 },
+      { f: 587.33, d: 0.2, t: 750 },
+      { f: 659.25, d: 0.2, t: 950 },
+      { f: 783.99, d: 0.6, t: 1150 },
+      { f: 1046.5, d: 0.8, t: 1550 }
+    ];
+    melody.forEach((n) => {
+      setTimeout(() => this.playTone(n.f, n.d), n.t);
+    });
+  }
+
+  /**
+   * Book Page Turn / UI Paper Sound
+   */
+  public playPageTurn() {
+    if (!this.soundEnabled) return;
+    this.initCtx();
+    this.playNoiseSwoosh(0.08, 1600);
+  }
+
+  /**
+   * Teleportation Gateway Portal Sound
+   */
+  public playTeleport() {
+    if (!this.soundEnabled) return;
+    this.initCtx();
+    if (!this.ctx || !this.masterGain) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(180, now);
+    osc.frequency.exponentialRampToValueAtTime(880, now + 0.5);
+    gain.gain.setValueAtTime(0.2, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    osc.start(now);
+    osc.stop(now + 0.65);
+  }
+
+  /**
+   * Gold Coin Jingling Sound
+   */
+  public playCoin() {
+    if (!this.soundEnabled) return;
+    this.initCtx();
+    this.playTone(987.77, 0.08);
+    setTimeout(() => this.playTone(1318.5, 0.12), 40);
+  }
 }
 
 export const audio = new AudioManager();

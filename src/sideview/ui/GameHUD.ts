@@ -15,12 +15,17 @@ import { audio } from '../engine/AudioManager';
 import { sprites } from '../engine/SpriteManager';
 import { SkillDefinition } from '../classes/ClassDefinitions';
 import { SideViewGame } from '../SideViewGame';
+import { quests } from '../quests/QuestManager';
+import { QuestLogUI } from './QuestLogUI';
+import { WorldMapUI } from './WorldMapUI';
 
 export class GameHUD {
   private container: HTMLElement;
   private engine: SideViewEngine;
   private game?: SideViewGame;
   private inventoryOpen: boolean = false;
+  public questLogUI: QuestLogUI | null = null;
+  public worldMapUI: WorldMapUI | null = null;
 
   // Joystick state
   private joystickActive: boolean = false;
@@ -34,8 +39,14 @@ export class GameHUD {
     this.container = document.createElement('div');
     this.container.id = 'game-hud-overlay';
     rootElement.appendChild(this.container);
+    this.questLogUI = new QuestLogUI(rootElement);
     this.injectStyles();
     this.render();
+
+    // Subscribe to quest events for toast alerts
+    quests.subscribe((evt) => {
+      this.showToast(evt.message);
+    });
   }
 
   private getSkillIcon(skill: SkillDefinition, classId: string): string {
@@ -203,7 +214,7 @@ export class GameHUD {
         z-index: 10;
       }
 
-      /* Top Right: Gold & Inventory */
+      /* Top Right: Gold & Navigation Buttons */
       .hud-top-right {
         position: absolute;
         top: 10px;
@@ -212,6 +223,7 @@ export class GameHUD {
         gap: 6px;
         pointer-events: auto;
         z-index: 10;
+        align-items: center;
       }
 
       .gold-badge {
@@ -232,18 +244,124 @@ export class GameHUD {
         background-size: 100% 100%;
         border: none;
         color: #ffffff;
-        padding: 6px 14px 8px 14px;
+        padding: 6px 12px 8px 12px;
         font-weight: 900;
-        font-size: 11px;
+        font-size: 10.5px;
         cursor: pointer;
         font-family: 'Cinzel', serif;
         touch-action: manipulation;
         text-shadow: 1px 1px 2px #000;
+        white-space: nowrap;
       }
 
       .inv-btn:active {
         background-image: url('/assets/kenney-rpg-ui/buttonLong_blue_pressed.png');
         transform: translateY(2px);
+      }
+
+      .inv-btn-quest {
+        background-image: url('/assets/kenney-rpg-ui/buttonLong_brown.png') !important;
+        color: #fef08a !important;
+      }
+
+      .inv-btn-town {
+        background-image: url('/assets/kenney-rpg-ui/buttonLong_beige.png') !important;
+        color: #1e293b !important;
+      }
+
+      /* Mini Quest Tracker Widget */
+      .mini-quest-tracker {
+        position: absolute;
+        top: 48px;
+        right: 10px;
+        width: 220px;
+        background: url('/assets/kenney-rpg-ui/panel_brown.png') repeat;
+        background-size: 100% 100%;
+        padding: 8px 10px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.85);
+        pointer-events: auto;
+        cursor: pointer;
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        transition: transform 0.1s ease;
+      }
+
+      .mini-quest-tracker:hover {
+        transform: scale(1.02);
+      }
+
+      .tracker-title {
+        font-size: 10px;
+        font-weight: 900;
+        color: #ffd700;
+        text-shadow: 1px 1px 2px #000;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid rgba(255, 215, 0, 0.3);
+        padding-bottom: 3px;
+      }
+
+      .tracker-quest-name {
+        font-size: 11px;
+        font-weight: 800;
+        color: #ffffff;
+        text-shadow: 1px 1px 2px #000;
+      }
+
+      .tracker-obj-list {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        font-size: 9.5px;
+        color: #cbd5e1;
+      }
+
+      /* Floating Toast Notification */
+      .hud-toast-banner {
+        position: absolute;
+        top: 18px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(18, 12, 28, 0.95);
+        border: 2px solid #ffd700;
+        border-radius: 6px;
+        padding: 8px 22px;
+        color: #fef08a;
+        font-weight: 800;
+        font-size: 13px;
+        box-shadow: 0 6px 25px rgba(0, 0, 0, 0.85), 0 0 15px rgba(255, 215, 0, 0.45);
+        z-index: 99999;
+        pointer-events: none;
+        animation: toastSlideDown 0.3s ease-out;
+        text-shadow: 1px 1px 2px #000;
+      }
+
+      @keyframes toastSlideDown {
+        from { transform: translate(-50%, -20px); opacity: 0; }
+        to { transform: translate(-50%, 0); opacity: 1; }
+      }
+
+      /* Touch Talk Button for NPC Interaction */
+      .touch-talk-btn {
+        width: 68px;
+        height: 68px;
+        background: url('/assets/kenney-rpg-ui/buttonRound_blue.png') no-repeat center center;
+        background-size: 100% 100%;
+        box-shadow: 0 0 20px rgba(59, 130, 246, 0.85);
+        animation: pulseTalkBtn 1.5s infinite ease-in-out;
+        color: #ffd700;
+        font-weight: 900;
+        font-size: 11px;
+        display: none;
+        border: none;
+      }
+
+      @keyframes pulseTalkBtn {
+        0%, 100% { transform: scale(1); filter: brightness(1); }
+        50% { transform: scale(1.08); filter: brightness(1.3); }
       }
 
       /* Desktop & Mobile Hotbar with Sprite Buttons */
@@ -739,10 +857,28 @@ export class GameHUD {
       <!-- Combo Display -->
       <div class="combo-display" id="combo-display">0x COMBO!</div>
 
-      <!-- Top Right: Gold & Inventory -->
+      <!-- Toast Notification Banner -->
+      <div class="hud-toast-banner" id="hud-toast-banner" style="display: none;"></div>
+
+      <!-- Top Right: Gold & Navigation Buttons -->
       <div class="hud-top-right">
         <div class="gold-badge">GOLD: <span id="hud-gold-text">${p.gold}</span></div>
+        <button class="inv-btn inv-btn-quest" id="toggle-quests-btn">QUESTS [ J ]</button>
+        <button class="inv-btn inv-btn-quest" id="toggle-map-btn">MAP [ M ]</button>
+        <button class="inv-btn inv-btn-town" id="return-town-btn" style="display: ${this.engine.isTownMode ? 'none' : 'block'};">TOWN [ T ]</button>
         <button class="inv-btn" id="toggle-inv-btn">BAG [ I ]</button>
+      </div>
+
+      <!-- Mini Quest Tracker -->
+      <div class="mini-quest-tracker" id="mini-quest-tracker">
+        <div class="tracker-title">
+          <span>📜 ACTIVE QUEST</span>
+          <span style="font-size: 8.5px; color: #94a3b8;">[CLICK / J]</span>
+        </div>
+        <div class="tracker-quest-name" id="tracker-quest-name">Act I: The Stolen Keystone</div>
+        <div class="tracker-obj-list" id="tracker-obj-list">
+          <div>Talk to Elder Justinian in Eldermoor</div>
+        </div>
       </div>
 
       <!-- Bottom Center: 6-Skill Cooldown Hotbar with Kyrise Icons & Sprite Slots -->
@@ -768,8 +904,12 @@ export class GameHUD {
           </div>
         </div>
 
-        <!-- Right Side: Touch Action Hub (Jump & Dash) -->
+        <!-- Right Side: Touch Action Hub (Talk, Jump & Dash) -->
         <div class="mobile-action-hub">
+          <button class="touch-action-btn touch-talk-btn" id="touch-talk-btn">
+            <span style="font-size: 16px;">💬</span>
+            <span>TALK</span>
+          </button>
           <button class="touch-action-btn jump-touch-btn" id="touch-jump-btn">
             <span style="font-size: 18px;">▲</span>
             <span>JUMP</span>
@@ -865,6 +1005,48 @@ export class GameHUD {
 
     closeBtn?.addEventListener('click', closeInv);
     closeBtn?.addEventListener('touchstart', closeInv, { passive: true });
+
+    // Quests button
+    const questsBtn = this.container.querySelector('#toggle-quests-btn');
+    questsBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.questLogUI?.toggle();
+    });
+
+    // Map button
+    const mapBtn = this.container.querySelector('#toggle-map-btn');
+    mapBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.worldMapUI?.open();
+    });
+
+    // Return to Town button
+    const townBtn = this.container.querySelector('#return-town-btn');
+    townBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      audio.playTeleport();
+      this.game?.loadTownHub();
+    });
+
+    // Mini Quest Tracker Click
+    const trackerEl = this.container.querySelector('#mini-quest-tracker');
+    trackerEl?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.questLogUI?.toggle();
+    });
+
+    // Touch Talk Button
+    const talkBtn = this.container.querySelector('#touch-talk-btn');
+    talkBtn?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.game?.interactWithActiveNpc();
+    });
+    talkBtn?.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.game?.interactWithActiveNpc();
+    }, { passive: false });
 
     // Skill Hotbar Click & Touch triggers skill with instant feedback
     const slots = this.container.querySelectorAll('.hotbar-slot');
@@ -1016,6 +1198,16 @@ export class GameHUD {
     if (mobsEl) mobsEl.textContent = `Enemies remaining: ${remainingEnemies}`;
   }
 
+  public showToast(message: string) {
+    const toast = this.container.querySelector('#hud-toast-banner') as HTMLElement;
+    if (!toast) return;
+    toast.textContent = message;
+    toast.style.display = 'block';
+    setTimeout(() => {
+      toast.style.display = 'none';
+    }, 3800);
+  }
+
   public update() {
     const p = this.engine.player;
 
@@ -1027,6 +1219,47 @@ export class GameHUD {
     if (hpBar) hpBar.style.width = `${Math.max(0, (p.hp / p.maxHp) * 100)}%`;
     if (expBar) expBar.style.width = `${Math.max(0, (p.exp / p.maxExp) * 100)}%`;
     if (goldText) goldText.textContent = `${p.gold}`;
+
+    // Town Return button
+    const townBtn = this.container.querySelector('#return-town-btn') as HTMLElement;
+    if (townBtn) {
+      townBtn.style.display = this.engine.isTownMode ? 'none' : 'block';
+    }
+
+    // Touch Talk Button
+    const talkBtn = this.container.querySelector('#touch-talk-btn') as HTMLElement;
+    if (talkBtn) {
+      const activeNpc = this.engine.townHub?.getActiveNpc();
+      talkBtn.style.display = (this.engine.isTownMode && activeNpc) ? 'flex' : 'none';
+    }
+
+    // Mini Quest Tracker update
+    const activeQuests = quests.getAllActiveQuests();
+    const qNameEl = this.container.querySelector('#tracker-quest-name');
+    const qListEl = this.container.querySelector('#tracker-obj-list');
+
+    if (qNameEl && qListEl) {
+      if (activeQuests.length > 0) {
+        const topQ = activeQuests[0];
+        qNameEl.textContent = topQ.quest.title;
+        qListEl.innerHTML = topQ.objectives.map(obj => `
+          <div style="color: ${obj.isCompleted ? '#4ade80' : '#cbd5e1'};">
+            ${obj.isCompleted ? '☑️' : '◻️'} ${obj.description} (${obj.currentCount}/${obj.requiredCount})
+          </div>
+        `).join('');
+      } else {
+        qNameEl.textContent = 'No Active Quest';
+        qListEl.innerHTML = `<div>Visit Elder Justinian in Eldermoor</div>`;
+      }
+    }
+
+    // Wave Banner in Town vs Dungeon
+    const waveTitle = this.container.querySelector('#wave-title-text');
+    const waveMobs = this.container.querySelector('#wave-mobs-text');
+    if (this.engine.isTownMode && waveTitle && waveMobs) {
+      waveTitle.textContent = 'HAVEN OF ELDERMOOR';
+      waveMobs.textContent = 'Peaceful Town Sanctuary';
+    }
 
     // Update Skill Cooldowns
     p.characterClass.skills.forEach(skill => {

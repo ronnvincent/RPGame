@@ -75,7 +75,7 @@ export interface DungeonDefinition {
   waves: DungeonWave[];
 }
 
-export type BattleTheme = 'catacombs' | 'crypt' | 'inferno';
+export type BattleTheme = 'catacombs' | 'crypt' | 'inferno' | 'void';
 
 export const DUNGEONS: DungeonDefinition[] = [
   // --- 1. GOBLIN CATACOMBS ---
@@ -190,6 +190,64 @@ export const DUNGEONS: DungeonDefinition[] = [
         waveNumber: 4,
         enemies: [
           { name: 'Ancient Red Dragon Ignis', type: 'boss', icon: '🐉', color: '#d50000', maxHp: 3500, atk: 80, def: 45, speed: 3.8, expReward: 1500, goldReward: 1200, width: 95, height: 95, count: 1, phases: 3 }
+        ]
+      }
+    ]
+  },
+
+  // --- 4. THE VOID NEXUS ---
+  {
+    id: 'void_nexus',
+    name: 'The Void Nexus',
+    subtitle: 'Cosmic rift where NightBorne channels the shattered runes into a total eclipse.',
+    theme: 'void',
+    backgroundGradient: ['#1a0b2e', '#06020c'],
+    platformColor: '#3d1c5e',
+    ambientParticles: '#c084fc',
+    waves: [
+      {
+        waveNumber: 1,
+        enemies: [
+          { name: 'Nether Stalker', type: 'mob', icon: '👤', color: '#a855f7', maxHp: 380, atk: 46, def: 20, speed: 4.0, expReward: 140, goldReward: 85, width: 42, height: 50, count: 4 }
+        ]
+      },
+      {
+        waveNumber: 2,
+        enemies: [
+          { name: 'Void Imp', type: 'mob', icon: '🔮', color: '#7c3aed', maxHp: 340, atk: 50, def: 16, speed: 4.2, expReward: 160, goldReward: 95, width: 38, height: 44, count: 3 },
+          { name: 'Crypt Wraith', type: 'mob', icon: '👻', color: '#9c27b0', maxHp: 320, atk: 48, def: 18, speed: 3.8, expReward: 150, goldReward: 90, width: 42, height: 52, count: 2 }
+        ]
+      },
+      {
+        waveNumber: 3,
+        enemies: [
+          { name: 'Void Colossus', type: 'elite', icon: '🌌', color: '#6d28d9', maxHp: 1500, atk: 72, def: 48, speed: 2.4, expReward: 600, goldReward: 400, width: 70, height: 80, count: 1 },
+          { name: 'Nether Stalker', type: 'mob', icon: '👤', color: '#a855f7', maxHp: 400, atk: 48, def: 22, speed: 4.0, expReward: 150, goldReward: 90, width: 42, height: 50, count: 3 }
+        ]
+      },
+      {
+        waveNumber: 4,
+        enemies: [
+          { name: 'NightBorne Void Overlord', type: 'boss', icon: '👑', color: '#4c1d95', maxHp: 5200, atk: 95, def: 52, speed: 4.2, expReward: 3000, goldReward: 2500, width: 88, height: 96, count: 1, phases: 3 }
+        ]
+      }
+    ]
+  },
+
+  // --- 5. ENDLESS CELESTIAL ARENA ---
+  {
+    id: 'endless_arena',
+    name: 'Endless Celestial Arena',
+    subtitle: 'Infinite trial against progressively empowered dimensional waves.',
+    theme: 'void',
+    backgroundGradient: ['#120c24', '#040208'],
+    platformColor: '#2e1c4a',
+    ambientParticles: '#facc15',
+    waves: [
+      {
+        waveNumber: 1,
+        enemies: [
+          { name: 'Nether Stalker', type: 'mob', icon: '👤', color: '#a855f7', maxHp: 400, atk: 48, def: 20, speed: 4.0, expReward: 150, goldReward: 100, width: 42, height: 50, count: 5 }
         ]
       }
     ]
