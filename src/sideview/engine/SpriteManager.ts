@@ -1963,21 +1963,6 @@ export class SpriteManager {
   }
 
   /**
-   * Draw Parallax Environment & High Forest Tiles
-   */
-  public drawEnvironment(
-    ctx: CanvasRenderingContext2D,
-    camX: number,
-    canvasWidth: number,
-    canvasHeight: number,
-    groundY: number,
-    arenaWidth: number,
-    battleTheme: BattleTheme = 'catacombs'
-  ) {
-    ctx.imageSmoothingEnabled = false;
-    const theme = battleTheme || 'catacombs';
-    const safeCamX = Math.max(0, camX);
-  /**
    * Draw Clean, High-Contrast Parallax Backgrounds, Themed Grounds, and Atmosphere
    */
   public drawEnvironment(
@@ -1987,7 +1972,7 @@ export class SpriteManager {
     canvasHeight: number,
     groundY: number,
     arenaWidth: number,
-    theme: BattleTheme
+    theme: BattleTheme = 'catacombs'
   ) {
     const time = Date.now() / 1000;
     const safeCamX = Math.max(0, camX);
