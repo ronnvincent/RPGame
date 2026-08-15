@@ -425,7 +425,15 @@ export class SpriteManager {
       wc_mg_nofungus: '/assets/warped-files/warped-files/Assets/PNG/environment/layers/middleground-no-fungus.png',
       wc_tileset: '/assets/warped-files/warped-files/Assets/PNG/environment/layers/tilesets.png',
       wc_walls: '/assets/warped-files/warped-files/Assets/PNG/environment/layers/walls.png',
-      wc_props: '/assets/warped-files/warped-files/Assets/PNG/environment/layers/props.png'
+      wc_props: '/assets/warped-files/warped-files/Assets/PNG/environment/layers/props.png',
+      wc_gate1: '/assets/warped-files/warped-files/Assets/PNG/environment/props/gate-01.png',
+      wc_gate2: '/assets/warped-files/warped-files/Assets/PNG/environment/props/gate-02.png',
+      wc_gate3: '/assets/warped-files/warped-files/Assets/PNG/environment/props/gate-03.png',
+      wc_stalactite: '/assets/warped-files/warped-files/Assets/PNG/environment/props/stalactite.png',
+      wc_stone_head: '/assets/warped-files/warped-files/Assets/PNG/environment/props/stone-head.png',
+      wc_stone: '/assets/warped-files/warped-files/Assets/PNG/environment/props/stone.png',
+      wc_plant_big: '/assets/warped-files/warped-files/Assets/PNG/environment/props/plant-big.png',
+      wc_plant_small: '/assets/warped-files/warped-files/Assets/PNG/environment/props/plant-small.png'
     };
 
     Object.entries(assetsToLoad).forEach(([key, src]) => {
@@ -2148,20 +2156,110 @@ export class SpriteManager {
     }
 
     // ----------------------------------------------------
-    // 3. GOTHICVANIA COBBLESTONE GROUND & SUBTERRANEAN TILES
+    // 3. WARPED CAVES HANGING STALACTITES & DUNGEON PROPS
+    // ----------------------------------------------------
+    if (isDungeon) {
+      const stalactiteImg = this.images['wc_stalactite'];
+      const gateImg = this.images['wc_gate1'] || this.images['wc_gate2'];
+      const stoneHeadImg = this.images['wc_stone_head'];
+      const stoneImg = this.images['wc_stone'];
+      const plantBigImg = this.images['wc_plant_big'];
+      const plantSmallImg = this.images['wc_plant_small'];
+
+      // A. Hanging Stalactites from Cave Ceiling
+      if (stalactiteImg && stalactiteImg.complete && stalactiteImg.naturalWidth > 0) {
+        const stalSpacing = 180;
+        const startStal = Math.floor((safeCamX - 100) / stalSpacing) - 1;
+        const endStal = Math.floor((safeCamX + canvasWidth + 100) / stalSpacing) + 1;
+        for (let s = startStal; s <= endStal; s++) {
+          const sx = s * stalSpacing + ((s * 47) % 60) - safeCamX;
+          const sy = 0;
+          const sH = 45 + ((s * 23) % 25);
+          ctx.drawImage(stalactiteImg, sx, sy, 32, sH);
+        }
+      }
+
+      // B. Ancient Dungeon Portal Gate at Left and Right ends of Arena
+      if (gateImg && gateImg.complete && gateImg.naturalWidth > 0) {
+        const gateLeftX = 80 - safeCamX;
+        const gateRightX = arenaWidth - 140 - safeCamX;
+        ctx.drawImage(gateImg, gateLeftX, groundY - 110, 64, 110);
+        ctx.drawImage(gateImg, gateRightX, groundY - 110, 64, 110);
+      }
+
+      // C. Ancient Stone Relic Heads & Boulders along Cavern Floor
+      if (stoneHeadImg && stoneHeadImg.complete && stoneHeadImg.naturalWidth > 0) {
+        const headSpacing = 680;
+        const startH = Math.floor((safeCamX - 100) / headSpacing) - 1;
+        const endH = Math.floor((safeCamX + canvasWidth + 100) / headSpacing) + 1;
+        for (let h = startH; h <= endH; h++) {
+          const hx = h * headSpacing + 260 - safeCamX;
+          ctx.drawImage(stoneHeadImg, hx, groundY - 48, 48, 48);
+        }
+      }
+
+      if (stoneImg && stoneImg.complete && stoneImg.naturalWidth > 0) {
+        const stoneSpacing = 420;
+        const startSt = Math.floor((safeCamX - 100) / stoneSpacing) - 1;
+        const endSt = Math.floor((safeCamX + canvasWidth + 100) / stoneSpacing) + 1;
+        for (let st = startSt; st <= endSt; st++) {
+          const stx = st * stoneSpacing + 160 - safeCamX;
+          ctx.drawImage(stoneImg, stx, groundY - 28, 42, 28);
+        }
+      }
+
+      // D. Bioluminescent Cave Flora with Soft Glowing Halo
+      if (plantBigImg && plantBigImg.complete && plantBigImg.naturalWidth > 0) {
+        const plantSpacing = 380;
+        const startP = Math.floor((safeCamX - 100) / plantSpacing) - 1;
+        const endP = Math.floor((safeCamX + canvasWidth + 100) / plantSpacing) + 1;
+        for (let p = startP; p <= endP; p++) {
+          const px = p * plantSpacing + 310 - safeCamX;
+          const py = groundY - 40;
+          ctx.drawImage(plantBigImg, px, py, 32, 40);
+
+          // Bioluminescent Glow Pulse
+          const glowColor = safeTheme === 'inferno' ? '#f97316' : safeTheme === 'crypt' ? '#c084fc' : safeTheme === 'void' ? '#818cf8' : '#4ade80';
+          const floraGlow = ctx.createRadialGradient(px + 16, py + 20, 4, px + 16, py + 20, 24 + Math.sin(time * 5 + p) * 4);
+          floraGlow.addColorStop(0, glowColor);
+          floraGlow.addColorStop(0.5, 'rgba(0, 0, 0, 0)');
+          ctx.fillStyle = floraGlow;
+          ctx.beginPath();
+          ctx.arc(px + 16, py + 20, 28, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      if (plantSmallImg && plantSmallImg.complete && plantSmallImg.naturalWidth > 0) {
+        const smSpacing = 290;
+        const startSm = Math.floor((safeCamX - 100) / smSpacing) - 1;
+        const endSm = Math.floor((safeCamX + canvasWidth + 100) / smSpacing) + 1;
+        for (let sm = startSm; sm <= endSm; sm++) {
+          const smx = sm * smSpacing + 120 - safeCamX;
+          ctx.drawImage(plantSmallImg, smx, groundY - 26, 24, 26);
+        }
+      }
+    }
+
+    // ----------------------------------------------------
+    // 4. COBBLESTONE & WARPED CAVERN GROUND TILES
     // ----------------------------------------------------
     const tileSize = 32;
     const startTile = Math.floor((safeCamX - 60) / tileSize);
     const endTile = Math.floor((safeCamX + canvasWidth + 60) / tileSize);
 
-    const gvGround = this.images['gv_ground'] || this.images['battle_ground'];
-    const gvGroundWall = this.images['gv_ground_wall'] || this.images['tiles'];
+    const gvGround = isDungeon
+      ? (this.images['wc_tileset'] || this.images['gv_ground'])
+      : (this.images['gv_ground'] || this.images['battle_ground']);
+    const gvGroundWall = isDungeon
+      ? (this.images['wc_walls'] || this.images['gv_ground_wall'])
+      : (this.images['gv_ground_wall'] || this.images['tiles']);
 
     for (let t = startTile; t <= endTile; t++) {
       const tileX = t * tileSize - safeCamX;
 
       if (gvGround && gvGround.complete && gvGround.naturalWidth > 0) {
-        // Cobblestone surface tile
+        // Cavern / Cobblestone Surface Tile
         ctx.drawImage(gvGround, tileX, groundY, tileSize, tileSize);
         // Deep stone wall foundation
         if (gvGroundWall && gvGroundWall.complete && gvGroundWall.naturalWidth > 0) {
@@ -2183,7 +2281,7 @@ export class SpriteManager {
       }
     }
 
-    // Cobblestone Top Edge Trim Accent
+    // Cavern Top Edge Trim Accent Line
     ctx.lineWidth = 2;
     ctx.strokeStyle = safeTheme === 'inferno' ? '#f97316' : safeTheme === 'crypt' ? '#a855f7' : safeTheme === 'void' ? '#818cf8' : '#71717a';
     ctx.beginPath();
