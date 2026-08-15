@@ -489,6 +489,11 @@ export class SideViewEngine {
     const skill: SkillDefinition = p.characterClass.skills[skillIndex];
     if (!skill) return;
 
+    // Prevent attack spam (Anti-Spam / GCD)
+    if (p.attackTimer > 0) {
+      return;
+    }
+
     // Check cooldown
     if ((p.skillCooldowns[skill.id] || 0) > 0) {
       this.particles.addFloatingText(p.x, p.y - 20, 'On Cooldown!', '#ef5350', false, 14);
