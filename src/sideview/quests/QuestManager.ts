@@ -247,7 +247,15 @@ export class QuestManager {
   }
 
   public isDungeonUnlocked(dungeonId: string): boolean {
-    if (dungeonId === 'goblin_catacombs') return true;
+    if (
+      dungeonId === 'goblin_catacombs' ||
+      dungeonId === 'venomous_swamp' ||
+      dungeonId === 'twilight_peaks' ||
+      dungeonId === 'sunken_abyss' ||
+      dungeonId === 'gallet_depths'
+    ) {
+      return true;
+    }
     return this.unlockedDungeons.has(dungeonId);
   }
 }

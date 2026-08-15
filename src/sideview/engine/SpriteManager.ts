@@ -436,7 +436,34 @@ export class SpriteManager {
       wc_plant_small: '/assets/warped-files/warped-files/Assets/PNG/environment/props/plant-small.png',
 
       // 27. Green Portal Animated Sprite Sheet (512x192, 8 frames x 3 rows, 64x64 per frame)
-      green_portal: '/assets/green-portal.png'
+      green_portal: '/assets/green-portal.png',
+
+      // 28. Gothicvania Swamp (Poison Marsh Biome)
+      swamp_bg: '/assets/swamp/background.png',
+      swamp_mid1: '/assets/swamp/mid-layer-01.png',
+      swamp_mid2: '/assets/swamp/mid-layer-02.png',
+      swamp_trees: '/assets/swamp/trees.png',
+      swamp_tileset: '/assets/swamp/tileset.png',
+      swamp_props: '/assets/swamp/props.png',
+
+      // 29. Mountain Dusk (Blood Moon & Twilight Peaks Biome)
+      mountain_sky: '/assets/mountain-dusk/MountainsLayers/sky.png',
+      mountain_far_mountains: '/assets/mountain-dusk/MountainsLayers/far-mountains.png',
+      mountain_mountains: '/assets/mountain-dusk/MountainsLayers/mountains.png',
+      mountain_far_clouds: '/assets/mountain-dusk/MountainsLayers/far-clouds.png',
+      mountain_near_clouds: '/assets/mountain-dusk/MountainsLayers/near-clouds.png',
+      mountain_trees: '/assets/mountain-dusk/MountainsLayers/trees.png',
+
+      // 30. Underwater Fantasy (Sunken Abyss & Ocean Ruins Biome)
+      underwater_far: '/assets/underwater/Assets/PNG/layers/far.png',
+      underwater_fg1: '/assets/underwater/Assets/PNG/layers/foreground-1.png',
+      underwater_fg2: '/assets/underwater/Assets/PNG/layers/foreground-2.png',
+      underwater_sand: '/assets/underwater/Assets/PNG/layers/sand.png',
+      underwater_merged: '/assets/underwater/Assets/PNG/layers/foregound-merged.png',
+
+      // 31. Caves of Gallet (Subterranean Forge & Lava Falls Biome)
+      caves_gallet: '/assets/caves-gallet/cavesofgallet.png',
+      caves_gallet_tiles: '/assets/caves-gallet/cavesofgallet_tiles.png'
     };
 
     Object.entries(assetsToLoad).forEach(([key, src]) => {
@@ -2124,245 +2151,401 @@ export class SpriteManager {
     ctx.imageSmoothingEnabled = false;
 
     // ----------------------------------------------------
-    // 1. GOTHICVANIA & WARPED CAVES PARALLAX LAYERS
+    // 1. BIOME-SPECIFIC PARALLAX LAYERS
     // ----------------------------------------------------
-    const isDungeon = safeTheme !== 'town';
-    const gvBg = (isDungeon && this.images['wc_bg']) ? this.images['wc_bg'] : (this.images['gv_bg'] || this.images['bg_forest']);
-    const gvMg = (isDungeon && this.images['wc_mg']) ? this.images['wc_mg'] : (this.images['gv_mg'] || this.images['bg_trees']);
+    if (safeTheme === 'swamp') {
+      // ===== GOTHICVANIA SWAMP BIOME =====
+      const swampBg = this.images['swamp_bg'];
+      const swampMid1 = this.images['swamp_mid1'];
+      const swampMid2 = this.images['swamp_mid2'];
+      const swampTrees = this.images['swamp_trees'];
 
-    const bgScale = Math.max(1.8, (groundY + 40) / 224);
-    const bgW = 384 * bgScale;
-    const bgH = 224 * bgScale;
-
-    // Layer 1: Distant Sky & Cavern/Mountains (Parallax Speed 0.15)
-    if (gvBg && gvBg.complete && gvBg.naturalWidth > 0) {
-      const bgCount = Math.ceil(canvasWidth / bgW) + 2;
-      const startBgX = -((safeCamX * 0.15) % bgW);
-      for (let i = 0; i < bgCount; i++) {
-        ctx.drawImage(gvBg, startBgX + i * bgW, groundY - bgH, bgW, bgH);
+      // Background emerald dark green sky
+      if (swampBg && swampBg.complete && swampBg.naturalWidth > 0) {
+        const bgW = 256;
+        const bgH = groundY;
+        const bgCount = Math.ceil(canvasWidth / bgW) + 2;
+        const startBgX = -((safeCamX * 0.1) % bgW);
+        for (let i = 0; i < bgCount; i++) {
+          ctx.drawImage(swampBg, startBgX + i * bgW, 0, bgW, bgH);
+        }
+      } else {
+        ctx.fillStyle = '#0f291e';
+        ctx.fillRect(0, 0, canvasWidth, groundY);
       }
+
+      // Mid-layer 2: Deep swamp silhouettes (0.2x speed)
+      if (swampMid2 && swampMid2.complete && swampMid2.naturalWidth > 0) {
+        const m2W = 320;
+        const m2H = 260;
+        const m2Count = Math.ceil(canvasWidth / m2W) + 2;
+        const startM2X = -((safeCamX * 0.2) % m2W);
+        for (let i = 0; i < m2Count; i++) {
+          ctx.drawImage(swampMid2, startM2X + i * m2W, groundY - m2H, m2W, m2H);
+        }
+      }
+
+      // Mid-layer 1: Murky trees with torches & hanging moss (0.35x speed)
+      if (swampMid1 && swampMid1.complete && swampMid1.naturalWidth > 0) {
+        const m1W = 320;
+        const m1H = 280;
+        const m1Count = Math.ceil(canvasWidth / m1W) + 2;
+        const startM1X = -((safeCamX * 0.35) % m1W);
+        for (let i = 0; i < m1Count; i++) {
+          ctx.drawImage(swampMid1, startM1X + i * m1W, groundY - m1H, m1W, m1H);
+        }
+      }
+
+      // Foreground twisted swamp deadwood (0.6x speed)
+      if (swampTrees && swampTrees.complete && swampTrees.naturalWidth > 0) {
+        const trW = 400;
+        const trH = 300;
+        const trCount = Math.ceil(canvasWidth / trW) + 2;
+        const startTrX = -((safeCamX * 0.6) % trW);
+        for (let i = 0; i < trCount; i++) {
+          ctx.drawImage(swampTrees, startTrX + i * trW, groundY - trH, trW, trH);
+        }
+      }
+
+      // Glowing Will-o'-the-Wisp Fireflies
+      for (let w = 0; w < 20; w++) {
+        const wx = (Math.sin(w * 88 + time * 0.6) * 0.5 + 0.5) * canvasWidth;
+        const wy = groundY - 50 - ((time * 30 + w * 25) % (groundY - 100));
+        ctx.fillStyle = w % 2 === 0 ? '#4ade80' : '#86efac';
+        ctx.shadowColor = '#22c55e';
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(wx, wy, 2 + Math.sin(time * 4 + w) * 1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (safeTheme === 'mountain') {
+      // ===== MOUNTAIN DUSK BIOME =====
+      const mSky = this.images['mountain_sky'];
+      const mFarM = this.images['mountain_far_mountains'];
+      const mFarC = this.images['mountain_far_clouds'];
+      const mNearC = this.images['mountain_near_clouds'];
+      const mMnt = this.images['mountain_mountains'];
+      const mTrees = this.images['mountain_trees'];
+
+      // Sky with Blood Moon
+      if (mSky && mSky.complete && mSky.naturalWidth > 0) {
+        const sW = 320;
+        const sH = groundY;
+        const sCount = Math.ceil(canvasWidth / sW) + 2;
+        const startSX = -((safeCamX * 0.05) % sW);
+        for (let i = 0; i < sCount; i++) {
+          ctx.drawImage(mSky, startSX + i * sW, 0, sW, sH);
+        }
+      }
+
+      // Far Mountains & Far Clouds (0.15x)
+      if (mFarM && mFarM.complete && mFarM.naturalWidth > 0) {
+        const fW = 380;
+        const fH = 220;
+        const fCount = Math.ceil(canvasWidth / fW) + 2;
+        const startFX = -((safeCamX * 0.15) % fW);
+        for (let i = 0; i < fCount; i++) {
+          ctx.drawImage(mFarM, startFX + i * fW, groundY - fH - 50, fW, fH);
+        }
+      }
+
+      if (mFarC && mFarC.complete && mFarC.naturalWidth > 0) {
+        const fcW = 380;
+        const fcH = 140;
+        const fcCount = Math.ceil(canvasWidth / fcW) + 2;
+        const startFCX = -(((safeCamX * 0.12) + time * 10) % fcW);
+        for (let i = 0; i < fcCount; i++) {
+          ctx.drawImage(mFarC, startFCX + i * fcW, groundY - fcH - 120, fcW, fcH);
+        }
+      }
+
+      // Dramatic Crimson Rock Crags (0.35x)
+      if (mMnt && mMnt.complete && mMnt.naturalWidth > 0) {
+        const mW = 380;
+        const mH = 240;
+        const mCount = Math.ceil(canvasWidth / mW) + 2;
+        const startMX = -((safeCamX * 0.35) % mW);
+        for (let i = 0; i < mCount; i++) {
+          ctx.drawImage(mMnt, startMX + i * mW, groundY - mH, mW, mH);
+        }
+      }
+
+      // Near Clouds drifting (0.45x)
+      if (mNearC && mNearC.complete && mNearC.naturalWidth > 0) {
+        const ncW = 380;
+        const ncH = 160;
+        const ncCount = Math.ceil(canvasWidth / ncW) + 2;
+        const startNCX = -(((safeCamX * 0.45) + time * 18) % ncW);
+        for (let i = 0; i < ncCount; i++) {
+          ctx.drawImage(mNearC, startNCX + i * ncW, groundY - ncH - 20, ncW, ncH);
+        }
+      }
+
+      // Pine Ridge Silhouettes (0.6x)
+      if (mTrees && mTrees.complete && mTrees.naturalWidth > 0) {
+        const tW = 340;
+        const tH = 200;
+        const tCount = Math.ceil(canvasWidth / tW) + 2;
+        const startTX = -((safeCamX * 0.6) % tW);
+        for (let i = 0; i < tCount; i++) {
+          ctx.drawImage(mTrees, startTX + i * tW, groundY - tH, tW, tH);
+        }
+      }
+    } else if (safeTheme === 'underwater') {
+      // ===== UNDERWATER FANTASY BIOME =====
+      const uFar = this.images['underwater_far'];
+      const uFg1 = this.images['underwater_fg1'];
+      const uFg2 = this.images['underwater_fg2'];
+
+      // Oceanic deep blue gradient & far abyss
+      if (uFar && uFar.complete && uFar.naturalWidth > 0) {
+        const uW = 384;
+        const uH = groundY + 50;
+        const uCount = Math.ceil(canvasWidth / uW) + 2;
+        const startUX = -((safeCamX * 0.15) % uW);
+        for (let i = 0; i < uCount; i++) {
+          ctx.drawImage(uFar, startUX + i * uW, 0, uW, uH);
+        }
+      } else {
+        ctx.fillStyle = '#042f2e';
+        ctx.fillRect(0, 0, canvasWidth, groundY);
+      }
+
+      // Sunken Temple Statues & Ancient Pillars (0.35x)
+      if (uFg2 && uFg2.complete && uFg2.naturalWidth > 0) {
+        const fg2W = 420;
+        const fg2H = 260;
+        const fg2Count = Math.ceil(canvasWidth / fg2W) + 2;
+        const startFG2X = -((safeCamX * 0.35) % fg2W);
+        for (let i = 0; i < fg2Count; i++) {
+          ctx.drawImage(uFg2, startFG2X + i * fg2W, groundY - fg2H + 20, fg2W, fg2H);
+        }
+      }
+
+      // Coral Reefs & Seaweed Formations (0.6x)
+      if (uFg1 && uFg1.complete && uFg1.naturalWidth > 0) {
+        const fg1W = 420;
+        const fg1H = 280;
+        const fg1Count = Math.ceil(canvasWidth / fg1W) + 2;
+        const startFG1X = -((safeCamX * 0.6) % fg1W);
+        for (let i = 0; i < fg1Count; i++) {
+          ctx.drawImage(uFg1, startFG1X + i * fg1W, groundY - fg1H + 10, fg1W, fg1H);
+        }
+      }
+
+      // Rising Oceanic Bubbles & Light Rays
+      for (let b = 0; b < 25; b++) {
+        const bx = (Math.sin(b * 55 + time * 0.8) * 0.5 + 0.5) * canvasWidth;
+        const by = groundY - ((time * 45 + b * 30) % groundY);
+        ctx.fillStyle = 'rgba(147, 246, 237, 0.6)';
+        ctx.shadowColor = '#2dd4bf';
+        ctx.shadowBlur = 6;
+        ctx.beginPath();
+        ctx.arc(bx, by, 1.5 + (b % 3), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (safeTheme === 'caves') {
+      // ===== CAVES OF GALLET BIOME =====
+      const cGallet = this.images['caves_gallet'];
+      if (cGallet && cGallet.complete && cGallet.naturalWidth > 0) {
+        const cgW = 480;
+        const cgH = groundY + 40;
+        const cgCount = Math.ceil(canvasWidth / cgW) + 2;
+        const startCGX = -((safeCamX * 0.25) % cgW);
+        for (let i = 0; i < cgCount; i++) {
+          ctx.drawImage(cGallet, startCGX + i * cgW, 0, cgW, cgH);
+        }
+      } else {
+        ctx.fillStyle = '#1c1917';
+        ctx.fillRect(0, 0, canvasWidth, groundY);
+      }
+
+      // Molten Lava Glow & Heat Distortion
+      const lavaGlow = ctx.createLinearGradient(0, groundY - 120, 0, groundY);
+      lavaGlow.addColorStop(0, 'transparent');
+      lavaGlow.addColorStop(1, 'rgba(234, 88, 12, 0.35)');
+      ctx.fillStyle = lavaGlow;
+      ctx.fillRect(0, groundY - 120, canvasWidth, 120);
     } else {
-      // Fallback sky gradient
-      const skyGrad = ctx.createLinearGradient(0, 0, 0, groundY);
-      skyGrad.addColorStop(0, '#0f172a');
-      skyGrad.addColorStop(1, '#1e1b4b');
-      ctx.fillStyle = skyGrad;
-      ctx.fillRect(0, 0, canvasWidth, groundY);
-    }
+      // ===== GOTHICVANIA TOWN & WARPED CAVES (Default / Catacombs / Crypt / Inferno / Void) =====
+      const isDungeon = safeTheme !== 'town';
+      const gvBg = (isDungeon && this.images['wc_bg']) ? this.images['wc_bg'] : (this.images['gv_bg'] || this.images['bg_forest']);
+      const gvMg = (isDungeon && this.images['wc_mg']) ? this.images['wc_mg'] : (this.images['gv_mg'] || this.images['bg_trees']);
 
-    // Layer 2: Gothic Skyline / Cavern Arches (Parallax Speed 0.35)
-    if (gvMg && gvMg.complete && gvMg.naturalWidth > 0) {
-      const mgW = 384 * bgScale;
-      const mgH = 224 * bgScale;
-      const mgCount = Math.ceil(canvasWidth / mgW) + 2;
-      const startMgX = -((safeCamX * 0.35) % mgW);
-      for (let i = 0; i < mgCount; i++) {
-        ctx.drawImage(gvMg, startMgX + i * mgW, groundY - mgH + 25, mgW, mgH);
+      const bgScale = Math.max(1.8, (groundY + 40) / 224);
+      const bgW = 384 * bgScale;
+      const bgH = 224 * bgScale;
+
+      // Layer 1: Distant Sky & Cavern/Mountains (Parallax Speed 0.15)
+      if (gvBg && gvBg.complete && gvBg.naturalWidth > 0) {
+        const bgCount = Math.ceil(canvasWidth / bgW) + 2;
+        const startBgX = -((safeCamX * 0.15) % bgW);
+        for (let i = 0; i < bgCount; i++) {
+          ctx.drawImage(gvBg, startBgX + i * bgW, groundY - bgH, bgW, bgH);
+        }
+      } else {
+        const skyGrad = ctx.createLinearGradient(0, 0, 0, groundY);
+        skyGrad.addColorStop(0, '#0f172a');
+        skyGrad.addColorStop(1, '#1e1b4b');
+        ctx.fillStyle = skyGrad;
+        ctx.fillRect(0, 0, canvasWidth, groundY);
       }
-    }
 
-    // ----------------------------------------------------
-    // 2. THEMATIC ATMOSPHERIC AMBIENCE OVERLAYS
-    // ----------------------------------------------------
-    if (safeTheme === 'inferno') {
-      // Molten Volcano Cavern Ambiance
-      const magmaGrad = ctx.createLinearGradient(0, 0, 0, groundY);
-      magmaGrad.addColorStop(0, 'rgba(127, 29, 29, 0.45)');
-      magmaGrad.addColorStop(0.7, 'rgba(239, 68, 68, 0.25)');
-      magmaGrad.addColorStop(1, 'rgba(249, 115, 22, 0.4)');
-      ctx.fillStyle = magmaGrad;
-      ctx.fillRect(0, 0, canvasWidth, groundY);
-
-      // Rising Magma Embers
-      for (let e = 0; e < 25; e++) {
-        const emberX = (Math.sin(e * 77 + time * 0.5) * 0.5 + 0.5) * canvasWidth;
-        const emberY = (groundY - ((time * 70 + e * 40) % groundY));
-        ctx.fillStyle = e % 2 === 0 ? '#f97316' : '#fde047';
-        ctx.beginPath();
-        ctx.arc(emberX, emberY, 2 + (e % 3), 0, Math.PI * 2);
-        ctx.fill();
-      }
-    } else if (safeTheme === 'crypt') {
-      // Gothic Crypt Violet Mist
-      const cryptGrad = ctx.createLinearGradient(0, 0, 0, groundY);
-      cryptGrad.addColorStop(0, 'rgba(30, 27, 75, 0.5)');
-      cryptGrad.addColorStop(1, 'rgba(147, 51, 234, 0.25)');
-      ctx.fillStyle = cryptGrad;
-      ctx.fillRect(0, 0, canvasWidth, groundY);
-
-      // Soulfire Braziers along the background
-      const brazierSpacing = 360;
-      const startB = Math.floor((safeCamX - 100) / brazierSpacing) - 1;
-      const endB = Math.floor((safeCamX + canvasWidth + 100) / brazierSpacing) + 1;
-      for (let b = startB; b <= endB; b++) {
-        const bx = b * brazierSpacing + 140 - safeCamX;
-        const by = groundY - 120;
-        const glowRadius = 50 + Math.sin(time * 7 + b) * 8;
-        const flameGlow = ctx.createRadialGradient(bx, by, 5, bx, by, glowRadius);
-        flameGlow.addColorStop(0, 'rgba(192, 132, 252, 0.7)');
-        flameGlow.addColorStop(0.6, 'rgba(126, 34, 206, 0.25)');
-        flameGlow.addColorStop(1, 'transparent');
-        ctx.fillStyle = flameGlow;
-        ctx.beginPath();
-        ctx.arc(bx, by, glowRadius, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    } else if (safeTheme === 'void') {
-      // Cosmic Nebula Void Vortex
-      const voidGrad = ctx.createLinearGradient(0, 0, 0, groundY);
-      voidGrad.addColorStop(0, 'rgba(15, 23, 42, 0.55)');
-      voidGrad.addColorStop(1, 'rgba(99, 102, 241, 0.25)');
-      ctx.fillStyle = voidGrad;
-      ctx.fillRect(0, 0, canvasWidth, groundY);
-
-      // Cosmic Twinkling Stars
-      for (let s = 0; s < 40; s++) {
-        const starX = ((s * 97) - safeCamX * (0.05 + (s % 3) * 0.03)) % (canvasWidth + 100);
-        const actualStarX = starX < 0 ? starX + canvasWidth + 100 : starX;
-        const starY = (s * 33) % (groundY - 40);
-        const alpha = 0.4 + Math.sin(time * 4 + s) * 0.4;
-        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
-        ctx.beginPath();
-        ctx.arc(actualStarX, starY, (s % 3 === 0 ? 2.5 : 1.5), 0, Math.PI * 2);
-        ctx.fill();
-      }
-    } else if (safeTheme === 'catacombs') {
-      // Ancient Dungeon Torches on Cobblestone
-      const torchSpacing = 340;
-      const startTorch = Math.floor((safeCamX - 100) / torchSpacing) - 1;
-      const endTorch = Math.floor((safeCamX + canvasWidth + 100) / torchSpacing) + 1;
-      for (let t = startTorch; t <= endTorch; t++) {
-        const tx = t * torchSpacing + 120 - safeCamX;
-        const ty = groundY - 140;
-        const glowRadius = 55 + Math.sin(time * 8 + t) * 6;
-        const torchGlow = ctx.createRadialGradient(tx, ty, 5, tx, ty, glowRadius);
-        torchGlow.addColorStop(0, 'rgba(251, 191, 36, 0.65)');
-        torchGlow.addColorStop(0.5, 'rgba(249, 115, 22, 0.25)');
-        torchGlow.addColorStop(1, 'transparent');
-        ctx.fillStyle = torchGlow;
-        ctx.beginPath();
-        ctx.arc(tx, ty, glowRadius, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-
-    // ----------------------------------------------------
-    // 3. WARPED CAVES HANGING STALACTITES & DUNGEON PROPS
-    // ----------------------------------------------------
-    if (isDungeon) {
-      const stalactiteImg = this.images['wc_stalactite'];
-      const gateImg = this.images['wc_gate1'] || this.images['wc_gate2'];
-      const stoneHeadImg = this.images['wc_stone_head'];
-      const stoneImg = this.images['wc_stone'];
-      const plantBigImg = this.images['wc_plant_big'];
-      const plantSmallImg = this.images['wc_plant_small'];
-
-      // A. Hanging Stalactites from Cave Ceiling
-      if (stalactiteImg && stalactiteImg.complete && stalactiteImg.naturalWidth > 0) {
-        const stalSpacing = 180;
-        const startStal = Math.floor((safeCamX - 100) / stalSpacing) - 1;
-        const endStal = Math.floor((safeCamX + canvasWidth + 100) / stalSpacing) + 1;
-        for (let s = startStal; s <= endStal; s++) {
-          const sx = s * stalSpacing + ((s * 47) % 60) - safeCamX;
-          const sy = 0;
-          const sH = 45 + ((s * 23) % 25);
-          ctx.drawImage(stalactiteImg, sx, sy, 32, sH);
+      // Layer 2: Gothic Skyline / Cavern Arches (Parallax Speed 0.35)
+      if (gvMg && gvMg.complete && gvMg.naturalWidth > 0) {
+        const mgW = 384 * bgScale;
+        const mgH = 224 * bgScale;
+        const mgCount = Math.ceil(canvasWidth / mgW) + 2;
+        const startMgX = -((safeCamX * 0.35) % mgW);
+        for (let i = 0; i < mgCount; i++) {
+          ctx.drawImage(gvMg, startMgX + i * mgW, groundY - mgH + 25, mgW, mgH);
         }
       }
 
-      // B. Ancient Dungeon Portal Gate at Left and Right ends of Arena
-      if (gateImg && gateImg.complete && gateImg.naturalWidth > 0) {
-        const gateLeftX = 80 - safeCamX;
-        const gateRightX = arenaWidth - 140 - safeCamX;
-        ctx.drawImage(gateImg, gateLeftX, groundY - 110, 64, 110);
-        ctx.drawImage(gateImg, gateRightX, groundY - 110, 64, 110);
-      }
+      // Atmosphere overlays for Inferno, Crypt, Void, and Catacombs
+      if (safeTheme === 'inferno') {
+        const magmaGrad = ctx.createLinearGradient(0, 0, 0, groundY);
+        magmaGrad.addColorStop(0, 'rgba(127, 29, 29, 0.45)');
+        magmaGrad.addColorStop(0.7, 'rgba(239, 68, 68, 0.25)');
+        magmaGrad.addColorStop(1, 'rgba(249, 115, 22, 0.4)');
+        ctx.fillStyle = magmaGrad;
+        ctx.fillRect(0, 0, canvasWidth, groundY);
 
-      // C. Ancient Stone Relic Heads & Boulders along Cavern Floor
-      if (stoneHeadImg && stoneHeadImg.complete && stoneHeadImg.naturalWidth > 0) {
-        const headSpacing = 680;
-        const startH = Math.floor((safeCamX - 100) / headSpacing) - 1;
-        const endH = Math.floor((safeCamX + canvasWidth + 100) / headSpacing) + 1;
-        for (let h = startH; h <= endH; h++) {
-          const hx = h * headSpacing + 260 - safeCamX;
-          ctx.drawImage(stoneHeadImg, hx, groundY - 48, 48, 48);
-        }
-      }
-
-      if (stoneImg && stoneImg.complete && stoneImg.naturalWidth > 0) {
-        const stoneSpacing = 420;
-        const startSt = Math.floor((safeCamX - 100) / stoneSpacing) - 1;
-        const endSt = Math.floor((safeCamX + canvasWidth + 100) / stoneSpacing) + 1;
-        for (let st = startSt; st <= endSt; st++) {
-          const stx = st * stoneSpacing + 160 - safeCamX;
-          ctx.drawImage(stoneImg, stx, groundY - 28, 42, 28);
-        }
-      }
-
-      // D. Bioluminescent Cave Flora with Soft Glowing Halo
-      if (plantBigImg && plantBigImg.complete && plantBigImg.naturalWidth > 0) {
-        const plantSpacing = 380;
-        const startP = Math.floor((safeCamX - 100) / plantSpacing) - 1;
-        const endP = Math.floor((safeCamX + canvasWidth + 100) / plantSpacing) + 1;
-        for (let p = startP; p <= endP; p++) {
-          const px = p * plantSpacing + 310 - safeCamX;
-          const py = groundY - 40;
-          ctx.drawImage(plantBigImg, px, py, 32, 40);
-
-          // Bioluminescent Glow Pulse
-          const glowColor = safeTheme === 'inferno' ? '#f97316' : safeTheme === 'crypt' ? '#c084fc' : safeTheme === 'void' ? '#818cf8' : '#4ade80';
-          const floraGlow = ctx.createRadialGradient(px + 16, py + 20, 4, px + 16, py + 20, 24 + Math.sin(time * 5 + p) * 4);
-          floraGlow.addColorStop(0, glowColor);
-          floraGlow.addColorStop(0.5, 'rgba(0, 0, 0, 0)');
-          ctx.fillStyle = floraGlow;
+        for (let e = 0; e < 25; e++) {
+          const emberX = (Math.sin(e * 77 + time * 0.5) * 0.5 + 0.5) * canvasWidth;
+          const emberY = (groundY - ((time * 70 + e * 40) % groundY));
+          ctx.fillStyle = e % 2 === 0 ? '#f97316' : '#fde047';
           ctx.beginPath();
-          ctx.arc(px + 16, py + 20, 28, 0, Math.PI * 2);
+          ctx.arc(emberX, emberY, 2 + (e % 3), 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (safeTheme === 'crypt') {
+        const cryptGrad = ctx.createLinearGradient(0, 0, 0, groundY);
+        cryptGrad.addColorStop(0, 'rgba(30, 27, 75, 0.5)');
+        cryptGrad.addColorStop(1, 'rgba(147, 51, 234, 0.25)');
+        ctx.fillStyle = cryptGrad;
+        ctx.fillRect(0, 0, canvasWidth, groundY);
+      } else if (safeTheme === 'void') {
+        const voidGrad = ctx.createLinearGradient(0, 0, 0, groundY);
+        voidGrad.addColorStop(0, 'rgba(15, 23, 42, 0.55)');
+        voidGrad.addColorStop(1, 'rgba(99, 102, 241, 0.25)');
+        ctx.fillStyle = voidGrad;
+        ctx.fillRect(0, 0, canvasWidth, groundY);
+
+        for (let s = 0; s < 40; s++) {
+          const starX = ((s * 97) - safeCamX * (0.05 + (s % 3) * 0.03)) % (canvasWidth + 100);
+          const actualStarX = starX < 0 ? starX + canvasWidth + 100 : starX;
+          const starY = (s * 33) % (groundY - 40);
+          const alpha = 0.4 + Math.sin(time * 4 + s) * 0.4;
+          ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+          ctx.beginPath();
+          ctx.arc(actualStarX, starY, (s % 3 === 0 ? 2.5 : 1.5), 0, Math.PI * 2);
           ctx.fill();
         }
       }
 
-      if (plantSmallImg && plantSmallImg.complete && plantSmallImg.naturalWidth > 0) {
-        const smSpacing = 290;
-        const startSm = Math.floor((safeCamX - 100) / smSpacing) - 1;
-        const endSm = Math.floor((safeCamX + canvasWidth + 100) / smSpacing) + 1;
-        for (let sm = startSm; sm <= endSm; sm++) {
-          const smx = sm * smSpacing + 120 - safeCamX;
-          ctx.drawImage(plantSmallImg, smx, groundY - 26, 24, 26);
+      // Stalactites & Gates for Warped Caves Dungeons
+      if (isDungeon) {
+        const stalactiteImg = this.images['wc_stalactite'];
+        const gateImg = this.images['wc_gate1'] || this.images['wc_gate2'];
+        const stoneHeadImg = this.images['wc_stone_head'];
+        const stoneImg = this.images['wc_stone'];
+        const plantBigImg = this.images['wc_plant_big'];
+        const plantSmallImg = this.images['wc_plant_small'];
+
+        if (stalactiteImg && stalactiteImg.complete && stalactiteImg.naturalWidth > 0) {
+          const stalSpacing = 180;
+          const startStal = Math.floor((safeCamX - 100) / stalSpacing) - 1;
+          const endStal = Math.floor((safeCamX + canvasWidth + 100) / stalSpacing) + 1;
+          for (let s = startStal; s <= endStal; s++) {
+            const sx = s * stalSpacing + ((s * 47) % 60) - safeCamX;
+            const sH = 45 + ((s * 23) % 25);
+            ctx.drawImage(stalactiteImg, sx, 0, 32, sH);
+          }
+        }
+
+        if (gateImg && gateImg.complete && gateImg.naturalWidth > 0) {
+          ctx.drawImage(gateImg, 80 - safeCamX, groundY - 110, 64, 110);
+          ctx.drawImage(gateImg, arenaWidth - 140 - safeCamX, groundY - 110, 64, 110);
+        }
+
+        if (stoneHeadImg && stoneHeadImg.complete && stoneHeadImg.naturalWidth > 0) {
+          const headSpacing = 680;
+          const startH = Math.floor((safeCamX - 100) / headSpacing) - 1;
+          const endH = Math.floor((safeCamX + canvasWidth + 100) / headSpacing) + 1;
+          for (let h = startH; h <= endH; h++) {
+            ctx.drawImage(stoneHeadImg, h * headSpacing + 260 - safeCamX, groundY - 48, 48, 48);
+          }
+        }
+
+        if (stoneImg && stoneImg.complete && stoneImg.naturalWidth > 0) {
+          const stoneSpacing = 420;
+          const startSt = Math.floor((safeCamX - 100) / stoneSpacing) - 1;
+          const endSt = Math.floor((safeCamX + canvasWidth + 100) / stoneSpacing) + 1;
+          for (let st = startSt; st <= endSt; st++) {
+            ctx.drawImage(stoneImg, st * stoneSpacing + 160 - safeCamX, groundY - 28, 42, 28);
+          }
+        }
+
+        if (plantBigImg && plantBigImg.complete && plantBigImg.naturalWidth > 0) {
+          const plantSpacing = 380;
+          const startP = Math.floor((safeCamX - 100) / plantSpacing) - 1;
+          const endP = Math.floor((safeCamX + canvasWidth + 100) / plantSpacing) + 1;
+          for (let p = startP; p <= endP; p++) {
+            const px = p * plantSpacing + 310 - safeCamX;
+            ctx.drawImage(plantBigImg, px, groundY - 40, 32, 40);
+          }
+        }
+
+        if (plantSmallImg && plantSmallImg.complete && plantSmallImg.naturalWidth > 0) {
+          const smSpacing = 290;
+          const startSm = Math.floor((safeCamX - 100) / smSpacing) - 1;
+          const endSm = Math.floor((safeCamX + canvasWidth + 100) / smSpacing) + 1;
+          for (let sm = startSm; sm <= endSm; sm++) {
+            ctx.drawImage(plantSmallImg, sm * smSpacing + 120 - safeCamX, groundY - 26, 24, 26);
+          }
         }
       }
     }
 
     // ----------------------------------------------------
-    // 4. COBBLESTONE & WARPED CAVERN GROUND TILES
+    // 2. BIOME-SPECIFIC GROUND TILES
     // ----------------------------------------------------
     const tileSize = 32;
     const startTile = Math.floor((safeCamX - 60) / tileSize);
     const endTile = Math.floor((safeCamX + canvasWidth + 60) / tileSize);
 
-    const gvGround = isDungeon
-      ? (this.images['wc_tileset'] || this.images['gv_ground'])
-      : (this.images['gv_ground'] || this.images['battle_ground']);
-    const gvGroundWall = isDungeon
-      ? (this.images['wc_walls'] || this.images['gv_ground_wall'])
-      : (this.images['gv_ground_wall'] || this.images['tiles']);
+    let groundTile = this.images['gv_ground'];
+    let groundWall = this.images['gv_ground_wall'];
+
+    if (safeTheme === 'swamp') {
+      groundTile = this.images['swamp_tileset'] || this.images['gv_ground'];
+      groundWall = this.images['swamp_tileset'] || this.images['gv_ground_wall'];
+    } else if (safeTheme === 'underwater') {
+      groundTile = this.images['underwater_sand'] || this.images['wc_tileset'];
+      groundWall = this.images['underwater_sand'] || this.images['wc_walls'];
+    } else if (safeTheme === 'caves') {
+      groundTile = this.images['caves_gallet_tiles'] || this.images['wc_tileset'];
+      groundWall = this.images['caves_gallet_tiles'] || this.images['wc_walls'];
+    } else if (safeTheme !== 'town') {
+      groundTile = this.images['wc_tileset'] || this.images['gv_ground'];
+      groundWall = this.images['wc_walls'] || this.images['gv_ground_wall'];
+    }
 
     for (let t = startTile; t <= endTile; t++) {
       const tileX = t * tileSize - safeCamX;
 
-      if (gvGround && gvGround.complete && gvGround.naturalWidth > 0) {
-        // Cavern / Cobblestone Surface Tile
-        ctx.drawImage(gvGround, tileX, groundY, tileSize, tileSize);
-        // Deep stone wall foundation
-        if (gvGroundWall && gvGroundWall.complete && gvGroundWall.naturalWidth > 0) {
+      if (groundTile && groundTile.complete && groundTile.naturalWidth > 0) {
+        ctx.drawImage(groundTile, tileX, groundY, tileSize, tileSize);
+        if (groundWall && groundWall.complete && groundWall.naturalWidth > 0) {
           for (let dy = groundY + tileSize; dy < canvasHeight + 100; dy += tileSize) {
-            ctx.drawImage(gvGroundWall, tileX, dy, tileSize, tileSize);
+            ctx.drawImage(groundWall, tileX, dy, tileSize, tileSize);
           }
         } else {
           ctx.fillStyle = '#18181b';
           ctx.fillRect(tileX, groundY + tileSize, tileSize + 1, canvasHeight - groundY);
         }
       } else {
-        // High-Quality Fallback Gradient Ground
         const groundGrad = ctx.createLinearGradient(tileX, groundY, tileX, canvasHeight);
         groundGrad.addColorStop(0, '#27272a');
         groundGrad.addColorStop(0.2, '#18181b');
@@ -2372,9 +2555,9 @@ export class SpriteManager {
       }
     }
 
-    // Cavern Top Edge Trim Accent Line
+    // Biome Accent Line along ground surface
     ctx.lineWidth = 2;
-    ctx.strokeStyle = safeTheme === 'inferno' ? '#f97316' : safeTheme === 'crypt' ? '#a855f7' : safeTheme === 'void' ? '#818cf8' : '#71717a';
+    ctx.strokeStyle = safeTheme === 'swamp' ? '#10b981' : safeTheme === 'mountain' ? '#f43f5e' : safeTheme === 'underwater' ? '#06b6d4' : safeTheme === 'caves' ? '#f97316' : safeTheme === 'inferno' ? '#ef4444' : safeTheme === 'crypt' ? '#a855f7' : safeTheme === 'void' ? '#818cf8' : '#71717a';
     ctx.beginPath();
     ctx.moveTo(0, groundY);
     ctx.lineTo(canvasWidth, groundY);

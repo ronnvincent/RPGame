@@ -80,6 +80,46 @@ export class WorldMapUI {
       bossName: 'NightBorne Void Overlord'
     },
     {
+      id: 'venomous_swamp',
+      name: 'Venomous Swamp',
+      actTitle: 'Bonus Zone: Gothicvania Swamp',
+      recommendedLevel: 3,
+      icon: '🌿',
+      color: '#10b981',
+      description: 'Murky poison marsh draped in moss, ancient deadwood, spider nests, and bog ghosts.',
+      bossName: 'Broodmother Queen'
+    },
+    {
+      id: 'twilight_peaks',
+      name: 'Twilight Peaks',
+      actTitle: 'Bonus Zone: Mountain Dusk',
+      recommendedLevel: 6,
+      icon: '🏔️',
+      color: '#f43f5e',
+      description: 'High alpine crags bathed in the crimson radiance of the blood moon and pine ridges.',
+      bossName: 'Blood Moon Behemoth'
+    },
+    {
+      id: 'sunken_abyss',
+      name: 'Sunken Abyss',
+      actTitle: 'Bonus Zone: Underwater Fantasy',
+      recommendedLevel: 10,
+      icon: '🌊',
+      color: '#06b6d4',
+      description: 'Submerged ancient temple ruins, coral reefs, sunken statues, and abyssal sirens.',
+      bossName: 'Leviathan of the Deep'
+    },
+    {
+      id: 'gallet_depths',
+      name: 'Gallet Depths',
+      actTitle: 'Bonus Zone: Caves of Gallet',
+      recommendedLevel: 12,
+      icon: '🕳️',
+      color: '#f97316',
+      description: 'Subterranean lava forge carved with stone channels, torches, and cascading waterfalls.',
+      bossName: 'Gallet Forge Overlord'
+    },
+    {
       id: 'endless_arena',
       name: 'Endless Celestial Arena',
       actTitle: 'Post-Game Mastery Trial',

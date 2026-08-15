@@ -1,0 +1,14 @@
+ea4bc82a6ad023ab7ee23ee620429895
+::res://::1695351640
+auto_scroller.gdshader::Shader::-1::1695351405::0::1::::<><>::
+auto_scroller.tscn::PackedScene::6754858830163848465::1695351394::0::1::::<><>::uid://cidgla3oqkmoa::::res://MountainsLayers/sky.png<>res://auto_scroller.gdshader<>uid://bbw3l7ns3qacb::::res://MountainsLayers/far-clouds.png<>uid://nei8g3fblyr7::::res://MountainsLayers/near-clouds.png<>uid://bcnsdxg457gf4::::res://MountainsLayers/far-mountains.png<>uid://cub65x0y0ym76::::res://MountainsLayers/mountains.png<>uid://dxjs1s2ge2yl0::::res://MountainsLayers/trees.png
+icon.svg::CompressedTexture2D::5203240424652549239::1695345861::1695345869::1::::<><>::
+::res://MountainsLayers/::1695351385
+far-clouds.png::CompressedTexture2D::2503747259136409349::1666652848::1695351385::1::::<><>::
+far-mountains.png::CompressedTexture2D::2554734763688315999::1666652907::1695351385::1::::<><>::
+mountains.png::CompressedTexture2D::6180619666275797407::1666652744::1695351385::1::::<><>::
+near-clouds.png::CompressedTexture2D::921257504075252042::1666652872::1695351385::1::::<><>::
+sky.png::CompressedTexture2D::5340929239354601500::1666652683::1695351385::1::::<><>::
+trees.png::CompressedTexture2D::8793325178460978695::1666652959::1695351385::1::::<><>::
+::res://Music/::1695351686
+summer nights.ogg::AudioStreamOggVorbis::783048643093742927::1695351686::1695351686::1::::<><>::

@@ -75,7 +75,7 @@ export interface DungeonDefinition {
   waves: DungeonWave[];
 }
 
-export type BattleTheme = 'catacombs' | 'crypt' | 'inferno' | 'void';
+export type BattleTheme = 'catacombs' | 'crypt' | 'inferno' | 'void' | 'town' | 'swamp' | 'mountain' | 'underwater' | 'caves';
 
 export const DUNGEONS: DungeonDefinition[] = [
   // --- 1. GOBLIN CATACOMBS ---
@@ -130,66 +130,65 @@ export const DUNGEONS: DungeonDefinition[] = [
       {
         waveNumber: 1,
         enemies: [
-          { name: 'Skeleton Warrior', type: 'mob', icon: '💀', color: '#e0e0e0', maxHp: 220, atk: 28, def: 12, speed: 2.8, expReward: 65, goldReward: 35, width: 40, height: 50, count: 4 }
+          { name: 'Skeleton Warrior', type: 'mob', icon: '💀', color: '#e0e0e0', maxHp: 220, atk: 26, def: 12, speed: 2.6, expReward: 55, goldReward: 30, width: 40, height: 52, count: 4 }
         ]
       },
       {
         waveNumber: 2,
         enemies: [
-          { name: 'Crypt Wraith', type: 'mob', icon: '👻', color: '#9c27b0', maxHp: 200, atk: 35, def: 10, speed: 3.8, expReward: 80, goldReward: 45, width: 42, height: 52, count: 3 },
-          { name: 'Vampire Bat', type: 'mob', icon: '🦇', color: '#4a148c', maxHp: 160, atk: 25, def: 8, speed: 4.2, expReward: 70, goldReward: 40, width: 36, height: 30, count: 3 }
+          { name: 'Skeleton Archer', type: 'mob', icon: '🏹', color: '#b0bec5', maxHp: 180, atk: 32, def: 8, speed: 2.3, expReward: 65, goldReward: 40, width: 38, height: 50, count: 3 },
+          { name: 'Cursed Wraith', type: 'mob', icon: '👻', color: '#7e57c2', maxHp: 200, atk: 35, def: 10, speed: 3.2, expReward: 75, goldReward: 45, width: 44, height: 54, count: 2 }
         ]
       },
       {
         waveNumber: 3,
         enemies: [
-          { name: 'Death Knight', type: 'elite', icon: '🛡️', color: '#311b92', maxHp: 650, atk: 48, def: 28, speed: 3.2, expReward: 240, goldReward: 160, width: 56, height: 65, count: 1 },
-          { name: 'Skeleton Archer', type: 'mob', icon: '🏹', color: '#b0bec5', maxHp: 180, atk: 32, def: 10, speed: 2.5, expReward: 75, goldReward: 45, width: 38, height: 48, count: 2 }
+          { name: 'Death Knight', type: 'elite', icon: '🛡️', color: '#4527a0', maxHp: 750, atk: 50, def: 28, speed: 2.5, expReward: 260, goldReward: 160, width: 56, height: 68, count: 1 },
+          { name: 'Skeleton Warrior', type: 'mob', icon: '💀', color: '#e0e0e0', maxHp: 240, atk: 28, def: 14, speed: 2.6, expReward: 60, goldReward: 35, width: 40, height: 52, count: 3 }
         ]
       },
       {
         waveNumber: 4,
         enemies: [
-          { name: 'Arch-Lich Malakar', type: 'boss', icon: '☠️', color: '#7b1fa2', maxHp: 2200, atk: 65, def: 30, speed: 3.4, expReward: 800, goldReward: 600, width: 72, height: 85, count: 1, phases: 3 }
+          { name: 'Arch-Lich Malakar', type: 'boss', icon: '👑', color: '#6a1b9a', maxHp: 2400, atk: 68, def: 32, speed: 3.2, expReward: 1000, goldReward: 750, width: 72, height: 86, count: 1, phases: 2 }
         ]
       }
     ]
   },
 
-  // --- 3. INFERNO DRAGON LAIR ---
+  // --- 3. INFERNO DRAGON'S LAIR ---
   {
     id: 'dragon_lair',
     name: "Inferno Dragon's Lair",
-    subtitle: 'Molten depths filled with fire imps, magma golems, and an ancient red dragon.',
+    subtitle: 'Volcanic magma caldera erupting with fire drakes and molten beasts.',
     theme: 'inferno',
-    backgroundGradient: ['#2e0c05', '#100302'],
-    platformColor: '#5c1b0d',
+    backgroundGradient: ['#2d0e0e', '#110303'],
+    platformColor: '#5c1d1d',
     ambientParticles: '#ff7043',
     waves: [
       {
         waveNumber: 1,
         enemies: [
-          { name: 'Fire Imp', type: 'mob', icon: '🔥', color: '#ff5722', maxHp: 280, atk: 36, def: 14, speed: 3.6, expReward: 90, goldReward: 55, width: 38, height: 42, count: 4 }
+          { name: 'Magma Hound', type: 'mob', icon: '🐕', color: '#ff5722', maxHp: 320, atk: 40, def: 16, speed: 3.8, expReward: 90, goldReward: 60, width: 46, height: 40, count: 4 }
         ]
       },
       {
         waveNumber: 2,
         enemies: [
-          { name: 'Hell Hound', type: 'mob', icon: '🐕', color: '#bf360c', maxHp: 320, atk: 44, def: 18, speed: 4.4, expReward: 120, goldReward: 75, width: 48, height: 38, count: 3 },
-          { name: 'Magma Golem', type: 'elite', icon: '🗿', color: '#e64a19', maxHp: 850, atk: 55, def: 38, speed: 2.0, expReward: 300, goldReward: 200, width: 62, height: 72, count: 1 }
+          { name: 'Fire Imp', type: 'mob', icon: '😈', color: '#f44336', maxHp: 260, atk: 48, def: 12, speed: 3.0, expReward: 110, goldReward: 75, width: 36, height: 44, count: 4 },
+          { name: 'Lava Golem', type: 'elite', icon: '🗿', color: '#bf360c', maxHp: 950, atk: 60, def: 35, speed: 1.8, expReward: 350, goldReward: 220, width: 62, height: 72, count: 1 }
         ]
       },
       {
         waveNumber: 3,
         enemies: [
-          { name: 'Inferno Titan', type: 'elite', icon: '🌋', color: '#b71c1c', maxHp: 1100, atk: 62, def: 42, speed: 2.6, expReward: 450, goldReward: 320, width: 65, height: 78, count: 1 },
-          { name: 'Fire Imp', type: 'mob', icon: '🔥', color: '#ff5722', maxHp: 300, atk: 38, def: 15, speed: 3.8, expReward: 100, goldReward: 60, width: 38, height: 42, count: 3 }
+          { name: 'Magma Drake', type: 'elite', icon: '🦎', color: '#d84315', maxHp: 1100, atk: 66, def: 38, speed: 3.4, expReward: 450, goldReward: 280, width: 66, height: 60, count: 2 }
         ]
       },
       {
         waveNumber: 4,
         enemies: [
-          { name: 'Ancient Red Dragon Ignis', type: 'boss', icon: '🐉', color: '#d50000', maxHp: 3500, atk: 80, def: 45, speed: 3.8, expReward: 1500, goldReward: 1200, width: 95, height: 95, count: 1, phases: 3 }
+          { name: 'Ancient Red Dragon Ignis', type: 'boss', icon: '👑', color: '#b71c1c', maxHp: 4200, atk: 88, def: 45, speed: 3.6, expReward: 2000, goldReward: 1500, width: 92, height: 90, count: 1, phases: 3 }
         ]
       }
     ]
@@ -199,34 +198,27 @@ export const DUNGEONS: DungeonDefinition[] = [
   {
     id: 'void_nexus',
     name: 'The Void Nexus',
-    subtitle: 'Cosmic rift where NightBorne channels the shattered runes into a total eclipse.',
+    subtitle: 'Cosmic rift where NightBorne commands the void shadows.',
     theme: 'void',
-    backgroundGradient: ['#1a0b2e', '#06020c'],
-    platformColor: '#3d1c5e',
+    backgroundGradient: ['#120c24', '#040208'],
+    platformColor: '#2e1c4a',
     ambientParticles: '#c084fc',
     waves: [
       {
         waveNumber: 1,
         enemies: [
-          { name: 'Nether Stalker', type: 'mob', icon: '👤', color: '#a855f7', maxHp: 380, atk: 46, def: 20, speed: 4.0, expReward: 140, goldReward: 85, width: 42, height: 50, count: 4 }
+          { name: 'Void Phantom', type: 'mob', icon: '👁️', color: '#9333ea', maxHp: 380, atk: 52, def: 22, speed: 3.5, expReward: 140, goldReward: 90, width: 44, height: 50, count: 4 }
         ]
       },
       {
         waveNumber: 2,
         enemies: [
-          { name: 'Void Imp', type: 'mob', icon: '🔮', color: '#7c3aed', maxHp: 340, atk: 50, def: 16, speed: 4.2, expReward: 160, goldReward: 95, width: 38, height: 44, count: 3 },
-          { name: 'Crypt Wraith', type: 'mob', icon: '👻', color: '#9c27b0', maxHp: 320, atk: 48, def: 18, speed: 3.8, expReward: 150, goldReward: 90, width: 42, height: 52, count: 2 }
+          { name: 'Astral Slayer', type: 'mob', icon: '🗡️', color: '#7c3aed', maxHp: 420, atk: 58, def: 25, speed: 3.8, expReward: 160, goldReward: 110, width: 46, height: 54, count: 3 },
+          { name: 'Eclipse Sorcerer', type: 'elite', icon: '🔮', color: '#6d28d9', maxHp: 1200, atk: 72, def: 30, speed: 2.5, expReward: 500, goldReward: 350, width: 58, height: 68, count: 1 }
         ]
       },
       {
         waveNumber: 3,
-        enemies: [
-          { name: 'Void Colossus', type: 'elite', icon: '🌌', color: '#6d28d9', maxHp: 1500, atk: 72, def: 48, speed: 2.4, expReward: 600, goldReward: 400, width: 70, height: 80, count: 1 },
-          { name: 'Nether Stalker', type: 'mob', icon: '👤', color: '#a855f7', maxHp: 400, atk: 48, def: 22, speed: 4.0, expReward: 150, goldReward: 90, width: 42, height: 50, count: 3 }
-        ]
-      },
-      {
-        waveNumber: 4,
         enemies: [
           { name: 'NightBorne Void Overlord', type: 'boss', icon: '👑', color: '#4c1d95', maxHp: 5200, atk: 95, def: 52, speed: 4.2, expReward: 3000, goldReward: 2500, width: 88, height: 96, count: 1, phases: 3 }
         ]
@@ -234,7 +226,134 @@ export const DUNGEONS: DungeonDefinition[] = [
     ]
   },
 
-  // --- 5. ENDLESS CELESTIAL ARENA ---
+  // --- 5. VENOMOUS SWAMP (Gothicvania Swamp) ---
+  {
+    id: 'venomous_swamp',
+    name: 'Venomous Swamp',
+    subtitle: 'Murky poison marsh draped in moss, ancient deadwood, and toxic creatures.',
+    theme: 'swamp',
+    backgroundGradient: ['#0f291e', '#05130d'],
+    platformColor: '#1b4332',
+    ambientParticles: '#4ade80',
+    waves: [
+      {
+        waveNumber: 1,
+        enemies: [
+          { name: 'Swamp Spider', type: 'mob', icon: '🕷️', color: '#166534', maxHp: 280, atk: 34, def: 14, speed: 3.6, expReward: 80, goldReward: 45, width: 44, height: 36, count: 4 }
+        ]
+      },
+      {
+        waveNumber: 2,
+        enemies: [
+          { name: 'Bog Ghost', type: 'mob', icon: '👻', color: '#86efac', maxHp: 240, atk: 42, def: 10, speed: 3.0, expReward: 100, goldReward: 60, width: 40, height: 48, count: 3 },
+          { name: 'Swamp Thing', type: 'elite', icon: '🐙', color: '#14532d', maxHp: 850, atk: 55, def: 28, speed: 2.2, expReward: 320, goldReward: 180, width: 58, height: 64, count: 1 }
+        ]
+      },
+      {
+        waveNumber: 3,
+        enemies: [
+          { name: 'Broodmother Queen', type: 'boss', icon: '👑', color: '#15803d', maxHp: 3200, atk: 75, def: 38, speed: 3.2, expReward: 1600, goldReward: 1200, width: 80, height: 80, count: 1, phases: 2 }
+        ]
+      }
+    ]
+  },
+
+  // --- 6. TWILIGHT PEAKS (Mountain Dusk) ---
+  {
+    id: 'twilight_peaks',
+    name: 'Twilight Peaks',
+    subtitle: 'High alpine crags bathed in the crimson radiance of the blood moon.',
+    theme: 'mountain',
+    backgroundGradient: ['#2e1022', '#0f040d'],
+    platformColor: '#4a1d35',
+    ambientParticles: '#f43f5e',
+    waves: [
+      {
+        waveNumber: 1,
+        enemies: [
+          { name: 'Dusk Wolf', type: 'mob', icon: '🐺', color: '#9f1239', maxHp: 340, atk: 44, def: 18, speed: 4.2, expReward: 110, goldReward: 70, width: 48, height: 38, count: 4 }
+        ]
+      },
+      {
+        waveNumber: 2,
+        enemies: [
+          { name: 'Mountain Harpy', type: 'mob', icon: '🦅', color: '#e11d48', maxHp: 300, atk: 50, def: 15, speed: 3.8, expReward: 130, goldReward: 85, width: 44, height: 52, count: 3 },
+          { name: 'Bloodstone Golem', type: 'elite', icon: '🗿', color: '#881337', maxHp: 1100, atk: 68, def: 42, speed: 2.0, expReward: 420, goldReward: 260, width: 64, height: 76, count: 1 }
+        ]
+      },
+      {
+        waveNumber: 3,
+        enemies: [
+          { name: 'Blood Moon Behemoth', type: 'boss', icon: '👑', color: '#be123c', maxHp: 4400, atk: 88, def: 48, speed: 3.5, expReward: 2200, goldReward: 1800, width: 88, height: 92, count: 1, phases: 3 }
+        ]
+      }
+    ]
+  },
+
+  // --- 7. SUNKEN ABYSS (Underwater Fantasy) ---
+  {
+    id: 'sunken_abyss',
+    name: 'Sunken Abyss',
+    subtitle: 'Submerged ancient temple ruins inhabited by abyssal horrors and sirens.',
+    theme: 'underwater',
+    backgroundGradient: ['#042f2e', '#021312'],
+    platformColor: '#0f766e',
+    ambientParticles: '#2dd4bf',
+    waves: [
+      {
+        waveNumber: 1,
+        enemies: [
+          { name: 'Deep Coral Crab', type: 'mob', icon: '🦀', color: '#0d9488', maxHp: 360, atk: 38, def: 30, speed: 2.4, expReward: 120, goldReward: 80, width: 46, height: 36, count: 4 }
+        ]
+      },
+      {
+        waveNumber: 2,
+        enemies: [
+          { name: 'Abyssal Siren', type: 'mob', icon: '🧜‍♀️', color: '#14b8a6', maxHp: 320, atk: 54, def: 16, speed: 3.4, expReward: 150, goldReward: 95, width: 42, height: 56, count: 3 },
+          { name: 'Sunken Titan', type: 'elite', icon: '🔱', color: '#115e59', maxHp: 1300, atk: 72, def: 45, speed: 2.2, expReward: 480, goldReward: 300, width: 68, height: 80, count: 1 }
+        ]
+      },
+      {
+        waveNumber: 3,
+        enemies: [
+          { name: 'Leviathan of the Deep', type: 'boss', icon: '👑', color: '#0f766e', maxHp: 4800, atk: 92, def: 50, speed: 3.6, expReward: 2600, goldReward: 2000, width: 96, height: 94, count: 1, phases: 3 }
+        ]
+      }
+    ]
+  },
+
+  // --- 8. GALLET DEPTHS (Caves of Gallet) ---
+  {
+    id: 'gallet_depths',
+    name: 'Gallet Depths',
+    subtitle: 'Subterranean lava forge carved with stone channels and cascading waterfalls.',
+    theme: 'caves',
+    backgroundGradient: ['#1f1610', '#0a0705'],
+    platformColor: '#43281c',
+    ambientParticles: '#fb923c',
+    waves: [
+      {
+        waveNumber: 1,
+        enemies: [
+          { name: 'Cave Bat Swarm', type: 'mob', icon: '🦇', color: '#78350f', maxHp: 290, atk: 40, def: 14, speed: 4.4, expReward: 100, goldReward: 65, width: 42, height: 34, count: 4 }
+        ]
+      },
+      {
+        waveNumber: 2,
+        enemies: [
+          { name: 'Molten Sentry', type: 'elite', icon: '🛡️', color: '#ea580c', maxHp: 1200, atk: 70, def: 40, speed: 2.4, expReward: 440, goldReward: 270, width: 60, height: 70, count: 2 }
+        ]
+      },
+      {
+        waveNumber: 3,
+        enemies: [
+          { name: 'Gallet Forge Overlord', type: 'boss', icon: '👑', color: '#c2410c', maxHp: 4600, atk: 90, def: 48, speed: 3.4, expReward: 2500, goldReward: 1900, width: 88, height: 90, count: 1, phases: 3 }
+        ]
+      }
+    ]
+  },
+
+  // --- 9. ENDLESS CELESTIAL ARENA ---
   {
     id: 'endless_arena',
     name: 'Endless Celestial Arena',
