@@ -149,14 +149,14 @@ export class CharacterSelectUI {
           font-family: 'Outfit', sans-serif;
         }
 
-        /* 10 Hero Cards Carousel */
         .classes-carousel {
           display: flex;
           gap: 10px;
           overflow-x: auto;
           overflow-y: hidden;
-          padding: 16px 8px 24px 8px;
-          margin-bottom: -8px;
+          padding: 20px 16px 28px 16px;
+          margin-top: -4px;
+          margin-bottom: -12px;
           max-width: 100%;
           scrollbar-width: thin;
           scrollbar-color: #f4b41b #181425;
@@ -499,13 +499,19 @@ export class CharacterSelectUI {
           }
           .classes-carousel {
             gap: 4px;
-            padding: 2px;
+            padding: 10px 8px 14px 8px;
+            margin-top: -6px;
+            margin-bottom: -6px;
             max-width: 100%;
           }
           .class-card {
             flex: 0 0 58px;
             padding: 2px 1px;
             border-width: 1.5px;
+          }
+          .class-card.active {
+            box-shadow: 0 0 12px rgba(255, 215, 0, 0.75), inset 0 0 6px rgba(255, 215, 0, 0.25), 0 4px 0 #07040b;
+            transform: translateY(-2px) scale(1.02);
           }
           .card-sprite-canvas {
             width: 36px;

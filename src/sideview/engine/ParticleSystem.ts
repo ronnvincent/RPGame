@@ -625,7 +625,7 @@ export class ParticleSystem {
 
   public spawnDragonMinion(x: number, groundY: number, facing: number, damage: number): SummonedMinionEntity {
     this.triggerScreenShake(24, 1.2);
-    this.addScreenFlash('#ff7849', 0.85, 0.04);
+    // Removed blinding #ff7849 screen flash to fix the "pink screen" issue where the player cannot see the game
     this.addFlameLash(x + facing * 80, groundY - 20, facing, 2.4);
 
     const minion: SummonedMinionEntity = {
@@ -1448,18 +1448,15 @@ export class ParticleSystem {
         const frameNum = Math.min(40, Math.max(1, Math.floor((minion.animTimer * 16) % 40) + 1));
         let dragonImg: HTMLImageElement | null | undefined = null;
 
-        if (minion.state === 'attack2') {
-          dragonImg = sprites.getImage(`dragon_atk2_${frameNum}`) || sprites.getImage(`dragon_atk_${frameNum}`);
-        } else if (minion.state === 'attack') {
-          dragonImg = sprites.getImage(`dragon_atk_${frameNum}`);
-        } else if (minion.state === 'walk') {
-          dragonImg = sprites.getImage(`dragon_walk_${frameNum}`);
+        // Fallback to idle if attack sprites are missing
+        if (minion.state === 'attack2' || minion.state === 'attack' || minion.state === 'walk') {
+           dragonImg = sprites.getImage(`dragon_idle_${frameNum}`);
         } else {
           dragonImg = sprites.getImage(`dragon_idle_${frameNum}`);
         }
 
         if (!dragonImg || !dragonImg.complete) {
-          dragonImg = sprites.getImage(`dragon_atk_1`) || sprites.getImage(`dragon_idle_1`);
+          dragonImg = sprites.getImage(`dragon_idle_1`);
         }
 
         const destW = 480;
