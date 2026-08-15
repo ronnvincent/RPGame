@@ -235,13 +235,30 @@ export class SideViewGame {
             label: 'Return to Town Hub [T]',
             icon: '🏰',
             type: 'custom',
-            onSelect: () => this.loadTownHub()
+            onSelect: () => {
+              this.dialogue?.close();
+              this.loadTownHub();
+            }
           },
           {
             label: 'Advance to Next Dungeon ➔',
             icon: '⚔️',
             type: 'custom',
-            onSelect: () => this.loadDungeon(this.currentDungeonIndex + 1)
+            onSelect: () => {
+              this.dialogue?.close();
+              const nextDungeon = DUNGEONS[this.currentDungeonIndex + 1];
+              if (!nextDungeon) {
+                this.loadTownHub();
+                return;
+              }
+              if (this.engine!.player.level < nextDungeon.minLevel) {
+                audio.playClick();
+                this.hud?.showToast(`Lv. ${nextDungeon.minLevel} Required for ${nextDungeon.name}!`);
+                this.loadTownHub();
+                return;
+              }
+              this.loadDungeon(this.currentDungeonIndex + 1);
+            }
           }
         ]
       });
