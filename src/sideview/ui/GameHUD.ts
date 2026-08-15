@@ -288,6 +288,91 @@ export class GameHUD {
         transition: transform 0.1s ease;
       }
 
+      /* MapleStory / Dark Souls Style Top Boss Health Bar */
+      .epic-boss-banner {
+        position: absolute;
+        top: 14px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 480px;
+        max-width: 90vw;
+        background: url('/assets/kenney-rpg-ui/panel_brown.png') repeat;
+        background-size: 100% 100%;
+        padding: 8px 14px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.9), 0 0 20px rgba(239, 68, 68, 0.4);
+        border-radius: 4px;
+        z-index: 25;
+        animation: bossBarSlideDown 0.4s ease-out;
+      }
+
+      @keyframes bossBarSlideDown {
+        from { transform: translate(-50%, -30px); opacity: 0; }
+        to { transform: translate(-50%, 0); opacity: 1; }
+      }
+
+      .boss-portrait-icon {
+        font-size: 28px;
+        filter: drop-shadow(0 0 8px #ef4444);
+      }
+
+      .boss-bar-details {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .boss-header-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .boss-name-text {
+        font-family: 'Cinzel', serif;
+        font-weight: 900;
+        font-size: 13px;
+        color: #fef08a;
+        text-shadow: 1px 1px 2px #000;
+        letter-spacing: 0.5px;
+      }
+
+      .boss-hp-percentage {
+        font-weight: 800;
+        font-size: 11px;
+        color: #ef4444;
+      }
+
+      .boss-hp-track {
+        position: relative;
+        height: 12px;
+        background: #0f172a;
+        border: 1.5px solid #ffd700;
+        border-radius: 3px;
+        overflow: hidden;
+      }
+
+      .boss-hp-lag {
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 100%;
+        background: #f59e0b;
+        transition: width 0.6s ease-out;
+      }
+
+      .boss-hp-fill {
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 100%;
+        background: linear-gradient(to right, #dc2626, #ef4444, #f87171);
+        transition: width 0.15s linear;
+      }
+
       .mini-quest-tracker:hover {
         transform: scale(1.02);
       }
@@ -854,6 +939,21 @@ export class GameHUD {
         <div class="wave-mobs-left" id="wave-mobs-text">Enemies remaining: 0</div>
       </div>
 
+      <!-- Top Center: Epic Boss Health Bar (MapleStory / Dark Souls Style) -->
+      <div class="epic-boss-banner" id="epic-boss-banner" style="display: none;">
+        <div class="boss-portrait-icon" id="boss-portrait-icon">👹</div>
+        <div class="boss-bar-details">
+          <div class="boss-header-row">
+            <span class="boss-name-text" id="boss-name-text">BOSS NAME</span>
+            <span class="boss-hp-percentage" id="boss-hp-percentage">100%</span>
+          </div>
+          <div class="boss-hp-track">
+            <div class="boss-hp-lag" id="boss-hp-lag" style="width: 100%;"></div>
+            <div class="boss-hp-fill" id="boss-hp-fill" style="width: 100%;"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- Combo Display -->
       <div class="combo-display" id="combo-display">0x COMBO!</div>
 
@@ -1251,6 +1351,35 @@ export class GameHUD {
         qNameEl.textContent = 'No Active Quest';
         qListEl.innerHTML = `<div>Visit Elder Justinian in Eldermoor</div>`;
       }
+    }
+
+    // Top Boss Health Bar (MapleStory / Dark Souls Style)
+    const bossBanner = this.container.querySelector('#epic-boss-banner') as HTMLElement;
+    const waveBanner = this.container.querySelector('#dungeon-wave-banner') as HTMLElement;
+    const activeBoss = this.engine.enemies.find(e => !e.isDead && e.type === 'boss');
+
+    if (activeBoss && !this.engine.isTownMode) {
+      if (bossBanner) {
+        bossBanner.style.display = 'flex';
+        const nameEl = this.container.querySelector('#boss-name-text');
+        const pctEl = this.container.querySelector('#boss-hp-percentage');
+        const fillEl = this.container.querySelector('#boss-hp-fill') as HTMLElement;
+        const lagEl = this.container.querySelector('#boss-hp-lag') as HTMLElement;
+        const iconEl = this.container.querySelector('#boss-portrait-icon');
+
+        const hpPct = Math.max(0, (activeBoss.hp / activeBoss.maxHp) * 100);
+        if (nameEl) nameEl.textContent = activeBoss.name.toUpperCase();
+        if (pctEl) pctEl.textContent = `${Math.ceil(hpPct)}% (${activeBoss.hp} / ${activeBoss.maxHp})`;
+        if (fillEl) fillEl.style.width = `${hpPct}%`;
+        if (lagEl) lagEl.style.width = `${hpPct}%`;
+        if (iconEl) {
+          iconEl.textContent = activeBoss.name.includes('Dragon') ? '🐉' : activeBoss.name.includes('Lich') ? '💀' : activeBoss.name.includes('NightBorne') ? '🌌' : '👹';
+        }
+      }
+      if (waveBanner) waveBanner.style.display = 'none';
+    } else {
+      if (bossBanner) bossBanner.style.display = 'none';
+      if (waveBanner) waveBanner.style.display = 'flex';
     }
 
     // Wave Banner in Town vs Dungeon

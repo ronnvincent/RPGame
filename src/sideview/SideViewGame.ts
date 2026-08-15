@@ -268,9 +268,10 @@ export class SideViewGame {
         this.loadTownHub();
       }
 
-      // Jump: W, Space, ArrowUp
+      // Jump / Drop-Through: W, Space, ArrowUp
       if (e.code === 'Space' || e.code === 'KeyW' || e.code === 'ArrowUp') {
-        this.engine.jumpPlayer();
+        const isHoldingDown = Boolean(this.keysPressed['KeyS'] || this.keysPressed['ArrowDown']);
+        this.engine.jumpPlayer(isHoldingDown);
       }
 
       // Dash: ShiftLeft, ShiftRight, KeyC

@@ -35,6 +35,14 @@ export interface DroppedLoot {
   bobTimer: number;
 }
 
+export interface Platform {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  type: 'one-way' | 'solid';
+}
+
 export interface PlayerState {
   characterClass: CharacterClass;
   level: number;
@@ -84,6 +92,10 @@ export interface PlayerState {
   inventory: ItemData[];
   comboCount: number;
   comboTimer: number;
+  comboStep: number;
+  comboResetTimer: number;
+  dropThroughTimer: number;
+  ghostTrailTimer: number;
 }
 
 type SkillCastProcProfile =
@@ -113,6 +125,7 @@ export class SideViewEngine {
   public player: PlayerState;
   public enemies: EnemyInstance[] = [];
   public droppedLoots: DroppedLoot[] = [];
+  public platforms: Platform[] = [];
   public particles: ParticleSystem;
   public arenaWidth: number = 3600;
   public arenaHeight: number = 600;
@@ -123,7 +136,8 @@ export class SideViewEngine {
   public canvasHeight: number = 540;
   public isTownMode: boolean = true;
   public townHub: TownHub | null = null;
-  private battleTheme: BattleTheme = 'catacombs';
+  public hitStopTimer: number = 0;
+  public battleTheme: BattleTheme = 'catacombs';
   private readonly cameraFollowSpeed = 10;
   private readonly cameraLookAheadPx = 140;
   private readonly cameraLeadRecoverySpeed = 12;
@@ -136,6 +150,7 @@ export class SideViewEngine {
     this.particles = new ParticleSystem();
     this.player = this.createInitialPlayer(characterClass);
     this.recomputeStats();
+    this.buildMapPlatforms(this.battleTheme);
   }
 
   public recalculateStats() {
@@ -241,6 +256,72 @@ export class SideViewEngine {
     p.totalCrit = Number(crit.toFixed(2));
   }
 
+  public setBattleTheme(theme: BattleTheme) {
+    this.battleTheme = theme;
+    this.buildMapPlatforms(theme);
+  }
+
+  public buildMapPlatforms(theme: BattleTheme) {
+    this.platforms = [];
+    const gy = this.groundY;
+
+    if (this.isTownMode) {
+      // Haven of Eldermoor Platforms (village lookout terraces, bridges)
+      this.platforms.push(
+        { x: 300, y: gy - 110, width: 260, height: 16, type: 'one-way' },
+        { x: 750, y: gy - 130, width: 320, height: 16, type: 'one-way' },
+        { x: 1250, y: gy - 110, width: 280, height: 16, type: 'one-way' },
+        { x: 1750, y: gy - 140, width: 340, height: 16, type: 'one-way' },
+        { x: 2300, y: gy - 120, width: 300, height: 16, type: 'one-way' }
+      );
+    } else if (theme === 'catacombs') {
+      // Goblin Catacombs Platforms (multi-tier stone ledges)
+      this.platforms.push(
+        { x: 240, y: gy - 115, width: 280, height: 16, type: 'one-way' },
+        { x: 600, y: gy - 205, width: 240, height: 16, type: 'one-way' },
+        { x: 920, y: gy - 115, width: 320, height: 16, type: 'one-way' },
+        { x: 1380, y: gy - 195, width: 260, height: 16, type: 'one-way' },
+        { x: 1750, y: gy - 120, width: 340, height: 16, type: 'one-way' },
+        { x: 2200, y: gy - 210, width: 280, height: 16, type: 'one-way' },
+        { x: 2600, y: gy - 125, width: 350, height: 16, type: 'one-way' },
+        { x: 3050, y: gy - 200, width: 300, height: 16, type: 'one-way' }
+      );
+    } else if (theme === 'crypt') {
+      // Crypt Mausoleum Platforms
+      this.platforms.push(
+        { x: 280, y: gy - 130, width: 300, height: 16, type: 'one-way' },
+        { x: 700, y: gy - 220, width: 260, height: 16, type: 'one-way' },
+        { x: 1100, y: gy - 135, width: 320, height: 16, type: 'one-way' },
+        { x: 1550, y: gy - 230, width: 300, height: 16, type: 'one-way' },
+        { x: 2000, y: gy - 130, width: 340, height: 16, type: 'one-way' },
+        { x: 2450, y: gy - 225, width: 280, height: 16, type: 'one-way' },
+        { x: 2850, y: gy - 135, width: 350, height: 16, type: 'one-way' }
+      );
+    } else if (theme === 'inferno') {
+      // Inferno Dragon's Lair (Molten Crags & Floating Basalt Pillars)
+      this.platforms.push(
+        { x: 260, y: gy - 120, width: 280, height: 16, type: 'one-way' },
+        { x: 620, y: gy - 215, width: 260, height: 16, type: 'one-way' },
+        { x: 1000, y: gy - 130, width: 350, height: 16, type: 'one-way' },
+        { x: 1450, y: gy - 225, width: 300, height: 16, type: 'one-way' },
+        { x: 1900, y: gy - 125, width: 320, height: 16, type: 'one-way' },
+        { x: 2350, y: gy - 220, width: 290, height: 16, type: 'one-way' },
+        { x: 2750, y: gy - 135, width: 360, height: 16, type: 'one-way' }
+      );
+    } else {
+      // Void Nexus (Void Monoliths)
+      this.platforms.push(
+        { x: 300, y: gy - 135, width: 300, height: 16, type: 'one-way' },
+        { x: 720, y: gy - 235, width: 280, height: 16, type: 'one-way' },
+        { x: 1150, y: gy - 140, width: 340, height: 16, type: 'one-way' },
+        { x: 1600, y: gy - 240, width: 300, height: 16, type: 'one-way' },
+        { x: 2050, y: gy - 135, width: 350, height: 16, type: 'one-way' },
+        { x: 2500, y: gy - 235, width: 280, height: 16, type: 'one-way' },
+        { x: 2900, y: gy - 140, width: 360, height: 16, type: 'one-way' }
+      );
+    }
+  }
+
   // --- PLAYER ACTIONS ---
 
   public movePlayer(direction: number) {
@@ -251,8 +332,19 @@ export class SideViewEngine {
     }
   }
 
-  public jumpPlayer() {
+  public jumpPlayer(holdingDown: boolean = false) {
     const p = this.player;
+
+    // Drop through one-way platforms when holding Down + Jump
+    if (holdingDown && p.y < this.groundY - 10) {
+      p.dropThroughTimer = 0.35;
+      p.vy = 3.5;
+      p.isGrounded = false;
+      audio.playJump();
+      this.particles.addImpactBurst(p.x, p.y, 8, '#94a3b8', 'smoke');
+      return;
+    }
+
     if (p.isGrounded) {
       p.vy = -p.characterClass.stats.jumpPower;
       p.isGrounded = false;
@@ -278,6 +370,7 @@ export class SideViewEngine {
     p.vx = p.facing * (p.totalSpeed * 2.6);
     audio.playDash();
     this.particles.addImpactBurst(p.x, p.y, 10, p.characterClass.themeColor, 'trail');
+    this.particles.addGhostTrail(p.x, p.y, p.facing, p.characterClass.id, 'run', 0, p.characterClass.accentColor);
   }
 
   private getSkillCastSoundProfile(skill: SkillDefinition, classId: string): SkillCastProcProfile {
@@ -424,6 +517,44 @@ export class SideViewEngine {
     const attackY = p.y;
     const isCrit = Math.random() < p.totalCrit;
     const damage = this.calculateDamage(skill);
+
+    // Mid-air Plunging Dive Attack for Basic Attack (Skill 0)
+    if (skillIndex === 0 && !p.isGrounded) {
+      p.vy = 14;
+      p.attackTimer = 0.4;
+      p.animState = 'attack';
+      this.particles.addSpellSlash(p.x, p.y + 10, p.facing, 1.8, '#ffd700');
+      this.particles.addImpactBurst(p.x, p.y, 14, '#ff9800', 'spark');
+      return;
+    }
+
+    // 3-Hit Ground Attack Combo String for Basic Attack (Skill 0)
+    if (skillIndex === 0) {
+      const step = p.comboStep || 0;
+      p.comboResetTimer = 0.75;
+
+      if (step === 0) {
+        // Step 1: Swift horizontal slash
+        p.comboStep = 1;
+        p.attackTimer = 0.22;
+        this.executeAreaDamage(attackX, attackY, skill, 1.0);
+      } else if (step === 1) {
+        // Step 2: Uppercut spin slash (lifts targets slightly)
+        p.comboStep = 2;
+        p.attackTimer = 0.25;
+        this.particles.addSpellSlash(attackX, attackY - 20, p.facing, 1.6, p.characterClass.accentColor);
+        this.executeAreaDamage(attackX, attackY, skill, 1.35);
+      } else {
+        // Step 3: Heavy ground smash finisher with screen shake
+        p.comboStep = 0;
+        p.attackTimer = 0.35;
+        this.particles.triggerScreenShake(10, 0.3);
+        this.particles.addGroundExplosion(attackX, this.groundY - 30, 1.7);
+        this.particles.addImpactBurst(attackX, attackY, 20, '#ff9800', 'spark');
+        this.executeAreaDamage(attackX, attackY, skill, 1.9);
+      }
+      return;
+    }
 
     // ----------------------------------------------------
     // DEDICATED CLASS-SPECIFIC SKILL LOGIC
@@ -717,10 +848,10 @@ export class SideViewEngine {
     return Math.max(1, Math.round(base + variation));
   }
 
-  private executeAreaDamage(centerX: number, centerY: number, skill: SkillDefinition) {
+  private executeAreaDamage(centerX: number, centerY: number, skill: SkillDefinition, multiplier: number = 1.0) {
     const p = this.player;
     const isCrit = Math.random() < p.totalCrit;
-    let baseDmg = this.calculateDamage(skill);
+    let baseDmg = Math.round(this.calculateDamage(skill) * multiplier);
     if (isCrit) baseDmg = Math.round(baseDmg * 1.8);
 
     if (skill.isUltimate) {
@@ -786,6 +917,10 @@ export class SideViewEngine {
     enemy.hitStun = 0.25;
     enemy.vx = knockbackDir * 3.5;
     enemy.vy = -2.5;
+
+    // Hit-stop micro freeze and crunchy screen shake on impact
+    this.hitStopTimer = isCrit ? 0.07 : 0.04;
+    this.particles.triggerScreenShake(isCrit ? 10 : 4, 0.2);
 
     audio.playHit(isCrit);
     this.particles.addFloatingText(enemy.x, enemy.y - enemy.height / 2, `${finalDamage}`, isCrit ? '#ffd54f' : '#ffffff', isCrit);
@@ -863,9 +998,14 @@ export class SideViewEngine {
     }
   }
 
-  // --- MAIN LOOP UPDATE & PHYSICS ---
-
   public update(dt: number) {
+    // 0. Hit-Stop Micro Freeze check (Crunchy combat impact feeling)
+    if (this.hitStopTimer > 0) {
+      this.hitStopTimer -= dt;
+      this.particles.update(dt);
+      return;
+    }
+
     const p = this.player;
     const dtFrame = dt * this.physicsFrameScale;
 
@@ -897,6 +1037,22 @@ export class SideViewEngine {
       p.comboTimer -= dt;
       if (p.comboTimer <= 0) {
         p.comboCount = 0;
+      }
+    }
+
+    if (p.comboResetTimer > 0) {
+      p.comboResetTimer -= dt;
+      if (p.comboResetTimer <= 0) {
+        p.comboStep = 0;
+      }
+    }
+
+    // Ghost trails (afterimages) on dashing and high-speed attack animation
+    if (p.isDashing || p.animState === 'attack') {
+      p.ghostTrailTimer = (p.ghostTrailTimer || 0) + dt;
+      if (p.ghostTrailTimer >= 0.05) {
+        p.ghostTrailTimer = 0;
+        this.particles.addGhostTrail(p.x, p.y, p.facing, p.characterClass.id, p.animState, p.attackTimer, p.characterClass.accentColor);
       }
     }
 
@@ -941,14 +1097,57 @@ export class SideViewEngine {
       this.playerRunBob *= 1 - settleSpeed;
     }
 
+    // Drop-through timer update
+    if (p.dropThroughTimer > 0) {
+      p.dropThroughTimer -= dt;
+    }
+
+    // Platform landing check
+    let landedOnPlatform = false;
+    if (p.vy >= 0 && (!p.dropThroughTimer || p.dropThroughTimer <= 0)) {
+      for (const plat of this.platforms) {
+        if (p.x >= plat.x - 12 && p.x <= plat.x + plat.width + 12) {
+          const prevY = p.y - p.vy * dtFrame;
+          if (prevY <= plat.y + 4 && p.y >= plat.y) {
+            p.y = plat.y;
+            p.vy = 0;
+            p.isGrounded = true;
+            p.hasJumpedOnce = false;
+            landedOnPlatform = true;
+
+            // Plunging dive attack landing impact explosion
+            if (p.attackTimer > 0 && p.animState === 'attack') {
+              this.particles.triggerScreenShake(14, 0.4);
+              this.particles.addGroundExplosion(p.x, plat.y - 20, 2.0);
+              this.particles.addImpactBurst(p.x, plat.y, 30, '#ffd700', 'spark');
+              const diveSkill = p.characterClass.skills[0];
+              this.executeAreaDamage(p.x, plat.y, diveSkill, 1.8);
+            }
+            break;
+          }
+        }
+      }
+    }
+
     // Ground collision: feet land directly on groundY
-    if (p.y >= this.groundY) {
-      p.y = this.groundY;
-      p.vy = 0;
-      p.isGrounded = true;
-      p.hasJumpedOnce = false;
-    } else {
-      p.isGrounded = false;
+    if (!landedOnPlatform) {
+      if (p.y >= this.groundY) {
+        p.y = this.groundY;
+        p.vy = 0;
+        p.isGrounded = true;
+        p.hasJumpedOnce = false;
+
+        // Plunging dive attack landing impact explosion on floor
+        if (p.attackTimer > 0 && p.animState === 'attack' && p.vy > 8) {
+          this.particles.triggerScreenShake(14, 0.4);
+          this.particles.addGroundExplosion(p.x, this.groundY - 20, 2.0);
+          this.particles.addImpactBurst(p.x, this.groundY, 30, '#ffd700', 'spark');
+          const diveSkill = p.characterClass.skills[0];
+          this.executeAreaDamage(p.x, this.groundY, diveSkill, 1.8);
+        }
+      } else {
+        p.isGrounded = false;
+      }
     }
 
     // Apply horizontal friction when on ground
@@ -1526,6 +1725,9 @@ export class SideViewEngine {
     ctx.save();
     ctx.translate(-camX, -camY);
 
+    // 1.5 Draw Multi-Level Platforms
+    sprites.drawPlatforms(ctx, this.platforms, this.battleTheme);
+
     // 2. Render Dropped Loot
     for (const loot of this.droppedLoots) {
       const bobY = loot.y + Math.sin(loot.bobTimer) * 4;
@@ -1535,7 +1737,7 @@ export class SideViewEngine {
       ctx.save();
       ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
       ctx.beginPath();
-      ctx.ellipse(loot.x, this.groundY - 6, 12, 4, 0, 0, Math.PI * 2);
+      ctx.ellipse(loot.x, loot.y + 10, 12, 4, 0, 0, Math.PI * 2);
       ctx.fill();
 
       // Glow halo
@@ -1575,6 +1777,18 @@ export class SideViewEngine {
           enemy.type === 'boss',
           enemy.hitStun
         );
+
+        // Telegraphed Attack Warning Glint above charging enemies
+        if (enemy.attackTimer <= 0.4 && enemy.attackTimer > 0) {
+          ctx.save();
+          ctx.font = 'bold 16px "Cinzel", sans-serif';
+          ctx.fillStyle = '#ef4444';
+          ctx.shadowColor = '#dc2626';
+          ctx.shadowBlur = 10;
+          ctx.textAlign = 'center';
+          ctx.fillText('⚠ !', enemy.x, enemy.y - enemy.height - 12);
+          ctx.restore();
+        }
 
         // Enemy Health Bar
         ctx.save();

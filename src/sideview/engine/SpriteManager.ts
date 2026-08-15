@@ -2441,7 +2441,65 @@ export class SpriteManager {
       ctx.fillRect(0, 0, canvasWidth, groundY);
     }
   }
+
+  /**
+   * Draw Multi-Level Platforms with authentic pixel-art tiles and support pillars
+   */
+  public drawPlatforms(
+    ctx: CanvasRenderingContext2D,
+    platforms: { x: number; y: number; width: number; height: number; type: 'one-way' | 'solid' }[],
+    theme: BattleTheme = 'catacombs'
+  ) {
+    const tilesImg = this.images['tiles'];
+    const battleGround = this.images['battle_ground'];
+    const thTerrain = this.images['th_terrain'];
+
+    platforms.forEach(plat => {
+      ctx.save();
+      const tileSize = 32;
+      const numTiles = Math.ceil(plat.width / tileSize);
+
+      // Support Pillars descending from platform
+      ctx.fillStyle = theme === 'inferno' ? '#291103' : '#0f172a';
+      ctx.fillRect(plat.x + 14, plat.y, 6, 250);
+      ctx.fillRect(plat.x + plat.width - 20, plat.y, 6, 250);
+
+      // Draw Top Platform Surface
+      for (let t = 0; t < numTiles; t++) {
+        const tx = plat.x + t * tileSize;
+        const tw = Math.min(tileSize, plat.x + plat.width - tx);
+
+        if (battleGround && battleGround.complete) {
+          ctx.drawImage(battleGround, 0, 0, 32, 32, tx, plat.y - 12, tw, 24);
+        } else if (thTerrain && thTerrain.complete) {
+          ctx.drawImage(thTerrain, 32, 0, 32, 32, tx, plat.y - 12, tw, 24);
+        } else if (tilesImg && tilesImg.complete) {
+          ctx.drawImage(tilesImg, 16, 16, 16, 16, tx, plat.y - 12, tw, 24);
+        } else {
+          ctx.fillStyle = '#334155';
+          ctx.fillRect(tx, plat.y - 8, tw, 16);
+          ctx.fillStyle = '#22c55e';
+          ctx.fillRect(tx, plat.y - 8, tw, 4);
+        }
+      }
+
+      // Platform Glow / Rune Accent Line
+      if (theme === 'void') {
+        ctx.fillStyle = 'rgba(168, 85, 247, 0.5)';
+        ctx.fillRect(plat.x, plat.y - 14, plat.width, 2);
+      } else if (theme === 'inferno') {
+        ctx.fillStyle = 'rgba(249, 115, 22, 0.5)';
+        ctx.fillRect(plat.x, plat.y - 14, plat.width, 2);
+      } else {
+        ctx.fillStyle = 'rgba(74, 222, 128, 0.4)';
+        ctx.fillRect(plat.x, plat.y - 14, plat.width, 2);
+      }
+
+      ctx.restore();
+    });
+  }
 }
 
 export const sprites = new SpriteManager();
+
 

@@ -212,15 +212,49 @@ export class ParticleSystem {
   public omnislashLines: OmnislashSlashLine[] = [];
   public chainLightningArcs: ChainLightningArc[] = [];
 
-  // Dramatic Ultimate Entities
-  public dragonAvatars: DragonAvatarEntity[] = [];
-  public reaperAvatars: GrimReaperAvatarEntity[] = [];
-  public holyHammers: HolyHammerAvatarEntity[] = [];
-  public volcanicFissures: VolcanicFissureEntity[] = [];
-  public screenFlashes: CinematicScreenFlash[] = [];
+  public ghostTrails: {
+    id: string;
+    x: number;
+    y: number;
+    facing: number;
+    classId: string;
+    state: 'idle' | 'run' | 'attack' | 'jump' | 'dead';
+    animTimer: number;
+    color: string;
+    alpha: number;
+    life: number;
+    maxLife: number;
+  }[] = [];
 
   public screenShakeTime: number = 0;
   public screenShakeMagnitude: number = 0;
+
+  /**
+   * Add Fading Ghost Trail (Afterimage)
+   */
+  public addGhostTrail(
+    x: number,
+    y: number,
+    facing: number,
+    classId: string,
+    state: 'idle' | 'run' | 'attack' | 'jump' | 'dead' = 'attack',
+    animTimer: number = 0,
+    color: string = '#60a5fa'
+  ) {
+    this.ghostTrails.push({
+      id: 'ghost_' + Math.random(),
+      x,
+      y,
+      facing,
+      classId,
+      state,
+      animTimer,
+      color,
+      alpha: 0.65,
+      life: 0.28,
+      maxLife: 0.28
+    });
+  }
 
   /**
    * Screen Shake Effect
@@ -1186,7 +1220,14 @@ export class ParticleSystem {
     });
     this.screenFlashes = this.screenFlashes.filter(sf => sf.alpha > 0);
 
-    // 7. Update Shadow Clones
+    // 7. Update Ghost Trails
+    this.ghostTrails.forEach(g => {
+      g.life -= dt;
+      g.alpha = Math.max(0, (g.life / g.maxLife) * 0.65);
+    });
+    this.ghostTrails = this.ghostTrails.filter(g => g.life > 0);
+
+    // 8. Update Shadow Clones
     this.shadowClones.forEach(clone => {
       clone.life += dt;
       clone.animTimer += dt;
@@ -1349,6 +1390,14 @@ export class ParticleSystem {
       if (spikeImg && spikeImg.complete) {
         ctx.drawImage(spikeImg, -16, -16, 32, 32);
       }
+      ctx.restore();
+    });
+
+    // 3.5 Draw Ghost Trails (Afterimages)
+    this.ghostTrails.forEach(g => {
+      ctx.save();
+      ctx.globalAlpha = g.alpha;
+      sprites.drawHero(ctx, g.x, g.y, g.classId, g.state, g.facing, g.animTimer, g.color);
       ctx.restore();
     });
 
