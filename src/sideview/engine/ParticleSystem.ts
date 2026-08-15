@@ -96,7 +96,7 @@ export interface SummonedMinionEntity {
   vx: number;
   vy: number;
   facing: number;
-  state: 'idle' | 'walk' | 'attack' | 'attack2' | 'spell' | 'cast';
+  state: 'idle' | 'walk' | 'run' | 'attack' | 'attack2' | 'spell' | 'cast' | 'hurt' | 'hit' | 'death';
   animTimer: number;
   attackCooldown: number;
   skillCooldown?: number;
@@ -211,6 +211,13 @@ export class ParticleSystem {
   public groundZones: GroundZoneEntity[] = [];
   public omnislashLines: OmnislashSlashLine[] = [];
   public chainLightningArcs: ChainLightningArc[] = [];
+
+  // Dramatic Ultimate Avatars & Cinematic Entities
+  public screenFlashes: CinematicScreenFlash[] = [];
+  public dragonAvatars: DragonAvatarEntity[] = [];
+  public volcanicFissures: VolcanicFissureEntity[] = [];
+  public reaperAvatars: GrimReaperAvatarEntity[] = [];
+  public holyHammers: HolyHammerAvatarEntity[] = [];
 
   public ghostTrails: {
     id: string;
@@ -1438,7 +1445,7 @@ export class ParticleSystem {
         ctx.fill();
 
         const frameNum = Math.min(40, Math.max(1, Math.floor((minion.animTimer * 16) % 40) + 1));
-        let dragonImg: HTMLImageElement | null = null;
+        let dragonImg: HTMLImageElement | null | undefined = null;
 
         if (minion.state === 'attack2') {
           dragonImg = sprites.getImage(`dragon_atk2_${frameNum}`) || sprites.getImage(`dragon_atk_${frameNum}`);
@@ -1492,7 +1499,7 @@ export class ParticleSystem {
         ctx.ellipse(0, 0, 45, 10, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        let reaperImg: HTMLImageElement | null = null;
+        let reaperImg: HTMLImageElement | null | undefined = null;
         if (minion.state === 'spell') {
           const frame = Math.min(16, Math.max(1, Math.floor((minion.animTimer * 14) % 16) + 1));
           reaperImg = sprites.getImage(`reaper_spell_${frame}`);
