@@ -97,6 +97,9 @@ export class SpriteManager {
       tiles: '/assets/high-forest/Assets/Tiles.png',
       props_rocks: '/assets/high-forest/Assets/Props-Rocks.png',
       buildings: '/assets/high-forest/Assets/Buildings.png',
+      battle_ground: '/assets/battle/ground/tx-tileset-ground.png',
+      battle_props: '/assets/battle/props/tx-village-props.png',
+      battle_chest: '/assets/battle/props/tx-chest-animation.png',
 
       // 2. High Forest Hero Animations (Assassin)
       hero_idle: '/assets/high-forest/Character/Idle/Idle-Sheet.png',

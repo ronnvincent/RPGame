@@ -1731,13 +1731,14 @@ export class SideViewEngine {
     ctx.scale(zoom, zoom);
 
     // 1. Draw Seamless Parallax Background & Deep Ground Tiles
-    sprites.drawEnvironment(ctx, camX, virtualWidth, virtualHeight, this.groundY, this.arenaWidth, this.battleTheme);
+    const currentTheme = this.isTownMode ? ('town' as BattleTheme) : this.battleTheme;
+    sprites.drawEnvironment(ctx, camX, virtualWidth, virtualHeight, this.groundY, this.arenaWidth, currentTheme);
 
     ctx.save();
     ctx.translate(-camX, -camY);
 
     // 1.5 Draw Multi-Level Platforms
-    sprites.drawPlatforms(ctx, this.platforms, this.battleTheme);
+    sprites.drawPlatforms(ctx, this.platforms, currentTheme);
 
     // 2. Render Dropped Loot
     for (const loot of this.droppedLoots) {
