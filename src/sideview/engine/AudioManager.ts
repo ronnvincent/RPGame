@@ -31,6 +31,21 @@ class AudioManager {
     this.soundEnabled = enabled;
   }
 
+  public playClick() {
+    if (!this.soundEnabled) return;
+    this.initCtx();
+    this.playTone(800, 0.05);
+  }
+
+  public playVictory() {
+    if (!this.soundEnabled) return;
+    this.initCtx();
+    this.playTone(523.25, 0.1);
+    setTimeout(() => this.playTone(659.25, 0.1), 100);
+    setTimeout(() => this.playTone(783.99, 0.2), 200);
+    setTimeout(() => this.playTone(1046.50, 0.4), 300);
+  }
+
   /**
    * Sword Slash / Physical Attack SFX
    */
