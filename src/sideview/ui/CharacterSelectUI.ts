@@ -29,6 +29,7 @@ export class CharacterSelectUI {
     rootElement.appendChild(this.container);
     this.render();
     this.startAnimationLoop();
+    audio.playTownBGM();
   }
 
   private getSkillIcon(skill: SkillDefinition, selectedClassId: string, skillIdx?: number): string {

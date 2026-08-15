@@ -6,9 +6,12 @@
 class AudioManager {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
-  private soundEnabled: boolean = true;
-  private bgmOsc: OscillatorNode | null = null;
-  private bgmGain: GainNode | null = null;
+  public soundEnabled: boolean = true;
+  public musicEnabled: boolean = true;
+  private currentBgmAudio: HTMLAudioElement | null = null;
+  private currentBgmSrc: string = '';
+  private bgmVolume: number = 0.35;
+  private sfxPool: { [src: string]: HTMLAudioElement[] } = {};
 
   constructor() {
     // Initialized lazily on first user gesture
@@ -19,7 +22,7 @@ class AudioManager {
       const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       this.ctx = new AudioCtxClass();
       this.masterGain = this.ctx.createGain();
-      this.masterGain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+      this.masterGain.gain.setValueAtTime(0.35, this.ctx.currentTime);
       this.masterGain.connect(this.ctx.destination);
     }
     if (this.ctx.state === 'suspended') {
@@ -27,8 +30,103 @@ class AudioManager {
     }
   }
 
-  public setSoundEnabled(enabled: boolean) {
-    this.soundEnabled = enabled;
+  /**
+   * Play background music track with looping and crossfading
+   */
+  public playBGM(src: string, volume: number = 0.35) {
+    this.bgmVolume = volume;
+    if (!this.musicEnabled) {
+      this.currentBgmSrc = src;
+      return;
+    }
+    if (this.currentBgmSrc === src && this.currentBgmAudio && !this.currentBgmAudio.paused) {
+      return;
+    }
+
+    if (this.currentBgmAudio) {
+      try {
+        this.currentBgmAudio.pause();
+        this.currentBgmAudio = null;
+      } catch (e) {}
+    }
+
+    try {
+      this.currentBgmSrc = src;
+      const audio = new Audio(src);
+      audio.loop = true;
+      audio.volume = this.bgmVolume;
+      audio.play().catch(() => {
+        // Autoplay may wait for user tap
+      });
+      this.currentBgmAudio = audio;
+    } catch (e) {
+      console.warn('BGM play error:', e);
+    }
+  }
+
+  /**
+   * Town Peaceful Medieval Hub BGM
+   */
+  public playTownBGM() {
+    this.playBGM('/assets/audio/music/town_theme.mp3', 0.3);
+  }
+
+  /**
+   * Action Dungeon & Battlefield BGM
+   */
+  public playDungeonBGM(theme?: string) {
+    if (theme === 'mountain') {
+      this.playBGM('/assets/audio/music/mountain_theme.ogg', 0.35);
+    } else {
+      this.playBGM('/assets/audio/music/dungeon_battle.mp3', 0.35);
+    }
+  }
+
+  public stopBGM() {
+    if (this.currentBgmAudio) {
+      try {
+        this.currentBgmAudio.pause();
+        this.currentBgmAudio.currentTime = 0;
+      } catch (e) {}
+      this.currentBgmAudio = null;
+    }
+  }
+
+  public toggleMusic(): boolean {
+    this.musicEnabled = !this.musicEnabled;
+    if (!this.musicEnabled) {
+      this.stopBGM();
+    } else if (this.currentBgmSrc) {
+      this.playBGM(this.currentBgmSrc, this.bgmVolume);
+    }
+    return this.musicEnabled;
+  }
+
+  public toggleSound(): boolean {
+    this.soundEnabled = !this.soundEnabled;
+    return this.soundEnabled;
+  }
+
+  /**
+   * Play asset sound effect from file
+   */
+  public playSFX(src: string, volume: number = 0.4) {
+    if (!this.soundEnabled) return;
+    try {
+      if (!this.sfxPool[src]) {
+        this.sfxPool[src] = [];
+      }
+      let audio = this.sfxPool[src].find(a => a.paused || a.ended);
+      if (!audio) {
+        audio = new Audio(src);
+        if (this.sfxPool[src].length < 8) {
+          this.sfxPool[src].push(audio);
+        }
+      }
+      audio.currentTime = 0;
+      audio.volume = volume;
+      audio.play().catch(() => {});
+    } catch (e) {}
   }
 
   public playClick() {

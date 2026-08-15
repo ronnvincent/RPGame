@@ -123,6 +123,7 @@ export class SideViewGame {
     this.engine.player.vx = 0;
     this.engine.player.vy = 0;
     this.engine.setBattleTheme('catacombs');
+    audio.playTownBGM();
     this.hud?.showToast('🏰 Arrived at Haven of Eldermoor');
   }
 
@@ -147,6 +148,11 @@ export class SideViewGame {
     this.engine.player.vy = 0;
 
     this.currentDungeonIndex = dungeonIndex % DUNGEONS.length;
+    const dungeon = DUNGEONS[this.currentDungeonIndex];
+    if (dungeon) {
+      this.engine.setBattleTheme(dungeon.theme);
+      audio.playDungeonBGM(dungeon.theme);
+    }
     this.currentWaveIndex = 0;
     this.spawnNextWave();
   }

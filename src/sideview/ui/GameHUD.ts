@@ -970,9 +970,11 @@ export class GameHUD {
       <!-- Toast Notification Banner -->
       <div class="hud-toast-banner" id="hud-toast-banner" style="display: none;"></div>
 
-      <!-- Top Right: Gold & Navigation Buttons -->
+      <!-- Top Right: Gold, Audio Toggles & Navigation Buttons -->
       <div class="hud-top-right">
         <div class="gold-badge">🪙 <span id="hud-gold-text">${p.gold}</span></div>
+        <button class="inv-btn inv-btn-fs" id="toggle-music-btn" title="Toggle Music">🎵</button>
+        <button class="inv-btn inv-btn-fs" id="toggle-sfx-btn" title="Toggle Sound SFX">🔊</button>
         <button class="inv-btn inv-btn-quest" id="toggle-quests-btn">QUESTS [ J ]</button>
         <button class="inv-btn inv-btn-quest" id="toggle-map-btn">MAP [ M ]</button>
         <button class="inv-btn inv-btn-town" id="return-town-btn" style="display: ${this.engine.isTownMode ? 'none' : 'block'};">TOWN [ T ]</button>
@@ -1137,6 +1139,24 @@ export class GameHUD {
       e.stopPropagation();
       audio.playTeleport();
       this.game?.loadTownHub();
+    });
+
+    // Music toggle
+    const musicBtn = this.container.querySelector('#toggle-music-btn');
+    musicBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const enabled = audio.toggleMusic();
+      musicBtn.textContent = enabled ? '🎵' : '🔇';
+      this.showToast(enabled ? '🎵 Music Enabled' : '🔇 Music Muted');
+    });
+
+    // Sound SFX toggle
+    const sfxBtn = this.container.querySelector('#toggle-sfx-btn');
+    sfxBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const enabled = audio.toggleSound();
+      sfxBtn.textContent = enabled ? '🔊' : '🔈';
+      this.showToast(enabled ? '🔊 SFX Enabled' : '🔈 SFX Muted');
     });
 
     // Fullscreen Toggle button
