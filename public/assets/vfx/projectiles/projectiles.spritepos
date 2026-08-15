@@ -1,0 +1,60 @@
+tech 1: 0 0 80 80
+tech 2: 81 0 80 80
+tech 3: 162 0 80 80
+tech 4: 243 0 80 80
+tech 5: 324 0 80 80
+tech 6: 405 0 80 80
+tech 7: 0 81 80 80
+tech 8: 81 81 80 80
+balloon 1: 162 81 78 56
+balloon 2: 241 81 78 56
+balloon 3: 320 81 78 56
+deflating balloon 1: 399 81 78 56
+deflating balloon 2: 0 162 78 56
+deflating balloon 3: 79 162 78 56
+deflating balloon 4: 158 162 78 56
+deflating balloon 5: 237 162 78 56
+deflating balloon 6: 316 162 78 56
+deflating balloon 7: 395 162 78 56
+deflating balloon 8: 0 219 78 56
+deflating balloon 9: 79 219 78 56
+big balloon 1: 158 219 78 56
+big balloon 2: 237 219 78 56
+big balloon 3: 316 219 78 56
+bubble: 0 276 64 64
+gas cylinder 1: 395 219 53 46
+gas cylinder 2: 449 219 53 46
+gas cylinder 3: 65 276 53 46
+gas cylinder 4: 119 276 53 46
+gas cylinder 5: 173 276 53 46
+gas cylinder 6: 227 276 53 46
+gas cylinder 7: 281 276 53 46
+gas cylinder 8: 335 276 53 46
+gas cylinder 9: 389 276 53 46
+water 1: 443 276 46 45
+water 2: 0 341 46 45
+water 3: 47 341 46 45
+water 4: 94 341 46 45
+water 5: 141 341 46 45
+lava 1: 188 341 44 42
+lava 2: 233 341 44 42
+lava 3: 278 341 44 42
+lava 4: 323 341 44 42
+lava 5: 368 341 44 42
+lava 6: 413 341 44 42
+lava 7: 458 341 44 42
+lava 8: 0 387 44 42
+lava 9: 45 387 44 42
+lava 10: 90 387 44 42
+lava extincted: 135 387 44 42
+stone: 180 387 39 39
+fire stone 1: 220 387 39 39
+fire stone 2: 260 387 39 39
+fire stone 3: 300 387 39 39
+fire stone 4: 340 387 39 39
+fire stone 5: 380 387 39 39
+gas cylinder part 2: 478 81 29 27
+gas cylinder part 4: 478 109 30 23
+gas cylinder part 5: 474 162 32 20
+gas cylinder part 1: 474 183 23 23
+gas cylinder part 3: 490 276 20 21

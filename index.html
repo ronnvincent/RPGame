@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Side-View Action RPG - 10 Hero Classes & Dungeons</title>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;800;900&family=Inter:wght@400;600;700;800&family=Outfit:wght@500;700;800;900&display=swap" rel="stylesheet">
+    <style>
+      * {
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+      }
+      body, html, #rpg {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+        background: #09090b;
+        font-family: 'Outfit', 'Cinzel', 'Inter', sans-serif;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+      /* Landscape Enforcement Shield for Mobile Devices */
+      #orientation-rotate-shield {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 999999;
+        background: radial-gradient(circle at center, #1c1428 0%, #08060c 100%);
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 24px;
+        color: #f8fafc;
+        user-select: none;
+      }
+
+      @media screen and (orientation: portrait) {
+        #orientation-rotate-shield {
+          display: flex !important;
+        }
+      }
+
+      .rotate-phone-anim {
+        width: 64px;
+        height: 64px;
+        border: 4px solid #ffd700;
+        border-radius: 12px;
+        margin-bottom: 24px;
+        animation: rotateDevice 2.2s infinite ease-in-out;
+        box-shadow: 0 0 25px rgba(255, 215, 0, 0.5);
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .rotate-phone-anim::after {
+        content: '';
+        width: 6px;
+        height: 6px;
+        background: #ffd700;
+        border-radius: 50%;
+        position: absolute;
+        bottom: 6px;
+      }
+
+      @keyframes rotateDevice {
+        0%, 15% {
+          transform: rotate(0deg) scale(1);
+        }
+        50%, 75% {
+          transform: rotate(90deg) scale(1.1);
+        }
+        100% {
+          transform: rotate(90deg) scale(1);
+        }
+      }
+
+      .rotate-title {
+        font-family: 'Cinzel', serif;
+        font-size: 22px;
+        font-weight: 900;
+        color: #ffd700;
+        margin: 0 0 10px 0;
+        letter-spacing: 2px;
+        text-shadow: 0 0 15px rgba(255, 215, 0, 0.6);
+      }
+
+      .rotate-desc {
+        font-size: 13px;
+        color: #cbd5e1;
+        max-width: 320px;
+        line-height: 1.5;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Landscape Lock Modal -->
+    <div id="orientation-rotate-shield">
+      <div class="rotate-phone-anim"></div>
+      <h2 class="rotate-title">ROTATE YOUR DEVICE</h2>
+      <p class="rotate-desc">For the best Action RPG experience, please rotate your device to <strong>Landscape Mode</strong>.</p>
+    </div>
+
+    <div id="rpg"></div>
+    <script type="module" src="./src/standalone.ts"></script>
+  </body>
+</html>
