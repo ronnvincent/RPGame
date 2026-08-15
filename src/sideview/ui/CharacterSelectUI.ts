@@ -467,83 +467,116 @@ export class CharacterSelectUI {
         }
 
         /* Mobile Landscape Optimization */
-        @media (max-height: 520px) {
+        @media (max-height: 650px), (max-width: 900px) {
           #char-select-screen {
-            padding: 6px 12px;
+            padding: 4px 8px;
+            justify-content: flex-start;
+            gap: 4px;
           }
           .title-banner {
-            padding: 4px 20px;
+            padding: 2px 16px;
           }
           .select-title {
-            font-size: 16px;
-            letter-spacing: 2px;
+            font-size: 14px;
+            letter-spacing: 1.5px;
           }
           .select-subtitle {
             display: none;
           }
+          .classes-carousel {
+            gap: 4px;
+            padding: 2px;
+            max-width: 100%;
+          }
           .class-card {
-            flex: 0 0 72px;
-            padding: 3px 2px;
+            flex: 0 0 58px;
+            padding: 2px 1px;
+            border-width: 1.5px;
           }
           .card-sprite-canvas {
-            width: 48px;
-            height: 48px;
+            width: 36px;
+            height: 36px;
           }
           .class-card-name {
-            font-size: 9px;
+            font-size: 8px;
+            margin-top: 1px;
           }
           .class-card-role {
-            font-size: 7px;
-            padding: 1px 4px;
+            font-size: 6.5px;
+            padding: 0 3px;
           }
           .class-detail-container {
-            padding: 8px 12px;
-            gap: 10px;
+            padding: 4px 8px;
+            gap: 8px;
+            margin-top: 0;
+          }
+          .hero-preview-row {
+            padding: 4px 6px;
+            gap: 8px;
           }
           #hero-showcase-canvas {
-            width: 72px;
-            height: 72px;
+            width: 56px;
+            height: 56px;
           }
           .hero-names h2 {
-            font-size: 14px;
+            font-size: 13px;
           }
           .hero-names p {
-            font-size: 8.5px;
+            font-size: 8px;
+            margin: 0;
           }
           .click-hint {
             display: none;
           }
           .hero-desc {
-            font-size: 8.5px;
+            font-size: 8px;
             line-height: 1.2;
-            margin: 2px 0;
+            padding: 3px 6px;
+            margin: 0;
           }
           .stats-grid {
             grid-template-columns: repeat(3, 1fr);
-            gap: 3px;
+            gap: 2px;
+            padding: 4px;
           }
           .stat-item {
-            padding: 2px 5px;
-            font-size: 7.5px;
+            padding: 1px 4px;
+            font-size: 7px;
           }
           .skills-section h3 {
-            font-size: 9.5px;
-            margin-bottom: 3px;
+            font-size: 8.5px;
+            margin-bottom: 2px;
           }
           .skills-list {
-            gap: 3px;
-            max-height: 110px;
+            gap: 2px;
+            max-height: 80px;
+            overflow-y: auto;
           }
           .skill-item {
-            padding: 2px 5px;
+            padding: 2px 4px;
+          }
+          .skill-icon-box {
+            width: 24px;
+            height: 24px;
+          }
+          .skill-icon-box img {
+            width: 18px;
+            height: 18px;
+          }
+          .skill-name-row {
+            font-size: 9px;
+          }
+          .skill-meta {
+            font-size: 7.5px;
           }
           .skill-desc {
             display: none;
           }
           .start-btn {
-            font-size: 12px;
-            padding: 6px 24px;
-            letter-spacing: 1.5px;
+            font-size: 11px;
+            padding: 5px 22px;
+            letter-spacing: 1px;
+            margin-top: 2px;
           }
         }
       </style>
@@ -553,10 +586,16 @@ export class CharacterSelectUI {
       <div class="vignette-overlay"></div>
 
       <div class="select-content-wrapper">
-        <!-- Title Banner -->
-        <div class="title-banner">
-          <h1 class="select-title">CHOOSE YOUR CHAMPION</h1>
-          <div class="select-subtitle">Select your battle archetype wielding 6 specialized combat skills</div>
+        <!-- Title Banner with Fullscreen Trigger -->
+        <div style="display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; position: relative;">
+          <div class="title-banner">
+            <h1 class="select-title">CHOOSE YOUR CHAMPION</h1>
+            <div class="select-subtitle">Select your battle archetype wielding 6 specialized combat skills</div>
+          </div>
+          <button id="char-select-fs-btn" style="position: absolute; right: 0; top: 50%; transform: translateY(-50%); background: #241608; border: 2px solid #d4af37; color: #ffd700; border-radius: 6px; padding: 4px 8px; font-size: 12px; font-weight: 900; cursor: pointer; display: flex; align-items: center; gap: 4px; box-shadow: 0 0 10px rgba(0,0,0,0.8);" title="Toggle Fullscreen">
+            <span>⛶</span>
+            <span style="font-size: 9px; font-family: 'Cinzel', serif;">FULLSCREEN</span>
+          </button>
         </div>
 
         <!-- 10 Roles Carousel with Animated Sprite Canvases -->
@@ -651,14 +690,31 @@ export class CharacterSelectUI {
     }
 
     const startBtn = this.container.querySelector('#start-game-btn');
-    if (startBtn) {
-      startBtn.addEventListener('click', () => {
-        this.isDestroyed = true;
-        audio.playVictory();
-        this.container.remove();
-        this.onClassSelectedCallback(this.selectedClass);
-      });
-    }
+    startBtn?.addEventListener('click', () => {
+      // Auto-trigger full screen on mobile browser
+      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+      audio.playQuestAccept();
+      this.destroy();
+      this.onClassSelectedCallback(this.selectedClass);
+    });
+
+    const fsBtn = this.container.querySelector('#char-select-fs-btn');
+    fsBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      audio.playClick();
+      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      }
+    });
+  }
+
+  public destroy() {
+    this.isDestroyed = true;
+    this.container.remove();
   }
 
   private startAnimationLoop() {
