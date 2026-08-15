@@ -1864,29 +1864,95 @@ export class SideViewEngine {
     const now = Date.now() / 1000;
     const activeNpc = this.townHub.getActiveNpc();
 
-    // 1. Draw High Forest Town Buildings & Trees in Background
-    const buildingImg = (sprites as any).images?.['buildings'];
-    const treeGolden = (sprites as any).images?.['tree_golden'];
-    const treeGreen = (sprites as any).images?.['tree_green'];
-    const treeRed = (sprites as any).images?.['tree_red'];
+    // 1. Draw Authentic GothicVania Town Buildings, Cathedral & Street Props
+    const gvChurch = (sprites as any).getImage('gv_church');
+    const gvHouseA = (sprites as any).getImage('gv_house_a');
+    const gvHouseB = (sprites as any).getImage('gv_house_b');
+    const gvHouseC = (sprites as any).getImage('gv_house_c');
+    const gvWell = (sprites as any).getImage('gv_well');
+    const gvWagon = (sprites as any).getImage('gv_wagon');
+    const gvLamp = (sprites as any).getImage('gv_street_lamp');
+    const gvCrateStack = (sprites as any).getImage('gv_crate_stack');
+    const gvCrate = (sprites as any).getImage('gv_crate');
+    const gvBarrel = (sprites as any).getImage('gv_barrel');
+    const gvSign = (sprites as any).getImage('gv_sign');
 
-    if (treeGreen && treeGreen.complete) {
-      ctx.drawImage(treeGreen, 180, this.groundY - 190, 120, 190);
-      ctx.drawImage(treeGreen, 1200, this.groundY - 190, 120, 190);
-      ctx.drawImage(treeGreen, 2240, this.groundY - 190, 120, 190);
-    }
-    if (treeGolden && treeGolden.complete) {
-      ctx.drawImage(treeGolden, 700, this.groundY - 195, 120, 195);
-      ctx.drawImage(treeGolden, 1700, this.groundY - 195, 120, 195);
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+
+    // A. Town Notice Sign at Entrance
+    if (gvSign && gvSign.complete) {
+      ctx.drawImage(gvSign, 280, this.groundY - 45, 37, 45);
     }
 
-    if (buildingImg && buildingImg.complete) {
-      // Village houses cleanly centered behind each NPC station
-      ctx.drawImage(buildingImg, 0, 0, 160, 140, 400, this.groundY - 140, 160, 140);
-      ctx.drawImage(buildingImg, 160, 0, 160, 140, 900, this.groundY - 140, 160, 140);
-      ctx.drawImage(buildingImg, 0, 0, 160, 140, 1400, this.groundY - 140, 160, 140);
-      ctx.drawImage(buildingImg, 160, 0, 160, 140, 1900, this.groundY - 140, 160, 140);
+    // B. House A near Elder Justinian (x = 380)
+    if (gvHouseA && gvHouseA.complete) {
+      ctx.drawImage(gvHouseA, 360, this.groundY - 183, 168, 183);
     }
+    if (gvCrateStack && gvCrateStack.complete) {
+      ctx.drawImage(gvCrateStack, 330, this.groundY - 68, 73, 68);
+    }
+
+    // C. House B near Captain Valerie (x = 880)
+    if (gvHouseB && gvHouseB.complete) {
+      ctx.drawImage(gvHouseB, 840, this.groundY - 244, 210, 244);
+    }
+    if (gvBarrel && gvBarrel.complete) {
+      ctx.drawImage(gvBarrel, 1050, this.groundY - 30, 24, 30);
+      ctx.drawImage(gvBarrel, 1070, this.groundY - 30, 24, 30);
+    }
+
+    // D. Village Well between Valerie and Keith (x = 1200)
+    if (gvWell && gvWell.complete) {
+      ctx.drawImage(gvWell, 1180, this.groundY - 65, 65, 65);
+    }
+
+    // E. House C near Blacksmith Keith (x = 1380)
+    if (gvHouseC && gvHouseC.complete) {
+      ctx.drawImage(gvHouseC, 1340, this.groundY - 183, 221, 183);
+    }
+    if (gvCrate && gvCrate.complete) {
+      ctx.drawImage(gvCrate, 1570, this.groundY - 35, 39, 35);
+    }
+
+    // F. Merchant Horse Wagon between Keith and Morwenna (x = 1720)
+    if (gvWagon && gvWagon.complete) {
+      ctx.drawImage(gvWagon, 1680, this.groundY - 75, 93, 75);
+    }
+
+    // G. House A near Alchemist Morwenna (x = 1880)
+    if (gvHouseA && gvHouseA.complete) {
+      ctx.drawImage(gvHouseA, 1860, this.groundY - 183, 168, 183);
+    }
+    if (gvBarrel && gvBarrel.complete) {
+      ctx.drawImage(gvBarrel, 2040, this.groundY - 30, 24, 30);
+    }
+
+    // H. Grand Gothic Cathedral / Church behind the Dimensional Gateway (x = 2360)
+    if (gvChurch && gvChurch.complete) {
+      const churchW = gvChurch.naturalWidth || 320;
+      const churchH = gvChurch.naturalHeight || 240;
+      ctx.drawImage(gvChurch, 2320, this.groundY - churchH, churchW, churchH);
+    }
+
+    // I. Victorian Street Lamps with Warm Amber Illumination
+    const lampPositions = [180, 640, 1120, 1620, 2140, 2720];
+    lampPositions.forEach((lx) => {
+      if (gvLamp && gvLamp.complete) {
+        ctx.drawImage(gvLamp, lx - 17, this.groundY - 108, 35, 108);
+      }
+      // Glowing Lantern Light Halo
+      const lampGlow = ctx.createRadialGradient(lx, this.groundY - 88, 5, lx, this.groundY - 88, 55 + Math.sin(now * 6 + lx) * 4);
+      lampGlow.addColorStop(0, 'rgba(254, 240, 138, 0.7)');
+      lampGlow.addColorStop(0.4, 'rgba(245, 158, 11, 0.25)');
+      lampGlow.addColorStop(1, 'transparent');
+      ctx.fillStyle = lampGlow;
+      ctx.beginPath();
+      ctx.arc(lx, this.groundY - 88, 60, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    ctx.restore();
 
     // 2. Draw Dimensional Portal Gateway at x = 2520
     const portalX = 2520;
@@ -1928,23 +1994,23 @@ export class SideViewEngine {
     ctx.fillText('DIMENSIONAL GATEWAY', portalX, portalY - 105);
     ctx.restore();
 
-    // 3. Draw Each Town NPC with dedicated sprite characters
-    const npcClassMap: { [id: string]: string } = {
-      elder_justinian: 'mage',
-      captain_valerie: 'warrior',
-      blacksmith_keith: 'berserker',
-      alchemist_morwenna: 'priest',
-      portal_donald: 'necromancer'
+    // 3. Draw Each Town NPC with Authentic GothicVania Townspeople Sprites
+    const npcSpriteTypeMap: { [id: string]: 'oldman' | 'bearded' | 'hatman' | 'woman' } = {
+      elder_justinian: 'oldman',
+      captain_valerie: 'bearded',
+      blacksmith_keith: 'hatman',
+      alchemist_morwenna: 'woman',
+      portal_donald: 'hatman'
     };
 
     this.townHub.npcs.forEach((npc) => {
-      const npcY = this.groundY - 10;
+      const npcY = this.groundY - 5;
       const bob = Math.sin(now * 2.5 + npc.x * 0.01) * 1.5;
 
       ctx.save();
-      // Draw Animated Character Sprite for NPC
-      const classId = npcClassMap[npc.id] || 'mage';
-      sprites.drawHero(ctx, npc.x, npcY + bob, classId, 'idle', -1, 0, npc.color);
+      // Draw Animated Gothic NPC Sprite
+      const npcType = npcSpriteTypeMap[npc.id] || 'oldman';
+      (sprites as any).drawGothicTownNPC(ctx, npc.x, npcY + bob, npcType, -1);
 
       // Scenery Props per NPC
       if (npc.id === 'blacksmith_keith') {
@@ -1971,10 +2037,10 @@ export class SideViewEngine {
       ctx.shadowColor = '#000';
       ctx.shadowBlur = 5;
       ctx.textAlign = 'center';
-      ctx.fillText(npc.name, npc.x, npcY - 80);
+      ctx.fillText(npc.name, npc.x, npcY - 95);
       ctx.font = '10px "Outfit", sans-serif';
       ctx.fillStyle = '#fef08a';
-      ctx.fillText(npc.title, npc.x, npcY - 68);
+      ctx.fillText(npc.title, npc.x, npcY - 82);
       ctx.shadowBlur = 0;
 
       // Quest Indicator Badge

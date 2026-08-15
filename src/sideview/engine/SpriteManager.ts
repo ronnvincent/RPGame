@@ -383,7 +383,49 @@ export class SpriteManager {
       ph_window: '/assets/treasure-hunters/Pirate Ship/Sprites/Decorations/Window/Window/01.png',
       ph_window_light: '/assets/treasure-hunters/Pirate Ship/Sprites/Decorations/Window/Window Light/01.png',
       ph_door_open: '/assets/treasure-hunters/Pirate Ship/Sprites/Decorations/Door/Opening/01.png',
-      ph_door_close: '/assets/treasure-hunters/Pirate Ship/Sprites/Decorations/Door/Closing/01.png'
+      ph_door_close: '/assets/treasure-hunters/Pirate Ship/Sprites/Decorations/Door/Closing/01.png',
+
+      // 23. GothicVania Town Environment & Parallax Layers
+      gv_bg: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/environment/layers/background.png',
+      gv_mg: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/environment/layers/middleground.png',
+      gv_tileset: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/environment/layers/tileset.png',
+      gv_ground: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/environment/layers/sliced-tileset/ground.png',
+      gv_ground_wall: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/environment/layers/sliced-tileset/ground-wall.png',
+      gv_ground_b: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/environment/layers/sliced-tileset/ground-b.png',
+      gv_top_wood: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/environment/layers/sliced-tileset/top-wood.png',
+      gv_wood_legs: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/environment/layers/sliced-tileset/wood-legs.png',
+      gv_stairs: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/environment/layers/sliced-tileset/stairs.png',
+
+      // 24. GothicVania Buildings & Sliced Props
+      gv_church: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/environment/props-sliced/chuch.png',
+      gv_house_a: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/environment/props-sliced/house-a.png',
+      gv_house_b: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/environment/props-sliced/house-b.png',
+      gv_house_c: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/environment/props-sliced/house-c.png',
+      gv_street_lamp: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/environment/props-sliced/street-lamp.png',
+      gv_well: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/environment/props-sliced/well.png',
+      gv_wagon: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/environment/props-sliced/wagon.png',
+      gv_barrel: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/environment/props-sliced/barrel.png',
+      gv_crate_stack: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/environment/props-sliced/crate-stack.png',
+      gv_crate: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/environment/props-sliced/crate.png',
+      gv_sign: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/environment/props-sliced/sign.png',
+
+      // 25. GothicVania Town NPCs Spritesheets
+      gv_bearded_idle: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/spritesheets/bearded-idle.png',
+      gv_bearded_walk: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/spritesheets/bearded-walk.png',
+      gv_hatman_idle: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/spritesheets/hat-man-idle.png',
+      gv_hatman_walk: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/spritesheets/hat-man-walk.png',
+      gv_oldman_idle: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/spritesheets/oldman-idle.png',
+      gv_oldman_walk: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/spritesheets/oldman-walk.png',
+      gv_woman_idle: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/spritesheets/woman-idle.png',
+      gv_woman_walk: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/spritesheets/woman-walk.png',
+
+      // 26. Warped Caves Environment & Dungeon Layers
+      wc_bg: '/assets/warped-files/warped-files/Assets/PNG/environment/layers/background.png',
+      wc_mg: '/assets/warped-files/warped-files/Assets/PNG/environment/layers/middleground.png',
+      wc_mg_nofungus: '/assets/warped-files/warped-files/Assets/PNG/environment/layers/middleground-no-fungus.png',
+      wc_tileset: '/assets/warped-files/warped-files/Assets/PNG/environment/layers/tilesets.png',
+      wc_walls: '/assets/warped-files/warped-files/Assets/PNG/environment/layers/walls.png',
+      wc_props: '/assets/warped-files/warped-files/Assets/PNG/environment/layers/props.png'
     };
 
     Object.entries(assetsToLoad).forEach(([key, src]) => {
@@ -1899,7 +1941,72 @@ export class SpriteManager {
   }
 
   /**
+   * Draw Authentic GothicVania Town NPC with animated idle breathing
+   */
+  public drawGothicTownNPC(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    npcType: 'oldman' | 'bearded' | 'hatman' | 'woman',
+    facing: number = 1
+  ) {
+    let imgKey = 'gv_oldman_idle';
+    let frameCount = 6;
+    let frameW = 36;
+    let frameH = 44;
+
+    if (npcType === 'bearded') {
+      imgKey = 'gv_bearded_idle';
+      frameCount = 5;
+      frameW = 40;
+      frameH = 47;
+    } else if (npcType === 'hatman') {
+      imgKey = 'gv_hatman_idle';
+      frameCount = 4;
+      frameW = 38;
+      frameH = 45;
+    } else if (npcType === 'woman') {
+      imgKey = 'gv_woman_idle';
+      frameCount = 4;
+      frameW = 36;
+      frameH = 44;
+    }
+
+    const img = this.images[imgKey];
+    if (!img || !img.complete || img.naturalWidth === 0) return;
+
+    const fps = 6;
+    const currentFrame = Math.floor(this.animTimer * fps) % frameCount;
+    const scale = 2.0;
+    const destW = frameW * scale;
+    const destH = frameH * scale;
+
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.translate(x, y);
+
+    if (facing < 0) {
+      ctx.scale(-1, 1);
+    }
+
+    ctx.drawImage(
+      img,
+      currentFrame * frameW,
+      0,
+      frameW,
+      frameH,
+      -destW / 2,
+      -destH,
+      destW,
+      destH
+    );
+
+    ctx.restore();
+  }
+
+  /**
    * Draw Clean, High-Contrast Parallax Backgrounds, Themed Grounds, and Atmosphere
+   * Uses 100% Authentic GothicVania Environment Layers & Tilesets
    */
   public drawEnvironment(
     ctx: CanvasRenderingContext2D,
@@ -1914,169 +2021,58 @@ export class SpriteManager {
     const safeCamX = Math.max(0, camX);
     const safeTheme = theme || 'catacombs';
 
-    // ----------------------------------------------------
-    // 1. SKY / BACKDROP GRADIENT & CELESTIAL ELEMENTS
-    // ----------------------------------------------------
     ctx.save();
+    ctx.imageSmoothingEnabled = false;
 
-    if (safeTheme === 'town' as any || (!safeTheme || safeTheme === ('town' as any))) {
-      // High Forest Dawn/Day Sky
+    // ----------------------------------------------------
+    // 1. GOTHICVANIA & WARPED CAVES PARALLAX LAYERS
+    // ----------------------------------------------------
+    const isDungeon = safeTheme !== 'town';
+    const gvBg = (isDungeon && this.images['wc_bg']) ? this.images['wc_bg'] : (this.images['gv_bg'] || this.images['bg_forest']);
+    const gvMg = (isDungeon && this.images['wc_mg']) ? this.images['wc_mg'] : (this.images['gv_mg'] || this.images['bg_trees']);
+
+    const bgScale = Math.max(1.8, (groundY + 40) / 224);
+    const bgW = 384 * bgScale;
+    const bgH = 224 * bgScale;
+
+    // Layer 1: Distant Sky & Cavern/Mountains (Parallax Speed 0.15)
+    if (gvBg && gvBg.complete && gvBg.naturalWidth > 0) {
+      const bgCount = Math.ceil(canvasWidth / bgW) + 2;
+      const startBgX = -((safeCamX * 0.15) % bgW);
+      for (let i = 0; i < bgCount; i++) {
+        ctx.drawImage(gvBg, startBgX + i * bgW, groundY - bgH, bgW, bgH);
+      }
+    } else {
+      // Fallback sky gradient
       const skyGrad = ctx.createLinearGradient(0, 0, 0, groundY);
-      skyGrad.addColorStop(0, '#1e3a8a'); // Deep Royal Blue
-      skyGrad.addColorStop(0.4, '#38bdf8'); // Azure Sky
-      skyGrad.addColorStop(0.85, '#bae6fd'); // Soft Horizon
-      skyGrad.addColorStop(1, '#fef08a'); // Warm Sunrise Glow
+      skyGrad.addColorStop(0, '#0f172a');
+      skyGrad.addColorStop(1, '#1e1b4b');
       ctx.fillStyle = skyGrad;
       ctx.fillRect(0, 0, canvasWidth, groundY);
+    }
 
-      // Sun Disc
-      const sunX = canvasWidth * 0.75 - ((camX * 0.04) % (canvasWidth * 1.5));
-      const sunGrad = ctx.createRadialGradient(sunX, 70, 10, sunX, 70, 60);
-      sunGrad.addColorStop(0, '#fffbeb');
-      sunGrad.addColorStop(0.3, 'rgba(254, 240, 138, 0.7)');
-      sunGrad.addColorStop(1, 'transparent');
-      ctx.fillStyle = sunGrad;
-      ctx.beginPath();
-      ctx.arc(sunX, 70, 60, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Distant Parallax Mountain Silhouettes
-      ctx.fillStyle = 'rgba(30, 58, 138, 0.25)';
-      ctx.beginPath();
-      ctx.moveTo(0, groundY);
-      for (let x = 0; x <= canvasWidth; x += 40) {
-        const worldX = x + camX * 0.1;
-        const mountainY = groundY - 140 - Math.sin(worldX * 0.003) * 60 - Math.cos(worldX * 0.007) * 30;
-        ctx.lineTo(x, mountainY);
+    // Layer 2: Gothic Skyline / Cavern Arches (Parallax Speed 0.35)
+    if (gvMg && gvMg.complete && gvMg.naturalWidth > 0) {
+      const mgW = 384 * bgScale;
+      const mgH = 224 * bgScale;
+      const mgCount = Math.ceil(canvasWidth / mgW) + 2;
+      const startMgX = -((safeCamX * 0.35) % mgW);
+      for (let i = 0; i < mgCount; i++) {
+        ctx.drawImage(gvMg, startMgX + i * mgW, groundY - mgH + 25, mgW, mgH);
       }
-      ctx.lineTo(canvasWidth, groundY);
-      ctx.closePath();
-      ctx.fill();
+    }
 
-      // Midground Parallax Forest Canopy
-      const bgTrees = this.images['bg_trees'];
-      if (bgTrees && bgTrees.complete && bgTrees.naturalWidth > 0) {
-        const treeW = 280;
-        const treeH = 180;
-        const count = Math.ceil(canvasWidth / treeW) + 2;
-        const startX = -((camX * 0.25) % treeW);
-        for (let i = 0; i < count; i++) {
-          ctx.drawImage(bgTrees, startX + i * treeW, groundY - treeH - 10, treeW, treeH);
-        }
-      }
-
-    } else if (safeTheme === 'catacombs') {
-      // Ancient Dungeon Brick Chamber
-      const skyGrad = ctx.createLinearGradient(0, 0, 0, groundY);
-      skyGrad.addColorStop(0, '#18181b'); // Dark Stone
-      skyGrad.addColorStop(0.6, '#27272a'); // Weathered Dungeon Wall
-      skyGrad.addColorStop(1, '#09090b'); // Floor Shadow
-      ctx.fillStyle = skyGrad;
+    // ----------------------------------------------------
+    // 2. THEMATIC ATMOSPHERIC AMBIENCE OVERLAYS
+    // ----------------------------------------------------
+    if (safeTheme === 'inferno') {
+      // Molten Volcano Cavern Ambiance
+      const magmaGrad = ctx.createLinearGradient(0, 0, 0, groundY);
+      magmaGrad.addColorStop(0, 'rgba(127, 29, 29, 0.45)');
+      magmaGrad.addColorStop(0.7, 'rgba(239, 68, 68, 0.25)');
+      magmaGrad.addColorStop(1, 'rgba(249, 115, 22, 0.4)');
+      ctx.fillStyle = magmaGrad;
       ctx.fillRect(0, 0, canvasWidth, groundY);
-
-      // Dungeon Arches Pattern
-      ctx.strokeStyle = 'rgba(63, 63, 70, 0.35)';
-      ctx.lineWidth = 4;
-      const archSpacing = 280;
-      const archOffset = -((camX * 0.3) % archSpacing);
-      for (let x = archOffset; x < canvasWidth + archSpacing; x += archSpacing) {
-        ctx.strokeRect(x, 40, 160, groundY - 40);
-        ctx.beginPath();
-        ctx.arc(x + 80, 40, 80, Math.PI, 0);
-        ctx.stroke();
-      }
-
-      // Torches on Walls
-      const torchSpacing = 340;
-      const startTorch = Math.floor((camX - 100) / torchSpacing) - 1;
-      const endTorch = Math.floor((camX + canvasWidth + 100) / torchSpacing) + 1;
-      for (let t = startTorch; t <= endTorch; t++) {
-        const tx = t * torchSpacing + 120 - camX;
-        const ty = groundY - 140;
-
-        // Torch glow
-        const glowRadius = 55 + Math.sin(time * 8 + t) * 6;
-        const torchGlow = ctx.createRadialGradient(tx, ty, 5, tx, ty, glowRadius);
-        torchGlow.addColorStop(0, 'rgba(251, 191, 36, 0.65)');
-        torchGlow.addColorStop(0.5, 'rgba(249, 115, 22, 0.25)');
-        torchGlow.addColorStop(1, 'transparent');
-        ctx.fillStyle = torchGlow;
-        ctx.beginPath();
-        ctx.arc(tx, ty, glowRadius, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Torch Sconce
-        ctx.fillStyle = '#451a03';
-        ctx.fillRect(tx - 3, ty + 2, 6, 20);
-        ctx.fillStyle = '#f59e0b';
-        ctx.beginPath();
-        ctx.arc(tx, ty, 5 + Math.sin(time * 12 + t) * 1.5, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-    } else if (safeTheme === 'crypt') {
-      // Gothic Mausoleum Chamber
-      const skyGrad = ctx.createLinearGradient(0, 0, 0, groundY);
-      skyGrad.addColorStop(0, '#0f0c1b'); // Midnight Violet
-      skyGrad.addColorStop(0.5, '#1e1b4b'); // Deep Crypt Purple
-      skyGrad.addColorStop(1, '#030712'); // Dark Abyss
-      ctx.fillStyle = skyGrad;
-      ctx.fillRect(0, 0, canvasWidth, groundY);
-
-      // Gothic Stained Glass Windows
-      const winSpacing = 320;
-      const winOffset = -((camX * 0.25) % winSpacing);
-      for (let x = winOffset; x < canvasWidth + winSpacing; x += winSpacing) {
-        // Window Glow
-        const winGlow = ctx.createRadialGradient(x + 60, 110, 10, x + 60, 110, 90);
-        winGlow.addColorStop(0, 'rgba(168, 85, 247, 0.45)');
-        winGlow.addColorStop(1, 'transparent');
-        ctx.fillStyle = winGlow;
-        ctx.fillRect(x + 20, 40, 80, 140);
-
-        ctx.strokeStyle = '#a855f7';
-        ctx.lineWidth = 2.5;
-        ctx.strokeRect(x + 30, 50, 60, 110);
-      }
-
-      // Soulfire Braziers
-      const brazierSpacing = 360;
-      const startB = Math.floor((camX - 100) / brazierSpacing) - 1;
-      const endB = Math.floor((camX + canvasWidth + 100) / brazierSpacing) + 1;
-      for (let b = startB; b <= endB; b++) {
-        const bx = b * brazierSpacing + 140 - camX;
-        const by = groundY - 120;
-        const glowRadius = 60 + Math.sin(time * 7 + b) * 8;
-        const flameGlow = ctx.createRadialGradient(bx, by, 5, bx, by, glowRadius);
-        flameGlow.addColorStop(0, 'rgba(192, 132, 252, 0.7)');
-        flameGlow.addColorStop(0.6, 'rgba(126, 34, 206, 0.25)');
-        flameGlow.addColorStop(1, 'transparent');
-        ctx.fillStyle = flameGlow;
-        ctx.beginPath();
-        ctx.arc(bx, by, glowRadius, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-    } else if (safeTheme === 'inferno') {
-      // Molten Volcano Cavern
-      const skyGrad = ctx.createLinearGradient(0, 0, 0, groundY);
-      skyGrad.addColorStop(0, '#450a0a'); // Dark Crimson
-      skyGrad.addColorStop(0.6, '#7f1d1d'); // Magma Red
-      skyGrad.addColorStop(1, '#1c0505'); // Charred Basalt
-      ctx.fillStyle = skyGrad;
-      ctx.fillRect(0, 0, canvasWidth, groundY);
-
-      // Distant Magma Falls
-      const magmaSpacing = 400;
-      const magmaOffset = -((camX * 0.2) % magmaSpacing);
-      for (let x = magmaOffset; x < canvasWidth + magmaSpacing; x += magmaSpacing) {
-        const magmaGrad = ctx.createLinearGradient(x, 0, x, groundY);
-        magmaGrad.addColorStop(0, 'rgba(239, 68, 68, 0.2)');
-        magmaGrad.addColorStop(0.8, 'rgba(249, 115, 22, 0.7)');
-        magmaGrad.addColorStop(1, '#ffedd5');
-        ctx.fillStyle = magmaGrad;
-        ctx.fillRect(x + 20, 20, 36, groundY - 20);
-      }
 
       // Rising Magma Embers
       for (let e = 0; e < 25; e++) {
@@ -2087,20 +2083,42 @@ export class SpriteManager {
         ctx.arc(emberX, emberY, 2 + (e % 3), 0, Math.PI * 2);
         ctx.fill();
       }
-
-    } else {
-      // Void Nexus Cosmic Nebula
-      const skyGrad = ctx.createLinearGradient(0, 0, 0, groundY);
-      skyGrad.addColorStop(0, '#020617'); // Space Black
-      skyGrad.addColorStop(0.4, '#1e1b4b'); // Deep Nebula
-      skyGrad.addColorStop(0.8, '#3b0764'); // Void Purple
-      skyGrad.addColorStop(1, '#09090b');
-      ctx.fillStyle = skyGrad;
+    } else if (safeTheme === 'crypt') {
+      // Gothic Crypt Violet Mist
+      const cryptGrad = ctx.createLinearGradient(0, 0, 0, groundY);
+      cryptGrad.addColorStop(0, 'rgba(30, 27, 75, 0.5)');
+      cryptGrad.addColorStop(1, 'rgba(147, 51, 234, 0.25)');
+      ctx.fillStyle = cryptGrad;
       ctx.fillRect(0, 0, canvasWidth, groundY);
 
-      // Cosmic Stars
-      for (let s = 0; s < 45; s++) {
-        const starX = ((s * 97) - camX * (0.05 + (s % 3) * 0.03)) % (canvasWidth + 100);
+      // Soulfire Braziers along the background
+      const brazierSpacing = 360;
+      const startB = Math.floor((safeCamX - 100) / brazierSpacing) - 1;
+      const endB = Math.floor((safeCamX + canvasWidth + 100) / brazierSpacing) + 1;
+      for (let b = startB; b <= endB; b++) {
+        const bx = b * brazierSpacing + 140 - safeCamX;
+        const by = groundY - 120;
+        const glowRadius = 50 + Math.sin(time * 7 + b) * 8;
+        const flameGlow = ctx.createRadialGradient(bx, by, 5, bx, by, glowRadius);
+        flameGlow.addColorStop(0, 'rgba(192, 132, 252, 0.7)');
+        flameGlow.addColorStop(0.6, 'rgba(126, 34, 206, 0.25)');
+        flameGlow.addColorStop(1, 'transparent');
+        ctx.fillStyle = flameGlow;
+        ctx.beginPath();
+        ctx.arc(bx, by, glowRadius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (safeTheme === 'void') {
+      // Cosmic Nebula Void Vortex
+      const voidGrad = ctx.createLinearGradient(0, 0, 0, groundY);
+      voidGrad.addColorStop(0, 'rgba(15, 23, 42, 0.55)');
+      voidGrad.addColorStop(1, 'rgba(99, 102, 241, 0.25)');
+      ctx.fillStyle = voidGrad;
+      ctx.fillRect(0, 0, canvasWidth, groundY);
+
+      // Cosmic Twinkling Stars
+      for (let s = 0; s < 40; s++) {
+        const starX = ((s * 97) - safeCamX * (0.05 + (s % 3) * 0.03)) % (canvasWidth + 100);
         const actualStarX = starX < 0 ? starX + canvasWidth + 100 : starX;
         const starY = (s * 33) % (groundY - 40);
         const alpha = 0.4 + Math.sin(time * 4 + s) * 0.4;
@@ -2109,88 +2127,65 @@ export class SpriteManager {
         ctx.arc(actualStarX, starY, (s % 3 === 0 ? 2.5 : 1.5), 0, Math.PI * 2);
         ctx.fill();
       }
-
-      // Swirling Dark Matter Vortex
-      const vortexX = canvasWidth * 0.5 - ((camX * 0.08) % (canvasWidth * 1.2));
-      const vortexGrad = ctx.createRadialGradient(vortexX, 100, 10, vortexX, 100, 140);
-      vortexGrad.addColorStop(0, 'rgba(192, 132, 252, 0.75)');
-      vortexGrad.addColorStop(0.5, 'rgba(126, 34, 206, 0.35)');
-      vortexGrad.addColorStop(1, 'transparent');
-      ctx.fillStyle = vortexGrad;
-      ctx.beginPath();
-      ctx.arc(vortexX, 100, 140, 0, Math.PI * 2);
-      ctx.fill();
+    } else if (safeTheme === 'catacombs') {
+      // Ancient Dungeon Torches on Cobblestone
+      const torchSpacing = 340;
+      const startTorch = Math.floor((safeCamX - 100) / torchSpacing) - 1;
+      const endTorch = Math.floor((safeCamX + canvasWidth + 100) / torchSpacing) + 1;
+      for (let t = startTorch; t <= endTorch; t++) {
+        const tx = t * torchSpacing + 120 - safeCamX;
+        const ty = groundY - 140;
+        const glowRadius = 55 + Math.sin(time * 8 + t) * 6;
+        const torchGlow = ctx.createRadialGradient(tx, ty, 5, tx, ty, glowRadius);
+        torchGlow.addColorStop(0, 'rgba(251, 191, 36, 0.65)');
+        torchGlow.addColorStop(0.5, 'rgba(249, 115, 22, 0.25)');
+        torchGlow.addColorStop(1, 'transparent');
+        ctx.fillStyle = torchGlow;
+        ctx.beginPath();
+        ctx.arc(tx, ty, glowRadius, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
 
     // ----------------------------------------------------
-    // 2. CLEAN SEAMLESS GROUND TILES
+    // 3. GOTHICVANIA COBBLESTONE GROUND & SUBTERRANEAN TILES
     // ----------------------------------------------------
-    const tileSize = 48;
-    const startTile = Math.floor((camX - 60) / tileSize);
-    const endTile = Math.floor((camX + canvasWidth + 60) / tileSize);
+    const tileSize = 32;
+    const startTile = Math.floor((safeCamX - 60) / tileSize);
+    const endTile = Math.floor((safeCamX + canvasWidth + 60) / tileSize);
 
-    const battleGround = this.images['battle_ground'];
-    const tilesImg = this.images['tiles'];
+    const gvGround = this.images['gv_ground'] || this.images['battle_ground'];
+    const gvGroundWall = this.images['gv_ground_wall'] || this.images['tiles'];
 
     for (let t = startTile; t <= endTile; t++) {
-      const tileX = t * tileSize - camX;
+      const tileX = t * tileSize - safeCamX;
 
-      if (battleGround && battleGround.complete && battleGround.naturalWidth > 0) {
-        // Top grass/stone surface tile
-        ctx.drawImage(battleGround, tileX, groundY, tileSize, tileSize);
-        // Fill deep ground beneath
-        for (let dy = groundY + tileSize; dy < canvasHeight + 100; dy += tileSize) {
-          ctx.drawImage(battleGround, tileX, dy, tileSize, tileSize);
-        }
-      } else if (tilesImg && tilesImg.complete && tilesImg.naturalWidth > 0) {
-        ctx.drawImage(tilesImg, 16, 16, 16, 16, tileX, groundY, tileSize, tileSize);
-        for (let dy = groundY + tileSize; dy < canvasHeight + 100; dy += tileSize) {
-          ctx.drawImage(tilesImg, 16, 32, 16, 16, tileX, dy, tileSize, tileSize);
+      if (gvGround && gvGround.complete && gvGround.naturalWidth > 0) {
+        // Cobblestone surface tile
+        ctx.drawImage(gvGround, tileX, groundY, tileSize, tileSize);
+        // Deep stone wall foundation
+        if (gvGroundWall && gvGroundWall.complete && gvGroundWall.naturalWidth > 0) {
+          for (let dy = groundY + tileSize; dy < canvasHeight + 100; dy += tileSize) {
+            ctx.drawImage(gvGroundWall, tileX, dy, tileSize, tileSize);
+          }
+        } else {
+          ctx.fillStyle = '#18181b';
+          ctx.fillRect(tileX, groundY + tileSize, tileSize + 1, canvasHeight - groundY);
         }
       } else {
-        // High-Quality Fallback Gradient Ground Block
+        // High-Quality Fallback Gradient Ground
         const groundGrad = ctx.createLinearGradient(tileX, groundY, tileX, canvasHeight);
-        if (safeTheme === 'inferno') {
-          groundGrad.addColorStop(0, '#7f1d1d');
-          groundGrad.addColorStop(1, '#180303');
-        } else if (safeTheme === 'crypt' || safeTheme === 'void') {
-          groundGrad.addColorStop(0, '#312e81');
-          groundGrad.addColorStop(1, '#09090b');
-        } else {
-          groundGrad.addColorStop(0, '#15803d'); // Lush Green Grass
-          groundGrad.addColorStop(0.15, '#78350f'); // Rich Earth
-          groundGrad.addColorStop(1, '#292524');
-        }
+        groundGrad.addColorStop(0, '#27272a');
+        groundGrad.addColorStop(0.2, '#18181b');
+        groundGrad.addColorStop(1, '#09090b');
         ctx.fillStyle = groundGrad;
         ctx.fillRect(tileX, groundY, tileSize + 1, canvasHeight - groundY + 100);
       }
-
-      // Thematic ground overlay tint
-      if (safeTheme === 'inferno') {
-        ctx.fillStyle = 'rgba(239, 68, 68, 0.2)';
-        ctx.fillRect(tileX, groundY, tileSize + 1, canvasHeight - groundY + 100);
-      } else if (safeTheme === 'crypt') {
-        ctx.fillStyle = 'rgba(147, 51, 234, 0.15)';
-        ctx.fillRect(tileX, groundY, tileSize + 1, canvasHeight - groundY + 100);
-      } else if (safeTheme === 'void') {
-        ctx.fillStyle = 'rgba(99, 102, 241, 0.15)';
-        ctx.fillRect(tileX, groundY, tileSize + 1, canvasHeight - groundY + 100);
-      }
     }
 
-    // Top Ground Trim Accent Line
-    ctx.lineWidth = 3;
-    if (safeTheme === 'inferno') {
-      ctx.strokeStyle = '#f97316';
-    } else if (safeTheme === 'crypt') {
-      ctx.strokeStyle = '#a855f7';
-    } else if (safeTheme === 'void') {
-      ctx.strokeStyle = '#818cf8';
-    } else if (safeTheme === 'catacombs') {
-      ctx.strokeStyle = '#71717a';
-    } else {
-      ctx.strokeStyle = '#22c55e'; // Vibrant Town Grass Edge
-    }
+    // Cobblestone Top Edge Trim Accent
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = safeTheme === 'inferno' ? '#f97316' : safeTheme === 'crypt' ? '#a855f7' : safeTheme === 'void' ? '#818cf8' : '#71717a';
     ctx.beginPath();
     ctx.moveTo(0, groundY);
     ctx.lineTo(canvasWidth, groundY);
@@ -2200,7 +2195,7 @@ export class SpriteManager {
   }
 
   /**
-   * Draw Themed Multi-Level Platforms
+   * Draw Themed Multi-Level Platforms using Authentic Gothic Wooden Beams
    */
   public drawPlatforms(
     ctx: CanvasRenderingContext2D,
@@ -2210,43 +2205,44 @@ export class SpriteManager {
     if (!platforms || platforms.length === 0) return;
 
     ctx.save();
+    ctx.imageSmoothingEnabled = false;
+
+    const gvTopWood = this.images['gv_top_wood'];
+    const gvWoodLegs = this.images['gv_wood_legs'];
+
     for (const plat of platforms) {
       // 1. Support Pillars down to ground
-      ctx.fillStyle = theme === 'inferno' ? '#450a0a' : theme === 'crypt' || theme === 'void' ? '#1e1b4b' : '#3e2723';
-      ctx.fillRect(plat.x + 16, plat.y + plat.height, 10, 480);
-      ctx.fillRect(plat.x + plat.width - 26, plat.y + plat.height, 10, 480);
-
-      // Cross Beams
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(plat.x + 16, plat.y + plat.height, 10, 480);
-      ctx.strokeRect(plat.x + plat.width - 26, plat.y + plat.height, 10, 480);
-
-      // 2. Platform Surface Board
-      const platGrad = ctx.createLinearGradient(plat.x, plat.y, plat.x, plat.y + plat.height);
-      if (theme === 'inferno') {
-        platGrad.addColorStop(0, '#991b1b');
-        platGrad.addColorStop(1, '#450a0a');
-      } else if (theme === 'crypt' || theme === 'void') {
-        platGrad.addColorStop(0, '#4338ca');
-        platGrad.addColorStop(1, '#1e1b4b');
+      if (gvWoodLegs && gvWoodLegs.complete && gvWoodLegs.naturalWidth > 0) {
+        for (let py = plat.y + plat.height; py < 600; py += 32) {
+          ctx.drawImage(gvWoodLegs, plat.x + 12, py, 16, 32);
+          ctx.drawImage(gvWoodLegs, plat.x + plat.width - 28, py, 16, 32);
+        }
       } else {
-        platGrad.addColorStop(0, '#854d0e'); // Wooden Plank
-        platGrad.addColorStop(1, '#451a03');
+        ctx.fillStyle = '#27272a';
+        ctx.fillRect(plat.x + 16, plat.y + plat.height, 10, 480);
+        ctx.fillRect(plat.x + plat.width - 26, plat.y + plat.height, 10, 480);
       }
 
-      ctx.fillStyle = platGrad;
-      ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
+      // 2. Wooden Platform Plank Surface
+      if (gvTopWood && gvTopWood.complete && gvTopWood.naturalWidth > 0) {
+        for (let px = plat.x; px < plat.x + plat.width; px += 32) {
+          const drawW = Math.min(32, plat.x + plat.width - px);
+          ctx.drawImage(gvTopWood, 0, 0, drawW, 16, px, plat.y, drawW, plat.height);
+        }
+      } else {
+        const platGrad = ctx.createLinearGradient(plat.x, plat.y, plat.x, plat.y + plat.height);
+        platGrad.addColorStop(0, '#3f3f46');
+        platGrad.addColorStop(1, '#18181b');
+        ctx.fillStyle = platGrad;
+        ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
+      }
 
-      // Glowing Top Edge
-      ctx.fillStyle = theme === 'inferno' ? '#f97316' : theme === 'crypt' || theme === 'void' ? '#818cf8' : '#eab308';
-      ctx.fillRect(plat.x, plat.y, plat.width, 3);
-
-      // Platform Border
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+      // Platform Border & Glow Accent
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
       ctx.lineWidth = 1.5;
       ctx.strokeRect(plat.x, plat.y, plat.width, plat.height);
     }
+
     ctx.restore();
   }
 }
