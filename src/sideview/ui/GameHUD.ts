@@ -779,37 +779,43 @@ export class GameHUD {
 
         /* The Main Attack Button (Skill 0) */
         .hotbar-slot[data-skill-idx="0"] {
-          width: 80px;
-          height: 80px;
-          bottom: calc(20px + env(safe-area-inset-bottom));
-          right: calc(20px + env(safe-area-inset-right));
+          width: 86px;
+          height: 86px;
+          bottom: calc(22px + env(safe-area-inset-bottom));
+          right: calc(22px + env(safe-area-inset-right));
           z-index: 10;
         }
         .hotbar-slot[data-skill-idx="0"] .slot-icon-img {
-          width: 44px;
-          height: 44px;
+          width: 48px;
+          height: 48px;
         }
 
-        /* Perfect Arc layout for active skills 1-5 */
-        .hotbar-slot[data-skill-idx="1"] { bottom: calc(38px + env(safe-area-inset-bottom)); right: calc(128px + env(safe-area-inset-right)); }
-        .hotbar-slot[data-skill-idx="2"] { bottom: calc(72px + env(safe-area-inset-bottom)); right: calc(121px + env(safe-area-inset-right)); }
-        .hotbar-slot[data-skill-idx="3"] { bottom: calc(101px + env(safe-area-inset-bottom)); right: calc(101px + env(safe-area-inset-right)); }
-        .hotbar-slot[data-skill-idx="4"] { bottom: calc(121px + env(safe-area-inset-bottom)); right: calc(72px + env(safe-area-inset-right)); }
-        .hotbar-slot[data-skill-idx="5"] { bottom: calc(128px + env(safe-area-inset-bottom)); right: calc(38px + env(safe-area-inset-right)); width: 36px; height: 36px; }
+        /* Outer Arc layout for active skills 1-5 (Radius 155px) */
+        .hotbar-slot[data-skill-idx="1"], .hotbar-slot[data-skill-idx="2"], 
+        .hotbar-slot[data-skill-idx="3"], .hotbar-slot[data-skill-idx="4"], 
+        .hotbar-slot[data-skill-idx="5"] {
+          width: 58px;
+          height: 58px;
+        }
+        .hotbar-slot[data-skill-idx="1"] { bottom: calc(36px + env(safe-area-inset-bottom)); right: calc(191px + env(safe-area-inset-right)); }
+        .hotbar-slot[data-skill-idx="2"] { bottom: calc(99px + env(safe-area-inset-bottom)); right: calc(178px + env(safe-area-inset-right)); }
+        .hotbar-slot[data-skill-idx="3"] { bottom: calc(151px + env(safe-area-inset-bottom)); right: calc(140px + env(safe-area-inset-right)); }
+        .hotbar-slot[data-skill-idx="4"] { bottom: calc(183px + env(safe-area-inset-bottom)); right: calc(84px + env(safe-area-inset-right)); }
+        .hotbar-slot[data-skill-idx="5"] { bottom: calc(190px + env(safe-area-inset-bottom)); right: calc(20px + env(safe-area-inset-right)); }
 
         .mobile-joystick-area {
           bottom: max(20px, env(safe-area-inset-bottom));
           left: max(20px, env(safe-area-inset-left));
-          width: 120px;
-          height: 120px;
+          width: 140px;
+          height: 140px;
         }
         .joystick-base {
-          width: 105px;
-          height: 105px;
+          width: 125px;
+          height: 125px;
         }
         .joystick-knob {
-          width: 44px;
-          height: 44px;
+          width: 52px;
+          height: 52px;
         }
 
         .mobile-action-hub {
@@ -825,25 +831,28 @@ export class GameHUD {
           pointer-events: auto;
         }
 
+        /* Inner Arc: Jump and Dash (Radius 95px) */
         .jump-touch-btn {
-          width: 52px;
-          height: 52px;
-          bottom: calc(106px + env(safe-area-inset-bottom));
-          right: calc(159px + env(safe-area-inset-right));
+          width: 54px;
+          height: 54px;
+          bottom: calc(124px + env(safe-area-inset-bottom));
+          right: calc(78px + env(safe-area-inset-right));
           font-size: 9px;
         }
         .dash-touch-btn {
-          width: 46px;
-          height: 46px;
-          bottom: calc(37px + env(safe-area-inset-bottom));
-          right: calc(177px + env(safe-area-inset-right));
+          width: 50px;
+          height: 50px;
+          bottom: calc(73px + env(safe-area-inset-bottom));
+          right: calc(129px + env(safe-area-inset-right));
           font-size: 8.5px;
         }
+
+        /* Talk button sitting safely out of the action arc */
         .touch-talk-btn {
-          width: 46px;
-          height: 46px;
-          bottom: calc(172px + env(safe-area-inset-bottom));
-          right: calc(100px + env(safe-area-inset-right));
+          width: 50px;
+          height: 50px;
+          bottom: calc(220px + env(safe-area-inset-bottom));
+          right: calc(166px + env(safe-area-inset-right));
           font-size: 8.5px;
         }
       }
