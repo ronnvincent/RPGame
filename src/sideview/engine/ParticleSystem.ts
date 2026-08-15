@@ -267,7 +267,8 @@ export class ParticleSystem {
    * Screen Shake Effect
    */
   public triggerScreenShake(magnitude: number = 6, duration: number = 0.25) {
-    this.screenShakeMagnitude = Math.max(this.screenShakeMagnitude, magnitude);
+    const reducedMagnitude = magnitude * 0.3; // Reduce screen shake by 70% globally
+    this.screenShakeMagnitude = Math.max(this.screenShakeMagnitude, reducedMagnitude);
     this.screenShakeTime = Math.max(this.screenShakeTime, duration);
   }
 
