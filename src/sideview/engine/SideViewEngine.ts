@@ -1712,15 +1712,26 @@ export class SideViewEngine {
    * Render side-view world, player, enemies, loot, and spell animations
    */
   public render(ctx: CanvasRenderingContext2D, width: number, height: number) {
-    this.canvasWidth = width;
-    this.canvasHeight = height;
+    // Dynamic virtual resolution with intelligent zoom scaling
+    // Scales pixel sprites up 2x - 2.5x so they are large, clear, and heroic!
+    const zoom = Math.max(1.65, Math.min(2.5, height / 440));
+    const virtualWidth = width / zoom;
+    const virtualHeight = height / zoom;
+
+    this.canvasWidth = virtualWidth;
+    this.canvasHeight = virtualHeight;
+    this.groundY = Math.round(virtualHeight - 75);
+
     const p = this.player;
     const shake = this.particles.getScreenShakeOffset();
     const camX = this.cameraX + shake.x;
     const camY = shake.y;
 
+    ctx.save();
+    ctx.scale(zoom, zoom);
+
     // 1. Draw Seamless Parallax Background & Deep Ground Tiles
-    sprites.drawEnvironment(ctx, camX, width, height, this.groundY, this.arenaWidth, this.battleTheme);
+    sprites.drawEnvironment(ctx, camX, virtualWidth, virtualHeight, this.groundY, this.arenaWidth, this.battleTheme);
 
     ctx.save();
     ctx.translate(-camX, -camY);
@@ -1841,6 +1852,7 @@ export class SideViewEngine {
     this.particles.draw(ctx);
 
     ctx.restore();
+    ctx.restore();
   }
 
   /**
@@ -1858,21 +1870,21 @@ export class SideViewEngine {
     const treeRed = (sprites as any).images?.['tree_red'];
 
     if (treeGreen && treeGreen.complete) {
-      ctx.drawImage(treeGreen, 120, this.groundY - 190, 120, 190);
-      ctx.drawImage(treeGreen, 1120, this.groundY - 190, 120, 190);
-      ctx.drawImage(treeGreen, 2180, this.groundY - 190, 120, 190);
+      ctx.drawImage(treeGreen, 180, this.groundY - 190, 120, 190);
+      ctx.drawImage(treeGreen, 1200, this.groundY - 190, 120, 190);
+      ctx.drawImage(treeGreen, 2240, this.groundY - 190, 120, 190);
     }
     if (treeGolden && treeGolden.complete) {
-      ctx.drawImage(treeGolden, 640, this.groundY - 195, 120, 195);
-      ctx.drawImage(treeGolden, 1640, this.groundY - 195, 120, 195);
+      ctx.drawImage(treeGolden, 700, this.groundY - 195, 120, 195);
+      ctx.drawImage(treeGolden, 1700, this.groundY - 195, 120, 195);
     }
 
     if (buildingImg && buildingImg.complete) {
-      // Village houses behind NPCs
-      ctx.drawImage(buildingImg, 0, 0, 160, 140, 360, this.groundY - 140, 160, 140);
-      ctx.drawImage(buildingImg, 160, 0, 160, 140, 860, this.groundY - 140, 160, 140);
-      ctx.drawImage(buildingImg, 0, 0, 160, 140, 1360, this.groundY - 140, 160, 140);
-      ctx.drawImage(buildingImg, 160, 0, 160, 140, 1860, this.groundY - 140, 160, 140);
+      // Village houses cleanly centered behind each NPC station
+      ctx.drawImage(buildingImg, 0, 0, 160, 140, 400, this.groundY - 140, 160, 140);
+      ctx.drawImage(buildingImg, 160, 0, 160, 140, 900, this.groundY - 140, 160, 140);
+      ctx.drawImage(buildingImg, 0, 0, 160, 140, 1400, this.groundY - 140, 160, 140);
+      ctx.drawImage(buildingImg, 160, 0, 160, 140, 1900, this.groundY - 140, 160, 140);
     }
 
     // 2. Draw Dimensional Portal Gateway at x = 2520

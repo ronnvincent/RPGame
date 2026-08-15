@@ -1977,526 +1977,356 @@ export class SpriteManager {
     ctx.imageSmoothingEnabled = false;
     const theme = battleTheme || 'catacombs';
     const safeCamX = Math.max(0, camX);
-    const screenFromWorldX = (worldX: number) => worldX - camX;
+  /**
+   * Draw Clean, High-Contrast Parallax Backgrounds, Themed Grounds, and Atmosphere
+   */
+  public drawEnvironment(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    canvasWidth: number,
+    canvasHeight: number,
+    groundY: number,
+    arenaWidth: number,
+    theme: BattleTheme
+  ) {
+    const time = Date.now() / 1000;
+    const safeCamX = Math.max(0, camX);
+    const safeTheme = theme || 'catacombs';
 
-    const isOnScreen = (worldX: number, worldW: number) => {
-      const screenX = screenFromWorldX(worldX);
-      return screenX < canvasWidth + 120 && screenX + worldW > -120;
-    };
+    // ----------------------------------------------------
+    // 1. SKY / BACKDROP GRADIENT & CELESTIAL ELEMENTS
+    // ----------------------------------------------------
+    ctx.save();
 
-    const pickFromGroup = (groupKey: string, seed: number): HTMLImageElement | undefined => {
-      const group = this.spriteGroups[groupKey];
-      if (!group || group.length === 0) return undefined;
-      const index = ((seed % group.length) + group.length) % group.length;
-      return group[index];
-    };
-
-    const drawWorldImage = (
-      img: HTMLImageElement | undefined,
-      worldX: number,
-      worldY: number,
-      w: number,
-      h: number,
-      sx = 0,
-      sy = 0,
-      sw?: number,
-      sh?: number
-    ) => {
-      if (!img || !img.complete || img.naturalWidth <= 0 || img.naturalHeight <= 0) return;
-      if (!isOnScreen(worldX, w)) return;
-
-      const sourceW = sw ?? img.naturalWidth;
-      const sourceH = sh ?? img.naturalHeight;
-      const screenX = screenFromWorldX(worldX);
-      ctx.drawImage(img, sx, sy, sourceW, sourceH, screenX, worldY, w, h);
-    };
-
-    const themePalettes = {
-      catacombs: {
-        top: '#22130f',
-        bottom: '#0d0808',
-        shadow: 'rgba(60, 40, 36, 0.4)',
-        propTint: 'rgba(230, 206, 190, 0.22)',
-        overlay: 'rgba(58, 35, 26, 0.25)',
-        ambient: 'rgba(173, 128, 95, 0.09)',
-        groundTint: 'rgba(255, 87, 34, 0.17)'
-      },
-      crypt: {
-        top: '#120f1f',
-        bottom: '#07050a',
-        shadow: 'rgba(42, 26, 56, 0.45)',
-        propTint: 'rgba(173, 132, 255, 0.18)',
-        overlay: 'rgba(36, 24, 58, 0.32)',
-        ambient: 'rgba(128, 77, 255, 0.07)',
-        groundTint: 'rgba(80, 60, 122, 0.14)'
-      },
-      inferno: {
-        top: '#340c06',
-        bottom: '#150501',
-        shadow: 'rgba(117, 41, 8, 0.42)',
-        propTint: 'rgba(255, 140, 61, 0.22)',
-        overlay: 'rgba(157, 39, 8, 0.32)',
-        ambient: 'rgba(255, 110, 24, 0.10)',
-        groundTint: 'rgba(255, 87, 34, 0.17)'
-      }
-    };
-
-    const palette = themePalettes[theme];
-
-    const skyGradient = ctx.createLinearGradient(0, 0, 0, groundY);
-    skyGradient.addColorStop(0, palette.top);
-    skyGradient.addColorStop(1, palette.bottom);
-    ctx.fillStyle = skyGradient;
-    ctx.fillRect(0, 0, canvasWidth, groundY);
-
-    ctx.fillStyle = palette.ambient;
-    ctx.fillRect(0, 0, canvasWidth, groundY - 40);
-    for (let i = 0; i < 2; i++) {
-      const layerY = 40 + i * 90;
-      const layerHeight = groundY * 0.35;
-      const alpha = theme === 'inferno' ? (0.12 + i * 0.05) : (0.06 + i * 0.02);
-      ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
-      ctx.fillRect(0, layerY, canvasWidth, layerHeight);
-    }
-
-    const bgImg = this.images['bg_forest'];
-    if (bgImg && bgImg.complete && bgImg.naturalWidth > 0 && bgImg.naturalHeight > 0 && theme === 'catacombs') {
-      const bgScale = Math.max(groundY / bgImg.height, canvasWidth / bgImg.width);
-      const bgW = bgImg.width * bgScale;
-      const numTiles = Math.ceil(canvasWidth / bgW) + 2;
-      const startX = -((camX * 0.12) % bgW);
-
-      for (let i = 0; i < numTiles; i++) {
-        ctx.drawImage(bgImg, startX + i * bgW, 0, bgW, groundY + 20);
-      }
-    }
-
-    const thTerrain = this.images['th_terrain'];
-    const battleGround = this.images['battle_ground'];
-    const battleProps = this.images['battle_props'];
-    const battleTorch = this.images['battle_torch_fx'];
-    const battleFlame = this.images['battle_flame_fx'];
-    const battleChest = this.images['battle_chest'];
-    const tilesImg = this.images['tiles'];
-    const tileSize = 48;
-    const maxTileIndex = Math.max(0, Math.ceil(arenaWidth / tileSize));
-    const startTileIndex = Math.max(0, Math.floor(safeCamX / tileSize) - 3);
-    const endTileIndex = Math.min(maxTileIndex + 2, Math.floor((camX + canvasWidth) / tileSize) + 3);
-    const depthCount = Math.ceil((canvasHeight - groundY + 300) / tileSize) + 3;
-
-    if (battleGround && battleGround.complete && battleGround.naturalWidth > 0 && battleGround.naturalHeight > 0) {
-      for (let i = startTileIndex; i <= endTileIndex; i++) {
-        const tileX = i * tileSize;
-
-        drawWorldImage(battleGround, tileX, groundY - 16, tileSize, tileSize, 0, 0, battleGround.width, battleGround.height);
-
-        if (theme === 'inferno' || theme === 'crypt') {
-          ctx.globalAlpha = 0.5;
-          ctx.fillStyle = palette.groundTint;
-          ctx.fillRect(screenFromWorldX(tileX), groundY - 16, tileSize, tileSize);
-          ctx.globalAlpha = 1;
-        }
-
-        drawWorldImage(battleGround, tileX, (groundY - 16) + tileSize, tileSize, tileSize, 0, 0, battleGround.width, battleGround.height);
-        for (let d = 2; d < depthCount; d++) {
-          drawWorldImage(
-            battleGround,
-            tileX,
-            (groundY - 16) + d * tileSize,
-            tileSize,
-            tileSize,
-            0,
-            0,
-            battleGround.width,
-            battleGround.height
-          );
-        }
-      }
-    } else if (thTerrain && thTerrain.complete && thTerrain.naturalWidth > 0 && thTerrain.naturalHeight > 0) {
-      for (let i = startTileIndex; i <= endTileIndex; i++) {
-        const tileX = i * tileSize;
-        drawWorldImage(thTerrain, tileX, groundY - 16, tileSize, tileSize, 32, 0, 32, 32);
-        drawWorldImage(thTerrain, tileX, (groundY - 16) + tileSize, tileSize, tileSize, 32, 32, 32, 32);
-        for (let d = 2; d < depthCount; d++) {
-          drawWorldImage(thTerrain, tileX, (groundY - 16) + d * tileSize, tileSize, tileSize, 32, 64, 32, 32);
-        }
-      }
-    } else if (tilesImg && tilesImg.complete && tilesImg.naturalWidth > 0 && tilesImg.naturalHeight > 0) {
-      for (let i = startTileIndex; i <= endTileIndex; i++) {
-        const tileX = i * tileSize;
-        drawWorldImage(tilesImg, tileX, groundY - 16, tileSize, tileSize, 16, 16, 16, 16);
-        drawWorldImage(tilesImg, tileX, (groundY - 16) + tileSize, tileSize, tileSize, 16, 32, 16, 16);
-        for (let d = 2; d < depthCount; d++) {
-          drawWorldImage(tilesImg, tileX, (groundY - 16) + d * tileSize, tileSize, tileSize, 16, 48, 16, 16);
-        }
-      }
-    }
-
-    const crateImg = this.images['th_crate'];
-    const barrelImg = this.images['th_barrel'];
-    const propsImg = this.images['props_rocks'];
-    const terrainDetail = this.images['th_terrain_detail'];
-    const propStep = 340;
-    const startPropIndex = Math.floor((safeCamX - canvasWidth * 0.4) / propStep) - 2;
-    const endPropIndex = Math.floor((camX + canvasWidth * 1.4) / propStep) + 2;
-
-    for (let i = startPropIndex; i <= endPropIndex; i++) {
-      const px = i * propStep + 120;
-      if (px < -200 || px > arenaWidth + 260) continue;
-
-      const jitter = ((i * 13) % 26) - 13;
-      const groundY1 = groundY - 34;
-      const themeGate = theme === 'inferno' ? 1 : 0;
-      const waterDrift = ((i * 7) % 17) - 8;
-      const shipSway = ((i * 5) % 18) - 9;
-
-      if (battleProps && battleProps.complete && battleProps.naturalWidth > 0 && battleGround && isOnScreen(px, 54)) {
-        const frameW = Math.min(96, battleProps.naturalWidth);
-        const frameH = Math.min(96, battleProps.naturalHeight);
-        const propScale = 42 / Math.max(28, frameW / 2);
-        ctx.globalAlpha = theme === 'inferno' ? 0.95 : theme === 'crypt' ? 0.8 : 0.85;
-        drawWorldImage(
-          battleProps,
-          px + jitter,
-          groundY1,
-          Math.max(28, Math.round(frameW * propScale)),
-          Math.max(28, Math.round(frameH * propScale)),
-          0,
-          0,
-          frameW,
-          frameH
-        );
-        ctx.globalAlpha = 1;
-      } else if (propsImg && propsImg.complete && propsImg.naturalWidth > 0 && i % 4 === 0 && isOnScreen(px + 80, 40)) {
-        drawWorldImage(propsImg, px + 80 + jitter, groundY - 32, 40, 40, 0, 0, 48, 48);
-      }
-
-      const palmBack = pickFromGroup('th_palm_back_left', i) || pickFromGroup('th_palm_back_regular', i) || pickFromGroup('th_palm_back_right', i) || this.images['th_palm_back'];
-      const palmFront = pickFromGroup('th_palm_front_top', i) || this.images['th_palm_front'];
-      const chestSet = pickFromGroup('th_chest_open_set', i) || this.images['th_chest_open'];
-      const chestCloseSet = pickFromGroup('th_chest_close_set', i) || this.images['th_pinechest_close'];
-      const crateSet = pickFromGroup('th_box_set_idle', i) || this.images['th_chest_idle'];
-      const barrelSet = pickFromGroup('th_barrel_set_idle', i) || barrelImg;
-      const flagSet = pickFromGroup('th_flag_set', i);
-      const chestImg = pickFromGroup('th_chest_unlocked_set', i) || this.images['th_chest_idle'];
-      const chestIdleSet = pickFromGroup('th_chest_idle_set', i) || pickFromGroup('th_chest_open_set', i) || this.images['th_chest_open'];
-      const boxDestroySet = pickFromGroup('th_box_set_destroy', i);
-      const boxHitSet = pickFromGroup('th_box_set_hit', i);
-      const barrelDestroySet = pickFromGroup('th_barrel_set_destroy', i);
-      const barrelHitSet = pickFromGroup('th_barrel_set_hit', i);
-      const coinSet = pickFromGroup('th_gold_coin_set', i);
-      const redDiamondSet = pickFromGroup('th_red_diamond_set', i);
-      const blueDiamondSet = pickFromGroup('th_blue_diamond_set', i);
-      const greenDiamondSet = pickFromGroup('th_green_diamond_set', i);
-      const redPotionSet = pickFromGroup('th_red_potion_set', i);
-      const bluePotionSet = pickFromGroup('th_blue_potion_set', i);
-      const greenPotionSet = pickFromGroup('th_green_potion_set', i);
-      const effectCoinSet = pickFromGroup('th_effect_coin_set', i);
-      const msAnchor = pickFromGroup('ms_anchor_set', i);
-      const msSail = (theme === 'inferno' ? pickFromGroup('ms_sail_wind_set', i) : pickFromGroup('ms_sail_no_wind_set', i));
-      const msHull = pickFromGroup('ms_ship_idle_set', i);
-      const msHullHit = pickFromGroup('ms_ship_hit_set', i);
-      const msHullDestroy = pickFromGroup('ms_ship_destroyed_set', i);
-      const msTopWater = pickFromGroup('ms_water_top_set', i);
-      const msSplash = ((i + Math.floor(camX / 300)) % 2 === 0 ? pickFromGroup('ms_water_splash_set', i) : pickFromGroup('ms_water_splash2_set', i));
-      const msReflex = ((i + Math.floor(camX / 300)) % 2 === 0 ? pickFromGroup('ms_reflex1_set', i) : pickFromGroup('ms_reflex2_set', i));
-      const cannonFire = pickFromGroup('st_cannon_fire_set', i);
-      const cannonFx = pickFromGroup('st_cannon_fire_effect_set', i);
-      const cannonDestroy = pickFromGroup('st_cannon_destroyed_set', i);
-      const tent1 =
-        pickFromGroup('st_tent_head1_idle', i) ||
-        pickFromGroup('st_tent_head2_idle', i) ||
-        pickFromGroup('st_tent_head3_idle', i) ||
-        this.images['st_tent_head1_attack'] ||
-        this.images['st_tent_head2_attack'] ||
-        this.images['st_tent_head3_attack'];
-      const seashell =
-        pickFromGroup('st_seashell_idle_1', i) ||
-        pickFromGroup('st_seashell_opening_1', i) ||
-        this.images['st_seashell_idle_1'] ||
-        this.images['st_seashell_opening_1'] ||
-        this.images['st_seashell_hit_1'];
-      const ccIdle = pickFromGroup('tc_crabby_idle_1', i) || this.images['tc_crabby_idle_1'];
-      const ftIdle = pickFromGroup('tc_fierce_tooth_idle_1', i) || this.images['tc_fierce_tooth_idle_1'];
-      const psIdle = pickFromGroup('tc_pink_star_idle_1', i) || this.images['tc_pink_star_idle_1'];
-      const cannonBallIdle = pickFromGroup('st_cannon_ball_idle_1', i) || this.images['st_cannon_ball_idle_1'];
-      const cannonBallIdle2 = pickFromGroup('st_cannon_ball_idle_2', i) || this.images['st_cannon_ball_idle_2'];
-      const cannonBallFire = pickFromGroup('st_cannon_ball_explosion_1', i) || this.images['st_cannon_ball_explosion_1'];
-
-      if (palmBack && isOnScreen(px - 60, 110)) {
-        drawWorldImage(palmBack, px - 60, groundY - 140, 110, 140, 0, 0, palmBack.naturalWidth, palmBack.naturalHeight);
-      }
-      if (palmBack && isOnScreen(px + 10, 80)) {
-        drawWorldImage(
-          palmBack,
-          px + 10,
-          groundY - 230 + (theme === 'inferno' ? 14 : 10),
-          90,
-          90,
-          0,
-          0,
-          palmBack.naturalWidth,
-          palmBack.naturalHeight
-        );
-      }
-      if (palmFront && i % 4 === 2 && isOnScreen(px + 30, 80)) {
-        drawWorldImage(palmFront, px + 30, groundY - 110, 80, 95, 0, 0, palmFront.naturalWidth, palmFront.naturalHeight);
-      }
-      if (terrainDetail && isOnScreen(px + 40, 48)) {
-        drawWorldImage(terrainDetail, px + 40, groundY - 14, 48, 16, 0, 0, Math.min(48, terrainDetail.naturalWidth), Math.min(16, terrainDetail.naturalHeight));
-      }
-
-      if (i % 3 === 1 && (crateSet || chestImg) && isOnScreen(px + jitter, 36)) {
-        const img = crateSet || crateImg;
-        if (img) {
-          const w = theme === 'catacombs' ? 30 : 36;
-          const h = theme === 'catacombs' ? 32 : 38;
-          drawWorldImage(img, px + jitter, groundY - 30 + themeGate, w, h, 0, 0, img.naturalWidth, img.naturalHeight);
-        }
-      }
-      if (i % 3 === 2 && barrelSet && isOnScreen(px, 26)) {
-        drawWorldImage(barrelSet, px, groundY - 26 + themeGate, 24, 26, 0, 0, barrelSet.naturalWidth, barrelSet.naturalHeight);
-      }
-      if (i % 9 === 1 && barrelDestroySet && isOnScreen(px + 12, 24)) {
-        drawWorldImage(barrelDestroySet, px + 12, groundY - 22 + themeGate, 24, 24, 0, 0, barrelDestroySet.naturalWidth, barrelDestroySet.naturalHeight);
-      }
-      if (i % 11 === 5 && barrelHitSet && isOnScreen(px + 6, 24)) {
-        drawWorldImage(barrelHitSet, px + 6, groundY - 22 + themeGate, 24, 24, 0, 0, barrelHitSet.naturalWidth, barrelHitSet.naturalHeight);
-      }
-      if (barrelImg && isOnScreen(px + 20, 26) && i % 5 === 0) {
-        drawWorldImage(barrelImg, px + 20, groundY - 26 + themeGate, 24, 26, 0, 0, barrelImg.naturalWidth, barrelImg.naturalHeight);
-      }
-      if (boxDestroySet && i % 6 === 2 && isOnScreen(px + 25, 32)) {
-        drawWorldImage(boxDestroySet, px + 25, groundY - 35 + themeGate, 28, 28, 0, 0, boxDestroySet.naturalWidth, boxDestroySet.naturalHeight);
-      }
-      if (boxHitSet && i % 6 === 4 && isOnScreen(px + 22, 30)) {
-        drawWorldImage(boxHitSet, px + 22, groundY - 30 + themeGate, 28, 30, 0, 0, boxHitSet.naturalWidth, boxHitSet.naturalHeight);
-      }
-
-      if (flagSet && i % 5 === 0 && isOnScreen(px + 10, 44)) {
-        drawWorldImage(flagSet, px + 10, groundY - 95, 34, 46, 0, 0, flagSet.naturalWidth, flagSet.naturalHeight);
-      }
-      if (chestSet && i % 8 === 0 && isOnScreen(px + 35, 36)) {
-        drawWorldImage(chestSet, px + 35, groundY - 31, 34, 34, 0, 0, chestSet.naturalWidth, chestSet.naturalHeight);
-      }
-      if (battleChest && battleChest.complete && battleChest.naturalWidth > 0 && i % 4 === 0 && theme === 'inferno') {
-        const frameW = Math.min(64, battleChest.naturalWidth);
-        const frameH = Math.min(64, battleChest.naturalHeight);
-        drawWorldImage(battleChest, px + 50, groundY - 36, 38, 38, 0, 0, frameW, frameH);
-      }
-      if (battleTorch && battleTorch.complete && battleTorch.naturalWidth > 0 && i % 7 === 0 && theme === 'inferno') {
-        drawWorldImage(battleTorch, px + 10 + jitter, groundY - 46, 18, 24, 0, 0, battleTorch.naturalWidth, battleTorch.naturalHeight);
-      }
-      if (battleFlame && battleFlame.naturalWidth > 0 && i % 9 === 0 && theme === 'inferno') {
-        ctx.globalAlpha = 0.75;
-        drawWorldImage(battleFlame, px + 60 + jitter, groundY - 58, 20, 40, 0, 0, battleFlame.naturalWidth, battleFlame.naturalHeight);
-        ctx.globalAlpha = 1;
-      }
-      if (chestCloseSet && i % 12 === 2 && isOnScreen(px + 90, 36)) {
-        drawWorldImage(chestCloseSet, px + 90, groundY - 31, 34, 34, 0, 0, chestCloseSet.naturalWidth, chestCloseSet.naturalHeight);
-      }
-      if (chestIdleSet && i % 12 === 7 && isOnScreen(px + 60, 36)) {
-        drawWorldImage(chestIdleSet, px + 60, groundY - 31, 34, 34, 0, 0, chestIdleSet.naturalWidth, chestIdleSet.naturalHeight);
-      }
-
-      if (coinSet && i % 18 === 1 && isOnScreen(px + 68, 18)) {
-        drawWorldImage(coinSet, px + 68, groundY - 13, 18, 18, 0, 0, coinSet.naturalWidth, coinSet.naturalHeight);
-      }
-      if (redPotionSet && i % 18 === 3 && isOnScreen(px + 72, 16)) {
-        drawWorldImage(redPotionSet, px + 72, groundY - 16, 16, 16, 0, 0, redPotionSet.naturalWidth, redPotionSet.naturalHeight);
-      }
-      if (bluePotionSet && i % 18 === 9 && isOnScreen(px + 74, 16)) {
-        drawWorldImage(bluePotionSet, px + 74, groundY - 16, 16, 16, 0, 0, bluePotionSet.naturalWidth, bluePotionSet.naturalHeight);
-      }
-      if (greenPotionSet && i % 18 === 11 && isOnScreen(px + 76, 16)) {
-        drawWorldImage(greenPotionSet, px + 76, groundY - 16, 16, 16, 0, 0, greenPotionSet.naturalWidth, greenPotionSet.naturalHeight);
-      }
-      if (redDiamondSet && i % 18 === 5 && isOnScreen(px + 64, 16)) {
-        drawWorldImage(redDiamondSet, px + 64, groundY - 17, 16, 16, 0, 0, redDiamondSet.naturalWidth, redDiamondSet.naturalHeight);
-      }
-      if (blueDiamondSet && i % 18 === 12 && isOnScreen(px + 64, 16)) {
-        drawWorldImage(blueDiamondSet, px + 64, groundY - 17, 16, 16, 0, 0, blueDiamondSet.naturalWidth, blueDiamondSet.naturalHeight);
-      }
-      if (greenDiamondSet && i % 18 === 14 && isOnScreen(px + 64, 16)) {
-        drawWorldImage(greenDiamondSet, px + 64, groundY - 17, 16, 16, 0, 0, greenDiamondSet.naturalWidth, greenDiamondSet.naturalHeight);
-      }
-      if (effectCoinSet && i % 18 === 10 && isOnScreen(px + 66, 12)) {
-        drawWorldImage(effectCoinSet, px + 66, groundY - 14, 14, 14, 0, 0, effectCoinSet.naturalWidth, effectCoinSet.naturalHeight);
-      }
-
-      if (msTopWater && i % 2 === 0 && isOnScreen(px - 40, 40)) {
-        drawWorldImage(msTopWater, px - 40 + waterDrift, groundY - 26 + shipSway * 0.2, 40, 26, 0, 0, msTopWater.naturalWidth, msTopWater.naturalHeight);
-      }
-      if (msAnchor && i % 16 === 4 && isOnScreen(px + 30, 24)) {
-        drawWorldImage(msAnchor, px + 30, groundY - 20, 28, 24, 0, 0, msAnchor.naturalWidth, msAnchor.naturalHeight);
-      }
-      if (msSail && i % 16 === 8 && isOnScreen(px - 20, 46)) {
-        drawWorldImage(msSail, px - 20 + waterDrift, groundY - 72, 32, 46, 0, 0, msSail.naturalWidth, msSail.naturalHeight);
-      }
-      if (msHull && i % 17 === 1 && isOnScreen(px + 12, 52)) {
-        drawWorldImage(msHull, px + 12, groundY - 78, 32, 52, 0, 0, msHull.naturalWidth, msHull.naturalHeight);
-      }
-      if (msHullHit && i % 17 === 7 && isOnScreen(px - 4, 52)) {
-        drawWorldImage(msHullHit, px - 4, groundY - 78, 34, 52, 0, 0, msHullHit.naturalWidth, msHullHit.naturalHeight);
-      }
-      if (msHullDestroy && i % 17 === 9 && isOnScreen(px + 20, 50)) {
-        drawWorldImage(msHullDestroy, px + 20, groundY - 76, 36, 52, 0, 0, msHullDestroy.naturalWidth, msHullDestroy.naturalHeight);
-      }
-      if (msSplash && i % 7 === 1 && isOnScreen(px - 16, 18)) {
-        drawWorldImage(msSplash, px - 16, groundY - 9, 18, 18, 0, 0, msSplash.naturalWidth, msSplash.naturalHeight);
-      }
-      if (msReflex && i % 7 === 3 && isOnScreen(px - 8, 20)) {
-        drawWorldImage(msReflex, px - 8, groundY - 14, 18, 20, 0, 0, msReflex.naturalWidth, msReflex.naturalHeight);
-      }
-
-      if (cannonFire && i % 10 === 3 && isOnScreen(px + 100, 30)) {
-        drawWorldImage(cannonFire, px + 100 + waterDrift, groundY - 30, 30, 30, 0, 0, cannonFire.naturalWidth, cannonFire.naturalHeight);
-      }
-      if (cannonFx && i % 10 === 3 && isOnScreen(px + 108, 40)) {
-        drawWorldImage(cannonFx, px + 108 + waterDrift, groundY - 34, 24, 24, 0, 0, cannonFx.naturalWidth, cannonFx.naturalHeight);
-      }
-      if (cannonDestroy && i % 10 === 7 && isOnScreen(px + 102, 30)) {
-        drawWorldImage(cannonDestroy, px + 102 + waterDrift, groundY - 28, 30, 24, 0, 0, cannonDestroy.naturalWidth, cannonDestroy.naturalHeight);
-      }
-      if (cannonBallIdle && i % 10 === 5 && isOnScreen(px + 110, 18)) {
-        drawWorldImage(cannonBallIdle, px + 110, groundY - 11, 12, 16, 0, 0, cannonBallIdle.naturalWidth, cannonBallIdle.naturalHeight);
-      }
-      if (cannonBallIdle2 && i % 10 === 5 && isOnScreen(px + 116, 18)) {
-        drawWorldImage(cannonBallIdle2, px + 116, groundY - 10, 12, 16, 0, 0, cannonBallIdle2.naturalWidth, cannonBallIdle2.naturalHeight);
-      }
-      if (cannonBallFire && i % 10 === 5 && isOnScreen(px + 120, 18)) {
-        drawWorldImage(cannonBallFire, px + 120, groundY - 18, 16, 16, 0, 0, cannonBallFire.naturalWidth, cannonBallFire.naturalHeight);
-      }
-      if (seashell && i % 13 === 6 && isOnScreen(px + 126, 20)) {
-        drawWorldImage(seashell, px + 126, groundY - 16, 14, 16, 0, 0, seashell.naturalWidth, seashell.naturalHeight);
-      }
-      if (tent1 && i % 14 === 4 && isOnScreen(px + 96, 28)) {
-        drawWorldImage(tent1, px + 96, groundY - 24, 20, 24, 0, 0, tent1.naturalWidth, tent1.naturalHeight);
-      }
-      if (ccIdle && i % 15 === 8 && isOnScreen(px + 108, 28)) {
-        drawWorldImage(ccIdle, px + 108, groundY - 42, 42, 26, 0, 0, ccIdle.naturalWidth, ccIdle.naturalHeight);
-      }
-      if (ftIdle && i % 15 === 11 && isOnScreen(px + 114, 28)) {
-        drawWorldImage(ftIdle, px + 114, groundY - 42, 42, 26, 0, 0, ftIdle.naturalWidth, ftIdle.naturalHeight);
-      }
-      if (psIdle && i % 15 === 13 && isOnScreen(px + 120, 28)) {
-        drawWorldImage(psIdle, px + 120, groundY - 42, 42, 26, 0, 0, psIdle.naturalWidth, psIdle.naturalHeight);
-      }
-
-      const bottle = pickFromGroup('ph_bottles_set', i);
-      if (bottle && i % 4 === 0 && isOnScreen(px + 70, 28)) {
-        drawWorldImage(bottle, px + 70, groundY - 28, 28, 28, 0, 0, bottle.naturalWidth, bottle.naturalHeight);
-      }
-      const candle = pickFromGroup('ph_candle_set', i);
-      const candleLight = pickFromGroup('ph_candle_light_set', i);
-      if (candle && i % 5 === 0 && isOnScreen(px + 100, 20)) {
-        drawWorldImage(candle, px + 100, groundY - 40, 20, 28, 0, 0, candle.naturalWidth, candle.naturalHeight);
-      }
-      if (candleLight && i % 5 === 0 && isOnScreen(px + 100, 20)) {
-        const lightAnim = this.animTimer % 0.4;
-        const candleAlpha = 0.7 + (lightAnim % 0.3);
-        ctx.globalAlpha = candleAlpha;
-        drawWorldImage(candleLight, px + 100, groundY - 40, 18, 24, 0, 0, candleLight.naturalWidth, candleLight.naturalHeight);
-        ctx.globalAlpha = 1;
-      }
-      const chain = pickFromGroup(i % 2 === 0 ? 'ph_chain_small_set' : 'ph_chain_big_set', i);
-      if (chain && i % 8 === 0 && isOnScreen(px + 140, 18)) {
-        drawWorldImage(chain, px + 140, groundY - 64, 20, 48, 0, 0, chain.naturalWidth, chain.naturalHeight);
-      }
-      const window = pickFromGroup('ph_window_set', i);
-      if (window && i % 10 === 0 && isOnScreen(px - 20, 34)) {
-        drawWorldImage(window, px - 20, groundY - 122, 34, 54, 0, 0, window.naturalWidth, window.naturalHeight);
-      }
-      const windowLight = pickFromGroup('ph_window_light_set', i);
-      if (windowLight && i % 12 === 0 && isOnScreen(px - 10, 24)) {
-        drawWorldImage(windowLight, px - 10, groundY - 110, 24, 28, 0, 0, windowLight.naturalWidth, windowLight.naturalHeight);
-      }
-      const doorOpen = pickFromGroup('ph_door_open_set', i);
-      const doorClose = pickFromGroup('ph_door_close_set', i);
-      if ((doorOpen || doorClose) && i % 6 === 3 && isOnScreen(px + 6, 28)) {
-        const door = i % 6 < 3 ? doorOpen : doorClose;
-        if (door) drawWorldImage(door, px + 6, groundY - 88, 28, 52, 0, 0, door.naturalWidth, door.naturalHeight);
-      }
-
-      const helmSet = pickFromGroup('th_helm_turn_set', i) || pickFromGroup('th_helm_idle_set', i) || this.images['th_ship_helm'];
-      if (helmSet && i % 6 === 1 && isOnScreen(px - 12, 52)) {
-        drawWorldImage(helmSet, px - 12, groundY - 80, 40, 45, 0, 0, helmSet.naturalWidth, helmSet.naturalHeight);
-      }
-    }
-
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = palette.overlay;
-    ctx.fillRect(0, groundY - 2, canvasWidth, canvasHeight - groundY + 2);
-
-    if (theme === 'inferno' || theme === 'catacombs' || theme === 'crypt') {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
-      ctx.fillRect(0, 0, canvasWidth, groundY - 20);
-      ctx.fillStyle =
-        theme === 'inferno'
-          ? 'rgba(255, 94, 26, 0.08)'
-          : theme === 'crypt'
-            ? 'rgba(180, 130, 255, 0.04)'
-            : 'rgba(173, 146, 117, 0.04)';
+    if (safeTheme === 'town' as any || (!safeTheme || safeTheme === ('town' as any))) {
+      // High Forest Dawn/Day Sky
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, groundY);
+      skyGrad.addColorStop(0, '#1e3a8a'); // Deep Royal Blue
+      skyGrad.addColorStop(0.4, '#38bdf8'); // Azure Sky
+      skyGrad.addColorStop(0.85, '#bae6fd'); // Soft Horizon
+      skyGrad.addColorStop(1, '#fef08a'); // Warm Sunrise Glow
+      ctx.fillStyle = skyGrad;
       ctx.fillRect(0, 0, canvasWidth, groundY);
+
+      // Sun Disc
+      const sunX = canvasWidth * 0.75 - ((camX * 0.04) % (canvasWidth * 1.5));
+      const sunGrad = ctx.createRadialGradient(sunX, 70, 10, sunX, 70, 60);
+      sunGrad.addColorStop(0, '#fffbeb');
+      sunGrad.addColorStop(0.3, 'rgba(254, 240, 138, 0.7)');
+      sunGrad.addColorStop(1, 'transparent');
+      ctx.fillStyle = sunGrad;
+      ctx.beginPath();
+      ctx.arc(sunX, 70, 60, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Distant Parallax Mountain Silhouettes
+      ctx.fillStyle = 'rgba(30, 58, 138, 0.25)';
+      ctx.beginPath();
+      ctx.moveTo(0, groundY);
+      for (let x = 0; x <= canvasWidth; x += 40) {
+        const worldX = x + camX * 0.1;
+        const mountainY = groundY - 140 - Math.sin(worldX * 0.003) * 60 - Math.cos(worldX * 0.007) * 30;
+        ctx.lineTo(x, mountainY);
+      }
+      ctx.lineTo(canvasWidth, groundY);
+      ctx.closePath();
+      ctx.fill();
+
+      // Midground Parallax Forest Canopy
+      const bgTrees = this.images['bg_trees'];
+      if (bgTrees && bgTrees.complete && bgTrees.naturalWidth > 0) {
+        const treeW = 280;
+        const treeH = 180;
+        const count = Math.ceil(canvasWidth / treeW) + 2;
+        const startX = -((camX * 0.25) % treeW);
+        for (let i = 0; i < count; i++) {
+          ctx.drawImage(bgTrees, startX + i * treeW, groundY - treeH - 10, treeW, treeH);
+        }
+      }
+
+    } else if (safeTheme === 'catacombs') {
+      // Ancient Dungeon Brick Chamber
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, groundY);
+      skyGrad.addColorStop(0, '#18181b'); // Dark Stone
+      skyGrad.addColorStop(0.6, '#27272a'); // Weathered Dungeon Wall
+      skyGrad.addColorStop(1, '#09090b'); // Floor Shadow
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, canvasWidth, groundY);
+
+      // Dungeon Arches Pattern
+      ctx.strokeStyle = 'rgba(63, 63, 70, 0.35)';
+      ctx.lineWidth = 4;
+      const archSpacing = 280;
+      const archOffset = -((camX * 0.3) % archSpacing);
+      for (let x = archOffset; x < canvasWidth + archSpacing; x += archSpacing) {
+        ctx.strokeRect(x, 40, 160, groundY - 40);
+        ctx.beginPath();
+        ctx.arc(x + 80, 40, 80, Math.PI, 0);
+        ctx.stroke();
+      }
+
+      // Torches on Walls
+      const torchSpacing = 340;
+      const startTorch = Math.floor((camX - 100) / torchSpacing) - 1;
+      const endTorch = Math.floor((camX + canvasWidth + 100) / torchSpacing) + 1;
+      for (let t = startTorch; t <= endTorch; t++) {
+        const tx = t * torchSpacing + 120 - camX;
+        const ty = groundY - 140;
+
+        // Torch glow
+        const glowRadius = 55 + Math.sin(time * 8 + t) * 6;
+        const torchGlow = ctx.createRadialGradient(tx, ty, 5, tx, ty, glowRadius);
+        torchGlow.addColorStop(0, 'rgba(251, 191, 36, 0.65)');
+        torchGlow.addColorStop(0.5, 'rgba(249, 115, 22, 0.25)');
+        torchGlow.addColorStop(1, 'transparent');
+        ctx.fillStyle = torchGlow;
+        ctx.beginPath();
+        ctx.arc(tx, ty, glowRadius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Torch Sconce
+        ctx.fillStyle = '#451a03';
+        ctx.fillRect(tx - 3, ty + 2, 6, 20);
+        ctx.fillStyle = '#f59e0b';
+        ctx.beginPath();
+        ctx.arc(tx, ty, 5 + Math.sin(time * 12 + t) * 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+    } else if (safeTheme === 'crypt') {
+      // Gothic Mausoleum Chamber
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, groundY);
+      skyGrad.addColorStop(0, '#0f0c1b'); // Midnight Violet
+      skyGrad.addColorStop(0.5, '#1e1b4b'); // Deep Crypt Purple
+      skyGrad.addColorStop(1, '#030712'); // Dark Abyss
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, canvasWidth, groundY);
+
+      // Gothic Stained Glass Windows
+      const winSpacing = 320;
+      const winOffset = -((camX * 0.25) % winSpacing);
+      for (let x = winOffset; x < canvasWidth + winSpacing; x += winSpacing) {
+        // Window Glow
+        const winGlow = ctx.createRadialGradient(x + 60, 110, 10, x + 60, 110, 90);
+        winGlow.addColorStop(0, 'rgba(168, 85, 247, 0.45)');
+        winGlow.addColorStop(1, 'transparent');
+        ctx.fillStyle = winGlow;
+        ctx.fillRect(x + 20, 40, 80, 140);
+
+        ctx.strokeStyle = '#a855f7';
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(x + 30, 50, 60, 110);
+      }
+
+      // Soulfire Braziers
+      const brazierSpacing = 360;
+      const startB = Math.floor((camX - 100) / brazierSpacing) - 1;
+      const endB = Math.floor((camX + canvasWidth + 100) / brazierSpacing) + 1;
+      for (let b = startB; b <= endB; b++) {
+        const bx = b * brazierSpacing + 140 - camX;
+        const by = groundY - 120;
+        const glowRadius = 60 + Math.sin(time * 7 + b) * 8;
+        const flameGlow = ctx.createRadialGradient(bx, by, 5, bx, by, glowRadius);
+        flameGlow.addColorStop(0, 'rgba(192, 132, 252, 0.7)');
+        flameGlow.addColorStop(0.6, 'rgba(126, 34, 206, 0.25)');
+        flameGlow.addColorStop(1, 'transparent');
+        ctx.fillStyle = flameGlow;
+        ctx.beginPath();
+        ctx.arc(bx, by, glowRadius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+    } else if (safeTheme === 'inferno') {
+      // Molten Volcano Cavern
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, groundY);
+      skyGrad.addColorStop(0, '#450a0a'); // Dark Crimson
+      skyGrad.addColorStop(0.6, '#7f1d1d'); // Magma Red
+      skyGrad.addColorStop(1, '#1c0505'); // Charred Basalt
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, canvasWidth, groundY);
+
+      // Distant Magma Falls
+      const magmaSpacing = 400;
+      const magmaOffset = -((camX * 0.2) % magmaSpacing);
+      for (let x = magmaOffset; x < canvasWidth + magmaSpacing; x += magmaSpacing) {
+        const magmaGrad = ctx.createLinearGradient(x, 0, x, groundY);
+        magmaGrad.addColorStop(0, 'rgba(239, 68, 68, 0.2)');
+        magmaGrad.addColorStop(0.8, 'rgba(249, 115, 22, 0.7)');
+        magmaGrad.addColorStop(1, '#ffedd5');
+        ctx.fillStyle = magmaGrad;
+        ctx.fillRect(x + 20, 20, 36, groundY - 20);
+      }
+
+      // Rising Magma Embers
+      for (let e = 0; e < 25; e++) {
+        const emberX = (Math.sin(e * 77 + time * 0.5) * 0.5 + 0.5) * canvasWidth;
+        const emberY = (groundY - ((time * 70 + e * 40) % groundY));
+        ctx.fillStyle = e % 2 === 0 ? '#f97316' : '#fde047';
+        ctx.beginPath();
+        ctx.arc(emberX, emberY, 2 + (e % 3), 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+    } else {
+      // Void Nexus Cosmic Nebula
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, groundY);
+      skyGrad.addColorStop(0, '#020617'); // Space Black
+      skyGrad.addColorStop(0.4, '#1e1b4b'); // Deep Nebula
+      skyGrad.addColorStop(0.8, '#3b0764'); // Void Purple
+      skyGrad.addColorStop(1, '#09090b');
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, canvasWidth, groundY);
+
+      // Cosmic Stars
+      for (let s = 0; s < 45; s++) {
+        const starX = ((s * 97) - camX * (0.05 + (s % 3) * 0.03)) % (canvasWidth + 100);
+        const actualStarX = starX < 0 ? starX + canvasWidth + 100 : starX;
+        const starY = (s * 33) % (groundY - 40);
+        const alpha = 0.4 + Math.sin(time * 4 + s) * 0.4;
+        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+        ctx.beginPath();
+        ctx.arc(actualStarX, starY, (s % 3 === 0 ? 2.5 : 1.5), 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Swirling Dark Matter Vortex
+      const vortexX = canvasWidth * 0.5 - ((camX * 0.08) % (canvasWidth * 1.2));
+      const vortexGrad = ctx.createRadialGradient(vortexX, 100, 10, vortexX, 100, 140);
+      vortexGrad.addColorStop(0, 'rgba(192, 132, 252, 0.75)');
+      vortexGrad.addColorStop(0.5, 'rgba(126, 34, 206, 0.35)');
+      vortexGrad.addColorStop(1, 'transparent');
+      ctx.fillStyle = vortexGrad;
+      ctx.beginPath();
+      ctx.arc(vortexX, 100, 140, 0, Math.PI * 2);
+      ctx.fill();
     }
+
+    // ----------------------------------------------------
+    // 2. CLEAN SEAMLESS GROUND TILES
+    // ----------------------------------------------------
+    const tileSize = 48;
+    const startTile = Math.floor((camX - 60) / tileSize);
+    const endTile = Math.floor((camX + canvasWidth + 60) / tileSize);
+
+    const battleGround = this.images['battle_ground'];
+    const tilesImg = this.images['tiles'];
+
+    for (let t = startTile; t <= endTile; t++) {
+      const tileX = t * tileSize - camX;
+
+      if (battleGround && battleGround.complete && battleGround.naturalWidth > 0) {
+        // Top grass/stone surface tile
+        ctx.drawImage(battleGround, tileX, groundY, tileSize, tileSize);
+        // Fill deep ground beneath
+        for (let dy = groundY + tileSize; dy < canvasHeight + 100; dy += tileSize) {
+          ctx.drawImage(battleGround, tileX, dy, tileSize, tileSize);
+        }
+      } else if (tilesImg && tilesImg.complete && tilesImg.naturalWidth > 0) {
+        ctx.drawImage(tilesImg, 16, 16, 16, 16, tileX, groundY, tileSize, tileSize);
+        for (let dy = groundY + tileSize; dy < canvasHeight + 100; dy += tileSize) {
+          ctx.drawImage(tilesImg, 16, 32, 16, 16, tileX, dy, tileSize, tileSize);
+        }
+      } else {
+        // High-Quality Fallback Gradient Ground Block
+        const groundGrad = ctx.createLinearGradient(tileX, groundY, tileX, canvasHeight);
+        if (safeTheme === 'inferno') {
+          groundGrad.addColorStop(0, '#7f1d1d');
+          groundGrad.addColorStop(1, '#180303');
+        } else if (safeTheme === 'crypt' || safeTheme === 'void') {
+          groundGrad.addColorStop(0, '#312e81');
+          groundGrad.addColorStop(1, '#09090b');
+        } else {
+          groundGrad.addColorStop(0, '#15803d'); // Lush Green Grass
+          groundGrad.addColorStop(0.15, '#78350f'); // Rich Earth
+          groundGrad.addColorStop(1, '#292524');
+        }
+        ctx.fillStyle = groundGrad;
+        ctx.fillRect(tileX, groundY, tileSize + 1, canvasHeight - groundY + 100);
+      }
+
+      // Thematic ground overlay tint
+      if (safeTheme === 'inferno') {
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.2)';
+        ctx.fillRect(tileX, groundY, tileSize + 1, canvasHeight - groundY + 100);
+      } else if (safeTheme === 'crypt') {
+        ctx.fillStyle = 'rgba(147, 51, 234, 0.15)';
+        ctx.fillRect(tileX, groundY, tileSize + 1, canvasHeight - groundY + 100);
+      } else if (safeTheme === 'void') {
+        ctx.fillStyle = 'rgba(99, 102, 241, 0.15)';
+        ctx.fillRect(tileX, groundY, tileSize + 1, canvasHeight - groundY + 100);
+      }
+    }
+
+    // Top Ground Trim Accent Line
+    ctx.lineWidth = 3;
+    if (safeTheme === 'inferno') {
+      ctx.strokeStyle = '#f97316';
+    } else if (safeTheme === 'crypt') {
+      ctx.strokeStyle = '#a855f7';
+    } else if (safeTheme === 'void') {
+      ctx.strokeStyle = '#818cf8';
+    } else if (safeTheme === 'catacombs') {
+      ctx.strokeStyle = '#71717a';
+    } else {
+      ctx.strokeStyle = '#22c55e'; // Vibrant Town Grass Edge
+    }
+    ctx.beginPath();
+    ctx.moveTo(0, groundY);
+    ctx.lineTo(canvasWidth, groundY);
+    ctx.stroke();
+
+    ctx.restore();
   }
 
   /**
-   * Draw Multi-Level Platforms with authentic pixel-art tiles and support pillars
+   * Draw Themed Multi-Level Platforms
    */
   public drawPlatforms(
     ctx: CanvasRenderingContext2D,
-    platforms: { x: number; y: number; width: number; height: number; type: 'one-way' | 'solid' }[],
-    theme: BattleTheme = 'catacombs'
+    platforms: { x: number; y: number; width: number; height: number; type: string }[],
+    theme: BattleTheme
   ) {
-    const tilesImg = this.images['tiles'];
-    const battleGround = this.images['battle_ground'];
-    const thTerrain = this.images['th_terrain'];
+    if (!platforms || platforms.length === 0) return;
 
-    platforms.forEach(plat => {
-      ctx.save();
-      const tileSize = 32;
-      const numTiles = Math.ceil(plat.width / tileSize);
+    ctx.save();
+    for (const plat of platforms) {
+      // 1. Support Pillars down to ground
+      ctx.fillStyle = theme === 'inferno' ? '#450a0a' : theme === 'crypt' || theme === 'void' ? '#1e1b4b' : '#3e2723';
+      ctx.fillRect(plat.x + 16, plat.y + plat.height, 10, 480);
+      ctx.fillRect(plat.x + plat.width - 26, plat.y + plat.height, 10, 480);
 
-      // Support Pillars descending from platform
-      ctx.fillStyle = theme === 'inferno' ? '#291103' : '#0f172a';
-      ctx.fillRect(plat.x + 14, plat.y, 6, 250);
-      ctx.fillRect(plat.x + plat.width - 20, plat.y, 6, 250);
+      // Cross Beams
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(plat.x + 16, plat.y + plat.height, 10, 480);
+      ctx.strokeRect(plat.x + plat.width - 26, plat.y + plat.height, 10, 480);
 
-      // Draw Top Platform Surface
-      for (let t = 0; t < numTiles; t++) {
-        const tx = plat.x + t * tileSize;
-        const tw = Math.min(tileSize, plat.x + plat.width - tx);
-
-        if (battleGround && battleGround.complete) {
-          ctx.drawImage(battleGround, 0, 0, 32, 32, tx, plat.y - 12, tw, 24);
-        } else if (thTerrain && thTerrain.complete) {
-          ctx.drawImage(thTerrain, 32, 0, 32, 32, tx, plat.y - 12, tw, 24);
-        } else if (tilesImg && tilesImg.complete) {
-          ctx.drawImage(tilesImg, 16, 16, 16, 16, tx, plat.y - 12, tw, 24);
-        } else {
-          ctx.fillStyle = '#334155';
-          ctx.fillRect(tx, plat.y - 8, tw, 16);
-          ctx.fillStyle = '#22c55e';
-          ctx.fillRect(tx, plat.y - 8, tw, 4);
-        }
-      }
-
-      // Platform Glow / Rune Accent Line
-      if (theme === 'void') {
-        ctx.fillStyle = 'rgba(168, 85, 247, 0.5)';
-        ctx.fillRect(plat.x, plat.y - 14, plat.width, 2);
-      } else if (theme === 'inferno') {
-        ctx.fillStyle = 'rgba(249, 115, 22, 0.5)';
-        ctx.fillRect(plat.x, plat.y - 14, plat.width, 2);
+      // 2. Platform Surface Board
+      const platGrad = ctx.createLinearGradient(plat.x, plat.y, plat.x, plat.y + plat.height);
+      if (theme === 'inferno') {
+        platGrad.addColorStop(0, '#991b1b');
+        platGrad.addColorStop(1, '#450a0a');
+      } else if (theme === 'crypt' || theme === 'void') {
+        platGrad.addColorStop(0, '#4338ca');
+        platGrad.addColorStop(1, '#1e1b4b');
       } else {
-        ctx.fillStyle = 'rgba(74, 222, 128, 0.4)';
-        ctx.fillRect(plat.x, plat.y - 14, plat.width, 2);
+        platGrad.addColorStop(0, '#854d0e'); // Wooden Plank
+        platGrad.addColorStop(1, '#451a03');
       }
 
-      ctx.restore();
-    });
+      ctx.fillStyle = platGrad;
+      ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
+
+      // Glowing Top Edge
+      ctx.fillStyle = theme === 'inferno' ? '#f97316' : theme === 'crypt' || theme === 'void' ? '#818cf8' : '#eab308';
+      ctx.fillRect(plat.x, plat.y, plat.width, 3);
+
+      // Platform Border
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(plat.x, plat.y, plat.width, plat.height);
+    }
+    ctx.restore();
   }
 }
 
