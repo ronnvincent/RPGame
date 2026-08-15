@@ -1,7 +1,13 @@
 import { SideViewGame } from './sideview/SideViewGame';
 
-// Mount Side-View Action RPG into DOM
-window.addEventListener('DOMContentLoaded', () => {
+function initGame() {
   const mountPoint = document.getElementById('rpg') || document.body;
+  if (!mountPoint) return;
   new SideViewGame(mountPoint);
-});
+}
+
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', initGame);
+} else {
+  initGame();
+}
