@@ -18,7 +18,7 @@
  * 15. UI: Cryo's Mini GUI
  */
 
-type BattleTheme = 'catacombs' | 'crypt' | 'inferno';
+type BattleTheme = 'catacombs' | 'crypt' | 'inferno' | 'void' | 'town';
 
 export class SpriteManager {
   private images: { [key: string]: HTMLImageElement } = {};
@@ -316,9 +316,6 @@ export class SpriteManager {
       th_pot_blue: '/assets/treasure-hunters/Pirate Treasure/Sprites/Blue Potion/01.png',
 
       // 21. Battle Arena Assets
-      battle_ground: '/assets/battle/ground/tx-tileset-ground.png',
-      battle_props: '/assets/battle/props/tx-village-props.png',
-      battle_chest: '/assets/battle/props/tx-chest-animation.png',
       battle_flame_fx: '/assets/battle/fx/tx-fx-flame.png',
       battle_torch_fx: '/assets/battle/fx/tx-fx-torch-flame.png',
 
@@ -1698,71 +1695,7 @@ export class SpriteManager {
     ctx.restore();
   }
 
-  /**
-   * Draw NightBorne Boss from Sheet (1840x400)
-   */
-  private drawNightBorneBoss(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    state: 'idle' | 'walk' | 'run' | 'hit' | 'dead',
-    facing: number,
-    hitStun: number
-  ) {
-    const img = this.images['nightborne_sheet'];
-    if (!img) return;
 
-    const frameW = 80;
-    const frameH = 100;
-    let row = 0; // row 0: idle, 1: run, 2: attack, 3: hurt/death
-    let frameCount = 9;
-    let fps = 8;
-
-    if (state === 'dead') {
-      row = 3;
-      frameCount = 15;
-      fps = 6;
-    } else if (state === 'hit' || hitStun > 0) {
-      row = 3;
-      frameCount = 5;
-      fps = 8;
-    } else if (state === 'run' || state === 'walk') {
-      row = 2; // combat slash charge
-      frameCount = 12;
-      fps = 10;
-    }
-
-    const currentFrame = Math.floor(this.animTimer * fps) % frameCount;
-    const scale = 2.4;
-    const destW = frameW * scale;
-    const destH = frameH * scale;
-
-    ctx.save();
-    ctx.imageSmoothingEnabled = false;
-    ctx.translate(x, y);
-
-    if (facing < 0) {
-      ctx.scale(-1, 1);
-    }
-
-    if (hitStun > 0) {
-      ctx.filter = 'brightness(2.2) contrast(1.5)';
-    }
-
-    ctx.drawImage(
-      img,
-      currentFrame * frameW,
-      0,
-      frameW,
-      frameH,
-      -destW / 2,
-      -(destH - 24),
-      destW,
-      destH
-    );
-
-    ctx.restore();
-  }
 
   /**
    * Draw NightBorne Boss from Sheet (1840x400)
