@@ -1,7 +1,10 @@
 {
   "compilerOptions": {
     "target": "ES2020",
-    "lib": ["dom", "esnext"],
+    "lib": [
+      "dom",
+      "esnext"
+    ],
     "module": "ES2020",
     "outDir": "./lib",
     "rootDir": "./src",
@@ -18,18 +21,22 @@
     "noImplicitAny": false,
     "noImplicitReturns": false,
     "declaration": true,
-    "experimentalDecorators": true, 
+    "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "stripInternal": true,
     "skipLibCheck": true
   },
   "include": [
-      "src",
-      "src/types/**/*",
-      "node_modules/canvasengine/*"
-, "public/spritesheets"  ],
-  "typeRoots": [
-      "node_modules/@types",
-      "src/types"
+    "src",
+    "src/types/**/*",
+    "node_modules/canvasengine/*",
+    "public/spritesheets"
   ],
+  "typeRoots": [
+    "node_modules/@types",
+    "src/types"
+  ],
+  "exclude": [
+    "src/tiled"
+  ]
 }

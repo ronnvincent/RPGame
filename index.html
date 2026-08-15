@@ -13,6 +13,7 @@
     <meta name="theme-color" content="#09090b" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;800;900&family=Inter:wght@400;600;700;800&family=Outfit:wght@500;700;800;900&display=swap">
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;800;900&family=Inter:wght@400;600;700;800&family=Outfit:wght@500;700;800;900&display=swap" rel="stylesheet">
     <style>
       * {
@@ -127,28 +128,14 @@
         font-weight: 600;
         margin-bottom: 18px;
       }
-
-      .rotate-dismiss-btn {
-        background: url('/assets/kenney-rpg-ui/buttonLong_brown.png') no-repeat center center;
-        background-size: 100% 100%;
-        border: none;
-        color: #ffd700;
-        font-family: 'Cinzel', serif;
-        font-weight: 900;
-        font-size: 12px;
-        padding: 10px 24px;
-        cursor: pointer;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.8);
-      }
     </style>
   </head>
   <body>
-    <!-- Landscape Orientation Guide (Dismissable) -->
+    <!-- Landscape Orientation Guide -->
     <div id="orientation-rotate-shield">
       <div class="rotate-phone-anim"></div>
       <h2 class="rotate-title">LANDSCAPE MODE</h2>
-      <p class="rotate-desc">For the best Action RPG experience, rotate your device to <strong>Landscape</strong> or tap below to continue.</p>
-      <button class="rotate-dismiss-btn" onclick="document.getElementById('orientation-rotate-shield').style.display='none'">PLAY ANYWAY ⚔️</button>
+      <p class="rotate-desc">For the best Action RPG experience, please rotate your device to <strong>Landscape Mode</strong>.</p>
     </div>
 
     <div id="rpg"></div>
