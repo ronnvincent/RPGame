@@ -712,11 +712,10 @@ export class GameHUD {
         .player-name-row {
           font-size: 9.5px;
         }
-        .sprite-bar-frame {
-          height: 9px;
-        }
         .dungeon-wave-banner {
-          top: 48px; /* Moved down to clear top-right menu overlap */
+          top: 52px; /* Safely tucked under the player health bar */
+          left: 6px;
+          transform: none;
           padding: 3px 12px;
         }
         .wave-title {
@@ -728,7 +727,9 @@ export class GameHUD {
         .hud-top-right {
           top: max(6px, env(safe-area-inset-top));
           right: max(6px, env(safe-area-inset-right));
-          gap: 3px;
+          gap: 2px;
+          transform: scale(0.85);
+          transform-origin: top right;
         }
         .gold-badge {
           padding: 3px 6px;
@@ -778,23 +779,23 @@ export class GameHUD {
 
         /* The Main Attack Button (Skill 0) */
         .hotbar-slot[data-skill-idx="0"] {
-          width: 76px;
-          height: 76px;
-          bottom: max(20px, env(safe-area-inset-bottom));
-          right: max(20px, env(safe-area-inset-right));
+          width: 80px;
+          height: 80px;
+          bottom: calc(20px + env(safe-area-inset-bottom));
+          right: calc(20px + env(safe-area-inset-right));
           z-index: 10;
         }
         .hotbar-slot[data-skill-idx="0"] .slot-icon-img {
-          width: 38px;
-          height: 38px;
+          width: 44px;
+          height: 44px;
         }
 
-        /* Arc layout for active skills 1-5 */
-        .hotbar-slot[data-skill-idx="1"] { bottom: max(20px, env(safe-area-inset-bottom)); right: max(110px, env(safe-area-inset-right)); }
-        .hotbar-slot[data-skill-idx="2"] { bottom: max(65px, env(safe-area-inset-bottom)); right: max(105px, env(safe-area-inset-right)); }
-        .hotbar-slot[data-skill-idx="3"] { bottom: max(100px, env(safe-area-inset-bottom)); right: max(75px, env(safe-area-inset-right)); }
-        .hotbar-slot[data-skill-idx="4"] { bottom: max(115px, env(safe-area-inset-bottom)); right: max(25px, env(safe-area-inset-right)); }
-        .hotbar-slot[data-skill-idx="5"] { bottom: max(135px, env(safe-area-inset-bottom)); right: max(75px, env(safe-area-inset-right)); width: 36px; height: 36px; }
+        /* Perfect Arc layout for active skills 1-5 */
+        .hotbar-slot[data-skill-idx="1"] { bottom: calc(38px + env(safe-area-inset-bottom)); right: calc(128px + env(safe-area-inset-right)); }
+        .hotbar-slot[data-skill-idx="2"] { bottom: calc(72px + env(safe-area-inset-bottom)); right: calc(121px + env(safe-area-inset-right)); }
+        .hotbar-slot[data-skill-idx="3"] { bottom: calc(101px + env(safe-area-inset-bottom)); right: calc(101px + env(safe-area-inset-right)); }
+        .hotbar-slot[data-skill-idx="4"] { bottom: calc(121px + env(safe-area-inset-bottom)); right: calc(72px + env(safe-area-inset-right)); }
+        .hotbar-slot[data-skill-idx="5"] { bottom: calc(128px + env(safe-area-inset-bottom)); right: calc(38px + env(safe-area-inset-right)); width: 36px; height: 36px; }
 
         .mobile-joystick-area {
           bottom: max(20px, env(safe-area-inset-bottom));
@@ -827,22 +828,22 @@ export class GameHUD {
         .jump-touch-btn {
           width: 52px;
           height: 52px;
-          bottom: max(75px, env(safe-area-inset-bottom));
-          right: max(160px, env(safe-area-inset-right));
+          bottom: calc(106px + env(safe-area-inset-bottom));
+          right: calc(159px + env(safe-area-inset-right));
           font-size: 9px;
         }
         .dash-touch-btn {
           width: 46px;
           height: 46px;
-          bottom: max(20px, env(safe-area-inset-bottom));
-          right: max(165px, env(safe-area-inset-right));
+          bottom: calc(37px + env(safe-area-inset-bottom));
+          right: calc(177px + env(safe-area-inset-right));
           font-size: 8.5px;
         }
         .touch-talk-btn {
           width: 46px;
           height: 46px;
-          bottom: max(135px, env(safe-area-inset-bottom));
-          right: max(130px, env(safe-area-inset-right));
+          bottom: calc(172px + env(safe-area-inset-bottom));
+          right: calc(100px + env(safe-area-inset-right));
           font-size: 8.5px;
         }
       }
