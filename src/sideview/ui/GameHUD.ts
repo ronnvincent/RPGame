@@ -691,7 +691,6 @@ export class GameHUD {
         z-index: 5;
       }
 
-      /* Responsive Media Queries for Mobile Screens */
       @media (max-width: 860px) {
         .player-status-panel {
           top: 6px;
@@ -717,7 +716,7 @@ export class GameHUD {
           height: 9px;
         }
         .dungeon-wave-banner {
-          top: 6px;
+          top: 48px; /* Moved down to clear top-right menu overlap */
           padding: 3px 12px;
         }
         .wave-title {
@@ -743,50 +742,107 @@ export class GameHUD {
           display: none; /* Hide on small mobile to avoid screen clutter */
         }
 
-        /* Shift Hotbar up slightly so it doesn't overlap action buttons */
+        /* MLBB-Style Action HUD for Right Thumb */
         .skills-hotbar {
-          bottom: max(10px, env(safe-area-inset-bottom));
-          gap: 4px;
-          padding: 3px 5px;
+          background: none;
+          box-shadow: none;
+          padding: 0;
+          bottom: 0;
+          left: auto;
+          right: 0;
+          transform: none;
+          width: 100vw;
+          height: 100vh;
+          pointer-events: none; /* Let touches pass through to underlying elements */
         }
+
         .hotbar-slot {
-          width: 36px;
-          height: 36px;
+          position: absolute;
+          pointer-events: auto;
+          border-radius: 50%;
+          width: 44px;
+          height: 44px;
+          background-image: url('/assets/kenney-rpg-ui/buttonRound_brown.png');
         }
+
         .slot-skill-name {
           display: none;
         }
+
         .slot-key-badge {
           font-size: 6.5px;
           padding: 0 2px;
+          top: -4px;
+          left: -4px;
         }
+
+        /* The Main Attack Button (Skill 0) */
+        .hotbar-slot[data-skill-idx="0"] {
+          width: 76px;
+          height: 76px;
+          bottom: max(20px, env(safe-area-inset-bottom));
+          right: max(20px, env(safe-area-inset-right));
+          z-index: 10;
+        }
+        .hotbar-slot[data-skill-idx="0"] .slot-icon-img {
+          width: 38px;
+          height: 38px;
+        }
+
+        /* Arc layout for active skills 1-5 */
+        .hotbar-slot[data-skill-idx="1"] { bottom: max(20px, env(safe-area-inset-bottom)); right: max(110px, env(safe-area-inset-right)); }
+        .hotbar-slot[data-skill-idx="2"] { bottom: max(65px, env(safe-area-inset-bottom)); right: max(105px, env(safe-area-inset-right)); }
+        .hotbar-slot[data-skill-idx="3"] { bottom: max(100px, env(safe-area-inset-bottom)); right: max(75px, env(safe-area-inset-right)); }
+        .hotbar-slot[data-skill-idx="4"] { bottom: max(115px, env(safe-area-inset-bottom)); right: max(25px, env(safe-area-inset-right)); }
+        .hotbar-slot[data-skill-idx="5"] { bottom: max(135px, env(safe-area-inset-bottom)); right: max(75px, env(safe-area-inset-right)); width: 36px; height: 36px; }
+
         .mobile-joystick-area {
-          bottom: max(8px, env(safe-area-inset-bottom));
-          left: max(8px, env(safe-area-inset-left));
+          bottom: max(20px, env(safe-area-inset-bottom));
+          left: max(20px, env(safe-area-inset-left));
+          width: 120px;
+          height: 120px;
+        }
+        .joystick-base {
           width: 105px;
           height: 105px;
         }
-        .joystick-base {
-          width: 95px;
-          height: 95px;
-        }
         .joystick-knob {
-          width: 40px;
-          height: 40px;
+          width: 44px;
+          height: 44px;
         }
+
         .mobile-action-hub {
-          bottom: max(8px, env(safe-area-inset-bottom));
-          right: max(8px, env(safe-area-inset-right));
-          gap: 8px;
+          bottom: 0;
+          right: 0;
+          width: 100vw;
+          height: 100vh;
+          pointer-events: none;
         }
+
+        .touch-action-btn {
+          position: absolute;
+          pointer-events: auto;
+        }
+
         .jump-touch-btn {
-          width: 56px;
-          height: 56px;
-          font-size: 9.5px;
+          width: 52px;
+          height: 52px;
+          bottom: max(75px, env(safe-area-inset-bottom));
+          right: max(160px, env(safe-area-inset-right));
+          font-size: 9px;
         }
         .dash-touch-btn {
           width: 46px;
           height: 46px;
+          bottom: max(20px, env(safe-area-inset-bottom));
+          right: max(165px, env(safe-area-inset-right));
+          font-size: 8.5px;
+        }
+        .touch-talk-btn {
+          width: 46px;
+          height: 46px;
+          bottom: max(135px, env(safe-area-inset-bottom));
+          right: max(130px, env(safe-area-inset-right));
           font-size: 8.5px;
         }
       }
