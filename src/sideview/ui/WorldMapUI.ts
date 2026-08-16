@@ -17,6 +17,7 @@ export interface WorldMapLocation {
   runeType?: 'verdant' | 'shadow' | 'flame' | 'void';
   description: string;
   bossName: string;
+  bgImage: string;
 }
 
 export class WorldMapUI {
@@ -33,7 +34,8 @@ export class WorldMapUI {
       icon: '🏰',
       color: '#3b82f6',
       description: 'The peaceful town sanctuary. Meet Elder Justinian, Captain Valerie, Blacksmith Keith, and Alchemist Morwenna.',
-      bossName: 'None (Safe Zone)'
+      bossName: 'None (Safe Zone)',
+      bgImage: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/environment/layers/background.png'
     },
     {
       id: 'goblin_catacombs',
@@ -44,7 +46,8 @@ export class WorldMapUI {
       color: '#22c55e',
       runeType: 'verdant',
       description: 'Subterranean tunnels infested with goblin thieves, shamans, and berserkers.',
-      bossName: 'Chief Warlord Grimjaw'
+      bossName: 'Chief Warlord Grimjaw',
+      bgImage: '/assets/warped-files/warped-files/Assets/PNG/environment/layers/background.png'
     },
     {
       id: 'undead_crypt',
@@ -55,7 +58,8 @@ export class WorldMapUI {
       color: '#a855f7',
       runeType: 'shadow',
       description: 'Ancient royal mausoleums defiled by dark necromancy and wraiths.',
-      bossName: 'Arch-Lich Malakar'
+      bossName: 'Arch-Lich Malakar',
+      bgImage: '/assets/high-forest/Background/Background.png'
     },
     {
       id: 'dragon_lair',
@@ -66,7 +70,8 @@ export class WorldMapUI {
       color: '#ef4444',
       runeType: 'flame',
       description: 'Volcanic magma chambers erupting with fire imps and the ancient wyrm.',
-      bossName: 'Ancient Red Dragon Ignis'
+      bossName: 'Ancient Red Dragon Ignis',
+      bgImage: '/assets/swamp/background.png'
     },
     {
       id: 'void_nexus',
@@ -77,7 +82,8 @@ export class WorldMapUI {
       color: '#8b5cf6',
       runeType: 'void',
       description: 'Cosmic astral rift where NightBorne commands the forces of total eclipse.',
-      bossName: 'NightBorne Void Overlord'
+      bossName: 'NightBorne Void Overlord',
+      bgImage: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/environment/layers/background.png'
     },
     {
       id: 'venomous_swamp',
@@ -87,7 +93,8 @@ export class WorldMapUI {
       icon: '🌿',
       color: '#10b981',
       description: 'Murky poison marsh draped in moss, ancient deadwood, spider nests, and bog ghosts.',
-      bossName: 'Broodmother Queen'
+      bossName: 'Broodmother Queen',
+      bgImage: '/assets/swamp/background.png'
     },
     {
       id: 'twilight_peaks',
@@ -97,7 +104,8 @@ export class WorldMapUI {
       icon: '🏔️',
       color: '#f43f5e',
       description: 'High alpine crags bathed in the crimson radiance of the blood moon and pine ridges.',
-      bossName: 'Blood Moon Behemoth'
+      bossName: 'Blood Moon Behemoth',
+      bgImage: '/assets/high-forest/Background/Background.png'
     },
     {
       id: 'sunken_abyss',
@@ -107,7 +115,8 @@ export class WorldMapUI {
       icon: '🌊',
       color: '#06b6d4',
       description: 'Submerged ancient temple ruins, coral reefs, sunken statues, and abyssal sirens.',
-      bossName: 'Leviathan of the Deep'
+      bossName: 'Leviathan of the Deep',
+      bgImage: '/assets/warped-files/warped-files/Assets/PNG/environment/layers/background.png'
     },
     {
       id: 'gallet_depths',
@@ -117,7 +126,8 @@ export class WorldMapUI {
       icon: '🕳️',
       color: '#f97316',
       description: 'Subterranean lava forge carved with stone channels, torches, and cascading waterfalls.',
-      bossName: 'Gallet Forge Overlord'
+      bossName: 'Gallet Forge Overlord',
+      bgImage: '/assets/high-forest/Background/Background.png'
     },
     {
       id: 'endless_arena',
@@ -127,7 +137,8 @@ export class WorldMapUI {
       icon: '⭐',
       color: '#eab308',
       description: 'Infinite scaling trial against empowered dimensional waves for legendary records.',
-      bossName: 'Continuous Scaling Waves'
+      bossName: 'Continuous Scaling Waves',
+      bgImage: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/environment/layers/background.png'
     }
   ];
 
@@ -202,7 +213,7 @@ export class WorldMapUI {
 
       const card = document.createElement('div');
       card.style.cssText = `
-        background: ${isUnlocked ? 'linear-gradient(145deg, rgba(30, 25, 45, 0.95), rgba(20, 15, 25, 0.95))' : 'linear-gradient(145deg, rgba(20, 20, 25, 0.8), rgba(10, 10, 15, 0.8))'};
+        background: ${isUnlocked ? 'linear-gradient(145deg, rgba(30, 25, 45, 0.85), rgba(20, 15, 25, 0.95))' : 'linear-gradient(145deg, rgba(20, 20, 25, 0.9), rgba(10, 10, 15, 0.95))'}, url('${loc.bgImage}') center/cover;
         border: 2px solid ${isUnlocked ? loc.color : 'rgba(255,255,255,0.1)'};
         border-radius: 12px;
         padding: 16px;
