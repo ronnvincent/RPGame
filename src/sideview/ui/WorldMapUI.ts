@@ -143,7 +143,7 @@ export class WorldMapUI {
     }
   ];
 
-  constructor(parent: HTMLElement, onSelectLocation: (locationId: string) => void) {
+  constructor(parent: HTMLElement, onSelectLocation: (locationId: string, isHost?: boolean) => void) {
     this.container = parent;
     this.onSelectLocation = onSelectLocation;
   }
@@ -433,7 +433,8 @@ export class WorldMapUI {
       // Start match!
       document.body.removeChild(overlay);
       this.close();
-      this.onSelectLocation(locationId);
+      const isHost = roomData && typeof roomData.isHost === 'boolean' ? roomData.isHost : true;
+      this.onSelectLocation(locationId, isHost);
     });
   }
 

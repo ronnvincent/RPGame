@@ -265,7 +265,7 @@ export class NetworkManager {
 
   // ================= SYNC EVENTS =================
 
-  public sendEnemySync(enemiesData: any[], groundY: number, waveIndex: number = 0) {
+  public sendEnemySync(enemiesData: any[], groundY: number, waveIndex: number = 0, dungeonIndex?: number, dungeonId?: string) {
     if (!this.socket || !this.room) {
       return;
     }
@@ -300,16 +300,17 @@ export class NetworkManager {
       isDead: e.isDead,
       phases: e.phases,
       currentPhase: e.currentPhase,
-      specialAttackTimer: e.specialAttackTimer
+      specialAttackTimer: e.specialAttackTimer,
+      lootDrop: e.lootDrop
     }));
-    this.socket.emit('enemy_sync', { enemies: slim, waveIndex });
+    this.socket.emit('enemy_sync', { enemies: slim, waveIndex, dungeonIndex, dungeonId });
   }
 
-  public listenForEnemySync(onSync: (enemiesData: any[], waveIndex: number) => void) {
+  public listenForEnemySync(onSync: (enemiesData: any[], waveIndex: number, dungeonIndex?: number, dungeonId?: string) => void) {
     if (!this.socket) this.connect();
     this.socket?.off('enemy_sync');
     this.socket?.on('enemy_sync', (data) => {
-      onSync(data.enemies, data.waveIndex || 0);
+      onSync(data.enemies, data.waveIndex || 0, data.dungeonIndex, data.dungeonId);
     });
   }
 

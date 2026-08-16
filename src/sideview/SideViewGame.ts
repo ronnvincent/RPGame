@@ -27,6 +27,7 @@ export class SideViewGame {
   private worldMap: WorldMapUI | null = null;
   private currentDungeonIndex: number = 0;
   private currentWaveIndex: number = 0;
+  private waveActive: boolean = false;
   private lastTime: number = 0;
   private isRunning: boolean = false;
   private keysPressed: { [key: string]: boolean } = {};
@@ -114,8 +115,8 @@ export class SideViewGame {
     this.engine.townHub = this.townHub;
 
     this.dialogue = new DialogueSystem(this.container);
-    this.worldMap = new WorldMapUI(this.container, (locationId) => {
-      this.onSelectLocation(locationId);
+    this.worldMap = new WorldMapUI(this.container, (locationId, isHost) => {
+      this.onSelectLocation(locationId, isHost);
     });
 
     this.hud = new GameHUD(this.container, this.engine, this);
@@ -188,10 +189,13 @@ export class SideViewGame {
             }
           }
         }
-        this.loadTownHub(false);
+        if (!this.engine?.isTownMode) {
+          this.loadTownHub(false);
+        }
       });
 
       mod.network.listenForPartyNextDungeon((data) => {
+        if (!this.engine || this.engine.isHost) return;
         console.log('[NET] Received party_next_dungeon from host:', data);
         this.dialogue?.close();
         this.loadDungeon(data.dungeonIndex, false);
@@ -200,13 +204,15 @@ export class SideViewGame {
       mod.network.listenForWaveSync((data) => {
         if (!this.engine || this.engine.isHost) return;
         this.currentWaveIndex = data.waveIndex;
+        this.engine.currentWaveIndex = data.waveIndex;
         if (data.cleared) {
           this.onDungeonCleared();
         } else {
           // Update HUD with new wave info
           const dungeon = DUNGEONS[this.currentDungeonIndex];
           if (dungeon) {
-            this.hud?.setWaveInfo(`${dungeon.name} - Wave ${this.currentWaveIndex + 1}/${dungeon.waves.length}`, 0);
+            const livingCount = this.engine.enemies.filter(e => !e.isDead).length;
+            this.hud?.setWaveInfo(`${dungeon.name} - Wave ${this.currentWaveIndex + 1}/${dungeon.waves.length}`, livingCount);
             audio.playSlash('heavy');
             this.engine.particles.addImpactBurst(this.engine.player.x, this.engine.groundY, 12, dungeon.ambientParticles, 'spark');
           }
@@ -232,12 +238,24 @@ export class SideViewGame {
         this.engine.onEnemyDefeated(fakeEnemy);
       });
 
-      mod.network.listenForEnemySync((enemies, waveIndex) => {
+      mod.network.listenForEnemySync((enemies, waveIndex, dungeonIndex, dungeonId) => {
         if (!this.engine || this.engine.isHost) return;
         
         // Ensure client is in dungeon mode
         if (this.engine.isTownMode) {
           this.engine.isTownMode = false;
+        }
+
+        // Synchronize dungeon index and theme if needed
+        if (dungeonIndex !== undefined && dungeonIndex !== this.currentDungeonIndex) {
+          this.currentDungeonIndex = dungeonIndex % DUNGEONS.length;
+          this.engine.currentDungeonIndex = this.currentDungeonIndex;
+          this.engine.currentDungeonId = dungeonId || DUNGEONS[this.currentDungeonIndex]?.id || 'goblin_catacombs';
+          const dungeon = DUNGEONS[this.currentDungeonIndex];
+          if (dungeon) {
+            this.engine.setBattleTheme(dungeon.theme);
+            audio.playDungeonBGM(dungeon.theme);
+          }
         }
 
         // Sync wave index from host
@@ -246,10 +264,35 @@ export class SideViewGame {
           this.engine.currentWaveIndex = waveIndex;
         }
         
-        // Fully sync enemies from host
-        // Denormalize Y coordinates
-        const denormalized = (enemies || []).map((e: any) => ({ ...e, y: e.y + this.engine!.groundY }));
-        this.engine.enemies = denormalized as any;
+        // Smoothly reconcile enemies by ID
+        const groundY = this.engine.groundY;
+        const incoming = (enemies || []).map((e: any) => ({ ...e, y: e.y + groundY }));
+        
+        const reconciled: any[] = [];
+        for (const inc of incoming) {
+          const existing = this.engine.enemies.find(e => e.id === inc.id);
+          if (existing) {
+            existing.x = inc.x;
+            existing.y = inc.y;
+            existing.vx = inc.vx;
+            existing.vy = inc.vy;
+            existing.hp = inc.hp;
+            existing.maxHp = inc.maxHp;
+            existing.facing = inc.facing;
+            existing.isGrounded = inc.isGrounded;
+            existing.isAttacking = inc.isAttacking;
+            existing.hitStun = inc.hitStun;
+            existing.isDead = inc.isDead;
+            existing.attackTimer = inc.attackTimer;
+            if (inc.lootDrop && !existing.lootDrop) {
+              existing.lootDrop = inc.lootDrop;
+            }
+            reconciled.push(existing);
+          } else {
+            reconciled.push(inc);
+          }
+        }
+        this.engine.enemies = reconciled;
 
         const dungeon = DUNGEONS[this.currentDungeonIndex];
         if (dungeon) {
@@ -279,6 +322,7 @@ export class SideViewGame {
 
   public loadTownHub(broadcastParty: boolean = true) {
     if (!this.engine) return;
+    this.waveActive = false;
     this.engine.isTownMode = true;
     this.engine.enemies = [];
     this.engine.particles.summonedMinions = [];
@@ -327,8 +371,9 @@ export class SideViewGame {
 
   public loadDungeon(dungeonIndex: number, broadcastParty: boolean = false) {
     if (!this.engine) return;
+    this.waveActive = false;
     this.engine.isTownMode = false;
-    this.engine.player.x = 300;
+    this.engine.player.x = this.engine.isHost ? 260 : 360;
     this.engine.player.y = this.engine.groundY;
     this.engine.player.vx = 0;
     this.engine.player.vy = 0;
@@ -336,8 +381,10 @@ export class SideViewGame {
     this.engine.particles.summonedMinions = [];
 
     this.currentDungeonIndex = dungeonIndex % DUNGEONS.length;
+    this.engine.currentDungeonIndex = this.currentDungeonIndex;
     const dungeon = DUNGEONS[this.currentDungeonIndex];
     if (dungeon) {
+      this.engine.currentDungeonId = dungeon.id;
       this.engine.setBattleTheme(dungeon.theme);
       audio.playDungeonBGM(dungeon.theme);
     }
@@ -358,6 +405,7 @@ export class SideViewGame {
   private spawnNextWave() {
     if (!this.engine) return;
     const dungeon = DUNGEONS[this.currentDungeonIndex];
+    if (!dungeon) return;
     if (this.currentWaveIndex >= dungeon.waves.length) {
       // Dungeon Cleared!
       this.onDungeonCleared();
@@ -365,6 +413,9 @@ export class SideViewGame {
     }
 
     this.engine.setBattleTheme(dungeon.theme);
+    this.engine.currentDungeonIndex = this.currentDungeonIndex;
+    this.engine.currentDungeonId = dungeon.id;
+    this.engine.currentWaveIndex = this.currentWaveIndex;
     const enemies = spawnWaveEnemies(
       dungeon,
       this.currentWaveIndex,
@@ -372,6 +423,7 @@ export class SideViewGame {
       this.engine.player.x
     );
     this.engine.enemies = enemies;
+    this.waveActive = true;
     audio.playSlash('heavy');
 
     const bossEnemy = enemies.find(e => e.type === 'boss');
@@ -381,10 +433,20 @@ export class SideViewGame {
 
     this.hud?.setWaveInfo(`${dungeon.name} - Wave ${this.currentWaveIndex + 1}/${dungeon.waves.length}`, enemies.length);
     this.engine.particles.addImpactBurst(this.engine.player.x, this.engine.groundY, 12, dungeon.ambientParticles, 'spark');
+
+    // Immediately broadcast newly spawned wave to party members
+    import('./network/NetworkManager').then(mod => {
+      mod.network.sendEnemySync(this.engine!.enemies, this.engine!.groundY, this.currentWaveIndex, this.currentDungeonIndex, dungeon.id);
+      mod.network.sendWaveSync({
+        waveIndex: this.currentWaveIndex,
+        cleared: false
+      });
+    });
   }
 
   private onDungeonCleared() {
     if (!this.engine) return;
+    this.waveActive = false;
     
     // Update max cleared dungeon for progression gating
     if (this.currentDungeonIndex >= (this.engine.player.maxDungeonCleared || 0)) {
@@ -595,21 +657,30 @@ export class SideViewGame {
         if (!this.engine.isTownMode) {
           const livingEnemies = this.engine.enemies.filter(e => !e.isDead);
           const dungeon = DUNGEONS[this.currentDungeonIndex];
-          this.hud?.setWaveInfo(`${dungeon.name} - Wave ${this.currentWaveIndex + 1}/${dungeon.waves.length}`, livingEnemies.length);
+          if (dungeon) {
+            this.hud?.setWaveInfo(`${dungeon.name} - Wave ${this.currentWaveIndex + 1}/${dungeon.waves.length}`, livingEnemies.length);
 
-          // Only Host progresses wave
-          if (this.engine.isHost && livingEnemies.length === 0 && this.engine.enemies.length > 0) {
-            this.currentWaveIndex++;
-            this.engine.currentWaveIndex = this.currentWaveIndex;
-            this.spawnNextWave();
-            
-            // Sync wave change to client
-            import('./network/NetworkManager').then(mod => {
-              mod.network.sendWaveSync({
-                waveIndex: this.currentWaveIndex,
-                cleared: this.currentWaveIndex >= dungeon.waves.length
+            // Only Host progresses wave
+            if (this.engine.isHost && this.waveActive && livingEnemies.length === 0) {
+              this.waveActive = false;
+              this.currentWaveIndex++;
+              this.engine.currentWaveIndex = this.currentWaveIndex;
+              const isCleared = this.currentWaveIndex >= dungeon.waves.length;
+              
+              if (isCleared) {
+                this.onDungeonCleared();
+              } else {
+                this.spawnNextWave();
+              }
+
+              // Sync wave change to client
+              import('./network/NetworkManager').then(mod => {
+                mod.network.sendWaveSync({
+                  waveIndex: this.currentWaveIndex,
+                  cleared: isCleared
+                });
               });
-            });
+            }
           }
         }
 

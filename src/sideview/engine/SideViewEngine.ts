@@ -142,6 +142,8 @@ export class SideViewEngine {
   public isTownMode: boolean = true;
   public isHost: boolean = true;
   public currentWaveIndex: number = 0;
+  public currentDungeonIndex: number = 0;
+  public currentDungeonId: string = 'goblin_catacombs';
   private syncTimer: number = 0;
   private playerSyncTimer: number = 0;
   public townHub: TownHub | null = null;
@@ -1311,7 +1313,7 @@ export class SideViewEngine {
 
   public applyDamageToEnemy(enemy: EnemyInstance, rawDamage: number, isCrit: boolean, knockbackDir: number, fromRemote: boolean = false) {
     const defenseReduction = enemy.def * 0.6;
-    const finalDamage = Math.max(1, Math.round(rawDamage - defenseReduction));
+    const finalDamage = fromRemote ? Math.max(1, Math.round(rawDamage)) : Math.max(1, Math.round(rawDamage - defenseReduction));
 
     enemy.hp -= finalDamage;
     enemy.hitStun = 0.25;
@@ -1669,7 +1671,7 @@ export class SideViewEngine {
       this.syncTimer -= dt;
       if (this.syncTimer <= 0) {
         this.syncTimer = 0.1;
-        network.sendEnemySync(this.enemies, this.groundY, this.currentWaveIndex);
+        network.sendEnemySync(this.enemies, this.groundY, this.currentWaveIndex, this.currentDungeonIndex, this.currentDungeonId);
       }
     }
   }

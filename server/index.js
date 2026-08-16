@@ -144,16 +144,13 @@ io.on('connection', (socket) => {
 
   // When a player joins the server with their guest info
   socket.on('register_player', (data) => {
-    if (players[socket.id]) {
-      console.log(`[AUTH] Socket ${socket.id} already registered. Skipping to preserve state.`);
-      return;
-    }
+    const existingRoom = players[socket.id]?.room || null;
     players[socket.id] = {
       uuid: data.uuid,
       name: data.name,
       shortId: data.shortId,
       socketId: socket.id,
-      room: null
+      room: existingRoom
     };
     console.log(`[AUTH] Registered ${data.name} (${data.shortId}) on socket ${socket.id}`);
   });
@@ -358,7 +355,8 @@ io.on('connection', (socket) => {
   socket.on('party_next_dungeon', (data) => {
     const p = players[socket.id];
     if (p && p.room) {
-      io.to(p.room).emit('party_next_dungeon', data);
+      // Broadcast to other party members only (not echoing back to host)
+      socket.to(p.room).emit('party_next_dungeon', data);
     }
   });
 
@@ -391,9 +389,6 @@ io.on('connection', (socket) => {
   socket.on('enemy_damaged', (data) => {
     const p = players[socket.id];
     if (p && p.room) {
-      // In a fully authoritative server, we'd subtract HP here. 
-      // For now, we trust the first client to report it and broadcast to others.
-      // This is a hybrid Client-Authoritative model.
       io.to(p.room).emit('sync_enemy_hp', {
         enemyId: data.enemyId,
         newHp: data.newHp,
