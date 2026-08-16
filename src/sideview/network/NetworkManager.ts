@@ -14,6 +14,7 @@ export class NetworkManager {
     facing: number;
     isGrounded: boolean;
     isAttacking: boolean;
+    animState: string;
   }> = {};
 
   constructor() {
@@ -46,7 +47,8 @@ export class NetworkManager {
           classId: data.classId,
           name: data.name || 'Player',
           x: data.x, y: data.y, facing: data.facing,
-          isGrounded: data.isGrounded, isAttacking: data.isAttacking
+          isGrounded: data.isGrounded, isAttacking: data.isAttacking,
+          animState: data.animState || 'idle'
         };
       } else {
         const p = this.remotePlayers[data.socketId];
@@ -57,6 +59,7 @@ export class NetworkManager {
         p.facing = data.facing;
         p.isGrounded = data.isGrounded;
         p.isAttacking = data.isAttacking;
+        p.animState = data.animState || 'idle';
       }
     });
 
@@ -142,23 +145,24 @@ export class NetworkManager {
       y: playerState.y - groundY,
       facing: playerState.facing,
       isGrounded: playerState.isGrounded,
-      isAttacking
+      isAttacking,
+      animState: playerState.animState || 'idle'
     });
   }
 
   // ================= SYNC EVENTS =================
 
-  public sendEnemySync(enemiesData: any[], groundY: number) {
+  public sendEnemySync(enemiesData: any[], groundY: number, waveIndex: number = 0) {
     if (!this.socket || !this.room) return;
     const norm = enemiesData.map(e => ({ ...e, y: e.y - groundY }));
-    this.socket.emit('enemy_sync', { enemies: norm });
+    this.socket.emit('enemy_sync', { enemies: norm, waveIndex });
   }
 
-  public listenForEnemySync(onSync: (enemiesData: any[]) => void) {
+  public listenForEnemySync(onSync: (enemiesData: any[], waveIndex: number) => void) {
     if (!this.socket) this.connect();
     this.socket.off('enemy_sync');
     this.socket.on('enemy_sync', (data) => {
-      onSync(data.enemies);
+      onSync(data.enemies, data.waveIndex || 0);
     });
   }
 

@@ -161,8 +161,14 @@ export class SideViewGame {
         this.engine.onEnemyDefeated(fakeEnemy);
       });
 
-      mod.network.listenForEnemySync((enemies) => {
+      mod.network.listenForEnemySync((enemies, waveIndex) => {
         if (!this.engine || this.engine.isHost) return;
+        
+        // Sync wave index from host
+        if (waveIndex !== undefined) {
+          this.currentWaveIndex = waveIndex;
+          this.engine.currentWaveIndex = waveIndex;
+        }
         
         // Fully sync enemies from host
         // Denormalize Y coordinates
@@ -243,6 +249,7 @@ export class SideViewGame {
       audio.playDungeonBGM(dungeon.theme);
     }
     this.currentWaveIndex = 0;
+    this.engine.currentWaveIndex = 0;
     
     // Only Host spawns waves
     if (this.engine.isHost) {
@@ -495,6 +502,7 @@ export class SideViewGame {
           // Only Host progresses wave
           if (this.engine.isHost && livingEnemies.length === 0 && this.engine.enemies.length > 0) {
             this.currentWaveIndex++;
+            this.engine.currentWaveIndex = this.currentWaveIndex;
             this.spawnNextWave();
             
             // Sync wave change to client

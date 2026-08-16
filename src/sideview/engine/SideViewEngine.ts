@@ -139,6 +139,7 @@ export class SideViewEngine {
   public canvasHeight: number = 540;
   public isTownMode: boolean = true;
   public isHost: boolean = true;
+  public currentWaveIndex: number = 0;
   private syncTimer: number = 0;
   private playerSyncTimer: number = 0;
   public townHub: TownHub | null = null;
@@ -1361,6 +1362,17 @@ export class SideViewEngine {
         mod.network.sendPlayerMove(this.player, this.groundY, this.player.attackTimer > 0);
       });
     }
+
+    // 11. Host Broadcasts Enemy State over Network (10 times a second)
+    if (this.isHost && !this.isTownMode) {
+      this.syncTimer -= dt;
+      if (this.syncTimer <= 0) {
+        this.syncTimer = 0.1;
+        import('../network/NetworkManager').then(mod => {
+          mod.network.sendEnemySync(this.enemies, this.groundY, this.currentWaveIndex);
+        });
+      }
+    }
   }
 
   private checkSpecialSkillEntities(dt: number) {
@@ -2029,15 +2041,16 @@ export class SideViewEngine {
 
     ctx.restore();
 
-    // Render Remote Multiplayer Ghosts
+    // Render Remote Multiplayer Players
     if (network.room) {
       for (const socketId in network.remotePlayers) {
         const remoteP = network.remotePlayers[socketId];
         ctx.save();
-        ctx.globalAlpha = 0.6; // ghost effect
-        ctx.filter = 'sepia(1) hue-rotate(180deg) drop-shadow(0 0 10px #4fade5)'; // blueish aura
+        ctx.globalAlpha = 0.95;
+        ctx.filter = 'drop-shadow(0 0 6px rgba(79, 173, 229, 0.7))'; // subtle blue glow
         
-        const rIsRun = remoteP.isGrounded && remoteP.x !== undefined; // simple approximation
+        const rAnimState = (remoteP.animState || 'idle') as 'idle' | 'run' | 'attack' | 'jump' | 'dead';
+        const rIsRun = rAnimState === 'run';
         const rRunBob = rIsRun ? -Math.abs(Math.sin(this.playerRunBob) * 1.8) : 0;
         
         sprites.drawHero(
@@ -2045,7 +2058,7 @@ export class SideViewEngine {
           remoteP.x,
           remoteP.y + this.groundY + rRunBob,
           remoteP.classId || 'knight',
-          remoteP.isAttacking ? 'attack' : (rIsRun ? 'run' : 'idle'),
+          rAnimState,
           remoteP.facing,
           remoteP.isAttacking ? 0.2 : 0,
           '#4fade5'
@@ -2054,10 +2067,15 @@ export class SideViewEngine {
         // Remote Name
         ctx.globalAlpha = 1.0;
         ctx.filter = 'none';
-        ctx.font = 'bold 10px "Outfit", sans-serif';
+        ctx.font = 'bold 11px "Outfit", sans-serif';
         ctx.fillStyle = '#4fade5';
+        ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+        ctx.lineWidth = 3;
         ctx.textAlign = 'center';
-        ctx.fillText(remoteP.name || 'Player', remoteP.x, remoteP.y + this.groundY - 40);
+        const nameText = remoteP.name || 'Player';
+        const nameY = remoteP.y + this.groundY - 45;
+        ctx.strokeText(nameText, remoteP.x, nameY);
+        ctx.fillText(nameText, remoteP.x, nameY);
         
         ctx.restore();
       }
