@@ -10,6 +10,7 @@ export interface SkillDefinition {
   icon: string;
   iconImage: string;
   description: string;
+  ultimateQuote: string;
   cooldown: number; // seconds
   manaCost: number;
   damageMultiplier: number;
@@ -35,6 +36,7 @@ export interface CharacterClass {
   themeColor: string;
   accentColor: string;
   description: string;
+  ultimateQuote: string;
   role: 'DPS' | 'Tank' | 'Burst' | 'Mage' | 'Support';
   stats: {
     maxHp: number;
@@ -58,6 +60,7 @@ export const CHARACTER_CLASSES: CharacterClass[] = [
     themeColor: '#e53935',
     accentColor: '#ff8a80',
     description: 'Master of heavy blades and physical dominance. High health, reliable cleaves, and ground-shattering crowd control.',
+    ultimateQuote: "SHATTER... THE HEAVENS!",
     role: 'DPS',
     stats: { maxHp: 650, maxMp: 120, atk: 55, def: 40, critChance: 0.12, speed: 5.5, jumpPower: 12.5 },
     skills: [
@@ -100,6 +103,7 @@ export const CHARACTER_CLASSES: CharacterClass[] = [
     themeColor: '#1976d2',
     accentColor: '#90caf9',
     description: 'Wielder of arcane fires, frozen blizzards, and celestial storms. Unrivaled destructive AoE magical firepower.',
+    ultimateQuote: "I AM... ATOMIC!",
     role: 'Mage',
     stats: { maxHp: 380, maxMp: 300, atk: 85, def: 18, critChance: 0.18, speed: 5.0, jumpPower: 11.5 },
     skills: [
@@ -163,6 +167,7 @@ export const CHARACTER_CLASSES: CharacterClass[] = [
     themeColor: '#5c6bc0',
     accentColor: '#c5cae9',
     description: 'Commander of the underworld. Drains the life force of foes, raises skeletal warriors, and triggers dark corpse explosions.',
+    ultimateQuote: "ARISE... FROM THE ABYSS!",
     role: 'Mage',
     stats: { maxHp: 420, maxMp: 280, atk: 78, def: 22, critChance: 0.15, speed: 5.2, jumpPower: 11.5 },
     skills: [
@@ -184,6 +189,7 @@ export const CHARACTER_CLASSES: CharacterClass[] = [
     themeColor: '#d84315',
     accentColor: '#ffab91',
     description: 'Thrives on the brink of death. Gains colossal attack power as health drops, swinging dual axes with brutal ferocity.',
+    ultimateQuote: "BLOOD... FOR THE BLOOD GOD!",
     role: 'DPS',
     stats: { maxHp: 700, maxMp: 100, atk: 75, def: 28, critChance: 0.22, speed: 6.0, jumpPower: 13.0 },
     skills: [
@@ -205,6 +211,7 @@ export const CHARACTER_CLASSES: CharacterClass[] = [
     themeColor: '#00acc1',
     accentColor: '#b2ebf2',
     description: 'Channeler of radiant starlight and sacred judgment. Sustains allies with powerful heals and smites wickedness.',
+    ultimateQuote: "DIVINE JUDGMENT... DESCEND!",
     role: 'Support',
     stats: { maxHp: 500, maxMp: 320, atk: 58, def: 32, critChance: 0.14, speed: 5.3, jumpPower: 12.0 },
     skills: [
@@ -226,6 +233,7 @@ export const CHARACTER_CLASSES: CharacterClass[] = [
     themeColor: '#2e7d32',
     accentColor: '#a5d6a7',
     description: 'Acrobatic master of shurikens, substitution jutsu, and lightning-fast multi-blade assassination combos.',
+    ultimateQuote: "SHADOWS... CONSUME YOU!",
     role: 'Burst',
     stats: { maxHp: 460, maxMp: 190, atk: 70, def: 22, critChance: 0.32, speed: 7.5, jumpPower: 14.5 },
     skills: [
@@ -247,6 +255,7 @@ export const CHARACTER_CLASSES: CharacterClass[] = [
     themeColor: '#00838f',
     accentColor: '#80deea',
     description: 'Sovereign of the skies. Wields long lances, executes soaring jump dives, and channels ancient dragon breath.',
+    ultimateQuote: "DRAGON'S... WRATH!",
     role: 'DPS',
     stats: { maxHp: 580, maxMp: 170, atk: 66, def: 36, critChance: 0.20, speed: 6.2, jumpPower: 15.5 },
     skills: [

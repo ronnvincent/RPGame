@@ -1950,6 +1950,24 @@ export class ParticleSystem {
           ctx.drawImage(img, -32, -32, 64, 64);
           ctx.filter = 'none';
         }
+      } else if (p.type === 'shockwave') {
+        ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = 10 * ctx.globalAlpha;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * (p.scale || 1) * 20, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (p.type === 'energy_pillar') {
+        ctx.globalAlpha = Math.max(0, p.life / p.maxLife) * 0.7;
+        const grad = ctx.createLinearGradient(p.x, p.y, p.x, p.y - 1000);
+        grad.addColorStop(0, p.color);
+        grad.addColorStop(1, 'transparent');
+        ctx.fillStyle = grad;
+        ctx.fillRect(p.x - p.size/2, p.y - 1000, p.size, 1000);
+      } else if (p.type === 'spark') {
+        ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
       } else {
         // Fallback for anything else
         const img = sprites.getImage(`sanju_pure_${frame}`);
@@ -1988,4 +2006,58 @@ export class ParticleSystem {
 
     ctx.restore();
   }
+
+  // --- CINEMATIC ULTIMATE EFFECTS ---
+
+  public createAnimeShockwave(x: number, y: number, color: string) {
+    // Flash the screen
+    this.createScreenFlash('#ffffff', 0.8, 1.0);
+    this.createScreenFlash(color, 0.4, 2.0);
+
+    // Create 3 massive expanding rings
+    for (let i = 0; i < 3; i++) {
+      this.particles.push({
+        x, y,
+        vx: 0, vy: 0,
+        life: 1.5 + i * 0.2, maxLife: 1.5 + i * 0.2,
+        size: 10,
+        color: i % 2 === 0 ? '#ffffff' : color,
+        type: 'shockwave',
+        scale: 1, // Will expand massively in update()
+        rotation: 0
+      });
+    }
+
+    // Huge explosion of 100 particles
+    for (let i = 0; i < 100; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = Math.random() * 800 + 400; // Extremely fast
+      this.particles.push({
+        x, y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: Math.random() * 1.5 + 0.5,
+        maxLife: 2.0,
+        size: Math.random() * 8 + 4,
+        color: Math.random() > 0.5 ? '#ffffff' : color,
+        type: 'spark'
+      });
+    }
+    
+    // Create ascending light pillars
+    for (let i = 0; i < 15; i++) {
+      this.particles.push({
+        x: x + (Math.random() - 0.5) * 400,
+        y: y + 50,
+        vx: 0,
+        vy: -Math.random() * 1000 - 500,
+        life: 2.0,
+        maxLife: 2.0,
+        size: Math.random() * 20 + 10,
+        color: color,
+        type: 'energy_pillar'
+      });
+    }
+  }
+
 }

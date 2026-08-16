@@ -122,6 +122,13 @@ type SkillCastProcProfile =
   | 'heal';
 
 export class SideViewEngine {
+  // Cinematic Ultimate Properties
+  public timeScale: number = 1.0;
+  public cinematicAlpha: number = 0;
+  public cinematicText: string = '';
+  public isCinematicMode: boolean = false;
+  
+
   public player: PlayerState;
   public enemies: EnemyInstance[] = [];
   public droppedLoots: DroppedLoot[] = [];
@@ -488,10 +495,22 @@ export class SideViewEngine {
   /**
    * Cast one of the 6 specialized skills
    */
-  public castSkill(skillIndex: number) {
+public castSkill(skillIndex: number) {
     const p = this.player;
-    const skill: SkillDefinition = p.characterClass.skills[skillIndex];
+    const skill = p.characterClass.skills[skillIndex];
     if (!skill) return;
+
+    // --- CINEMATIC ULTIMATE INTERCEPT ---
+    // If it's the very last skill, trigger the cinematic ultimate!
+    if (skillIndex === p.characterClass.skills.length - 1 && p.characterClass.ultimateQuote) {
+      if ((p.skillCooldowns[skill.id] || 0) > 0) {
+        this.particles.addFloatingText({ x: p.x, y: p.y - 40, text: 'Not Ready!', color: '#ef5350', life: 1, fontSize: 18 });
+        return;
+      }
+      p.skillCooldowns[skill.id] = skill.cooldown > 0 ? skill.cooldown : 30;
+      this.triggerUltimate();
+      return;
+    }
 
     // Prevent attack spam (Anti-Spam / GCD)
     if (p.attackTimer > 0) {
@@ -1047,6 +1066,10 @@ export class SideViewEngine {
   }
 
   public update(dt: number) {
+    if (this.timeScale !== 1.0) {
+      dt *= this.timeScale;
+    }
+
     // 0. Hit-Stop Micro Freeze check (Crunchy combat impact feeling)
     if (this.hitStopTimer > 0) {
       this.hitStopTimer -= dt;
@@ -2130,4 +2153,87 @@ export class SideViewEngine {
       ctx.restore();
     });
   }
+
+  public triggerUltimate() {
+    if (this.isCinematicMode || this.isTownMode) return;
+    const heroClass = this.player.characterClass;
+    if (!heroClass.ultimateQuote) return;
+
+    this.isCinematicMode = true;
+    this.timeScale = 0.02; // 50x slow motion
+    this.cinematicAlpha = 0.85; // Darken screen
+    this.hitStopTimer = 0; // Clear any existing hitstop
+
+    // Use Web Audio API for deep bass drop
+    import('./AudioManager').then(({ audio }) => {
+      audio.playCinematicBassDrop();
+    });
+
+    const quoteParts = heroClass.ultimateQuote.split('...');
+    const part1 = quoteParts[0] ? quoteParts[0].trim() + '...' : heroClass.ultimateQuote;
+    const part2 = quoteParts.length > 1 ? quoteParts[1].trim() : '';
+
+    this.cinematicText = part1;
+
+    // We must use real time for the cinematic sequence, since engine time is slowed down
+    let elapsedRealTime = 0;
+    const cinematicInterval = setInterval(() => {
+      elapsedRealTime += 50;
+
+      if (elapsedRealTime === 1000 && part2) {
+        this.cinematicText = part2;
+      }
+
+      if (elapsedRealTime >= 2000) {
+        clearInterval(cinematicInterval);
+        
+        // BOOM! Execute Ultimate
+        this.timeScale = 1.0;
+        this.isCinematicMode = false;
+        this.cinematicAlpha = 0;
+        this.cinematicText = '';
+        
+        import('./AudioManager').then(({ audio }) => {
+          audio.playAnimeExplosion();
+        });
+
+        this.particles.createAnimeShockwave(this.player.x, this.player.y - 48, heroClass.accentColor);
+        
+        // Massive Screen Shake & Hit Stop
+        this.particles.screenShakeTime = 1.5;
+        this.hitStopTimer = 0.3;
+
+        // Massive AoE Damage
+        const dmg = this.player.stats.atk * 10; // 1000% multiplier
+        this.enemies.forEach(e => {
+          if (e.hp > 0) {
+            e.hp -= dmg;
+            e.flashTimer = 0.3;
+            
+            // Push back
+            const dir = Math.sign(e.x - this.player.x) || 1;
+            e.vx = dir * 600;
+            e.vy = -300;
+
+            this.particles.addFloatingText({
+              x: e.x, y: e.y - 64,
+              text: Math.floor(dmg).toString(),
+              color: '#ef4444',
+              life: 1.5,
+              fontSize: 32,
+              isCrit: true,
+              vy: -80
+            });
+
+            if (e.hp <= 0) {
+              e.state = 'dead';
+              e.vx = 0;
+              this.spawnLoot(e.x, e.y, e.type);
+            }
+          }
+        });
+      }
+    }, 50);
+  }
+
 }
