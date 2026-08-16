@@ -127,7 +127,7 @@ export class SideViewGame {
     import('./network/NetworkManager').then(mod => {
       mod.network.listenForPlayerSkill((socketId, skillIndex, classId, x, y, facing) => {
         if (!this.engine) return;
-        this.engine.castRemoteSkill(classId, skillIndex, x, y, facing);
+        this.engine.castRemoteSkill(classId, skillIndex, x, y + this.engine.groundY, facing);
       });
 
       mod.network.listenForWaveSync((data) => {
@@ -147,7 +147,7 @@ export class SideViewGame {
           name: enemyData.name,
           type: enemyData.type,
           x: enemyData.x,
-          y: enemyData.y,
+          y: enemyData.y + this.engine.groundY,
           drops: enemyData.drops,
           isDead: false,
           hp: 0
@@ -159,8 +159,9 @@ export class SideViewGame {
         if (!this.engine || this.engine.isHost) return;
         
         // Fully sync enemies from host
-        // We map the raw JSON objects to EnemyInstance structure roughly
-        this.engine.enemies = enemies;
+        // Denormalize Y coordinates
+        const denormalized = enemies.map((e: any) => ({ ...e, y: e.y + this.engine!.groundY }));
+        this.engine.enemies = denormalized as any;
       });
       
       mod.network.listenForDamageEnemy((enemyId, damage, facing) => {

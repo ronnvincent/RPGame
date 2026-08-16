@@ -562,7 +562,7 @@ export class SideViewEngine {
 
     // Broadcast skill to network
     import('../network/NetworkManager').then(mod => {
-      mod.network.sendPlayerSkill(skillIndex, p.characterClass.id, p.x, p.y, p.facing);
+      mod.network.sendPlayerSkill(skillIndex, p.characterClass.id, p.x, p.y, p.facing, this.groundY);
     });
 
     // Play SFX
@@ -1077,7 +1077,7 @@ export class SideViewEngine {
           x: enemy.x,
           y: enemy.y,
           drops: enemy.drops // Send drops so client can spawn identical loot!
-        });
+        }, this.groundY);
       });
     }
 
@@ -1358,7 +1358,7 @@ export class SideViewEngine {
     if (this.playerSyncTimer <= 0) {
       this.playerSyncTimer = 0.05;
       import('../network/NetworkManager').then(mod => {
-        mod.network.sendPlayerMove(this.player, this.player.attackTimer > 0);
+        mod.network.sendPlayerMove(this.player, this.groundY, this.player.attackTimer > 0);
       });
     }
   }

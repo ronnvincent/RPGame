@@ -6,7 +6,7 @@ export class NetworkManager {
   public static instance: NetworkManager;
   public room: string | null = null;
   
-  public remotePlayers: Record<string, {
+  public remotePlayers: Record<string, { classId?: string; name?: string;
     name: string;
     x: number;
     y: number;
@@ -42,12 +42,15 @@ export class NetworkManager {
     this.socket.on('remote_player_move', (data) => {
       if (!this.remotePlayers[data.socketId]) {
         this.remotePlayers[data.socketId] = {
-          name: 'Player', // Can be updated if we pass name
+          classId: data.classId,
+          name: data.name || 'Player',
           x: data.x, y: data.y, facing: data.facing,
           isGrounded: data.isGrounded, isAttacking: data.isAttacking
         };
       } else {
         const p = this.remotePlayers[data.socketId];
+        p.classId = data.classId;
+        p.name = data.name || p.name;
         p.x = data.x;
         p.y = data.y;
         p.facing = data.facing;
@@ -115,7 +118,8 @@ export class NetworkManager {
     });
   }
 
-  public sendPlayerSkill(skillIndex: number, classId: string, x: number, y: number, facing: number) {
+  public sendPlayerSkill(skillIndex: number, classId: string, x: number, y: number, facing: number, groundY: number) {
+    y = y - groundY;
     if (!this.socket || !this.room) return;
     this.socket.emit('player_skill', { skillIndex, classId, x, y, facing });
   }
@@ -127,11 +131,13 @@ export class NetworkManager {
     });
   }
 
-  public sendPlayerMove(playerState: PlayerState, isAttacking: boolean = false) {
+  public sendPlayerMove(playerState: any, groundY: number, isAttacking: boolean = false) {
     if (!this.socket || !this.room) return;
     this.socket.emit('player_move', {
+      classId: playerState.characterClass ? playerState.characterClass.id : 'knight',
+      name: playerState.name,
       x: playerState.x,
-      y: playerState.y,
+      y: playerState.y - groundY,
       facing: playerState.facing,
       isGrounded: playerState.isGrounded,
       isAttacking
@@ -140,9 +146,10 @@ export class NetworkManager {
 
   // ================= SYNC EVENTS =================
 
-  public sendEnemySync(enemiesData: any[]) {
+  public sendEnemySync(enemiesData: any[], groundY: number) {
     if (!this.socket || !this.room) return;
-    this.socket.emit('enemy_sync', { enemies: enemiesData });
+    const norm = enemiesData.map(e => ({ ...e, y: e.y - groundY }));
+    this.socket.emit('enemy_sync', { enemies: norm });
   }
 
   public listenForEnemySync(onSync: (enemiesData: any[]) => void) {
@@ -164,8 +171,9 @@ export class NetworkManager {
     });
   }
 
-  public sendEnemyDied(enemyData: any) {
+  public sendEnemyDied(enemyData: any, groundY: number) {
     if (!this.socket || !this.room) return;
+    enemyData.y = enemyData.y - groundY;
     this.socket.emit('enemy_died', enemyData);
   }
 
