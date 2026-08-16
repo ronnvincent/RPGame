@@ -210,27 +210,31 @@ io.on('connection', (socket) => {
     const room = rooms[p.room];
     if (!room) return;
 
-    // Find player by shortId
-    const targetPlayer = Object.values(players).find(player => player.shortId === data.targetShortId);
+    // Find ALL sockets for target player (in case they have multiple tabs or a ghost connection)
+    const targetSockets = Object.values(players).filter(player => player.shortId === data.targetShortId);
     
-    if (!targetPlayer) {
+    if (targetSockets.length === 0) {
       if (callback) callback({ success: false, msg: 'Player not found or offline.' });
       return;
     }
 
-    if (targetPlayer.socketId === socket.id) {
+    if (targetSockets.every(target => target.socketId === socket.id)) {
       if (callback) callback({ success: false, msg: 'You cannot invite yourself.' });
       return;
     }
 
-    // Send invite to target
-    io.to(targetPlayer.socketId).emit('invite_received', {
-      fromName: p.name,
-      dungeonId: room.dungeonId,
-      roomId: p.room
+    let targetName = targetSockets[0].name;
+
+    // Send invite to ALL target sockets
+    targetSockets.forEach(target => {
+      io.to(target.socketId).emit('invite_received', {
+        fromName: p.name,
+        dungeonId: room.dungeonId,
+        roomId: p.room
+      });
     });
 
-    if (callback) callback({ success: true, msg: `Invite sent to ${targetPlayer.name}!` });
+    if (callback) callback({ success: true, msg: `Invite sent to ${targetName}!` });
   });
 
   // Accept Invite
