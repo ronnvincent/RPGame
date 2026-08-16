@@ -131,7 +131,7 @@ class AudioManager {
   /**
    * Fast, zero-lag Web Audio API playback
    */
-  public async playSFX(src: string, volume: number = 0.2, pitchRate: number = 1.0) {
+  public async playSFX(src: string, volume: number = 0.2, pitchRate: number = 1.0, maxDuration?: number) {
     if (!this.soundEnabled) return;
     try {
       const buffer = await this.getAudioBuffer(src);
@@ -146,39 +146,47 @@ class AudioManager {
       const gainNode = this.ctx.createGain();
       gainNode.gain.setValueAtTime(volume, this.ctx.currentTime);
       
+      let playDuration = buffer.duration;
+      if (maxDuration && maxDuration < buffer.duration) {
+        playDuration = maxDuration;
+      }
+      
       // Quick fade out to prevent clicking sounds on stop
-      gainNode.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + buffer.duration - 0.05);
+      gainNode.gain.setTargetAtTime(0, this.ctx.currentTime + playDuration - 0.05, 0.015);
 
       source.connect(gainNode);
       gainNode.connect(this.masterGain);
       
       source.start(0);
+      source.stop(this.ctx.currentTime + playDuration);
     } catch (e) {}
   }
 
   // --- Adjusted SFX to be less "OA", much lower volume, and randomized pitches ---
   
   public playSlash(type: 'light' | 'heavy' | 'dagger' | 'spear' = 'light', tone = 1) {
-    if (type === 'heavy') this.playSFX('/assets/audio/sfx/RPG Sound Pack/battle/swing2.wav', 0.3);
-    else if (type === 'spear') this.playSFX('/assets/audio/sfx/RPG Sound Pack/battle/swing3.wav', 0.25);
-    else this.playSFX('/assets/audio/sfx/RPG Sound Pack/battle/swing.wav', 0.2);
+    // Short maxDuration (0.2s) limits the trailing echo to stop extreme noise when spamming basic attacks
+    if (type === 'heavy') this.playSFX('/assets/audio/sfx/RPG Sound Pack/battle/swing2.wav', 0.15, 0.9, 0.2);
+    else if (type === 'spear') this.playSFX('/assets/audio/sfx/RPG Sound Pack/battle/swing3.wav', 0.12, 1.1, 0.2);
+    else this.playSFX('/assets/audio/sfx/RPG Sound Pack/battle/swing.wav', 0.1, 1.0, 0.15);
   }
 
   public playMagic(type: 'fire' | 'ice' | 'lightning' | 'holy' | 'dark' = 'fire', tone = 1) {
-    // Volume reduced dramatically from 0.5 to 0.15/0.2 to stop ear-bleeding
-    if (type === 'fire') this.playSFX('/assets/audio/sfx/explode2.ogg', 0.18, 0.8);
-    else if (type === 'ice') this.playSFX('/assets/audio/sfx/freeze.ogg', 0.15);
-    else if (type === 'lightning') this.playSFX('/assets/audio/sfx/zap.ogg', 0.12, 1.2);
-    else if (type === 'holy') this.playSFX('/assets/audio/sfx/blessing.ogg', 0.2);
-    else this.playSFX('/assets/audio/sfx/curse.ogg', 0.2);
+    // Volume reduced and maxDuration capped
+    if (type === 'fire') this.playSFX('/assets/audio/sfx/explode2.ogg', 0.15, 0.8, 0.35);
+    else if (type === 'ice') this.playSFX('/assets/audio/sfx/freeze.ogg', 0.12, 1.0, 0.35);
+    else if (type === 'lightning') this.playSFX('/assets/audio/sfx/zap.ogg', 0.1, 1.2, 0.3);
+    else if (type === 'holy') this.playSFX('/assets/audio/sfx/blessing.ogg', 0.15, 1.0, 0.4);
+    else this.playSFX('/assets/audio/sfx/curse.ogg', 0.15, 1.0, 0.4);
   }
 
   public playHit(isCrit: boolean = false) {
+    // Cap hit sound to 0.25 seconds
     if (isCrit) {
-      this.playSFX('/assets/audio/sfx/explode3.ogg', 0.15);
-      this.playSFX('/assets/audio/sfx/RPG Sound Pack/battle/magic1.wav', 0.2);
+      this.playSFX('/assets/audio/sfx/explode3.ogg', 0.12, 1.0, 0.25);
+      this.playSFX('/assets/audio/sfx/RPG Sound Pack/battle/magic1.wav', 0.15, 1.0, 0.25);
     } else {
-      this.playSFX('/assets/audio/sfx/RPG Sound Pack/battle/spell.wav', 0.15);
+      this.playSFX('/assets/audio/sfx/RPG Sound Pack/battle/spell.wav', 0.1, 1.0, 0.2);
     }
   }
 
