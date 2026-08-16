@@ -183,6 +183,10 @@ export class SideViewEngine {
       isGrounded: true,
       canDoubleJump: true,
       hasJumpedOnce: false,
+      comboStep: 0,
+      comboResetTimer: 0,
+      dropThroughTimer: 0,
+      ghostTrailTimer: 0,
       isDashing: false,
       dashTimer: 0,
       dashCooldown: 0,
@@ -1706,7 +1710,7 @@ export class SideViewEngine {
     if (!item) return;
 
     // Consumables
-    if (item.type === 'potion' || item.type === 'scroll') {
+    if (item.type === 'consumable') {
       p.inventory.splice(invIdx, 1);
 
       if (!item.consumableEffect) {

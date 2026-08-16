@@ -251,9 +251,10 @@ export class SideViewGame {
                 this.loadTownHub();
                 return;
               }
-              if (this.engine!.player.level < nextDungeon.minLevel) {
+              const requiredLevel = nextDungeon.minLevel || 1;
+              if (this.engine!.player.level < requiredLevel) {
                 audio.playClick();
-                this.hud?.showToast(`Lv. ${nextDungeon.minLevel} Required for ${nextDungeon.name}!`);
+                this.hud?.showToast(`Lv. ${requiredLevel} Required for ${nextDungeon.name}!`);
                 this.loadTownHub();
                 return;
               }

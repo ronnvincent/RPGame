@@ -18,7 +18,7 @@
  * 15. UI: Cryo's Mini GUI
  */
 
-type BattleTheme = 'catacombs' | 'crypt' | 'inferno' | 'void' | 'town';
+type BattleTheme = 'catacombs' | 'crypt' | 'inferno' | 'void' | 'town' | 'swamp' | 'mountain' | 'underwater' | 'caves';
 
 export class SpriteManager {
   private images: { [key: string]: HTMLImageElement } = {};

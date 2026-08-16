@@ -72,6 +72,7 @@ export interface DungeonDefinition {
   backgroundGradient: [string, string];
   platformColor: string;
   ambientParticles: string;
+  minLevel?: number;
   waves: DungeonWave[];
 }
 

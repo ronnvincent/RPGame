@@ -1691,7 +1691,7 @@ export class ParticleSystem {
       const frameNum = Math.min(40, Math.max(1, Math.floor(progress * 40) + 1));
       let dragonImg = sprites.getImage(`dragon_atk_${frameNum}`);
       if (!this.isDrawableImage(dragonImg)) {
-        dragonImg = sprites.getImage('dragon_atk_1') || this.resolveDragonFallback();
+        dragonImg = sprites.getImage('dragon_atk_1') || this.resolveDragonFallback() || undefined;
       }
       if (this.isDrawableImage(dragonImg)) {
         const destW = 540;
@@ -1717,7 +1717,7 @@ export class ParticleSystem {
 
       let reaperImg = sprites.getImage(isSpell ? `reaper_spell_${frameNum}` : `reaper_atk_${frameNum}`);
       if (!this.isDrawableImage(reaperImg)) {
-        reaperImg = this.resolveReaperFallback();
+        reaperImg = this.resolveReaperFallback() || undefined;
       }
       if (this.isDrawableImage(reaperImg)) {
         const destW = 280;

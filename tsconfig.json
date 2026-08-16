@@ -29,7 +29,6 @@
   "include": [
     "src",
     "src/types/**/*",
-    "node_modules/canvasengine/*",
     "public/spritesheets"
   ],
   "typeRoots": [
