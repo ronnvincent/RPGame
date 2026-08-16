@@ -1,47 +1,81 @@
 /**
- * Procedural Web Audio API Sound Generator for RPGJS Side-View Game
- * Zero external audio assets required - Instant, responsive, high-impact sound synthesis.
+ * High-Performance Web Audio API Sound Manager
+ * Uses AudioBuffers for ZERO-LAG sound effects and DynamicsCompressor for safe volumes.
  */
 
 class AudioManager {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
+  private compressor: DynamicsCompressorNode | null = null;
+  
   public soundEnabled: boolean = true;
   public musicEnabled: boolean = true;
+  
   private currentBgmAudio: HTMLAudioElement | null = null;
   private currentBgmSrc: string = '';
-  private bgmVolume: number = 0.35;
-  private sfxPool: { [src: string]: HTMLAudioElement[] } = {};
+  private bgmVolume: number = 0.25; // Lowered from 0.35
+  
+  private audioBuffers: { [src: string]: AudioBuffer } = {};
+  private pendingFetches: { [src: string]: Promise<AudioBuffer> } = {};
 
-  constructor() {
-    // Initialized lazily on first user gesture
-  }
+  constructor() {}
 
   private initCtx() {
     if (!this.ctx) {
       const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       this.ctx = new AudioCtxClass();
+      
+      // Master Gain for Volume
       this.masterGain = this.ctx.createGain();
-      this.masterGain.gain.setValueAtTime(0.35, this.ctx.currentTime);
-      this.masterGain.connect(this.ctx.destination);
+      this.masterGain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+      
+      // Compressor to prevent ear-piercing loud overlapping sounds (OA sounds)
+      this.compressor = this.ctx.createDynamicsCompressor();
+      this.compressor.threshold.setValueAtTime(-24, this.ctx.currentTime);
+      this.compressor.knee.setValueAtTime(30, this.ctx.currentTime);
+      this.compressor.ratio.setValueAtTime(12, this.ctx.currentTime);
+      this.compressor.attack.setValueAtTime(0.003, this.ctx.currentTime);
+      this.compressor.release.setValueAtTime(0.25, this.ctx.currentTime);
+
+      this.masterGain.connect(this.compressor);
+      this.compressor.connect(this.ctx.destination);
     }
     if (this.ctx.state === 'suspended') {
       this.ctx.resume();
     }
   }
 
-  /**
-   * Play background music track with looping and crossfading
-   */
-  public playBGM(src: string, volume: number = 0.35) {
+  private async getAudioBuffer(src: string): Promise<AudioBuffer | null> {
+    this.initCtx();
+    if (!this.ctx) return null;
+    
+    if (this.audioBuffers[src]) {
+      return this.audioBuffers[src];
+    }
+    
+    if (!this.pendingFetches[src]) {
+      this.pendingFetches[src] = fetch(src)
+        .then(response => response.arrayBuffer())
+        .then(arrayBuffer => this.ctx!.decodeAudioData(arrayBuffer))
+        .then(buffer => {
+          this.audioBuffers[src] = buffer;
+          return buffer;
+        })
+        .catch(err => {
+          console.warn('Failed to load audio:', src, err);
+          throw err;
+        });
+    }
+    return this.pendingFetches[src];
+  }
+
+  public playBGM(src: string, volume: number = 0.2) {
     this.bgmVolume = volume;
     if (!this.musicEnabled) {
       this.currentBgmSrc = src;
       return;
     }
-    if (this.currentBgmSrc === src && this.currentBgmAudio && !this.currentBgmAudio.paused) {
-      return;
-    }
+    if (this.currentBgmSrc === src && this.currentBgmAudio && !this.currentBgmAudio.paused) return;
 
     if (this.currentBgmAudio) {
       try {
@@ -55,30 +89,20 @@ class AudioManager {
       const audio = new Audio(src);
       audio.loop = true;
       audio.volume = this.bgmVolume;
-      audio.play().catch(() => {
-        // Autoplay may wait for user tap
-      });
+      audio.play().catch(() => {});
       this.currentBgmAudio = audio;
-    } catch (e) {
-      console.warn('BGM play error:', e);
-    }
+    } catch (e) {}
   }
 
-  /**
-   * Town Peaceful Medieval Hub BGM
-   */
   public playTownBGM() {
-    this.playBGM('/assets/audio/music/town_theme.mp3', 0.3);
+    this.playBGM('/assets/audio/music/town_theme.mp3', 0.2);
   }
 
-  /**
-   * Action Dungeon & Battlefield BGM
-   */
   public playDungeonBGM(theme?: string) {
     if (theme === 'mountain') {
-      this.playBGM('/assets/audio/music/mountain_theme.ogg', 0.35);
+      this.playBGM('/assets/audio/music/mountain_theme.ogg', 0.25);
     } else {
-      this.playBGM('/assets/audio/music/dungeon_battle.mp3', 0.35);
+      this.playBGM('/assets/audio/music/dungeon_battle.mp3', 0.25);
     }
   }
 
@@ -94,11 +118,8 @@ class AudioManager {
 
   public toggleMusic(): boolean {
     this.musicEnabled = !this.musicEnabled;
-    if (!this.musicEnabled) {
-      this.stopBGM();
-    } else if (this.currentBgmSrc) {
-      this.playBGM(this.currentBgmSrc, this.bgmVolume);
-    }
+    if (!this.musicEnabled) this.stopBGM();
+    else if (this.currentBgmSrc) this.playBGM(this.currentBgmSrc, this.bgmVolume);
     return this.musicEnabled;
   }
 
@@ -108,306 +129,101 @@ class AudioManager {
   }
 
   /**
-   * Play asset sound effect from file
+   * Fast, zero-lag Web Audio API playback
    */
-  public playSFX(src: string, volume: number = 0.4) {
+  public async playSFX(src: string, volume: number = 0.2, pitchRate: number = 1.0) {
     if (!this.soundEnabled) return;
     try {
-      if (!this.sfxPool[src]) {
-        this.sfxPool[src] = [];
-      }
-      let audio = this.sfxPool[src].find(a => a.paused || a.ended);
-      if (!audio) {
-        audio = new Audio(src);
-        if (this.sfxPool[src].length < 8) {
-          this.sfxPool[src].push(audio);
-        }
-      }
-      audio.currentTime = 0;
-      audio.volume = volume;
-      audio.play().catch(() => {});
+      const buffer = await this.getAudioBuffer(src);
+      if (!buffer || !this.ctx || !this.masterGain) return;
+
+      const source = this.ctx.createBufferSource();
+      source.buffer = buffer;
+      
+      // Randomize pitch slightly to prevent machine-gun ear fatigue
+      source.playbackRate.value = pitchRate * (0.9 + Math.random() * 0.2);
+
+      const gainNode = this.ctx.createGain();
+      gainNode.gain.setValueAtTime(volume, this.ctx.currentTime);
+      
+      // Quick fade out to prevent clicking sounds on stop
+      gainNode.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + buffer.duration - 0.05);
+
+      source.connect(gainNode);
+      gainNode.connect(this.masterGain);
+      
+      source.start(0);
     } catch (e) {}
   }
 
-  /**
-   * Sword Slash / Physical Attack SFX
-   */
+  // --- Adjusted SFX to be less "OA", much lower volume, and randomized pitches ---
+  
   public playSlash(type: 'light' | 'heavy' | 'dagger' | 'spear' = 'light', tone = 1) {
-    if (!this.soundEnabled) return;
-    if (type === 'heavy') this.playSFX('/assets/audio/sfx/RPG Sound Pack/battle/swing2.wav', 0.6);
-    else if (type === 'spear') this.playSFX('/assets/audio/sfx/RPG Sound Pack/battle/swing3.wav', 0.5);
-    else this.playSFX('/assets/audio/sfx/RPG Sound Pack/battle/swing.wav', 0.5);
+    if (type === 'heavy') this.playSFX('/assets/audio/sfx/RPG Sound Pack/battle/swing2.wav', 0.3);
+    else if (type === 'spear') this.playSFX('/assets/audio/sfx/RPG Sound Pack/battle/swing3.wav', 0.25);
+    else this.playSFX('/assets/audio/sfx/RPG Sound Pack/battle/swing.wav', 0.2);
   }
 
-  /**
-   * Magic Cast / Spell SFX
-   */
   public playMagic(type: 'fire' | 'ice' | 'lightning' | 'holy' | 'dark' = 'fire', tone = 1) {
-    if (!this.soundEnabled) return;
-    if (type === 'fire') this.playSFX('/assets/audio/sfx/explode2.ogg', 0.5);
-    else if (type === 'ice') this.playSFX('/assets/audio/sfx/freeze.ogg', 0.5);
-    else if (type === 'lightning') this.playSFX('/assets/audio/sfx/zap.ogg', 0.4);
-    else if (type === 'holy') this.playSFX('/assets/audio/sfx/blessing.ogg', 0.6);
-    else this.playSFX('/assets/audio/sfx/curse.ogg', 0.6);
+    // Volume reduced dramatically from 0.5 to 0.15/0.2 to stop ear-bleeding
+    if (type === 'fire') this.playSFX('/assets/audio/sfx/explode2.ogg', 0.18, 0.8);
+    else if (type === 'ice') this.playSFX('/assets/audio/sfx/freeze.ogg', 0.15);
+    else if (type === 'lightning') this.playSFX('/assets/audio/sfx/zap.ogg', 0.12, 1.2);
+    else if (type === 'holy') this.playSFX('/assets/audio/sfx/blessing.ogg', 0.2);
+    else this.playSFX('/assets/audio/sfx/curse.ogg', 0.2);
   }
 
-  /**
-   * Hit Impact SFX
-   */
   public playHit(isCrit: boolean = false) {
-    if (!this.soundEnabled) return;
     if (isCrit) {
-      this.playSFX('/assets/audio/sfx/explode3.ogg', 0.4);
-      this.playSFX('/assets/audio/sfx/RPG Sound Pack/battle/magic1.wav', 0.6);
+      this.playSFX('/assets/audio/sfx/explode3.ogg', 0.15);
+      this.playSFX('/assets/audio/sfx/RPG Sound Pack/battle/magic1.wav', 0.2);
     } else {
-      this.playSFX('/assets/audio/sfx/RPG Sound Pack/battle/spell.wav', 0.4);
+      this.playSFX('/assets/audio/sfx/RPG Sound Pack/battle/spell.wav', 0.15);
     }
   }
 
-  /**
-   * Jump & Dash SFX
-   */
   public playJump() {
-    this.playSFX('/assets/audio/sfx/wind2.ogg', 0.2);
+    this.playSFX('/assets/audio/sfx/wind2.ogg', 0.08);
   }
 
   public playDash() {
-    this.playSFX('/assets/audio/sfx/wind.ogg', 0.3);
+    this.playSFX('/assets/audio/sfx/wind.ogg', 0.1);
   }
 
-  /**
-   * Loot & Item Pickup SFX
-   */
   public playLoot(rarity: 'common' | 'rare' | 'epic' | 'legendary' = 'common') {
-    if (!this.soundEnabled) return;
-    if (rarity === 'legendary') this.playSFX('/assets/audio/sfx/interlude.ogg', 0.6);
-    else if (rarity === 'epic') this.playSFX('/assets/audio/sfx/interlude2.ogg', 0.5);
-    else this.playSFX('/assets/audio/sfx/magicdrop.ogg', 0.5);
+    if (rarity === 'legendary') this.playSFX('/assets/audio/sfx/interlude.ogg', 0.25);
+    else if (rarity === 'epic') this.playSFX('/assets/audio/sfx/interlude2.ogg', 0.2);
+    else this.playSFX('/assets/audio/sfx/magicdrop.ogg', 0.15);
   }
 
-  /**
-   * Victory Fanfare SFX
-   */
   public playVictory() {
-    this.playSFX('/assets/audio/sfx/cheer-crowd.ogg', 0.6);
+    this.playSFX('/assets/audio/sfx/cheer-crowd.ogg', 0.3);
   }
 
-  /**
-   * Level Up Fanfare SFX
-   */
   public playLevelUp() {
-    this.playSFX('/assets/audio/sfx/interlude2a.ogg', 0.7);
+    this.playSFX('/assets/audio/sfx/interlude2a.ogg', 0.3);
   }
 
-  /**
-   * Potion Drink / Heal SFX
-   */
-  public playHeal() {
-    this.playSFX('/assets/audio/sfx/heal.ogg', 0.6);
-  }
-
-  /**
-   * Boss Roar / Earthquake SFX
-   */
-  public playBossRoar() {
-    this.playSFX('/assets/audio/sfx/explode1.ogg', 0.8);
-    this.playSFX('/assets/audio/sfx/confusion.ogg', 0.8);
-  }
-
-  /**
-   * UI Click / Select
-   */
   public playClick() {
-    this.playSFX('/assets/audio/sfx/zap10.ogg', 0.2);
+    this.playSFX('/assets/audio/sfx/RPG Sound Pack/inventory/cursor.wav', 0.3);
   }
 
-  private playChime(freq: number, duration: number) {
-    if (!this.soundEnabled) return;
-    this.initCtx();
-    if (!this.ctx || !this.masterGain) return;
-
-    const now = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(freq, now);
-
-    gain.gain.setValueAtTime(0.18, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
-
-    osc.connect(gain);
-    gain.connect(this.masterGain);
-
-    osc.start(now);
-    osc.stop(now + duration + 0.05);
-  }
-
-  private playNoiseSwoosh(duration: number, filterCutoff: number = 1000) {
-    if (!this.ctx || !this.masterGain) return;
-    const now = this.ctx.currentTime;
-    const bufferSize = this.ctx.sampleRate * duration;
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = Math.random() * 2 - 1;
-    }
-
-    const noise = this.ctx.createBufferSource();
-    noise.buffer = buffer;
-
-    const filter = this.ctx.createBiquadFilter();
-    filter.type = 'bandpass';
-    filter.frequency.setValueAtTime(filterCutoff, now);
-    filter.Q.setValueAtTime(2.0, now);
-
-    const gain = this.ctx.createGain();
-    gain.gain.setValueAtTime(0.25, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
-
-    noise.connect(filter);
-    filter.connect(gain);
-    gain.connect(this.masterGain);
-
-    noise.start(now);
-    noise.stop(now + duration);
-  }
-
-  /**
-   * Dialogue Speech Blip Sound
-   */
-  public playDialogueBlip(pitch: number = 440) {
-    if (!this.soundEnabled) return;
-    this.initCtx();
-    if (!this.ctx || !this.masterGain) return;
-    const now = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(pitch + (Math.random() * 40 - 20), now);
-    osc.frequency.exponentialRampToValueAtTime(pitch * 0.7, now + 0.04);
-    gain.gain.setValueAtTime(0.08, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
-    osc.connect(gain);
-    gain.connect(this.masterGain);
-    osc.start(now);
-    osc.stop(now + 0.05);
-  }
-
-  /**
-   * Quest Accepted Sound: Bright rising chime
-   */
   public playQuestAccept() {
-    if (!this.soundEnabled) return;
-    this.initCtx();
-    const notes = [440, 554, 659, 880];
-    notes.forEach((freq, i) => {
-      setTimeout(() => this.playTone(freq, 0.15), i * 70);
-    });
+    this.playSFX('/assets/audio/sfx/RPG Sound Pack/inventory/chainmail1.wav', 0.4);
+  }
+  
+  public playError() {
+    this.playSFX('/assets/audio/sfx/RPG Sound Pack/battle/sword-unsheathe.wav', 0.2, 0.5);
   }
 
-  /**
-   * Quest Completed Sound: Victorious triumphant arpeggio
-   */
-  public playQuestComplete() {
-    if (!this.soundEnabled) return;
-    this.initCtx();
-    const notes = [523.25, 659.25, 783.99, 1046.5, 1318.5];
-    notes.forEach((freq, i) => {
-      setTimeout(() => this.playTone(freq, 0.25), i * 90);
-    });
+  // --- Procedural Fallbacks for System Sounds ---
+  
+  public playChime() {
+    this.playSFX('/assets/audio/sfx/magicdrop.ogg', 0.1);
   }
 
-  /**
-   * Grand Boss Victory Fanfare
-   */
-  public playFanfare() {
-    if (!this.soundEnabled) return;
-    this.initCtx();
-    const melody = [
-      { f: 523.25, d: 0.15, t: 0 },
-      { f: 523.25, d: 0.15, t: 160 },
-      { f: 523.25, d: 0.15, t: 320 },
-      { f: 659.25, d: 0.35, t: 480 },
-      { f: 587.33, d: 0.2, t: 750 },
-      { f: 659.25, d: 0.2, t: 950 },
-      { f: 783.99, d: 0.6, t: 1150 },
-      { f: 1046.5, d: 0.8, t: 1550 }
-    ];
-    melody.forEach((n) => {
-      setTimeout(() => this.playTone(n.f, n.d), n.t);
-    });
-  }
-
-  public playTone(freq: number, duration: number = 0.12, volume: number = 0.12) {
-    if (!this.soundEnabled) return;
-    this.initCtx();
-    if (!this.ctx || !this.masterGain) return;
-    if (!Number.isFinite(freq) || freq <= 0) return;
-
-    try {
-      const now = this.ctx.currentTime;
-      const safeFreq = Math.max(80, Math.min(2400, Math.abs(freq)));
-      const safeDuration = Math.max(0.03, Math.max(0.01, duration));
-      const safeVolume = Math.max(0.01, Math.min(0.32, volume));
-
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(safeFreq, now);
-      osc.frequency.exponentialRampToValueAtTime(Math.max(60, safeFreq * 0.35), now + safeDuration);
-
-      gain.gain.setValueAtTime(safeVolume, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + safeDuration);
-
-      osc.connect(gain);
-      gain.connect(this.masterGain);
-
-      osc.start(now);
-      osc.stop(now + safeDuration);
-    } catch (e) {}
-  }
-
-  /**
-   * Book Page Turn / UI Paper Sound
-  */
-  public playPageTurn() {
-    if (!this.soundEnabled) return;
-    this.initCtx();
-    this.playNoiseSwoosh(0.08, 1600);
-  }
-
-  /**
-   * Teleportation Gateway Portal Sound
-   */
-  public playTeleport() {
-    if (!this.soundEnabled) return;
-    this.initCtx();
-    if (!this.ctx || !this.masterGain) return;
-    const now = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(180, now);
-    osc.frequency.exponentialRampToValueAtTime(880, now + 0.5);
-    gain.gain.setValueAtTime(0.2, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
-    osc.connect(gain);
-    gain.connect(this.masterGain);
-    osc.start(now);
-    osc.stop(now + 0.65);
-  }
-
-  /**
-   * Gold Coin Jingling Sound
-   */
-  public playCoin() {
-    if (!this.soundEnabled) return;
-    this.initCtx();
-    this.playTone(987.77, 0.08);
-    setTimeout(() => this.playTone(1318.5, 0.12), 40);
+  public playNoiseSwoosh() {
+    this.playSFX('/assets/audio/sfx/wind.ogg', 0.1);
   }
 }
 
