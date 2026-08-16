@@ -50,7 +50,7 @@ export class SaveManager {
       };
 
       // 1. Save locally
-      await db.put('saveData', saveData, 'slot1');
+      await db.put('saveData', saveData, uuid || 'slot1');
       console.log('Game saved locally.');
 
       // 2. Sync to cloud
@@ -93,7 +93,7 @@ export class SaveManager {
              
              // Update local DB to match cloud DB
              const db = await this.initDB();
-             await db.put('saveData', cloudData.saveData, 'slot1');
+             await db.put('saveData', cloudData.saveData, uuid || 'slot1');
              
              return {
                 playerState: cloudData.saveData.playerState,
@@ -108,7 +108,7 @@ export class SaveManager {
 
       // 2. Fallback to local DB
       const db = await this.initDB();
-      const data = await db.get('saveData', 'slot1');
+      const data = await db.get('saveData', uuid || 'slot1');
       if (data) {
         console.log('Game loaded from Local DB.');
         return {
@@ -125,8 +125,9 @@ export class SaveManager {
 
   public static async deleteSave() {
     try {
+      const uuid = localStorage.getItem('playerUUID');
       const db = await this.initDB();
-      await db.delete('saveData', 'slot1');
+      await db.delete('saveData', uuid || 'slot1');
       console.log('Save deleted.');
     } catch (error) {
       console.error('Failed to delete save:', error);
