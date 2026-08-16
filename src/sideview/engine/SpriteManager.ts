@@ -588,6 +588,17 @@ export class SpriteManager {
     for (let i = 1; i <= 7; i++) this.addImage(`sanju_nature_2_${i}`, `/assets/sanju_normals/nature/2-${i}.png`);
     for (let i = 1; i <= 5; i++) this.addImage(`sanju_nature_3_${i}`, `/assets/sanju_normals/nature/3-${i}.png`);
 
+    // AAA Magic Spells
+    this.addImage('aaa_wind_bolt', '/assets/aaa_spells/pixel/Pixelart Spells/PNG Files/Wind Bolt.png');
+    this.addImage('aaa_magic_sparks', '/assets/aaa_spells/pixel/Pixelart Spells/PNG Files/Magic Sparks.png');
+    this.addImage('aaa_holy_shield', '/assets/aaa_spells/pixel/Pixelart Spells/PNG Files/Pixelart Shield.png');
+
+    // AAA Light Effects (25 frames)
+    for (let i = 1; i <= 25; i++) {
+      const numStr = i < 10 ? `0${i}` : `${i}`;
+      this.addImage(`aaa_light_${i}`, `/assets/aaa_spells/light/LightEffect_${numStr}.png`);
+    }
+
     // Preload Reaper Attack, Spell, Cast, Idle, and Walk frames (Clean paths)
     for (let i = 1; i <= 10; i++) {
       this.addImage(`reaper_atk_${i}`, `/assets/reaper/sprites/Attack/Bringer-of-Death_Attack_${i}.png`);

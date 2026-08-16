@@ -847,6 +847,10 @@ export class ParticleSystem {
       frameW = 100; frameH = 100; totalFrames = 7; cols = 7;
     } else if (spriteKey.includes('holy_spell')) {
       frameW = 32; frameH = 32; totalFrames = 38; cols = 38; scale *= 2;
+    } else if (spriteKey.includes('aaa_wind_bolt') || spriteKey.includes('aaa_magic_sparks')) {
+      frameW = 16; frameH = 16; totalFrames = 6; cols = 6; fps = 20; scale *= 3.5;
+    } else if (spriteKey.includes('aaa_holy_shield')) {
+      frameW = 48; frameH = 48; totalFrames = 6; cols = 6; fps = 18; scale *= 2.5;
     } else if (spriteKey.includes('pipo_mapeffect')) {
       frameW = 192; frameH = 192; totalFrames = 20; cols = 5; scale *= 1.2;
     } else if (spriteKey.includes('pipo_nazoobj')) {

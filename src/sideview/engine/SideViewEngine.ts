@@ -891,17 +891,17 @@ export class SideViewEngine {
       case 'm_4': this.particles.playSanjuVfx(centerX, centerY - 30, 'sanju_pure', 25, 24, 1.8, '#ef4444'); break;
       case 'm_5': this.particles.playSanjuVfx(centerX, centerY - 40, 'sanju_water', 25, 24, 2.2); break;
       // Archer
-      case 'ar_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_nature_0', 5, 12, 1.5); break;
-      case 'ar_2': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_nature_1', 7, 12, 1.8); break;
-      case 'ar_3': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_nature_2', 7, 12, 1.6); break;
-      case 'ar_4': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_pure', 25, 24, 1.5, '#10b981'); break;
-      case 'ar_5': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_nature_3', 5, 12, 2.0); break;
+      case 'ar_1': this.particles.playVfxSprite(centerX, centerY - 15, 'aaa_wind_bolt', p.facing, 1.5); break;
+      case 'ar_2': this.particles.playVfxSprite(centerX, centerY - 15, 'aaa_magic_sparks', p.facing, 1.8); break;
+      case 'ar_3': this.particles.playVfxSprite(centerX, centerY - 20, 'aaa_wind_bolt', p.facing, 1.6); break;
+      case 'ar_4': this.particles.playVfxSprite(centerX, centerY - 15, 'aaa_magic_sparks', p.facing, 1.5); break;
+      case 'ar_5': this.particles.playVfxSprite(centerX, centerY - 20, 'aaa_wind_bolt', p.facing, 2.0); break;
       // Paladin
-      case 'p_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_light', 25, 24, 1.5); break;
-      case 'p_2': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_light', 25, 24, 1.8); break;
-      case 'p_3': this.particles.playSanjuVfx(centerX, centerY - 30, 'sanju_light', 25, 24, 2.0); break;
-      case 'p_4': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_2d_sparks', 12, 24, 1.8, '#facc15'); break;
-      case 'p_5': this.particles.playSanjuVfx(centerX, centerY - 25, 'sanju_light', 25, 24, 2.2); break;
+      case 'p_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'aaa_light', 25, 24, 1.5); break;
+      case 'p_2': this.particles.playVfxSprite(centerX, centerY - 20, 'aaa_holy_shield', p.facing, 1.8); break;
+      case 'p_3': this.particles.playSanjuVfx(centerX, centerY - 30, 'aaa_light', 25, 24, 2.0); break;
+      case 'p_4': this.particles.playVfxSprite(centerX, centerY - 20, 'aaa_magic_sparks', p.facing, 1.8, '#facc15'); break;
+      case 'p_5': this.particles.playSanjuVfx(centerX, centerY - 25, 'aaa_light', 25, 24, 2.2); break;
       // Necromancer
       case 'n_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_blood', 25, 24, 1.5); break;
       case 'n_2': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_blood', 25, 24, 1.8); break;
@@ -919,11 +919,11 @@ export class SideViewEngine {
       case 'd_4': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_fire', 25, 24, 1.8); break;
       case 'd_5': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_fire', 25, 24, 2.0); break;
       // Priest
-      case 'pr_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_light', 25, 24, 1.5); break;
-      case 'pr_2': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_nature_1', 7, 12, 1.8); break;
-      case 'pr_3': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_nature_2', 7, 12, 2.0); break;
-      case 'pr_4': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_light', 25, 24, 1.8); break;
-      case 'pr_5': this.particles.playSanjuVfx(centerX, centerY - 30, 'sanju_light', 25, 24, 2.2); break;
+      case 'pr_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'aaa_light', 25, 24, 1.5); break;
+      case 'pr_2': this.particles.playVfxSprite(centerX, centerY - 20, 'aaa_holy_shield', p.facing, 1.8); break;
+      case 'pr_3': this.particles.playVfxSprite(centerX, centerY - 20, 'aaa_magic_sparks', p.facing, 2.0, '#facc15'); break;
+      case 'pr_4': this.particles.playSanjuVfx(centerX, centerY - 20, 'aaa_light', 25, 24, 1.8); break;
+      case 'pr_5': this.particles.playSanjuVfx(centerX, centerY - 30, 'aaa_light', 25, 24, 2.2); break;
       // Nightborne
       case 'ni_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_cosmic', 25, 24, 1.5); break;
       case 'ni_3': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_pure', 25, 24, 1.8, '#a855f7'); break;
