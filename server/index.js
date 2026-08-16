@@ -5,10 +5,126 @@ const cors = require('cors');
 
 const app = express();
 app.use(cors());
+app.use(express.json());
+
+const { Pool } = require('pg');
+
+// Database Connection
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL, // Railway provides this automatically
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false // Railway requires SSL for DB
+});
+
+// Initialize Database Table
+async function initDB() {
+  try {
+    if (!process.env.DATABASE_URL) {
+      console.warn("No DATABASE_URL found. Skipping DB init (running in memory mode?)");
+      return;
+    }
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(255) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        short_id VARCHAR(50) UNIQUE NOT NULL,
+        uuid VARCHAR(255) UNIQUE NOT NULL,
+        save_data JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log("Database tables initialized.");
+  } catch (err) {
+    console.error("DB Init error:", err);
+  }
+}
+initDB();
 
 // Healthcheck endpoint for Railway
 app.get('/', (req, res) => {
   res.send('RPGame Multiplayer Server is running!');
+});
+
+
+// ----------------- HTTP API ENDPOINTS -----------------
+
+function generateRandomPassword() {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let pwd = '';
+  for(let i=0; i<8; i++) pwd += chars.charAt(Math.floor(Math.random() * chars.length));
+  return pwd;
+}
+
+app.post('/api/register_guest', async (req, res) => {
+  const { username, shortId, uuid } = req.body;
+  if (!username || !shortId || !uuid) {
+    return res.status(400).json({ error: 'Missing fields' });
+  }
+
+  try {
+    const password = generateRandomPassword();
+    
+    // Check if user exists (fallback if they re-click guest)
+    const existing = await pool.query('SELECT * FROM users WHERE uuid = $1', [uuid]);
+    if (existing.rows.length > 0) {
+       return res.json({ 
+         success: true, 
+         username: existing.rows[0].username, 
+         password: existing.rows[0].password 
+       });
+    }
+
+    await pool.query(
+      'INSERT INTO users (username, password, short_id, uuid) VALUES ($1, $2, $3, $4)',
+      [username, password, shortId, uuid]
+    );
+
+    res.json({ success: true, username, password });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+app.post('/api/login', async (req, res) => {
+  const { username, password } = req.body;
+  try {
+    const result = await pool.query('SELECT * FROM users WHERE username = $1 AND password = $2', [username, password]);
+    if (result.rows.length > 0) {
+      const user = result.rows[0];
+      res.json({ success: true, uuid: user.uuid, shortId: user.short_id, name: user.username });
+    } else {
+      res.status(401).json({ error: 'Invalid credentials' });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+app.post('/api/save', async (req, res) => {
+  const { uuid, saveData } = req.body;
+  try {
+    await pool.query('UPDATE users SET save_data = $1 WHERE uuid = $2', [JSON.stringify(saveData), uuid]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to save' });
+  }
+});
+
+app.get('/api/load/:uuid', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT save_data FROM users WHERE uuid = $1', [req.params.uuid]);
+    if (result.rows.length > 0 && result.rows[0].save_data) {
+      res.json({ success: true, saveData: result.rows[0].save_data });
+    } else {
+      res.json({ success: false, msg: 'No save found' });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load' });
+  }
 });
 
 const server = http.createServer(app);

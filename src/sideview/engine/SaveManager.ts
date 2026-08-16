@@ -42,13 +42,32 @@ export class SaveManager {
         gold: playerState.gold,
       };
 
-      await db.put('saveData', {
+      const saveData = {
         playerState: stateToSave,
         inventory,
         maxDungeonCleared,
         lastUpdated: Date.now()
-      }, 'slot1');
-      console.log('Game saved successfully.');
+      };
+
+      // 1. Save locally
+      await db.put('saveData', saveData, 'slot1');
+      console.log('Game saved locally.');
+
+      // 2. Sync to cloud
+      const uuid = localStorage.getItem('playerUUID');
+      if (uuid) {
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const API_URL = isLocal ? 'http://localhost:3001/api' : 'https://rpgame-production-3453.up.railway.app/api';
+        
+        fetch(`${API_URL}/save`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uuid, saveData })
+        }).then(res => res.json()).then(data => {
+           if(data.success) console.log('Game synced to Cloud DB.');
+        }).catch(err => console.error('Cloud DB Sync failed:', err));
+      }
+
     } catch (error) {
       console.error('Failed to save game:', error);
     }
@@ -60,10 +79,38 @@ export class SaveManager {
     maxDungeonCleared: number;
   }> {
     try {
+      // 1. Try to fetch from cloud first
+      const uuid = localStorage.getItem('playerUUID');
+      if (uuid) {
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const API_URL = isLocal ? 'http://localhost:3001/api' : 'https://rpgame-production-3453.up.railway.app/api';
+        
+        try {
+          const res = await fetch(`${API_URL}/load/${uuid}`);
+          const cloudData = await res.json();
+          if (cloudData.success && cloudData.saveData) {
+             console.log('Game loaded from Cloud DB.');
+             
+             // Update local DB to match cloud DB
+             const db = await this.initDB();
+             await db.put('saveData', cloudData.saveData, 'slot1');
+             
+             return {
+                playerState: cloudData.saveData.playerState,
+                inventory: cloudData.saveData.inventory || [],
+                maxDungeonCleared: cloudData.saveData.maxDungeonCleared || 0,
+             };
+          }
+        } catch (e) {
+          console.warn('Cloud DB load failed, falling back to Local DB.');
+        }
+      }
+
+      // 2. Fallback to local DB
       const db = await this.initDB();
       const data = await db.get('saveData', 'slot1');
       if (data) {
-        console.log('Game loaded successfully.');
+        console.log('Game loaded from Local DB.');
         return {
           playerState: data.playerState,
           inventory: data.inventory,

@@ -17,7 +17,10 @@ function generateUUID() {
   });
 }
 
-function showGuestLogin(mountPoint: HTMLElement) {
+function showLoginScreen(mountPoint: HTMLElement) {
+  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const API_URL = isLocal ? 'http://localhost:3001/api' : 'https://rpgame-production-3453.up.railway.app/api';
+
   const overlay = document.createElement('div');
   overlay.style.position = 'fixed';
   overlay.style.inset = '0';
@@ -37,55 +40,174 @@ function showGuestLogin(mountPoint: HTMLElement) {
   box.style.borderRadius = '8px';
   box.style.textAlign = 'center';
   box.style.color = '#fef08a';
-  box.style.width = '300px';
+  box.style.width = '350px';
 
   const title = document.createElement('h2');
-  title.innerText = 'GUEST LOGIN';
+  title.innerText = 'AETHELGARD LOGIN';
   title.style.margin = '0 0 20px 0';
   title.style.textShadow = '2px 2px 4px #000';
 
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.placeholder = 'Enter your name...';
-  input.style.width = '100%';
-  input.style.padding = '10px';
-  input.style.marginBottom = '20px';
-  input.style.fontSize = '16px';
-  input.style.border = '2px solid #2e1a0b';
-  input.style.borderRadius = '4px';
-  input.style.background = '#000';
-  input.style.color = '#fff';
-  input.style.outline = 'none';
-  input.maxLength = 16;
+  const userIn = document.createElement('input');
+  userIn.type = 'text';
+  userIn.placeholder = 'Username / Adventurer Name';
+  userIn.style.width = '100%';
+  userIn.style.padding = '10px';
+  userIn.style.marginBottom = '10px';
+  userIn.style.fontSize = '14px';
+  userIn.style.border = '2px solid #2e1a0b';
+  userIn.style.borderRadius = '4px';
+  userIn.style.background = '#000';
+  userIn.style.color = '#fff';
+  userIn.style.outline = 'none';
+  userIn.maxLength = 16;
 
-  const btn = document.createElement('button');
-  btn.innerText = 'PLAY';
-  btn.style.background = "url('/assets/kenney-rpg-ui/buttonRound_blue.png') no-repeat center center";
-  btn.style.backgroundSize = "100% 100%";
-  btn.style.border = 'none';
-  btn.style.padding = '12px 24px';
-  btn.style.fontSize = '18px';
-  btn.style.color = '#fff';
-  btn.style.cursor = 'pointer';
-  btn.style.fontWeight = 'bold';
-  btn.style.width = '100%';
+  const passIn = document.createElement('input');
+  passIn.type = 'password';
+  passIn.placeholder = 'Password (Leave blank for Guest)';
+  passIn.style.width = '100%';
+  passIn.style.padding = '10px';
+  passIn.style.marginBottom = '20px';
+  passIn.style.fontSize = '14px';
+  passIn.style.border = '2px solid #2e1a0b';
+  passIn.style.borderRadius = '4px';
+  passIn.style.background = '#000';
+  passIn.style.color = '#fff';
+  passIn.style.outline = 'none';
 
-  btn.onclick = () => {
-    const name = input.value.trim();
-    if (name.length < 3) {
-      alert("Name must be at least 3 characters.");
+  const loginBtn = document.createElement('button');
+  loginBtn.innerText = 'LOGIN';
+  loginBtn.style.background = "url('/assets/kenney-rpg-ui/buttonRound_blue.png') no-repeat center center";
+  loginBtn.style.backgroundSize = "100% 100%";
+  loginBtn.style.border = 'none';
+  loginBtn.style.padding = '12px 24px';
+  loginBtn.style.fontSize = '16px';
+  loginBtn.style.color = '#fff';
+  loginBtn.style.cursor = 'pointer';
+  loginBtn.style.fontWeight = 'bold';
+  loginBtn.style.width = '100%';
+  loginBtn.style.marginBottom = '10px';
+
+  const guestBtn = document.createElement('button');
+  guestBtn.innerText = 'PLAY AS GUEST';
+  guestBtn.style.background = '#4a2c11';
+  guestBtn.style.border = '2px solid #fff';
+  guestBtn.style.padding = '10px 24px';
+  guestBtn.style.fontSize = '14px';
+  guestBtn.style.color = '#fff';
+  guestBtn.style.cursor = 'pointer';
+  guestBtn.style.fontWeight = 'bold';
+  guestBtn.style.width = '100%';
+
+  const errorText = document.createElement('p');
+  errorText.style.color = '#ff6b6b';
+  errorText.style.fontSize = '12px';
+  errorText.style.marginTop = '10px';
+  errorText.style.fontFamily = "'Outfit', sans-serif";
+
+  loginBtn.onclick = async () => {
+    const username = userIn.value.trim();
+    const password = passIn.value.trim();
+    if (!username || !password) {
+      errorText.innerText = "Please enter both username and password.";
       return;
     }
-    localStorage.setItem('playerName', name);
-    localStorage.setItem('playerUUID', generateUUID());
-    localStorage.setItem('playerShortId', generateShortId());
-    document.body.removeChild(overlay);
-    startGame(mountPoint);
+    
+    loginBtn.innerText = 'Logging in...';
+    try {
+      const res = await fetch(`${API_URL}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (data.success) {
+        localStorage.setItem('playerName', data.name);
+        localStorage.setItem('playerUUID', data.uuid);
+        localStorage.setItem('playerShortId', data.shortId);
+        document.body.removeChild(overlay);
+        startGame(mountPoint);
+      } else {
+        errorText.innerText = data.error || 'Invalid credentials';
+      }
+    } catch (err) {
+      errorText.innerText = 'Failed to connect to server.';
+    }
+    loginBtn.innerText = 'LOGIN';
+  };
+
+  guestBtn.onclick = async () => {
+    const username = userIn.value.trim();
+    if (username.length < 3) {
+      errorText.innerText = "Name must be at least 3 characters.";
+      return;
+    }
+
+    guestBtn.innerText = 'Creating account...';
+    try {
+      const uuid = generateUUID();
+      const shortId = generateShortId();
+      
+      const res = await fetch(`${API_URL}/register_guest`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, shortId, uuid })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        localStorage.setItem('playerName', username);
+        localStorage.setItem('playerUUID', uuid);
+        localStorage.setItem('playerShortId', shortId);
+
+        // Show credentials overlay
+        box.innerHTML = '';
+        box.style.width = '400px';
+        const okTitle = document.createElement('h2');
+        okTitle.innerText = 'ACCOUNT CREATED!';
+        okTitle.style.color = '#4ade80';
+        okTitle.style.marginBottom = '20px';
+
+        const okMsg = document.createElement('p');
+        okMsg.innerHTML = `Your account was successfully registered.<br/><br/>
+        <strong style="color:#fff">Username:</strong> <span style="color:#ffd700">${username}</span><br/>
+        <strong style="color:#fff">Password:</strong> <span style="color:#ffd700">${data.password}</span><br/><br/>
+        <span style="color:#ef4444; font-size: 14px;">Screenshot this! You will need this password to login on other devices.</span>`;
+        okMsg.style.fontFamily = "'Outfit', sans-serif";
+        okMsg.style.marginBottom = '20px';
+        okMsg.style.lineHeight = '1.5';
+
+        const okBtn = document.createElement('button');
+        okBtn.innerText = 'I HAVE SAVED IT ➔';
+        okBtn.style.background = "url('/assets/kenney-rpg-ui/buttonRound_blue.png') no-repeat center center";
+        okBtn.style.backgroundSize = "100% 100%";
+        okBtn.style.border = 'none';
+        okBtn.style.padding = '12px 24px';
+        okBtn.style.color = '#fff';
+        okBtn.style.cursor = 'pointer';
+        okBtn.style.fontWeight = 'bold';
+        okBtn.onclick = () => {
+          document.body.removeChild(overlay);
+          startGame(mountPoint);
+        };
+
+        box.appendChild(okTitle);
+        box.appendChild(okMsg);
+        box.appendChild(okBtn);
+      } else {
+        errorText.innerText = data.error || 'Failed to create guest account.';
+      }
+    } catch (err) {
+      errorText.innerText = 'Failed to connect to server.';
+    }
+    guestBtn.innerText = 'PLAY AS GUEST';
   };
 
   box.appendChild(title);
-  box.appendChild(input);
-  box.appendChild(btn);
+  box.appendChild(userIn);
+  box.appendChild(passIn);
+  box.appendChild(loginBtn);
+  box.appendChild(guestBtn);
+  box.appendChild(errorText);
   overlay.appendChild(box);
   document.body.appendChild(overlay);
 }
@@ -107,7 +229,7 @@ function initGame() {
 
   const existingShortId = localStorage.getItem('playerShortId');
   if (!existingName || !existingUUID || !existingShortId) {
-    showGuestLogin(mountPoint);
+    showLoginScreen(mountPoint);
   } else {
     startGame(mountPoint);
   }
