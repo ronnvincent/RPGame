@@ -1328,6 +1328,13 @@ export class SideViewEngine {
           mod.network.sendDamageEnemy(enemyIdentifier, finalDamage, knockbackDir);
         }
       });
+    } else if (this.isHost && !fromRemote) {
+      import('../network/NetworkManager').then(mod => {
+        const enemyIdentifier = enemy.id || this.enemies.indexOf(enemy).toString();
+        if (enemyIdentifier !== '-1') {
+          mod.network.sendEnemyHit(enemyIdentifier, finalDamage, isCrit, knockbackDir, enemy.hp);
+        }
+      });
     }
 
     // Hit-stop micro freeze and crunchy screen shake on impact

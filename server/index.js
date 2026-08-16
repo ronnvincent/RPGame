@@ -386,6 +386,13 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('enemy_hit', (data) => {
+    const p = players[socket.id];
+    if (p && p.room) {
+      socket.to(p.room).emit('enemy_hit', data);
+    }
+  });
+
   socket.on('enemy_damaged', (data) => {
     const p = players[socket.id];
     if (p && p.room) {

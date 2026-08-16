@@ -79,6 +79,7 @@ export class NetworkManager {
     this.socket?.off('dungeon_start');
 
     this.socket?.on('lobby_update', (data) => {
+      this.room = data.roomId;
       onUpdate(data);
     });
 
@@ -351,6 +352,19 @@ export class NetworkManager {
     this.socket?.off('damage_enemy');
     this.socket?.on('damage_enemy', (data) => {
       onDamage(data.enemyId, data.damage, data.facing);
+    });
+  }
+
+  public sendEnemyHit(enemyId: string, damage: number, isCrit: boolean, knockbackDir: number, newHp: number) {
+    if (!this.socket || !this.room) return;
+    this.socket.emit('enemy_hit', { enemyId, damage, isCrit, knockbackDir, newHp });
+  }
+
+  public listenForEnemyHit(onHit: (data: { enemyId: string, damage: number, isCrit: boolean, knockbackDir: number, newHp: number }) => void) {
+    if (!this.socket) this.connect();
+    this.socket?.off('enemy_hit');
+    this.socket?.on('enemy_hit', (data) => {
+      onHit(data);
     });
   }
 }

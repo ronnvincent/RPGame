@@ -308,6 +308,28 @@ export class SideViewGame {
           this.engine.applyDamageToEnemy(enemy, damage, false, facing, true);
         }
       });
+
+      mod.network.listenForEnemyHit((hitData) => {
+        if (!this.engine || this.engine.isHost) return;
+        const enemy = this.engine.enemies.find(e => e.id === hitData.enemyId) || this.engine.enemies[parseInt(hitData.enemyId)];
+        if (enemy) {
+          enemy.hp = hitData.newHp;
+          enemy.hitStun = 0.25;
+          enemy.vx = hitData.knockbackDir * 3.5;
+          enemy.vy = -2.5;
+
+          this.engine.particles.triggerScreenShake(hitData.isCrit ? 10 : 4, 0.2);
+          audio.playHit(hitData.isCrit);
+          this.engine.particles.addFloatingText(
+            enemy.x,
+            enemy.y - enemy.height / 2,
+            `${hitData.damage}`,
+            hitData.isCrit ? '#ffd54f' : '#ffffff',
+            hitData.isCrit
+          );
+          this.engine.particles.addImpactBurst(enemy.x, enemy.y, hitData.isCrit ? 18 : 8, '#e53935', 'spark');
+        }
+      });
     });
 
     // Start with Epic Story Prologue Cutscene
@@ -336,11 +358,7 @@ export class SideViewGame {
 
     if (broadcastParty) {
       import('./network/NetworkManager').then(mod => {
-        if (this.engine?.isHost) {
-          mod.network.sendPartyReturnTown(this.engine.player, this.engine.groundY);
-        } else {
-          mod.network.leaveDungeonRoom();
-        }
+        mod.network.sendPartyReturnTown(this.engine!.player, this.engine!.groundY);
       });
     }
   }
