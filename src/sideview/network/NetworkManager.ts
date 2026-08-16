@@ -153,9 +153,10 @@ export class NetworkManager {
   // ================= SYNC EVENTS =================
 
   public sendEnemySync(enemiesData: any[], groundY: number, waveIndex: number = 0) {
-    if (!this.socket || !this.room) return;
-    // Only send minimal serializable fields — spreading full objects with lootDrop etc.
-    // can cause socket.io to silently fail on complex/circular data
+    if (!this.socket || !this.room) {
+      console.log('[NET] sendEnemySync BLOCKED - socket:', !!this.socket, 'room:', this.room);
+      return;
+    }
     const slim = enemiesData.map(e => ({
       id: e.id,
       name: e.name,

@@ -126,6 +126,7 @@ export class SideViewGame {
     // Setup Multiplayer Sync Listeners
     import('./network/NetworkManager').then(mod => {
       mod.network.listenForPlayerSkill((socketId, skillIndex, classId, x, y, facing) => {
+        console.log('[NET] Received remote_player_skill:', { socketId, skillIndex, classId, x, y, facing });
         if (!this.engine) return;
         this.engine.castRemoteSkill(classId, skillIndex, x, y + this.engine.groundY, facing);
       });
@@ -162,6 +163,7 @@ export class SideViewGame {
       });
 
       mod.network.listenForEnemySync((enemies, waveIndex) => {
+        console.log('[NET] Received enemy_sync:', { enemyCount: enemies?.length, waveIndex, isHost: this.engine?.isHost });
         if (!this.engine || this.engine.isHost) return;
         
         // Sync wave index from host
