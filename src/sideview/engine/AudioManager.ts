@@ -233,6 +233,41 @@ class AudioManager {
   public playNoiseSwoosh() {
     this.playSFX('/assets/audio/sfx/wind.ogg', 0.1);
   }
-}
 
+  public playDialogueBlip(char?: string | number) {
+    this.playSFX('/assets/audio/sfx/click.ogg', 0.1);
+  }
+
+  public playPageTurn() {
+    this.playSFX('/assets/audio/sfx/click.ogg', 0.1);
+  }
+
+  public playHeal() {
+    this.playSFX('/assets/audio/sfx/magic.ogg', 0.2);
+  }
+
+  public playTone(duration?: number, freq?: number) {
+    this.playSFX('/assets/audio/sfx/chime.ogg', 0.2);
+  }
+
+  public playBossRoar() {
+    this.playSFX('/assets/audio/sfx/slash_heavy.ogg', 0.5);
+  }
+
+  public playQuestComplete() {
+    this.playVictory();
+  }
+
+  public playFanfare() {
+    this.playVictory();
+  }
+
+  public playTeleport() {
+    this.playSFX('/assets/audio/sfx/magic.ogg', 0.2);
+  }
+
+  public playCoin() {
+    this.playSFX('/assets/audio/sfx/loot.ogg', 0.2);
+  }
+}
 export const audio = new AudioManager();
