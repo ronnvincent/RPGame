@@ -938,8 +938,13 @@ export class SideViewEngine {
     let hitAny = false;
     this.enemies.forEach(enemy => {
       if (enemy.isDead) return;
-      const dist = Math.hypot(enemy.x - centerX, enemy.y - centerY);
-      if (dist <= skill.aoeRadius + enemy.width / 2) {
+      // 2D Brawler AABB Area Hit Detection
+      const distX = Math.abs(enemy.x - centerX);
+      const distY = Math.abs((enemy.y - 24) - centerY);
+      
+      // If the VFX is spawned high up (e.g. centerY is off the ground), we still want to hit enemies underneath it
+      // So we use a generous vertical cylinder (120px height tolerance)
+      if (distX <= skill.aoeRadius + enemy.width / 2 && distY <= 120) {
         this.applyDamageToEnemy(enemy, baseDmg, isCrit, p.facing);
         hitAny = true;
       }
@@ -1681,8 +1686,10 @@ export class SideViewEngine {
       if (proj.fromPlayer) {
         for (const enemy of this.enemies) {
           if (enemy.isDead) continue;
-          const dist = Math.hypot(proj.x - enemy.x, proj.y - enemy.y);
-          if (dist < proj.radius + enemy.width / 2) {
+          // Use AABB for 2D Beat 'em up accurate hit detection (ignore extreme Y axis mismatches)
+          const distX = Math.abs(proj.x - enemy.x);
+          const distY = Math.abs(proj.y - (enemy.y - 24)); // Compare to enemy chest height
+          if (distX < proj.radius + enemy.width / 2 && distY < proj.radius + 40) {
             if (proj.piercing) {
               const hitList = proj.hitEnemyIds || [];
               if (hitList.includes(enemy.id)) {
