@@ -139,48 +139,43 @@ class AudioManager {
 
     const now = this.ctx.currentTime;
     const amp = Math.max(0.6, Math.min(1.6, tone));
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    const filter = this.ctx.createBiquadFilter();
+    const duration = type === 'heavy' ? 0.4 : 0.2;
 
-    filter.type = 'lowpass';
-    const lowCutoff = type === 'heavy' ? 850 : type === 'spear' ? 700 : type === 'dagger' ? 1400 : 1800;
-    filter.frequency.setValueAtTime(lowCutoff * amp, now);
-    filter.frequency.exponentialRampToValueAtTime(100, now + 0.15);
+    const subOsc = this.ctx.createOscillator();
+    const subGain = this.ctx.createGain();
+    subOsc.type = 'sine';
+    subOsc.frequency.setValueAtTime(type === 'heavy' ? 120 : 80, now);
+    subOsc.frequency.exponentialRampToValueAtTime(20, now + duration);
+    subGain.gain.setValueAtTime(type === 'heavy' ? 1.0 : 0.5, now);
+    subGain.gain.exponentialRampToValueAtTime(0.01, now + duration);
+    subOsc.connect(subGain).connect(this.masterGain);
+    subOsc.start(now); subOsc.stop(now + duration);
 
-    osc.type = type === 'heavy' ? 'sawtooth' : 'triangle';
-    if (type === 'spear') {
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(320 * amp, now);
-      osc.frequency.exponentialRampToValueAtTime(70, now + 0.18);
-    } else if (type === 'dagger') {
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(560 * amp, now);
-      osc.frequency.exponentialRampToValueAtTime(140, now + 0.12);
-    } else if (type === 'heavy') {
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(180 * amp, now);
-      osc.frequency.exponentialRampToValueAtTime(35, now + 0.24);
-    } else {
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(460 * amp, now);
-      osc.frequency.exponentialRampToValueAtTime(65, now + 0.15);
+    const coreOsc = this.ctx.createOscillator();
+    const coreGain = this.ctx.createGain();
+    const shaper = this.ctx.createWaveShaper();
+    
+    const curve = new Float32Array(44100);
+    const k = type === 'heavy' ? 400 : 50; 
+    for (let i = 0; i < 44100; ++i) {
+      const x = (i * 2) / 44100 - 1;
+      curve[i] = ((3 + k) * x * 20 * (Math.PI / 180)) / (Math.PI + k * Math.abs(x));
     }
+    shaper.curve = curve;
+    shaper.oversample = '4x';
 
-    const noteLength = type === 'heavy' ? 0.22 : 0.12;
-    const finalLength = noteLength / amp;
-    gain.gain.setValueAtTime(Math.min(0.65, 0.5 * amp), now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + finalLength);
+    coreOsc.type = type === 'heavy' ? 'sawtooth' : type === 'spear' ? 'square' : 'triangle';
+    const startFreq = type === 'dagger' ? 1200 : type === 'spear' ? 600 : type === 'heavy' ? 300 : 800;
+    coreOsc.frequency.setValueAtTime(startFreq * amp, now);
+    coreOsc.frequency.exponentialRampToValueAtTime(startFreq * 0.1, now + duration * 0.8);
 
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(this.masterGain);
+    coreGain.gain.setValueAtTime(type === 'heavy' ? 0.45 : 0.35, now);
+    coreGain.gain.exponentialRampToValueAtTime(0.01, now + duration);
 
-    osc.start(now);
-    osc.stop(now + Math.max(0.2, finalLength * 1.4));
+    coreOsc.connect(shaper).connect(coreGain).connect(this.masterGain);
+    coreOsc.start(now); coreOsc.stop(now + duration);
 
-    // Add high frequency white noise swoosh
-    this.playNoiseSwoosh(0.1 * amp, type === 'heavy' ? 600 * amp : type === 'spear' ? 1550 : type === 'dagger' ? 1300 : 1200);
+    this.playNoiseSwoosh(0.15 * amp, type === 'heavy' ? 800 : type === 'spear' ? 1600 : 2000);
   }
 
   /**
@@ -193,52 +188,55 @@ class AudioManager {
 
     const now = this.ctx.currentTime;
     const amp = Math.max(0.6, Math.min(1.7, tone));
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
+    const duration = type === 'holy' ? 0.8 : 0.5;
+
+    const modOsc = this.ctx.createOscillator();
+    const modGain = this.ctx.createGain();
+    const carrierOsc = this.ctx.createOscillator();
+    const carrierGain = this.ctx.createGain();
 
     if (type === 'fire') {
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(150 * amp, now);
-      osc.frequency.exponentialRampToValueAtTime(600 * amp, now + 0.1 / amp);
-      osc.frequency.exponentialRampToValueAtTime(80, now + 0.35);
-      gain.gain.setValueAtTime(0.35 * amp, now);
-      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
-      this.playNoiseSwoosh(0.25 * amp, 400 * amp);
+      modOsc.type = 'sawtooth'; carrierOsc.type = 'sine';
+      modOsc.frequency.value = 50 * amp; modGain.gain.value = 300; 
+      carrierOsc.frequency.setValueAtTime(150 * amp, now);
+      carrierOsc.frequency.exponentialRampToValueAtTime(600 * amp, now + 0.2);
+      carrierOsc.frequency.exponentialRampToValueAtTime(50, now + duration);
+      this.playNoiseSwoosh(0.3 * amp, 300 * amp);
     } else if (type === 'ice') {
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(700 * amp, now);
-      osc.frequency.linearRampToValueAtTime(1400 * amp, now + 0.1 / amp);
-      osc.frequency.exponentialRampToValueAtTime(380, now + 0.28 / amp);
-      gain.gain.setValueAtTime(0.27 * amp, now);
-      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.28 / amp);
+      modOsc.type = 'sine'; carrierOsc.type = 'triangle';
+      modOsc.frequency.value = 800 * amp; modGain.gain.value = 500;
+      carrierOsc.frequency.setValueAtTime(1200 * amp, now);
+      carrierOsc.frequency.exponentialRampToValueAtTime(200, now + duration);
     } else if (type === 'lightning') {
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(120 * amp, now);
-      osc.frequency.linearRampToValueAtTime(880 * amp, now + 0.05 / amp);
-      osc.frequency.exponentialRampToValueAtTime(40, now + 0.2 / amp);
-      gain.gain.setValueAtTime(0.42 * amp, now);
-      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25 / amp);
-      this.playNoiseSwoosh(0.18 * amp, 1800);
+      modOsc.type = 'square'; carrierOsc.type = 'sawtooth';
+      modOsc.frequency.value = 200 * amp; modGain.gain.value = 1000;
+      carrierOsc.frequency.setValueAtTime(200 * amp, now);
+      carrierOsc.frequency.linearRampToValueAtTime(1200 * amp, now + 0.1);
+      carrierOsc.frequency.exponentialRampToValueAtTime(50, now + duration);
+      this.playNoiseSwoosh(0.25 * amp, 2000);
     } else if (type === 'holy') {
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(523.25 * amp, now); // C5
-      osc.frequency.linearRampToValueAtTime(659.25 * amp, now + 0.15 / amp); // E5
-      osc.frequency.linearRampToValueAtTime(783.99 * amp, now + 0.3 / amp); // G5
-      gain.gain.setValueAtTime(0.3 * amp, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5 / amp);
+      modOsc.type = 'sine'; carrierOsc.type = 'sine';
+      modOsc.frequency.value = 4 * amp; modGain.gain.value = 20; 
+      carrierOsc.frequency.setValueAtTime(440 * amp, now);
+      carrierOsc.frequency.linearRampToValueAtTime(659.25 * amp, now + 0.2);
+      carrierOsc.frequency.linearRampToValueAtTime(880 * amp, now + duration);
     } else { // dark
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(90 * amp, now);
-      osc.frequency.exponentialRampToValueAtTime(45, now + 0.4 / amp);
-      gain.gain.setValueAtTime(0.38 * amp, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45 / amp);
+      modOsc.type = 'sawtooth'; carrierOsc.type = 'square';
+      modOsc.frequency.value = 10 * amp; modGain.gain.value = 200; 
+      carrierOsc.frequency.setValueAtTime(100 * amp, now);
+      carrierOsc.frequency.exponentialRampToValueAtTime(30, now + duration);
     }
 
-    osc.connect(gain);
-    gain.connect(this.masterGain);
+    modOsc.connect(modGain);
+    modGain.connect(carrierOsc.frequency); 
 
-    osc.start(now);
-    osc.stop(now + 0.5);
+    carrierGain.gain.setValueAtTime(0.5, now);
+    carrierGain.gain.exponentialRampToValueAtTime(0.01, now + duration);
+
+    carrierOsc.connect(carrierGain).connect(this.masterGain);
+    
+    modOsc.start(now); modOsc.stop(now + duration);
+    carrierOsc.start(now); carrierOsc.stop(now + duration);
   }
 
   /**
@@ -250,24 +248,30 @@ class AudioManager {
     if (!this.ctx || !this.masterGain) return;
 
     const now = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
+    
+    const punchOsc = this.ctx.createOscillator();
+    const punchGain = this.ctx.createGain();
+    punchOsc.type = 'square';
+    punchOsc.frequency.setValueAtTime(isCrit ? 800 : 400, now);
+    punchOsc.frequency.exponentialRampToValueAtTime(50, now + 0.05); 
+    punchGain.gain.setValueAtTime(isCrit ? 0.8 : 0.5, now);
+    punchGain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+    punchOsc.connect(punchGain).connect(this.masterGain);
+    punchOsc.start(now); punchOsc.stop(now + 0.05);
 
-    osc.type = isCrit ? 'sawtooth' : 'triangle';
-    osc.frequency.setValueAtTime(isCrit ? 350 : 200, now);
-    osc.frequency.exponentialRampToValueAtTime(30, now + 0.12);
-
-    gain.gain.setValueAtTime(isCrit ? 0.6 : 0.35, now);
-    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
-
-    osc.connect(gain);
-    gain.connect(this.masterGain);
-
-    osc.start(now);
-    osc.stop(now + 0.18);
+    const bodyOsc = this.ctx.createOscillator();
+    const bodyGain = this.ctx.createGain();
+    bodyOsc.type = isCrit ? 'sawtooth' : 'sine';
+    bodyOsc.frequency.setValueAtTime(isCrit ? 200 : 120, now);
+    bodyOsc.frequency.exponentialRampToValueAtTime(20, now + 0.2);
+    bodyGain.gain.setValueAtTime(isCrit ? 0.7 : 0.4, now);
+    bodyGain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+    bodyOsc.connect(bodyGain).connect(this.masterGain);
+    bodyOsc.start(now); bodyOsc.stop(now + 0.2);
 
     if (isCrit) {
-      this.playChime(880, 0.15);
+      this.playChime(1200, 0.2);
+      this.playNoiseSwoosh(0.15, 1000);
     }
   }
 
