@@ -144,6 +144,10 @@ io.on('connection', (socket) => {
 
   // When a player joins the server with their guest info
   socket.on('register_player', (data) => {
+    if (players[socket.id]) {
+      console.log(`[AUTH] Socket ${socket.id} already registered. Skipping to preserve state.`);
+      return;
+    }
     players[socket.id] = {
       uuid: data.uuid,
       name: data.name,
