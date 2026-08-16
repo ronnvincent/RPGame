@@ -235,23 +235,23 @@ class AudioManager {
   }
 
   public playDialogueBlip(char?: string | number) {
-    this.playSFX('/assets/audio/sfx/click.ogg', 0.1);
+    this.playSFX('/assets/audio/sfx/RPG Sound Pack/inventory/cursor.wav', 0.15);
   }
 
   public playPageTurn() {
-    this.playSFX('/assets/audio/sfx/click.ogg', 0.1);
+    this.playSFX('/assets/audio/sfx/RPG Sound Pack/inventory/cursor.wav', 0.2);
   }
 
   public playHeal() {
-    this.playSFX('/assets/audio/sfx/magic.ogg', 0.2);
+    this.playSFX('/assets/audio/sfx/heal.ogg', 0.2);
   }
 
   public playTone(duration?: number, freq?: number) {
-    this.playSFX('/assets/audio/sfx/chime.ogg', 0.2);
+    this.playSFX('/assets/audio/sfx/magicdrop.ogg', 0.2);
   }
 
   public playBossRoar() {
-    this.playSFX('/assets/audio/sfx/slash_heavy.ogg', 0.5);
+    this.playSFX('/assets/audio/sfx/explode4.ogg', 0.4);
   }
 
   public playQuestComplete() {
@@ -263,11 +263,11 @@ class AudioManager {
   }
 
   public playTeleport() {
-    this.playSFX('/assets/audio/sfx/magic.ogg', 0.2);
+    this.playSFX('/assets/audio/sfx/teleport.ogg', 0.2);
   }
 
   public playCoin() {
-    this.playSFX('/assets/audio/sfx/loot.ogg', 0.2);
+    this.playSFX('/assets/audio/sfx/magicdrop.ogg', 0.2);
   }
 }
 export const audio = new AudioManager();

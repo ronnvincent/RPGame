@@ -338,6 +338,36 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('party_return_town', () => {
+    const p = players[socket.id];
+    if (p && p.room) {
+      io.to(p.room).emit('party_return_town');
+    }
+  });
+
+  socket.on('party_next_dungeon', (data) => {
+    const p = players[socket.id];
+    if (p && p.room) {
+      io.to(p.room).emit('party_next_dungeon', data);
+    }
+  });
+
+  socket.on('leave_dungeon_room', () => {
+    const p = players[socket.id];
+    if (p && p.room) {
+      const room = rooms[p.room];
+      if (room) {
+        room.players = room.players.filter(id => id !== socket.id);
+        socket.to(p.room).emit('player_left', { socketId: socket.id, name: p.name });
+        if (room.players.length === 0) {
+          delete rooms[p.room];
+        }
+      }
+      socket.leave(p.room);
+      p.room = null;
+    }
+  });
+
   socket.on('player_attack', (data) => {
     const p = players[socket.id];
     if (p && p.room) {

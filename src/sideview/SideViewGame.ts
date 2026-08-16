@@ -131,6 +131,18 @@ export class SideViewGame {
         this.engine.castRemoteSkill(classId, skillIndex, x, y + this.engine.groundY, facing);
       });
 
+      mod.network.listenForPartyReturnTown(() => {
+        console.log('[NET] Received party_return_town from host');
+        this.dialogue?.close();
+        this.loadTownHub(false);
+      });
+
+      mod.network.listenForPartyNextDungeon((data) => {
+        console.log('[NET] Received party_next_dungeon from host:', data);
+        this.dialogue?.close();
+        this.loadDungeon(data.dungeonIndex, false);
+      });
+
       mod.network.listenForWaveSync((data) => {
         if (!this.engine || this.engine.isHost) return;
         this.currentWaveIndex = data.waveIndex;
@@ -163,9 +175,13 @@ export class SideViewGame {
       });
 
       mod.network.listenForEnemySync((enemies, waveIndex) => {
-        console.log('[NET] Received enemy_sync:', { enemyCount: enemies?.length, waveIndex, isHost: this.engine?.isHost });
         if (!this.engine || this.engine.isHost) return;
         
+        // Ensure client is in dungeon mode
+        if (this.engine.isTownMode) {
+          this.engine.isTownMode = false;
+        }
+
         // Sync wave index from host
         if (waveIndex !== undefined) {
           this.currentWaveIndex = waveIndex;
@@ -174,8 +190,14 @@ export class SideViewGame {
         
         // Fully sync enemies from host
         // Denormalize Y coordinates
-        const denormalized = enemies.map((e: any) => ({ ...e, y: e.y + this.engine!.groundY }));
+        const denormalized = (enemies || []).map((e: any) => ({ ...e, y: e.y + this.engine!.groundY }));
         this.engine.enemies = denormalized as any;
+
+        const dungeon = DUNGEONS[this.currentDungeonIndex];
+        if (dungeon) {
+          const livingCount = this.engine.enemies.filter(e => !e.isDead).length;
+          this.hud?.setWaveInfo(`${dungeon.name} - Wave ${this.currentWaveIndex + 1}/${dungeon.waves.length}`, livingCount);
+        }
       });
       
       mod.network.listenForDamageEnemy((enemyId, damage, facing) => {
@@ -198,10 +220,11 @@ export class SideViewGame {
     requestAnimationFrame((t) => this.gameLoop(t));
   }
 
-  public loadTownHub() {
+  public loadTownHub(broadcastParty: boolean = true) {
     if (!this.engine) return;
     this.engine.isTownMode = true;
     this.engine.enemies = [];
+    this.engine.particles.summonedMinions = [];
     this.engine.player.x = 450;
     this.engine.player.y = this.engine.groundY;
     this.engine.player.vx = 0;
@@ -209,6 +232,16 @@ export class SideViewGame {
     this.engine.setBattleTheme('catacombs');
     audio.playTownBGM();
     this.hud?.showToast('🏰 Arrived at Haven of Eldermoor');
+
+    if (broadcastParty) {
+      import('./network/NetworkManager').then(mod => {
+        if (this.engine?.isHost) {
+          mod.network.sendPartyReturnTown();
+        } else {
+          mod.network.leaveDungeonRoom();
+        }
+      });
+    }
   }
 
   public onSelectLocation(locationId: string, isHost: boolean = true) {
@@ -231,11 +264,11 @@ export class SideViewGame {
           return;
         }
       }
-      this.loadDungeon(dungeonIdx);
+      this.loadDungeon(dungeonIdx, true);
     }
   }
 
-  public loadDungeon(dungeonIndex: number) {
+  public loadDungeon(dungeonIndex: number, broadcastParty: boolean = false) {
     if (!this.engine) return;
     this.engine.isTownMode = false;
     this.engine.player.x = 300;
@@ -243,6 +276,7 @@ export class SideViewGame {
     this.engine.player.vx = 0;
     this.engine.player.vy = 0;
     this.engine.enemies = []; // Clear for client
+    this.engine.particles.summonedMinions = [];
 
     this.currentDungeonIndex = dungeonIndex % DUNGEONS.length;
     const dungeon = DUNGEONS[this.currentDungeonIndex];
@@ -256,6 +290,11 @@ export class SideViewGame {
     // Only Host spawns waves
     if (this.engine.isHost) {
       this.spawnNextWave();
+      if (broadcastParty && dungeon) {
+        import('./network/NetworkManager').then(mod => {
+          mod.network.sendPartyNextDungeon(dungeon.id, this.currentDungeonIndex);
+        });
+      }
     }
   }
 
@@ -317,7 +356,7 @@ export class SideViewGame {
             label: 'Return to Town Sanctuary',
             icon: '🏰',
             type: 'custom',
-            onSelect: () => this.loadTownHub()
+            onSelect: () => this.loadTownHub(true)
           },
           {
             label: 'Enter Endless Celestial Arena',
@@ -346,7 +385,7 @@ export class SideViewGame {
             type: 'custom',
             onSelect: () => {
               this.dialogue?.close();
-              this.loadTownHub();
+              this.loadTownHub(true);
             }
           },
           {
@@ -357,17 +396,17 @@ export class SideViewGame {
               this.dialogue?.close();
               const nextDungeon = DUNGEONS[this.currentDungeonIndex + 1];
               if (!nextDungeon) {
-                this.loadTownHub();
+                this.loadTownHub(true);
                 return;
               }
               const requiredLevel = nextDungeon.minLevel || 1;
               if (this.engine!.player.level < requiredLevel) {
                 audio.playClick();
                 this.hud?.showToast(`Lv. ${requiredLevel} Required for ${nextDungeon.name}!`);
-                this.loadTownHub();
+                this.loadTownHub(true);
                 return;
               }
-              this.loadDungeon(this.currentDungeonIndex + 1);
+              this.loadDungeon(this.currentDungeonIndex + 1, true);
             }
           }
         ]

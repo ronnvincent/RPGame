@@ -15,6 +15,7 @@ export class NetworkManager {
     isGrounded: boolean;
     isAttacking: boolean;
     animState: string;
+    isTownMode?: boolean;
   }> = {};
 
   constructor() {
@@ -48,7 +49,8 @@ export class NetworkManager {
           name: data.name || 'Player',
           x: data.x, y: data.y, facing: data.facing,
           isGrounded: data.isGrounded, isAttacking: data.isAttacking,
-          animState: data.animState || 'idle'
+          animState: data.animState || 'idle',
+          isTownMode: !!data.isTownMode
         };
       } else {
         const p = this.remotePlayers[data.socketId];
@@ -60,6 +62,7 @@ export class NetworkManager {
         p.isGrounded = data.isGrounded;
         p.isAttacking = data.isAttacking;
         p.animState = data.animState || 'idle';
+        p.isTownMode = !!data.isTownMode;
       }
     });
 
@@ -130,8 +133,8 @@ export class NetworkManager {
 
   public listenForPlayerSkill(onSkill: (socketId: string, skillIndex: number, classId: string, x: number, y: number, facing: number) => void) {
     if (!this.socket) this.connect();
-    this.socket.off('remote_player_skill');
-    this.socket.on('remote_player_skill', (data) => {
+    this.socket?.off('remote_player_skill');
+    this.socket?.on('remote_player_skill', (data) => {
       onSkill(data.socketId, data.skillIndex, data.classId, data.x, data.y, data.facing);
     });
   }
@@ -146,15 +149,49 @@ export class NetworkManager {
       facing: playerState.facing,
       isGrounded: playerState.isGrounded,
       isAttacking,
-      animState: playerState.animState || 'idle'
+      animState: playerState.animState || 'idle',
+      isTownMode: !!playerState.isTownMode
     });
+  }
+
+  public sendPartyReturnTown() {
+    if (!this.socket || !this.room) return;
+    this.socket.emit('party_return_town');
+  }
+
+  public listenForPartyReturnTown(onReturn: () => void) {
+    if (!this.socket) this.connect();
+    this.socket?.off('party_return_town');
+    this.socket?.on('party_return_town', () => {
+      onReturn();
+    });
+  }
+
+  public sendPartyNextDungeon(dungeonId: string, dungeonIndex: number) {
+    if (!this.socket || !this.room) return;
+    this.socket.emit('party_next_dungeon', { dungeonId, dungeonIndex });
+  }
+
+  public listenForPartyNextDungeon(onNext: (data: { dungeonId: string, dungeonIndex: number }) => void) {
+    if (!this.socket) this.connect();
+    this.socket?.off('party_next_dungeon');
+    this.socket?.on('party_next_dungeon', (data) => {
+      onNext(data);
+    });
+  }
+
+  public leaveDungeonRoom() {
+    if (this.socket && this.room) {
+      this.socket.emit('leave_dungeon_room');
+    }
+    this.room = null;
+    this.remotePlayers = {};
   }
 
   // ================= SYNC EVENTS =================
 
   public sendEnemySync(enemiesData: any[], groundY: number, waveIndex: number = 0) {
     if (!this.socket || !this.room) {
-      console.log('[NET] sendEnemySync BLOCKED - socket:', !!this.socket, 'room:', this.room);
       return;
     }
     const slim = enemiesData.map(e => ({
@@ -195,8 +232,8 @@ export class NetworkManager {
 
   public listenForEnemySync(onSync: (enemiesData: any[], waveIndex: number) => void) {
     if (!this.socket) this.connect();
-    this.socket.off('enemy_sync');
-    this.socket.on('enemy_sync', (data) => {
+    this.socket?.off('enemy_sync');
+    this.socket?.on('enemy_sync', (data) => {
       onSync(data.enemies, data.waveIndex || 0);
     });
   }
@@ -208,8 +245,8 @@ export class NetworkManager {
 
   public listenForWaveSync(onSync: (waveData: any) => void) {
     if (!this.socket) this.connect();
-    this.socket.off('wave_sync');
-    this.socket.on('wave_sync', (data) => {
+    this.socket?.off('wave_sync');
+    this.socket?.on('wave_sync', (data) => {
       onSync(data);
     });
   }
@@ -222,8 +259,8 @@ export class NetworkManager {
 
   public listenForEnemyDied(onDied: (enemyData: any) => void) {
     if (!this.socket) this.connect();
-    this.socket.off('enemy_died');
-    this.socket.on('enemy_died', (data) => {
+    this.socket?.off('enemy_died');
+    this.socket?.on('enemy_died', (data) => {
       onDied(data);
     });
   }
@@ -235,8 +272,8 @@ export class NetworkManager {
 
   public listenForDamageEnemy(onDamage: (enemyId: string, damage: number, facing: number) => void) {
     if (!this.socket) this.connect();
-    this.socket.off('damage_enemy');
-    this.socket.on('damage_enemy', (data) => {
+    this.socket?.off('damage_enemy');
+    this.socket?.on('damage_enemy', (data) => {
       onDamage(data.enemyId, data.damage, data.facing);
     });
   }
