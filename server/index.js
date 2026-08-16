@@ -338,10 +338,20 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('party_return_town', () => {
+  socket.on('party_return_town', (data = {}) => {
     const p = players[socket.id];
     if (p && p.room) {
-      io.to(p.room).emit('party_return_town');
+      const payload = (data && typeof data === 'object') ? data : {};
+      io.to(p.room).emit('party_return_town', {
+        socketId: socket.id,
+        x: typeof payload.x === 'number' ? payload.x : undefined,
+        y: typeof payload.y === 'number' ? payload.y : undefined,
+        facing: typeof payload.facing === 'number' ? payload.facing : 1,
+        animState: payload.animState || 'idle',
+        isTownMode: payload.isTownMode !== false,
+        classId: payload.classId,
+        name: payload.name || p.name
+      });
     }
   });
 

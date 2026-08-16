@@ -125,15 +125,67 @@ export class SideViewGame {
     
     // Setup Multiplayer Sync Listeners
     import('./network/NetworkManager').then(mod => {
-      mod.network.listenForPlayerSkill((socketId, skillIndex, classId, x, y, facing) => {
-        console.log('[NET] Received remote_player_skill:', { socketId, skillIndex, classId, x, y, facing });
+      mod.network.listenForPlayerSkill((socketId, skillIndex, classId, x, y, facing, isTownMode, skillDamage) => {
+        console.log('[NET] Received remote_player_skill:', { socketId, skillIndex, classId, x, y, facing, isTownMode });
         if (!this.engine) return;
-        this.engine.castRemoteSkill(classId, skillIndex, x, y + this.engine.groundY, facing);
+
+        const remoteP = mod.network.remotePlayers[socketId] || {
+          name: 'Player',
+          x: 0,
+          y: 0,
+          facing: 1,
+          isGrounded: true,
+          isAttacking: true,
+          animState: 'attack',
+          isTownMode
+        };
+
+        remoteP.classId = classId;
+        remoteP.x = x;
+        remoteP.y = y;
+        remoteP.facing = facing;
+        remoteP.isGrounded = true;
+        remoteP.isAttacking = true;
+        remoteP.animState = 'attack';
+        remoteP.isTownMode = isTownMode;
+
+        mod.network.remotePlayers[socketId] = remoteP;
+
+        this.engine.castRemoteSkill(classId, skillIndex, x, y + this.engine.groundY, facing, socketId, skillDamage);
       });
 
-      mod.network.listenForPartyReturnTown(() => {
-        console.log('[NET] Received party_return_town from host');
+      mod.network.listenForPartyReturnTown((returnData) => {
+        console.log('[NET] Received party_return_town:', returnData);
         this.dialogue?.close();
+        if (this.engine && returnData?.socketId && returnData.socketId !== 'unknown') {
+          const isSelfReturn = returnData.socketId === mod.network.socket?.id;
+          if (!isSelfReturn) {
+            const remoteP = mod.network.remotePlayers[returnData.socketId];
+            if (remoteP) {
+              remoteP.classId = returnData.classId || remoteP.classId || this.engine.player.characterClass.id;
+              remoteP.name = returnData.name || remoteP.name;
+              remoteP.x = typeof returnData.x === 'number' ? returnData.x : remoteP.x;
+              remoteP.y = typeof returnData.y === 'number' ? returnData.y : remoteP.y;
+              remoteP.facing = returnData.facing || remoteP.facing;
+              remoteP.animState = returnData.animState || remoteP.animState;
+              remoteP.isTownMode = typeof returnData.isTownMode === 'boolean' ? returnData.isTownMode : true;
+              remoteP.isAttacking = false;
+              remoteP.isGrounded = true;
+            } else {
+              mod.network.remotePlayers[returnData.socketId] = {
+                classId: returnData.classId || this.engine.player.characterClass.id,
+                name: returnData.name || 'Player',
+                x: typeof returnData.x === 'number' ? returnData.x : this.engine.player.x,
+                y: typeof returnData.y === 'number' ? returnData.y : 0,
+                facing: returnData.facing || this.engine.player.facing,
+                isGrounded: true,
+                isAttacking: false,
+                animState: returnData.animState || 'idle',
+                isTownMode: typeof returnData.isTownMode === 'boolean' ? returnData.isTownMode : true
+              };
+            }
+          }
+        }
         this.loadTownHub(false);
       });
 
@@ -235,7 +287,7 @@ export class SideViewGame {
     if (broadcastParty) {
       import('./network/NetworkManager').then(mod => {
         if (this.engine?.isHost) {
-          mod.network.sendPartyReturnTown();
+          mod.network.sendPartyReturnTown(this.engine.player, this.engine.groundY);
         } else {
           mod.network.leaveDungeonRoom();
         }

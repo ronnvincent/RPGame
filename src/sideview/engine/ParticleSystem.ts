@@ -91,6 +91,7 @@ export interface ShadowCloneEntity {
 }
 
 export interface SummonedMinionEntity {
+  ownerSocketId?: string | null;
   id: string;
   x: number;
   y: number;
@@ -630,11 +631,12 @@ export class ParticleSystem {
     this.addSpellSlash(x, y - 20, facing, 1.5, '#4ade80');
   }
 
-  public spawnSkeletonMinion(x: number, y: number, damage: number): SummonedMinionEntity {
+  public spawnSkeletonMinion(x: number, y: number, damage: number, ownerSocketId?: string | null): SummonedMinionEntity {
     this.addImpactBurst(x, y - 10, 25, '#c084fc', 'dark');
     this.addDarkPillar(x, y);
 
     const minion: SummonedMinionEntity = {
+      ownerSocketId: ownerSocketId || null,
       id: `minion_${Date.now()}_${Math.random()}`,
       x,
       y,
@@ -655,7 +657,7 @@ export class ParticleSystem {
     return minion;
   }
 
-  public spawnDragonMinion(x: number, groundY: number, facing: number, damage: number): SummonedMinionEntity {
+  public spawnDragonMinion(x: number, groundY: number, facing: number, damage: number, ownerSocketId?: string | null): SummonedMinionEntity {
     // Keep only one Elder Dragon companion active
     this.summonedMinions = this.summonedMinions.filter(m => m.type !== 'dragon');
 
@@ -664,6 +666,7 @@ export class ParticleSystem {
     this.addFlameLash(x + facing * 80, groundY - 20, facing, 2.4);
 
     const minion: SummonedMinionEntity = {
+      ownerSocketId: ownerSocketId || null,
       id: `dragon_minion_${Date.now()}`,
       x: x - facing * 60,
       y: groundY,
@@ -684,7 +687,7 @@ export class ParticleSystem {
     return minion;
   }
 
-  public spawnReaperMinion(x: number, groundY: number, facing: number, damage: number): SummonedMinionEntity {
+  public spawnReaperMinion(x: number, groundY: number, facing: number, damage: number, ownerSocketId?: string | null): SummonedMinionEntity {
     // Clear any previous ultimate companion so only 1 exists
     this.summonedMinions = this.summonedMinions.filter(m => m.type !== 'reaper' && m.type !== 'nightborne');
 
@@ -692,6 +695,7 @@ export class ParticleSystem {
     this.addDarkPillar(x + facing * 60, groundY);
 
     const minion: SummonedMinionEntity = {
+      ownerSocketId: ownerSocketId || null,
       id: `reaper_minion_${Date.now()}`,
       x: x + facing * 40,
       y: groundY,

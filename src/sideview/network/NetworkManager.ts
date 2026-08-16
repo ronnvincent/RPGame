@@ -125,17 +125,43 @@ export class NetworkManager {
     });
   }
 
-  public sendPlayerSkill(skillIndex: number, classId: string, x: number, y: number, facing: number, groundY: number) {
+  public sendPlayerSkill(
+    skillIndex: number,
+    classId: string,
+    x: number,
+    y: number,
+    facing: number,
+    groundY: number,
+    isTownMode: boolean = false,
+    skillDamage?: number
+  ) {
     y = y - groundY;
     if (!this.socket || !this.room) return;
-    this.socket.emit('player_skill', { skillIndex, classId, x, y, facing });
+    this.socket.emit('player_skill', {
+      skillIndex,
+      classId,
+      x,
+      y,
+      facing,
+      isTownMode,
+      skillDamage
+    });
   }
 
-  public listenForPlayerSkill(onSkill: (socketId: string, skillIndex: number, classId: string, x: number, y: number, facing: number) => void) {
+  public listenForPlayerSkill(onSkill: (socketId: string, skillIndex: number, classId: string, x: number, y: number, facing: number, isTownMode: boolean, skillDamage: number) => void) {
     if (!this.socket) this.connect();
     this.socket?.off('remote_player_skill');
     this.socket?.on('remote_player_skill', (data) => {
-      onSkill(data.socketId, data.skillIndex, data.classId, data.x, data.y, data.facing);
+      onSkill(
+        data.socketId,
+        data.skillIndex,
+        data.classId,
+        data.x,
+        data.y,
+        data.facing,
+        Boolean(data.isTownMode),
+        typeof data.skillDamage === 'number' ? data.skillDamage : 0
+      );
     });
   }
 
@@ -154,16 +180,35 @@ export class NetworkManager {
     });
   }
 
-  public sendPartyReturnTown() {
+  public sendPartyReturnTown(playerState: PlayerState, groundY: number) {
     if (!this.socket || !this.room) return;
-    this.socket.emit('party_return_town');
+    const payload = {
+      x: playerState.x,
+      y: playerState.y - groundY,
+      facing: playerState.facing,
+      animState: playerState.animState || 'idle',
+      isTownMode: true,
+      classId: playerState.characterClass ? playerState.characterClass.id : undefined,
+      name: localStorage.getItem('playerName') || 'Player'
+    };
+
+    this.socket.emit('party_return_town', payload);
   }
 
-  public listenForPartyReturnTown(onReturn: () => void) {
+  public listenForPartyReturnTown(onReturn: (data: {
+    socketId: string;
+    x?: number;
+    y?: number;
+    facing?: number;
+    animState?: string;
+    isTownMode?: boolean;
+    classId?: string;
+    name?: string;
+  }) => void) {
     if (!this.socket) this.connect();
     this.socket?.off('party_return_town');
-    this.socket?.on('party_return_town', () => {
-      onReturn();
+    this.socket?.on('party_return_town', (data) => {
+      onReturn(data || { socketId: 'unknown' });
     });
   }
 

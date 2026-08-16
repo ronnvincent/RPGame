@@ -496,12 +496,14 @@ export class SideViewEngine {
   /**
    * Cast one of the 6 specialized skills on remote player
    */
-  public castRemoteSkill(classId: string, skillIndex: number, startX: number, startY: number, facing: number) {
+  public castRemoteSkill(classId: string, skillIndex: number, startX: number, startY: number, facing: number, ownerSocketId?: string, skillDamage?: number) {
     // Replicate VFX without dealing local damage (Host coordinates damage)
     const cls = CHARACTER_CLASSES.find((c: any) => c.id === classId);
     if (!cls) return;
     const skill = cls.skills[skillIndex];
     if (!skill) return;
+
+    const remoteBaseDamage = typeof skillDamage === 'number' && skillDamage > 0 ? skillDamage : this.player.totalAtk;
 
     const attackX = startX + (facing * (skill.range * 0.6));
     const attackY = startY;
@@ -660,7 +662,7 @@ export class SideViewEngine {
           this.particles.addImpactBurst(attackX, startY - 20, 20, '#a855f7', 'smoke');
         } else if (skillIndex === 2) {
           this.particles.playSanjuVfx(startX + facing * 40, this.groundY - 20, 'sanju_blood', 25, 24, 1.8);
-          this.particles.spawnSkeletonMinion(startX + facing * 40, this.groundY, 0);
+          this.particles.spawnSkeletonMinion(startX + facing * 40, this.groundY, Math.max(1, Math.round(remoteBaseDamage * 0.9)), ownerSocketId || null);
           this.particles.addFloatingText(startX, startY - 40, 'SUMMONED SKELETON!', '#c084fc', true, 16);
         } else if (skillIndex === 3) {
           this.particles.playSanjuVfx(attackX, attackY - 25, 'sanju_blood', 25, 24, 2.0);
@@ -674,7 +676,7 @@ export class SideViewEngine {
         } else if (skillIndex === 5) {
           this.particles.triggerScreenShake(24, 0.85);
           this.particles.addScreenFlash('#7e22ce', 0.6, 0.05);
-          this.particles.spawnReaperMinion(startX + facing * 50, this.groundY, facing, 0);
+          this.particles.spawnReaperMinion(startX + facing * 50, this.groundY, facing, Math.max(1, Math.round(remoteBaseDamage * 1.3)), ownerSocketId || null);
           this.particles.addDarkPillar(attackX, this.groundY);
           this.particles.addGroundExplosion(attackX, this.groundY, 2.5);
         }
@@ -787,7 +789,7 @@ export class SideViewEngine {
           this.particles.triggerScreenShake(26, 0.9);
           this.particles.addScreenFlash('#ff5722', 0.65, 0.05);
           this.particles.spawnDragonDescent(startX, startY, facing);
-          this.particles.spawnDragonMinion(startX, this.groundY, facing, 0);
+          this.particles.spawnDragonMinion(startX, this.groundY, facing, Math.max(1, Math.round(remoteBaseDamage * 0.85)), ownerSocketId || null);
         }
         return;
       }
@@ -817,8 +819,13 @@ export class SideViewEngine {
     p.attackTimer = skill.cooldown === 0 ? 0.22 : 0.45;
     p.animState = 'attack';
 
+    const attackX = p.x + (p.facing * (skill.range * 0.6));
+    const attackY = p.y;
+    const isCrit = Math.random() < p.totalCrit;
+    const damage = this.calculateDamage(skill);
+
     // Broadcast skill to network immediately
-    network.sendPlayerSkill(skillIndex, p.characterClass.id, p.x, p.y, p.facing, this.groundY);
+    network.sendPlayerSkill(skillIndex, p.characterClass.id, p.x, p.y, p.facing, this.groundY, this.isTownMode, damage);
 
     // Play SFX
     this.playSkillCastSfx(skill);
@@ -834,11 +841,6 @@ export class SideViewEngine {
       this.particles.addHolyPillar(p.x, p.y);
       this.particles.addFloatingText(p.x, p.y - 30, `BUFF +${Math.round((skill.buff.multiplier - 1) * 100)}% ${skill.buff.stat.toUpperCase()}`, '#ffee58', true, 16);
     }
-
-    const attackX = p.x + (p.facing * (skill.range * 0.6));
-    const attackY = p.y;
-    const isCrit = Math.random() < p.totalCrit;
-    const damage = this.calculateDamage(skill);
 
     // Mid-air Plunging Dive Attack for Basic Attack (Skill 0)
     if (skillIndex === 0 && !p.isGrounded) {
@@ -914,7 +916,7 @@ export class SideViewEngine {
 
     // 2. NECROMANCER: REAL SKELETON MINIONS, CORPSE EXPLOSION, GRIM REAPER DEATH NOVA
     if (skill.id === 'n_3') {
-      this.particles.spawnSkeletonMinion(p.x + p.facing * 40, this.groundY, Math.round(damage * 0.9));
+      this.particles.spawnSkeletonMinion(p.x + p.facing * 40, this.groundY, Math.round(damage * 0.9), network.socket?.id || null);
       this.particles.addFloatingText(p.x, p.y - 40, 'SUMMONED SKELETON!', '#c084fc', true, 16);
       return;
     }
@@ -934,7 +936,7 @@ export class SideViewEngine {
     }
     if (skill.id === 'n_6') {
       // 2. NECROMANCER ULTIMATE: Bringer of Death Companion
-      this.particles.spawnReaperMinion(p.x + p.facing * 50, this.groundY, p.facing, Math.round(damage * 1.3));
+      this.particles.spawnReaperMinion(p.x + p.facing * 50, this.groundY, p.facing, Math.round(damage * 1.3), network.socket?.id || null);
       this.executeAreaDamage(attackX, attackY, skill);
       return;
     }
@@ -1063,7 +1065,7 @@ export class SideViewEngine {
     if (skill.id === 'd_6') {
       // 7. DRAGOON ULTIMATE: Active Elder Dragon Companion & Flame Descent
       this.particles.spawnDragonDescent(p.x, p.y, p.facing);
-      this.particles.spawnDragonMinion(p.x, this.groundY, p.facing, Math.round(damage * 0.85));
+      this.particles.spawnDragonMinion(p.x, this.groundY, p.facing, Math.round(damage * 0.85), network.socket?.id || null);
       this.executeAreaDamage(p.x + p.facing * 120, this.groundY, skill);
       return;
     }
@@ -1626,6 +1628,21 @@ export class SideViewEngine {
   }
 
   private checkSpecialSkillEntities(dt: number) {
+    const ownerState = (ownerSocketId: string | null | undefined) => {
+      if (!ownerSocketId) return null;
+      if (network.socket && ownerSocketId === network.socket.id) {
+        return this.player;
+      }
+      const remoteP = network.remotePlayers[ownerSocketId];
+      return remoteP ? {
+        x: remoteP.x,
+        y: remoteP.y,
+        facing: remoteP.facing || this.player.facing,
+        animState: remoteP.animState || 'idle',
+        isTownMode: Boolean(remoteP.isTownMode)
+      } : null;
+    };
+
     // A. Update Summoned Minions (Skeletons & Active Elder Dragon Companion)
     this.particles.summonedMinions.forEach(minion => {
       let targetEnemy: EnemyInstance | null = null;
@@ -1641,6 +1658,7 @@ export class SideViewEngine {
       });
 
       if (minion.type === 'skeleton') {
+        const follow = ownerState(minion.ownerSocketId);
         if (targetEnemy) {
           const dx = (targetEnemy as EnemyInstance).x - minion.x;
           minion.facing = dx > 0 ? 1 : -1;
@@ -1660,18 +1678,20 @@ export class SideViewEngine {
           }
         } else {
           // Follow master smoothly
-          const followX = this.player.x - this.player.facing * 45;
+          const followState = follow || this.player;
+          const followX = followState.x - followState.facing * 45;
           const distToPlayer = followX - minion.x;
           if (Math.abs(distToPlayer) > 30) {
             minion.facing = distToPlayer > 0 ? 1 : -1;
             minion.x += minion.facing * 3.0;
             minion.state = 'walk';
           } else {
-            minion.facing = this.player.facing;
+            minion.facing = followState.facing;
             minion.state = 'idle';
           }
         }
       } else if (minion.type === 'dragon') {
+        const follow = ownerState(minion.ownerSocketId);
         minion.y = this.groundY; // Firmly anchored on ground
         if (minion.skillCooldown === undefined) minion.skillCooldown = 1.0;
         if (minion.skillCooldown > 0) minion.skillCooldown -= dt;
@@ -1751,18 +1771,20 @@ export class SideViewEngine {
           }
         } else {
           // Follow player smoothly on the ground
-          const followX = this.player.x - this.player.facing * 80;
+          const followState = follow || this.player;
+          const followX = followState.x - followState.facing * 80;
           const distToPlayer = followX - minion.x;
           if (Math.abs(distToPlayer) > 35) {
             minion.facing = distToPlayer > 0 ? 1 : -1;
             minion.x += minion.facing * 3.2;
             minion.state = 'walk';
           } else {
-            minion.facing = this.player.facing;
+            minion.facing = followState.facing;
             minion.state = 'idle';
           }
         }
       } else if (minion.type === 'reaper') {
+        const follow = ownerState(minion.ownerSocketId);
         minion.y = this.groundY; // Firmly anchored on ground
         if (minion.skillCooldown === undefined) minion.skillCooldown = 1.0;
         if (minion.skillCooldown > 0) minion.skillCooldown -= dt;
@@ -1845,18 +1867,20 @@ export class SideViewEngine {
           }
         } else {
           // Follow Necromancer smoothly on ground
-          const followX = this.player.x - this.player.facing * 75;
+          const followState = follow || this.player;
+          const followX = followState.x - followState.facing * 75;
           const distToPlayer = followX - minion.x;
           if (Math.abs(distToPlayer) > 35) {
             minion.facing = distToPlayer > 0 ? 1 : -1;
             minion.x += minion.facing * 3.0;
             minion.state = 'walk';
           } else {
-            minion.facing = this.player.facing;
+            minion.facing = followState.facing;
             minion.state = 'idle';
           }
         }
       } else if (minion.type === 'nightborne') {
+        const follow = ownerState(minion.ownerSocketId);
         minion.y = this.groundY; // Firmly anchored on ground
         if (minion.skillCooldown === undefined) minion.skillCooldown = 1.0;
         if (minion.skillCooldown > 0) minion.skillCooldown -= dt;
@@ -1917,14 +1941,15 @@ export class SideViewEngine {
           }
         } else {
           // Follow player smoothly on ground
-          const followX = this.player.x - this.player.facing * 60;
+          const followState = follow || this.player;
+          const followX = followState.x - followState.facing * 60;
           const distToPlayer = followX - minion.x;
           if (Math.abs(distToPlayer) > 30) {
             minion.facing = distToPlayer > 0 ? 1 : -1;
             minion.x += minion.facing * 2.8;
             minion.state = 'walk';
           } else {
-            minion.facing = this.player.facing;
+            minion.facing = followState.facing;
             minion.state = 'idle';
           }
         }
