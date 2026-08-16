@@ -24,7 +24,7 @@ export interface WorldMapLocation {
 export class WorldMapUI {
   private container: HTMLElement;
   private modalEl: HTMLElement | null = null;
-  private onSelectLocation: (locationId: string) => void;
+  private onSelectLocation: (locationId: string, isHost?: boolean) => void;
 
   public static LOCATIONS: WorldMapLocation[] = [
     {

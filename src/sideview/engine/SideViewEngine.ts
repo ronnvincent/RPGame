@@ -138,6 +138,8 @@ export class SideViewEngine {
   public canvasWidth: number = 960;
   public canvasHeight: number = 540;
   public isTownMode: boolean = true;
+  public isHost: boolean = true;
+  private syncTimer: number = 0;
   public townHub: TownHub | null = null;
   public readonly portalX: number = 2560;
   public isPlayerNearPortal: boolean = false;
@@ -973,7 +975,7 @@ export class SideViewEngine {
     }
   }
 
-  public applyDamageToEnemy(enemy: EnemyInstance, rawDamage: number, isCrit: boolean, knockbackDir: number) {
+  public applyDamageToEnemy(enemy: EnemyInstance, rawDamage: number, isCrit: boolean, knockbackDir: number, fromRemote: boolean = false) {
     const defenseReduction = enemy.def * 0.6;
     const finalDamage = Math.max(1, Math.round(rawDamage - defenseReduction));
 
@@ -981,6 +983,17 @@ export class SideViewEngine {
     enemy.hitStun = 0.25;
     enemy.vx = knockbackDir * 3.5;
     enemy.vy = -2.5;
+
+    // If we are the client, and this wasn't from a remote packet, send it to the host
+    if (!this.isHost && !fromRemote) {
+      import('../network/NetworkManager').then(mod => {
+        // enemy needs an ID to be uniquely identified. We will use its array index for now if no ID exists.
+        const eIdx = this.enemies.indexOf(enemy);
+        if (eIdx !== -1) {
+          mod.network.sendDamageEnemy(eIdx.toString(), finalDamage, knockbackDir);
+        }
+      });
+    }
 
     // Hit-stop micro freeze and crunchy screen shake on impact
     this.hitStopTimer = isCrit ? 0.07 : 0.04;
@@ -996,13 +1009,27 @@ export class SideViewEngine {
     }
 
     if (enemy.hp <= 0 && !enemy.isDead) {
-      this.onEnemyDefeated(enemy);
+      if (this.isHost) {
+        this.onEnemyDefeated(enemy);
+      }
     }
   }
 
-  private onEnemyDefeated(enemy: EnemyInstance) {
+  public onEnemyDefeated(enemy: EnemyInstance) {
     enemy.isDead = true;
     enemy.hp = 0;
+    
+    if (this.isHost) {
+      import('../network/NetworkManager').then(mod => {
+        mod.network.sendEnemyDied({
+          name: enemy.name,
+          type: enemy.type,
+          x: enemy.x,
+          y: enemy.y,
+          drops: enemy.drops // Send drops so client can spawn identical loot!
+        });
+      });
+    }
 
     // Trigger quest kill tracker
     quests.onEnemyKilled(enemy.name, enemy.type === 'boss');
@@ -1624,7 +1651,7 @@ export class SideViewEngine {
       // Hit stun
       if (enemy.hitStun > 0) {
         enemy.hitStun -= dt;
-      } else {
+      } else if (this.isHost) {
         // AI Tracking towards player (or minion)
         let targetX = p.x;
         if (p.stealthTimer > 0 && this.particles.summonedMinions.length > 0) {
@@ -1640,10 +1667,12 @@ export class SideViewEngine {
         } else {
           enemy.vx = 0;
           // Attack player
-          enemy.attackTimer -= dt;
-          if (enemy.attackTimer <= 0) {
-            enemy.attackTimer = enemy.attackCooldown;
-            this.enemyAttackPlayer(enemy);
+          if (this.isHost) {
+             enemy.attackTimer -= dt;
+             if (enemy.attackTimer <= 0) {
+               enemy.attackTimer = enemy.attackCooldown;
+               this.enemyAttackPlayer(enemy);
+             }
           }
         }
       }

@@ -122,6 +122,51 @@ export class SideViewGame {
     this.hud.worldMapUI = this.worldMap;
 
     this.setupInputListeners();
+    
+    // Setup Multiplayer Sync Listeners
+    import('./network/NetworkManager').then(mod => {
+      mod.network.listenForWaveSync((data) => {
+        if (!this.engine || this.engine.isHost) return;
+        this.currentWaveIndex = data.waveIndex;
+        if (data.cleared) {
+          this.onDungeonCleared();
+        } else {
+          // Play fanfare for new wave?
+        }
+      });
+      
+      mod.network.listenForEnemyDied((enemyData) => {
+        if (!this.engine || this.engine.isHost) return;
+        // Mock an enemy instance to trigger the defeat logic
+        const fakeEnemy: any = {
+          name: enemyData.name,
+          type: enemyData.type,
+          x: enemyData.x,
+          y: enemyData.y,
+          drops: enemyData.drops,
+          isDead: false,
+          hp: 0
+        };
+        this.engine.onEnemyDefeated(fakeEnemy);
+      });
+
+      mod.network.listenForEnemySync((enemies) => {
+        if (!this.engine || this.engine.isHost) return;
+        
+        // Fully sync enemies from host
+        // We map the raw JSON objects to EnemyInstance structure roughly
+        this.engine.enemies = enemies;
+      });
+      
+      mod.network.listenForDamageEnemy((enemyId, damage, facing) => {
+        if (!this.engine || !this.engine.isHost) return;
+        const eIdx = parseInt(enemyId);
+        const enemy = this.engine.enemies[eIdx];
+        if (enemy) {
+          this.engine.applyDamageToEnemy(enemy, damage, false, facing, true);
+        }
+      });
+    });
 
     // Start with Epic Story Prologue Cutscene
     this.dialogue.playPrologue(() => {
@@ -146,10 +191,14 @@ export class SideViewGame {
     this.hud?.showToast('🏰 Arrived at Haven of Eldermoor');
   }
 
-  public onSelectLocation(locationId: string) {
+  public onSelectLocation(locationId: string, isHost: boolean = true) {
     if (locationId === 'town_eldermoor') {
       this.loadTownHub();
       return;
+    }
+
+    if (this.engine) {
+      this.engine.isHost = isHost;
     }
 
     const dungeonIdx = DUNGEONS.findIndex(d => d.id === locationId);
@@ -172,6 +221,7 @@ export class SideViewGame {
     this.engine.player.y = this.engine.groundY;
     this.engine.player.vx = 0;
     this.engine.player.vy = 0;
+    this.engine.enemies = []; // Clear for client
 
     this.currentDungeonIndex = dungeonIndex % DUNGEONS.length;
     const dungeon = DUNGEONS[this.currentDungeonIndex];
@@ -180,7 +230,11 @@ export class SideViewGame {
       audio.playDungeonBGM(dungeon.theme);
     }
     this.currentWaveIndex = 0;
-    this.spawnNextWave();
+    
+    // Only Host spawns waves
+    if (this.engine.isHost) {
+      this.spawnNextWave();
+    }
   }
 
   private spawnNextWave() {
@@ -425,9 +479,18 @@ export class SideViewGame {
           const dungeon = DUNGEONS[this.currentDungeonIndex];
           this.hud?.setWaveInfo(`${dungeon.name} - Wave ${this.currentWaveIndex + 1}/${dungeon.waves.length}`, livingEnemies.length);
 
-          if (livingEnemies.length === 0 && this.engine.enemies.length > 0) {
+          // Only Host progresses wave
+          if (this.engine.isHost && livingEnemies.length === 0 && this.engine.enemies.length > 0) {
             this.currentWaveIndex++;
             this.spawnNextWave();
+            
+            // Sync wave change to client
+            import('./network/NetworkManager').then(mod => {
+              mod.network.sendWaveSync({
+                waveIndex: this.currentWaveIndex,
+                cleared: this.currentWaveIndex >= dungeon.waves.length
+              });
+            });
           }
         }
 

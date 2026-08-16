@@ -269,11 +269,51 @@ io.on('connection', (socket) => {
     
     // Start the match!
     room.started = true;
-    io.to(data.roomId).emit('dungeon_start', {
-      roomId: data.roomId,
-      dungeonId: room.dungeonId,
-      players: room.players.map(id => players[id])
+    
+    // Assign isHost
+    const hostId = room.players[0]; // Lobby creator
+    
+    room.players.forEach(id => {
+      const pData = players[id];
+      if (pData) {
+        io.to(id).emit('dungeon_start', {
+          roomId: data.roomId,
+          dungeonId: room.dungeonId,
+          players: room.players.map(pid => players[pid]),
+          isHost: id === hostId
+        });
+      }
     });
+  });
+
+
+  // Sync Events
+  socket.on('enemy_sync', (data) => {
+    const p = players[socket.id];
+    if (p && p.room) {
+      socket.to(p.room).emit('enemy_sync', data);
+    }
+  });
+
+  socket.on('wave_sync', (data) => {
+    const p = players[socket.id];
+    if (p && p.room) {
+      socket.to(p.room).emit('wave_sync', data);
+    }
+  });
+
+  socket.on('enemy_died', (data) => {
+    const p = players[socket.id];
+    if (p && p.room) {
+      socket.to(p.room).emit('enemy_died', data);
+    }
+  });
+
+  socket.on('damage_enemy', (data) => {
+    const p = players[socket.id];
+    if (p && p.room) {
+      socket.to(p.room).emit('damage_enemy', data);
+    }
   });
 
   // In-Game Sync Events

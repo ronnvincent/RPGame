@@ -125,6 +125,56 @@ export class NetworkManager {
       isAttacking
     });
   }
+
+  // ================= SYNC EVENTS =================
+
+  public sendEnemySync(enemiesData: any[]) {
+    if (!this.socket || !this.room) return;
+    this.socket.emit('enemy_sync', { enemies: enemiesData });
+  }
+
+  public listenForEnemySync(onSync: (enemiesData: any[]) => void) {
+    this.socket?.off('enemy_sync');
+    this.socket?.on('enemy_sync', (data) => {
+      onSync(data.enemies);
+    });
+  }
+
+  public sendWaveSync(waveData: any) {
+    if (!this.socket || !this.room) return;
+    this.socket.emit('wave_sync', waveData);
+  }
+
+  public listenForWaveSync(onSync: (waveData: any) => void) {
+    this.socket?.off('wave_sync');
+    this.socket?.on('wave_sync', (data) => {
+      onSync(data);
+    });
+  }
+
+  public sendEnemyDied(enemyData: any) {
+    if (!this.socket || !this.room) return;
+    this.socket.emit('enemy_died', enemyData);
+  }
+
+  public listenForEnemyDied(onDied: (enemyData: any) => void) {
+    this.socket?.off('enemy_died');
+    this.socket?.on('enemy_died', (data) => {
+      onDied(data);
+    });
+  }
+
+  public sendDamageEnemy(enemyId: string, damage: number, facing: number) {
+    if (!this.socket || !this.room) return;
+    this.socket.emit('damage_enemy', { enemyId, damage, facing });
+  }
+
+  public listenForDamageEnemy(onDamage: (enemyId: string, damage: number, facing: number) => void) {
+    this.socket?.off('damage_enemy');
+    this.socket?.on('damage_enemy', (data) => {
+      onDamage(data.enemyId, data.damage, data.facing);
+    });
+  }
 }
 
 export const network = new NetworkManager();

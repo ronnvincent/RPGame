@@ -1493,7 +1493,7 @@ export class GameHUD {
         // Join room and wait for dungeon_start
         network.acceptInvite(inviteData.roomId, (roomData) => {
           if (this.game) {
-             this.game.onSelectLocation(roomData.dungeonId);
+             this.game.onSelectLocation(roomData.dungeonId, roomData.isHost);
           }
         });
       };
