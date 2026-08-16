@@ -161,7 +161,7 @@ export class NetworkManager {
     this.socket?.on('remote_player_skill', (data) => {
       const skillDamage = typeof data.skillDamage === 'number' ? data.skillDamage : 0;
       const payload = {
-        data.socketId,
+        socketId: data.socketId,
         skillIndex: data.skillIndex,
         classId: data.classId,
         x: data.x,
