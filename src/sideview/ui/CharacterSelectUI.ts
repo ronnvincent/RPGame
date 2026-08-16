@@ -60,7 +60,6 @@ export class CharacterSelectUI {
       <style>
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Outfit:wght@400;600;800&family=Teko:wght@400;600&display=swap');
         
-        /* Base Reset & Variables */
         #char-select-screen {
           position: fixed;
           inset: 0;
@@ -72,7 +71,7 @@ export class CharacterSelectUI {
           display: flex;
           justify-content: center;
           align-items: center;
-          padding: 10px;
+          padding: 2vh 4vw;
           box-sizing: border-box;
         }
 
@@ -93,95 +92,26 @@ export class CharacterSelectUI {
           z-index: 2;
           width: 100%;
           height: 100%;
-          max-width: 1400px;
-          max-height: 900px;
+          max-width: 1200px;
+          max-height: 850px;
           display: grid;
-          grid-template-columns: 120px 1fr 380px;
-          gap: 20px;
+          grid-template-columns: 1fr 400px;
+          gap: 30px;
           border: 2px solid rgba(212, 175, 55, 0.4);
           background: rgba(10, 5, 15, 0.6);
           backdrop-filter: blur(12px);
           border-radius: 16px;
-          padding: 20px;
+          padding: 30px;
           box-shadow: inset 0 0 50px rgba(0,0,0,0.8), 0 20px 50px rgba(0,0,0,0.8);
           box-sizing: border-box;
         }
 
-        /* LEFT PANEL: Roster */
-        .roster-panel {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-          overflow-y: auto;
-          overflow-x: hidden;
-          padding-right: 5px;
-          scrollbar-width: none;
-          mask-image: linear-gradient(to bottom, black 90%, transparent 100%);
-        }
-        .roster-panel::-webkit-scrollbar { display: none; }
-
-        .class-card {
-          flex: 0 0 auto;
-          background: rgba(20, 15, 30, 0.6);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          border-radius: 12px;
-          padding: 10px 5px;
-          text-align: center;
-          cursor: pointer;
-          transition: all 0.2s ease;
-          box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
-          position: relative;
-        }
-
-        .class-card:hover {
-          transform: translateX(5px);
-          border-color: rgba(212, 175, 55, 0.6);
-          background: rgba(40, 25, 60, 0.8);
-        }
-
-        .class-card.active {
-          border-color: #ffd700;
-          background: linear-gradient(135deg, rgba(70, 40, 100, 0.9) 0%, rgba(20, 10, 30, 0.9) 100%);
-          box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
-          transform: translateX(10px);
-        }
-        
-        .class-card.active::before {
-          content: ''; position: absolute; left: -5px; top: 50%; transform: translateY(-50%);
-          width: 4px; height: 60%; background: #ffd700; border-radius: 4px;
-          box-shadow: 0 0 10px #ffd700;
-        }
-
-        .card-sprite-canvas {
-          image-rendering: pixelated;
-          width: 56px;
-          height: 56px;
-        }
-
-        .class-card-name {
-          font-family: 'Teko', sans-serif;
-          font-size: 16px;
-          letter-spacing: 1px;
-          color: #fff;
-          margin-top: 2px;
-        }
-
-        .class-card-role {
-          font-size: 9px;
-          font-weight: 800;
-          padding: 2px 4px;
-          border-radius: 4px;
-          margin-top: 2px;
-          text-transform: uppercase;
-          border: 1px solid rgba(255, 255, 255, 0.15);
-        }
-
-        /* CENTER PANEL: Hero Showcase */
+        /* LEFT PANEL: Hero Showcase with Arrows */
         .showcase-panel {
           display: flex;
           flex-direction: column;
           align-items: center;
-          justify-content: center;
+          justify-content: space-between;
           position: relative;
           background: radial-gradient(circle at center, rgba(30, 20, 50, 0.4) 0%, transparent 70%);
           border-radius: 16px;
@@ -189,16 +119,14 @@ export class CharacterSelectUI {
         }
         
         .title-banner {
-          position: absolute;
-          top: 0;
           width: 100%;
           text-align: center;
-          padding: 10px 0;
+          margin-bottom: 20px;
         }
         
         .select-title {
           font-family: 'Cinzel', serif;
-          font-size: clamp(24px, 3vw, 36px);
+          font-size: clamp(24px, 4vw, 38px);
           font-weight: 900;
           color: #ffeba1;
           text-shadow: 0 0 20px rgba(255, 215, 0, 0.8), 2px 2px 0px #4a3000;
@@ -206,23 +134,56 @@ export class CharacterSelectUI {
           letter-spacing: 4px;
         }
 
+        .hero-stage-container {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 30px;
+          width: 100%;
+          flex: 1;
+        }
+
+        .nav-btn {
+          background: rgba(0, 0, 0, 0.6);
+          border: 2px solid rgba(212, 175, 55, 0.5);
+          color: #ffd700;
+          font-size: 32px;
+          font-family: 'Cinzel', serif;
+          width: 60px;
+          height: 60px;
+          border-radius: 50%;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s;
+          box-shadow: 0 0 15px rgba(212, 175, 55, 0.2);
+        }
+        
+        .nav-btn:hover {
+          transform: scale(1.1);
+          background: rgba(212, 175, 55, 0.2);
+          box-shadow: 0 0 25px rgba(212, 175, 55, 0.5);
+        }
+        
+        .nav-btn:active { transform: scale(0.95); }
+
         .hero-platform {
           position: relative;
-          width: 160px;
-          height: 160px;
-          margin-top: 60px;
+          width: 180px;
+          height: 180px;
           background: rgba(0, 0, 0, 0.5);
-          border: 2px solid rgba(212, 175, 55, 0.6);
+          border: 3px solid rgba(212, 175, 55, 0.6);
           border-radius: 50%;
           display: flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 0 40px rgba(212, 175, 55, 0.3);
+          box-shadow: 0 0 50px rgba(212, 175, 55, 0.4);
         }
 
         #hero-showcase-canvas { 
-          width: 180px; 
-          height: 180px; 
+          width: 200px; 
+          height: 200px; 
           image-rendering: pixelated; 
           cursor: pointer;
           transition: transform 0.1s;
@@ -231,41 +192,52 @@ export class CharacterSelectUI {
 
         .hero-name-plate {
           text-align: center;
-          margin-top: 20px;
+          margin-top: 10px;
         }
 
         .hero-name-plate h2 {
           font-family: 'Cinzel', serif;
-          font-size: 42px;
+          font-size: 48px;
           margin: 0;
           text-shadow: 0 4px 10px rgba(0, 0, 0, 0.9);
         }
 
         .hero-name-plate h3 {
           font-family: 'Outfit', sans-serif;
-          font-size: 14px;
+          font-size: 16px;
           margin: 5px 0 0 0;
           letter-spacing: 4px;
           text-transform: uppercase;
+        }
+        
+        .role-badge {
+          display: inline-block;
+          font-size: 12px;
+          font-weight: 800;
+          padding: 4px 12px;
+          border-radius: 6px;
+          margin-top: 10px;
+          text-transform: uppercase;
+          border: 1px solid rgba(255, 255, 255, 0.3);
+          background: rgba(0, 0, 0, 0.5);
         }
 
         .lore-box {
           font-style: italic;
           color: #cbd5e1;
-          font-size: 13px;
-          line-height: 1.5;
+          font-size: 14px;
+          line-height: 1.6;
           text-align: center;
           margin-top: 20px;
-          max-width: 80%;
+          max-width: 85%;
           text-shadow: 0 1px 3px #000;
         }
         
         .enter-btn-wrap {
-          margin-top: auto;
           width: 100%;
           display: flex;
           justify-content: center;
-          padding-top: 20px;
+          padding-top: 30px;
         }
 
         .enter-btn {
@@ -273,8 +245,8 @@ export class CharacterSelectUI {
           color: #fff;
           font-family: 'Cinzel', serif;
           font-weight: 900;
-          font-size: 22px;
-          padding: 18px 50px;
+          font-size: 24px;
+          padding: 20px 60px;
           border: none;
           cursor: pointer;
           transition: all 0.2s;
@@ -284,7 +256,7 @@ export class CharacterSelectUI {
         }
 
         .enter-btn:hover {
-          filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.8)) brightness(1.2);
+          filter: drop-shadow(0 0 25px rgba(255, 215, 0, 0.8)) brightness(1.2);
           transform: translateY(-2px);
         }
         .enter-btn:active {
@@ -329,14 +301,14 @@ export class CharacterSelectUI {
 
         .stat-row span:last-child {
           font-family: 'Teko', sans-serif;
-          font-size: 16px;
+          font-size: 18px;
           font-weight: 600;
         }
 
         .skills-header {
           font-family: 'Cinzel', serif;
           color: #d4af37;
-          font-size: 16px;
+          font-size: 18px;
           letter-spacing: 2px;
           margin-top: 5px;
           border-bottom: 1px solid rgba(212, 175, 55, 0.3);
@@ -400,47 +372,43 @@ export class CharacterSelectUI {
 
         .skill-desc { color: #94a3b8; font-size: 11px; line-height: 1.4; }
 
-        /* PORTRAIT / EXTREME MOBILE RESPONSIVENESS */
+        /* MOBILE RESPONSIVENESS */
         @media (max-width: 950px) {
           .main-layout {
             grid-template-columns: 1fr;
-            grid-template-rows: auto auto 1fr;
+            grid-template-rows: auto 1fr;
+            padding: 15px;
+            gap: 20px;
+            height: 100%;
             overflow-y: auto;
             overflow-x: hidden;
-            padding: 10px;
-            gap: 15px;
-            height: auto;
-            max-height: 100vh;
+            display: flex;
+            flex-direction: column;
           }
           
-          .roster-panel {
-            flex-direction: row;
-            overflow-x: auto;
-            overflow-y: hidden;
-            padding-bottom: 5px;
-            mask-image: none;
-          }
-          .class-card { flex: 0 0 80px; }
-          .class-card.active { transform: translateY(-5px); }
-          .class-card.active::before {
-            top: auto; bottom: -5px; left: 50%; transform: translateX(-50%);
-            width: 60%; height: 4px;
-          }
+          .hero-stage-container { gap: 15px; }
+          .nav-btn { width: 45px; height: 45px; font-size: 24px; }
+          .hero-platform { width: 140px; height: 140px; }
+          #hero-showcase-canvas { width: 160px; height: 160px; }
           
-          .showcase-panel { padding: 10px; }
-          .title-banner { position: relative; margin-bottom: 10px; }
-          .hero-platform { margin-top: 10px; width: 120px; height: 120px; }
-          #hero-showcase-canvas { width: 140px; height: 140px; }
-          
-          .info-panel { overflow: visible; }
+          .info-panel { overflow: visible; flex: none; }
+          .stats-box { grid-template-columns: 1fr 1fr 1fr; }
           
           .enter-btn-wrap {
             position: sticky;
             bottom: 0;
-            background: linear-gradient(0deg, #000 30%, transparent 100%);
-            padding: 20px 0 10px 0;
+            background: linear-gradient(0deg, rgba(0,0,0,0.95) 40%, transparent 100%);
+            padding: 30px 0 10px 0;
             z-index: 100;
           }
+          .enter-btn { padding: 15px 40px; font-size: 18px; width: 100%; max-width: 350px;}
+        }
+        @media (max-width: 500px) {
+           .stats-box { grid-template-columns: 1fr 1fr; }
+           .hero-name-plate h2 { font-size: 32px; }
+           .nav-btn { position: absolute; z-index: 10; }
+           #prev-char-btn { left: 0; }
+           #next-char-btn { right: 0; }
         }
       </style>
 
@@ -451,30 +419,25 @@ export class CharacterSelectUI {
           <button id="char-select-fs-btn" style="background: url('/assets/gui/PNG/buttonSquare_brown.png') center/100% 100%; border: none; padding: 10px; color: #fff; cursor: pointer; font-family: 'Outfit'; font-weight: bold; font-size: 10px;">[ ] FS</button>
         </div>
 
-        <!-- LEFT PANEL: ROSTER -->
-        <div class="roster-panel" id="classes-carousel">
-          ${CHARACTER_CLASSES.map(c => `
-            <div class="class-card ${c.id === this.selectedClass.id ? 'active' : ''}" data-class-id="${c.id}">
-              <canvas class="card-sprite-canvas" data-class="${c.id}" width="64" height="64"></canvas>
-              <div class="class-card-name">${c.name}</div>
-              <div class="class-card-role" style="color:${c.themeColor}; border-color:${c.themeColor}">${c.role}</div>
-            </div>
-          `).join('')}
-        </div>
-
-        <!-- CENTER PANEL: SHOWCASE -->
+        <!-- LEFT PANEL: SHOWCASE WITH ARROWS -->
         <div class="showcase-panel">
           <div class="title-banner">
             <h1 class="select-title">CHOOSE YOUR CHAMPION</h1>
           </div>
           
-          <div class="hero-platform">
-            <canvas id="hero-showcase-canvas" width="128" height="128"></canvas>
+          <div class="hero-stage-container">
+            <button class="nav-btn" id="prev-char-btn">&#10094;</button>
+            
+            <div class="hero-platform">
+              <canvas id="hero-showcase-canvas" width="128" height="128"></canvas>
+            </div>
+            
+            <button class="nav-btn" id="next-char-btn">&#10095;</button>
           </div>
           
           <div class="hero-name-plate">
             <h2 style="color: ${this.selectedClass.accentColor}">${this.selectedClass.name}</h2>
-            <h3 style="color: ${this.selectedClass.themeColor}">${this.selectedClass.title}</h3>
+            <div class="role-badge" style="color: ${this.selectedClass.themeColor}; border-color: ${this.selectedClass.themeColor};">${this.selectedClass.role}</div>
           </div>
           
           <div class="lore-box">${this.selectedClass.description}</div>
@@ -522,33 +485,8 @@ export class CharacterSelectUI {
   }
 
   private attachEvents() {
-    const cards = this.container.querySelectorAll('.class-card');
-    cards.forEach(card => {
-      card.addEventListener('click', () => {
-        const classId = card.getAttribute('data-class-id');
-        const found = CHARACTER_CLASSES.find(c => c.id === classId);
-        if (found) {
-          this.selectedClass = found;
-          this.showcaseAnimState = 'attack';
-          this.showcaseTimer = 0.5;
-          audio.playClick();
-          this.render();
-        }
-      });
-    });
-
-    const showcaseCanvas = this.container.querySelector('#hero-showcase-canvas') as HTMLCanvasElement;
-    if (showcaseCanvas) {
-      showcaseCanvas.addEventListener('click', () => {
-        this.showcaseAnimState = 'attack';
-        this.showcaseTimer = 0.45;
-        audio.playSlash('heavy');
-      });
-    }
-
     const startBtn = this.container.querySelector('#start-game-btn');
     startBtn?.addEventListener('click', () => {
-      // Auto-trigger full screen on mobile browser
       if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
         document.documentElement.requestFullscreen().catch(() => {});
       }
@@ -567,6 +505,38 @@ export class CharacterSelectUI {
         document.exitFullscreen().catch(() => {});
       }
     });
+
+    const prevBtn = this.container.querySelector('#prev-char-btn');
+    const nextBtn = this.container.querySelector('#next-char-btn');
+    
+    const cycleCharacter = (direction: number) => {
+      let currentIndex = CHARACTER_CLASSES.findIndex(c => c.id === this.selectedClass.id);
+      currentIndex += direction;
+      
+      if (currentIndex < 0) {
+        currentIndex = CHARACTER_CLASSES.length - 1;
+      } else if (currentIndex >= CHARACTER_CLASSES.length) {
+        currentIndex = 0;
+      }
+      
+      this.selectedClass = CHARACTER_CLASSES[currentIndex];
+      this.showcaseAnimState = 'attack';
+      this.showcaseTimer = 0.5;
+      audio.playClick();
+      this.render();
+    };
+
+    prevBtn?.addEventListener('click', () => cycleCharacter(-1));
+    nextBtn?.addEventListener('click', () => cycleCharacter(1));
+
+    const showcaseCanvas = this.container.querySelector('#hero-showcase-canvas') as HTMLCanvasElement;
+    if (showcaseCanvas) {
+      showcaseCanvas.addEventListener('click', () => {
+        this.showcaseAnimState = 'attack';
+        this.showcaseTimer = 0.45;
+        audio.playSlash('heavy');
+      });
+    }
   }
 
   public destroy() {
