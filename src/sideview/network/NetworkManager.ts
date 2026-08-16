@@ -21,8 +21,12 @@ export class NetworkManager {
 
   public connect() {
     if (this.socket) return;
-    // For local testing, use 3001. In production, this would point to the Railway URL.
-    this.socket = io('http://localhost:3001');
+    
+    // Automatically switch between Localhost and Railway Live Server
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const SERVER_URL = isLocal ? 'http://localhost:3001' : 'https://rpgame-production-3453.up.railway.app';
+    
+    this.socket = io(SERVER_URL);
 
     this.socket.on('connect', () => {
       console.log('Connected to multiplayer server.');
