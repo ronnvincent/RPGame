@@ -510,33 +510,183 @@ export class SideViewEngine {
       // Play SFX
       this.playSkillCastSfx(skill);
 
-      // Basic Attack 3-hit combo visual approx
+      // Basic Attack 3-hit combo visual
       if (skillIndex === 0) {
         this.particles.addSpellSlash(attackX, attackY - 20, facing, 1.4, cls.accentColor);
         return;
       }
 
-      // Class specific VFX
+      // ---- NINJA ----
       if (classId === 'ninja') {
         if (skillIndex === 1) this.particles.addSpellSlash(startX, startY, facing, 1.8, '#94a3b8');
-        if (skillIndex === 2) this.particles.spawnShadowClones(startX, startY, facing, 0); // 0 dmg
+        if (skillIndex === 2) this.particles.spawnShadowClones(startX, startY, facing, 0);
         if (skillIndex === 3) {
           this.particles.addImpactBurst(startX, startY - 15, 20, '#94a3b8', 'smoke');
           this.particles.addSpellSlash(startX + facing * 200, startY - 15, facing, 1.4, '#4ade80');
         }
         if (skillIndex === 4) this.particles.addFlameLash(startX + facing * 50, startY - 20, facing, 1.8);
         if (skillIndex === 5) this.particles.triggerCinematicOmnislash([{x: attackX, y: attackY}]);
-      } else if (classId === 'necromancer') {
-        // ... (minimal replication)
-        if (skillIndex === 1) this.particles.addGroundExplosion(attackX, this.groundY, 1.2);
-        if (skillIndex === 3) this.particles.addGroundExplosion(attackX, this.groundY, 1.8);
-        if (skillIndex === 5) this.particles.addGroundExplosion(attackX, this.groundY, 2.5);
-      } else if (classId === 'mage') {
-        this.particles.addGroundExplosion(attackX, this.groundY, 1.5);
-      } else {
-        // generic fallback
-        this.particles.addSpellSlash(attackX, attackY, facing, 1.5, cls.accentColor);
+        return;
       }
+
+      // ---- NECROMANCER ----
+      if (classId === 'necromancer') {
+        if (skillIndex === 1) this.particles.addGroundExplosion(attackX, this.groundY, 1.2);
+        if (skillIndex === 2) {
+          this.particles.spawnSkeletonMinion(startX + facing * 40, this.groundY, 0);
+          this.particles.addFloatingText(startX, startY - 40, 'SUMMONED SKELETON!', '#c084fc', true, 16);
+        }
+        if (skillIndex === 3) this.particles.addGroundExplosion(attackX, this.groundY, 1.8);
+        if (skillIndex === 4) {
+          this.particles.addDarkPillar(attackX, this.groundY);
+          this.particles.addGroundExplosion(attackX, this.groundY - 20, 1.6);
+        }
+        if (skillIndex === 5) {
+          this.particles.spawnReaperMinion(startX + facing * 50, this.groundY, facing, 0);
+          this.particles.addGroundExplosion(attackX, this.groundY, 2.5);
+        }
+        return;
+      }
+
+      // ---- MAGE ----
+      if (classId === 'mage') {
+        if (skillIndex === 1) this.particles.addGroundExplosion(attackX, this.groundY, 1.5);
+        if (skillIndex === 2) {
+          this.particles.addChainLightning([{x: startX, y: startY - 20}, {x: attackX, y: attackY - 15}]);
+        }
+        if (skillIndex === 3) this.particles.addGroundExplosion(attackX, this.groundY, 1.5);
+        if (skillIndex === 4) {
+          this.particles.addGroundZone(attackX, this.groundY, 160, 0, 5.0, 'blizzard', '#60a5fa');
+        }
+        if (skillIndex === 5) {
+          this.particles.spawnArmageddonMeteors(attackX, this.groundY, facing);
+        }
+        return;
+      }
+
+      // ---- ASSASSIN ----
+      if (classId === 'assassin') {
+        if (skillIndex === 1) this.particles.addSpellSlash(attackX, attackY, facing, 1.8, '#9333ea');
+        if (skillIndex === 2) {
+          this.particles.addDarkPillar(startX, startY);
+          this.particles.addImpactBurst(startX, startY - 20, 25, '#7e22ce', 'smoke');
+        }
+        if (skillIndex === 3) this.particles.addFanOfKnives(startX, startY, 0, 0);
+        if (skillIndex === 4) {
+          this.particles.addImpactBurst(startX, startY - 15, 12, '#9333ea', 'smoke');
+          this.particles.addSpellSlash(attackX, attackY - 15, facing, 1.8, '#ef4444');
+          this.particles.addImpactBurst(attackX, attackY - 15, 20, '#ef4444', 'spark');
+        }
+        if (skillIndex === 5) {
+          this.particles.triggerShadowTempest([{x: attackX, y: attackY}], startX, startY);
+        }
+        return;
+      }
+
+      // ---- ARCHER ----
+      if (classId === 'archer') {
+        if (skillIndex === 1) {
+          this.particles.addProjectile(startX + facing * 20, startY - 10, facing * 12, 0, 'arrow', 0, false, true, '#d7ccc8', 12, false);
+        }
+        if (skillIndex === 2) {
+          this.particles.addImpactBurst(attackX, this.groundY - 10, 15, '#22c55e', 'spark');
+          for (let i = 0; i < 12; i++) {
+            setTimeout(() => {
+              this.particles.addProjectile(attackX + (Math.random() * 160 - 80), 60 + Math.random() * 40, (Math.random() - 0.5) * 2, 15 + Math.random() * 5, 'arrow', 0, false, true, '#a3e635', 10, false);
+            }, i * 45);
+          }
+        }
+        if (skillIndex === 3) this.particles.addGroundTrap(startX + facing * 40, this.groundY, 'poison', 0);
+        if (skillIndex === 4) this.particles.addSpellSlash(attackX, attackY, facing, 1.5, '#22c55e');
+        if (skillIndex === 5) {
+          this.particles.spawnAstralDragonPiercer(startX, startY, facing);
+        }
+        return;
+      }
+
+      // ---- PALADIN ----
+      if (classId === 'paladin') {
+        if (skillIndex === 1) this.particles.addSpellSlash(attackX, attackY, facing, 1.6, '#facc15');
+        if (skillIndex === 2) this.particles.addHolyPillar(startX, startY);
+        if (skillIndex === 3) {
+          this.particles.addGroundZone(startX, this.groundY, 140, 0, 6.0, 'holy_consecration', '#facc15');
+        }
+        if (skillIndex === 4) this.particles.addSpellSlash(attackX, attackY, facing, 1.8, '#ffd700');
+        if (skillIndex === 5) {
+          this.particles.spawnHolyHammerJudgement(attackX, this.groundY);
+        }
+        return;
+      }
+
+      // ---- DRAGOON ----
+      if (classId === 'dragoon') {
+        if (skillIndex === 1) {
+          this.particles.addSpellSlash(attackX, attackY, facing, 1.6, '#f97316');
+          this.particles.addImpactBurst(attackX, attackY, 10, '#f97316', 'spark');
+        }
+        if (skillIndex === 2) {
+          this.particles.addGroundExplosion(attackX, this.groundY - 20, 1.8);
+          this.particles.triggerScreenShake(14, 0.5);
+        }
+        if (skillIndex === 3) {
+          this.particles.addFlameLash(startX + facing * 50, startY - 15, facing, 1.8);
+        }
+        if (skillIndex === 4) {
+          this.particles.addProjectile(startX + facing * 20, startY - 10, facing * 12, 0, 'fireball', 0, false, true, '#ff5722', 18, true);
+        }
+        if (skillIndex === 5) {
+          this.particles.spawnDragonDescent(startX, startY, facing);
+          this.particles.spawnDragonMinion(startX, this.groundY, facing, 0);
+        }
+        return;
+      }
+
+      // ---- WARRIOR ----
+      if (classId === 'warrior') {
+        if (skillIndex === 1) this.particles.addSpellSlash(attackX, attackY, facing, 1.6, '#e53935');
+        if (skillIndex === 2) this.particles.addFireSpin(startX, startY - 20, 1.8);
+        if (skillIndex === 3) this.particles.addSpellSlash(attackX, attackY, facing, 1.8, '#ef4444');
+        if (skillIndex === 4) {
+          this.particles.addSpellSlash(startX + facing * 220, startY - 15, facing, 1.8, '#ffffff');
+          this.particles.addImpactBurst(startX + facing * 220, startY - 15, 15, '#e53935', 'trail');
+        }
+        if (skillIndex === 5) {
+          this.particles.spawnTitanEarthShatter(startX, this.groundY, facing);
+        }
+        return;
+      }
+
+      // ---- BERSERKER ----
+      if (classId === 'berserker') {
+        if (skillIndex === 1) this.particles.addSpellSlash(attackX, attackY, facing, 1.6, '#dc2626');
+        if (skillIndex === 2) this.particles.addImpactBurst(attackX, attackY, 15, '#dc2626', 'spark');
+        if (skillIndex === 3) this.particles.addSpellSlash(attackX, attackY, facing, 1.8, '#ef4444');
+        if (skillIndex === 4) {
+          this.particles.addGroundExplosion(attackX, this.groundY, 1.5);
+          this.particles.addImpactBurst(attackX, attackY, 20, '#dc2626', 'spark');
+        }
+        if (skillIndex === 5) {
+          this.particles.spawnBloodTitanRampage(startX, this.groundY, facing);
+        }
+        return;
+      }
+
+      // ---- PRIEST ----
+      if (classId === 'priest') {
+        if (skillIndex === 1) this.particles.addHolyPillar(attackX, attackY);
+        if (skillIndex === 2) this.particles.addHolyPillar(startX, startY);
+        if (skillIndex === 3) {
+          this.particles.addGroundZone(startX, this.groundY, 150, 0, 7.0, 'sanctuary_ward', '#38bdf8');
+        }
+        if (skillIndex === 4) this.particles.addHolyPillar(attackX, attackY);
+        if (skillIndex === 5) {
+          this.particles.spawnCelestialDivineRadiance(startX, this.groundY);
+        }
+        return;
+      }
+
+      // Generic fallback for any unhandled class
+      this.particles.addSpellSlash(attackX, attackY, facing, 1.5, cls.accentColor);
     });
   }
 

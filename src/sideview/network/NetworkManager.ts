@@ -154,8 +154,42 @@ export class NetworkManager {
 
   public sendEnemySync(enemiesData: any[], groundY: number, waveIndex: number = 0) {
     if (!this.socket || !this.room) return;
-    const norm = enemiesData.map(e => ({ ...e, y: e.y - groundY }));
-    this.socket.emit('enemy_sync', { enemies: norm, waveIndex });
+    // Only send minimal serializable fields — spreading full objects with lootDrop etc.
+    // can cause socket.io to silently fail on complex/circular data
+    const slim = enemiesData.map(e => ({
+      id: e.id,
+      name: e.name,
+      type: e.type,
+      icon: e.icon,
+      color: e.color,
+      maxHp: e.maxHp,
+      hp: e.hp,
+      atk: e.atk,
+      def: e.def,
+      speed: e.speed,
+      expReward: e.expReward,
+      goldReward: e.goldReward,
+      width: e.width,
+      height: e.height,
+      attackRange: e.attackRange,
+      attackCooldown: e.attackCooldown,
+      attackTimer: e.attackTimer,
+      x: e.x,
+      y: e.y - groundY,
+      vx: e.vx,
+      vy: e.vy,
+      isGrounded: e.isGrounded,
+      facing: e.facing,
+      isAttacking: e.isAttacking,
+      isActive: e.isActive,
+      spawnDelay: e.spawnDelay,
+      hitStun: e.hitStun,
+      isDead: e.isDead,
+      phases: e.phases,
+      currentPhase: e.currentPhase,
+      specialAttackTimer: e.specialAttackTimer
+    }));
+    this.socket.emit('enemy_sync', { enemies: slim, waveIndex });
   }
 
   public listenForEnemySync(onSync: (enemiesData: any[], waveIndex: number) => void) {
