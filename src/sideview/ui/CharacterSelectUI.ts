@@ -182,6 +182,7 @@ export class CharacterSelectUI {
           image-rendering: pixelated;
           box-shadow: 0 10px 20px rgba(0,0,0,0.8);
           overflow-y: auto;
+          touch-action: pan-y;
           -webkit-overflow-scrolling: touch;
           padding-right: 5px; /* Scrollbar breathing room */
         }
@@ -240,8 +241,12 @@ export class CharacterSelectUI {
         .skill-desc { font-size: 12px; color: #cbd5e1; line-height: 1.3; margin-top: 4px; }
 
         #start-game-btn {
-          margin-top: 10px;
-          width: 100%;
+          position: absolute;
+          bottom: -20px;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 80%;
+          max-width: 300px;
           min-height: 60px;
           border-image: url('/assets/kenney-rpg-ui/buttonLong_brown.png') 10 fill;
           border-style: solid;
@@ -253,9 +258,10 @@ export class CharacterSelectUI {
           font-weight: 900;
           text-shadow: 2px 2px 0px rgba(0,0,0,0.8);
           cursor: pointer;
-          transition: transform 0.1s;
+          transition: transform 0.1s, filter 0.1s;
+          z-index: 20;
         }
-        #start-game-btn:active { transform: scale(0.96); filter: brightness(0.8); }
+        #start-game-btn:active { transform: translateX(-50%) scale(0.96); filter: brightness(0.8); }
 
         #char-select-fs-btn {
           position: absolute;
@@ -288,6 +294,7 @@ export class CharacterSelectUI {
           <button class="cycle-btn" id="prev-char-btn">&lt;</button>
           <canvas id="hero-showcase-canvas"></canvas>
           <button class="cycle-btn" id="next-char-btn">&gt;</button>
+          <button id="start-game-btn">BEGIN JOURNEY</button>
         </div>
 
         <!-- Right: Details, Stats, Skills -->
@@ -321,7 +328,7 @@ export class CharacterSelectUI {
             `).join('')}
           </div>
 
-          <button id="start-game-btn">BEGIN JOURNEY</button>
+
         </div>
       </div>
     `;
