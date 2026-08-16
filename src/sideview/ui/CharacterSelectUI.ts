@@ -150,12 +150,12 @@ export class CharacterSelectUI {
           z-index: 10;
         }
         .cycle-btn:active { filter: brightness(0.8); transform: translateY(-46%); }
-        #prev-char-btn { left: 5px; }
-        #next-char-btn { right: 5px; }
+        #prev-char-btn { left: 10px; }
+        #next-char-btn { right: 10px; }
 
         .class-badge {
           position: absolute;
-          top: 10px;
+          top: -20px;
           left: 50%;
           transform: translateX(-50%);
           border-image: url('/assets/kenney-rpg-ui/panelInset_brown.png') 10 fill;
@@ -261,8 +261,9 @@ export class CharacterSelectUI {
           position: absolute;
           top: max(10px, env(safe-area-inset-top));
           right: max(10px, env(safe-area-inset-right));
-          width: 50px;
-          height: 50px;
+          width: auto;
+          padding: 0 15px;
+          height: 44px;
           border-image: url('/assets/kenney-rpg-ui/buttonSquare_brown.png') 10 fill;
           border-style: solid;
           border-width: 10px;
@@ -278,7 +279,7 @@ export class CharacterSelectUI {
       </style>
 
       <canvas id="bg-canvas"></canvas>
-      <button id="char-select-fs-btn" title="Toggle Fullscreen">FS</button>
+      <button id="char-select-fs-btn" title="Toggle Fullscreen">FULLSCREEN</button>
       
       <div class="main-layout">
         <!-- Left: Stage & Character Showcase -->
@@ -302,7 +303,7 @@ export class CharacterSelectUI {
             <div class="stat-box"><span class="stat-val" style="color: #f97316;">${this.selectedClass.stats.atk}</span><span class="stat-label">Attack</span></div>
             <div class="stat-box"><span class="stat-val" style="color: #8b5cf6;">${this.selectedClass.stats.def}</span><span class="stat-label">Defense</span></div>
             <div class="stat-box"><span class="stat-val" style="color: #22c55e;">${this.selectedClass.stats.speed}</span><span class="stat-label">Speed</span></div>
-            <div class="stat-box"><span class="stat-val" style="color: #eab308;">${this.selectedClass.stats.critChance * 100}%</span><span class="stat-label">Crit Rate</span></div>
+            <div class="stat-box"><span class="stat-val" style="color: #eab308;">${(this.selectedClass.stats.critChance * 100).toFixed(0)}%</span><span class="stat-label">Crit Rate</span></div>
           </div>
 
           <div style="font-family: 'Cinzel', serif; font-size: 18px; color: #facc15; border-bottom: 2px solid #5a4031; padding-bottom: 4px; margin-top: 10px;">Class Skills</div>
@@ -460,14 +461,7 @@ export class CharacterSelectUI {
             ctx.stroke();
             ctx.restore();
 
-            // 2. Ancient Stone Pedestal Slab (Single cohesive base)
-            const tilesImg = sprites.getImage('tiles');
-            if (tilesImg && tilesImg.complete && tilesImg.naturalWidth > 0) {
-              ctx.drawImage(tilesImg, 16, 16, 16, 16, cx - 40, cy - 4, 80, 16);
-            } else {
-              ctx.fillStyle = '#2d2042';
-              ctx.fillRect(cx - 40, cy - 4, 80, 16);
-            }
+            
 
             // 3. Elemental Floating Embers
             if (Math.random() < 0.4) {
