@@ -497,8 +497,8 @@ export class SideViewEngine {
    */
   public castRemoteSkill(classId: string, skillIndex: number, startX: number, startY: number, facing: number) {
     // Replicate VFX without dealing damage (Host handles damage)
-    import('../../data/CharacterClasses').then(mod => {
-      const cls = mod.CHARACTER_CLASSES[classId];
+    import('../classes/ClassDefinitions').then(mod => {
+      const cls = mod.CHARACTER_CLASSES.find((c: any) => c.id === classId);
       if (!cls) return;
       const skill = cls.skills[skillIndex];
       if (!skill) return;
