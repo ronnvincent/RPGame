@@ -942,9 +942,21 @@ export class SideViewEngine {
       const distX = Math.abs(enemy.x - centerX);
       const distY = Math.abs((enemy.y - 24) - centerY);
       
+      let effectiveDistX = distX;
+      
+      // Melee Blind-spot prevention:
+      // If an attack reaches far (e.g., a spear thrust), the centerX is placed far ahead.
+      // This causes enemies standing right in front of the player to be "behind" the hitbox and missed.
+      // Fix: If the enemy is between the player and the centerX, treat their horizontal distance as 0 (guaranteed hit).
+      const isBetween = (p.facing === 1 && enemy.x >= p.x && enemy.x <= centerX) || 
+                        (p.facing === -1 && enemy.x <= p.x && enemy.x >= centerX);
+      if (isBetween) {
+        effectiveDistX = 0;
+      }
+
       // If the VFX is spawned high up (e.g. centerY is off the ground), we still want to hit enemies underneath it
       // So we use a generous vertical cylinder (120px height tolerance)
-      if (distX <= skill.aoeRadius + enemy.width / 2 && distY <= 120) {
+      if (effectiveDistX <= skill.aoeRadius + (enemy.width || 40) / 2 && distY <= 120) {
         this.applyDamageToEnemy(enemy, baseDmg, isCrit, p.facing);
         hitAny = true;
       }
@@ -1689,7 +1701,7 @@ export class SideViewEngine {
           // Use AABB for 2D Beat 'em up accurate hit detection (ignore extreme Y axis mismatches)
           const distX = Math.abs(proj.x - enemy.x);
           const distY = Math.abs(proj.y - (enemy.y - 24)); // Compare to enemy chest height
-          if (distX < proj.radius + enemy.width / 2 && distY < proj.radius + 40) {
+          if (distX < proj.radius + (enemy.width || 40) / 2 && distY < proj.radius + 40) {
             if (proj.piercing) {
               const hitList = proj.hitEnemyIds || [];
               if (hitList.includes(enemy.id)) {
