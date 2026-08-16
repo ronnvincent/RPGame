@@ -60,18 +60,20 @@ export class CharacterSelectUI {
       <style>
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Outfit:wght@400;600;800&family=Teko:wght@400;600&display=swap');
         
+        /* Base Reset & Variables */
         #char-select-screen {
           position: fixed;
           inset: 0;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          padding: 2vh 4vw;
-          box-sizing: border-box;
           color: #f8fafc;
           font-family: 'Outfit', sans-serif;
           z-index: 1000;
           background: #000;
+          user-select: none;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          padding: 10px;
+          box-sizing: border-box;
         }
 
         #bg-canvas {
@@ -82,84 +84,72 @@ export class CharacterSelectUI {
           z-index: 0;
           pointer-events: none;
           image-rendering: pixelated;
-          filter: blur(8px) brightness(0.6) hue-rotate(30deg);
+          filter: blur(8px) brightness(0.5) hue-rotate(30deg);
           transform: scale(1.1);
         }
-
-        .select-content-wrapper {
+        
+        .main-layout {
           position: relative;
           z-index: 2;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
           width: 100%;
           height: 100%;
-          max-width: 1200px;
-          gap: 1.5vh;
-        }
-
-        .title-banner {
-          text-align: center;
-          background: rgba(10, 5, 15, 0.7);
+          max-width: 1400px;
+          max-height: 900px;
+          display: grid;
+          grid-template-columns: 120px 1fr 380px;
+          gap: 20px;
+          border: 2px solid rgba(212, 175, 55, 0.4);
+          background: rgba(10, 5, 15, 0.6);
           backdrop-filter: blur(12px);
-          border-top: 2px solid rgba(212, 175, 55, 0.8);
-          border-bottom: 2px solid rgba(212, 175, 55, 0.8);
-          padding: 8px 40px;
-          box-shadow: 0 0 40px rgba(212, 175, 55, 0.2), inset 0 0 20px rgba(0, 0, 0, 0.8);
-          position: relative;
-          overflow: hidden;
-          width: 100%;
-          max-width: 800px;
-          flex-shrink: 0;
+          border-radius: 16px;
+          padding: 20px;
+          box-shadow: inset 0 0 50px rgba(0,0,0,0.8), 0 20px 50px rgba(0,0,0,0.8);
+          box-sizing: border-box;
         }
 
-        .select-title {
-          font-family: 'Cinzel', serif;
-          font-size: clamp(20px, 4vw, 32px);
-          font-weight: 900;
-          color: #ffeba1;
-          text-shadow: 0 0 15px rgba(255, 215, 0, 0.6), 2px 2px 0px #4a3000;
-          margin: 0;
-          letter-spacing: 4px;
-        }
-
-        .classes-carousel {
+        /* LEFT PANEL: Roster */
+        .roster-panel {
           display: flex;
-          gap: 12px;
-          padding: 10px 15px;
-          max-width: 100%;
-          overflow-x: auto;
+          flex-direction: column;
+          gap: 10px;
+          overflow-y: auto;
+          overflow-x: hidden;
+          padding-right: 5px;
           scrollbar-width: none;
-          flex-shrink: 0;
+          mask-image: linear-gradient(to bottom, black 90%, transparent 100%);
         }
-
-        .classes-carousel::-webkit-scrollbar { display: none; }
+        .roster-panel::-webkit-scrollbar { display: none; }
 
         .class-card {
-          flex: 0 0 90px;
+          flex: 0 0 auto;
           background: rgba(20, 15, 30, 0.6);
-          backdrop-filter: blur(6px);
           border: 1px solid rgba(255, 255, 255, 0.1);
           border-radius: 12px;
-          padding: 8px 4px;
+          padding: 10px 5px;
           text-align: center;
           cursor: pointer;
           transition: all 0.2s ease;
-          box-shadow: 0 8px 15px rgba(0, 0, 0, 0.5);
+          box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
           position: relative;
         }
 
         .class-card:hover {
-          transform: translateY(-5px);
+          transform: translateX(5px);
           border-color: rgba(212, 175, 55, 0.6);
           background: rgba(40, 25, 60, 0.8);
         }
 
         .class-card.active {
           border-color: #ffd700;
-          background: linear-gradient(180deg, rgba(70, 40, 100, 0.9) 0%, rgba(20, 10, 30, 0.9) 100%);
+          background: linear-gradient(135deg, rgba(70, 40, 100, 0.9) 0%, rgba(20, 10, 30, 0.9) 100%);
           box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
-          transform: translateY(-3px) scale(1.05);
+          transform: translateX(10px);
+        }
+        
+        .class-card.active::before {
+          content: ''; position: absolute; left: -5px; top: 50%; transform: translateY(-50%);
+          width: 4px; height: 60%; background: #ffd700; border-radius: 4px;
+          box-shadow: 0 0 10px #ffd700;
         }
 
         .card-sprite-canvas {
@@ -177,7 +167,7 @@ export class CharacterSelectUI {
         }
 
         .class-card-role {
-          font-size: 8px;
+          font-size: 9px;
           font-weight: 800;
           padding: 2px 4px;
           border-radius: 4px;
@@ -186,97 +176,151 @@ export class CharacterSelectUI {
           border: 1px solid rgba(255, 255, 255, 0.15);
         }
 
-        .class-detail-container {
-          background: rgba(10, 5, 15, 0.85);
-          backdrop-filter: blur(16px);
-          border: 1px solid rgba(212, 175, 55, 0.3);
-          border-radius: 12px;
-          padding: 15px;
-          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
-          display: grid;
-          grid-template-columns: 1fr 1.2fr;
-          gap: 20px;
-          width: 100%;
-          flex: 1;
-          min-height: 0;
-          overflow: hidden;
-        }
-
-        .left-col {
+        /* CENTER PANEL: Hero Showcase */
+        .showcase-panel {
           display: flex;
           flex-direction: column;
-          gap: 12px;
-          overflow-y: auto;
-          scrollbar-width: none;
-        }
-
-        .char-presentation {
-          border-image: url('/assets/gui/PNG/panel_brown.png') 30 stretch;
-          border-style: solid;
-          border-width: 10px;
-          padding: 8px;
-          display: flex;
           align-items: center;
-          gap: 15px;
-          box-shadow: 0 8px 15px rgba(0, 0, 0, 0.5);
+          justify-content: center;
+          position: relative;
+          background: radial-gradient(circle at center, rgba(30, 20, 50, 0.4) 0%, transparent 70%);
+          border-radius: 16px;
+          padding: 20px;
+        }
+        
+        .title-banner {
+          position: absolute;
+          top: 0;
+          width: 100%;
+          text-align: center;
+          padding: 10px 0;
+        }
+        
+        .select-title {
+          font-family: 'Cinzel', serif;
+          font-size: clamp(24px, 3vw, 36px);
+          font-weight: 900;
+          color: #ffeba1;
+          text-shadow: 0 0 20px rgba(255, 215, 0, 0.8), 2px 2px 0px #4a3000;
+          margin: 0;
+          letter-spacing: 4px;
         }
 
-        .char-display-box {
+        .hero-platform {
           position: relative;
-          width: 60px;
-          height: 60px;
-          background: rgba(0, 0, 0, 0.6);
+          width: 160px;
+          height: 160px;
+          margin-top: 60px;
+          background: rgba(0, 0, 0, 0.5);
           border: 2px solid rgba(212, 175, 55, 0.6);
           border-radius: 50%;
           display: flex;
           align-items: center;
           justify-content: center;
+          box-shadow: 0 0 40px rgba(212, 175, 55, 0.3);
         }
 
-        #hero-showcase-canvas { width: 96px; height: 96px; }
+        #hero-showcase-canvas { 
+          width: 180px; 
+          height: 180px; 
+          image-rendering: pixelated; 
+          cursor: pointer;
+          transition: transform 0.1s;
+        }
+        #hero-showcase-canvas:active { transform: scale(0.95); }
 
-        .char-info-text h2 {
+        .hero-name-plate {
+          text-align: center;
+          margin-top: 20px;
+        }
+
+        .hero-name-plate h2 {
           font-family: 'Cinzel', serif;
+          font-size: 42px;
           margin: 0;
-          font-size: clamp(20px, 3vw, 24px);
-          color: #ffd700;
-          text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+          text-shadow: 0 4px 10px rgba(0, 0, 0, 0.9);
         }
 
-        .char-info-text .char-title {
+        .hero-name-plate h3 {
           font-family: 'Outfit', sans-serif;
-          color: #ffeba1;
-          font-size: 11px;
+          font-size: 14px;
+          margin: 5px 0 0 0;
+          letter-spacing: 4px;
           text-transform: uppercase;
-          letter-spacing: 1px;
         }
 
         .lore-box {
           font-style: italic;
           color: #cbd5e1;
-          font-size: 12px;
-          line-height: 1.4;
-          border-left: 2px solid #d4af37;
-          padding-left: 10px;
-          background: linear-gradient(90deg, rgba(212, 175, 55, 0.1), transparent);
-          padding-top: 8px;
-          padding-bottom: 8px;
+          font-size: 13px;
+          line-height: 1.5;
+          text-align: center;
+          margin-top: 20px;
+          max-width: 80%;
+          text-shadow: 0 1px 3px #000;
+        }
+        
+        .enter-btn-wrap {
+          margin-top: auto;
+          width: 100%;
+          display: flex;
+          justify-content: center;
+          padding-top: 20px;
+        }
+
+        .enter-btn {
+          background: url('/assets/gui/PNG/buttonLong_brown.png') center/100% 100%;
+          color: #fff;
+          font-family: 'Cinzel', serif;
+          font-weight: 900;
+          font-size: 22px;
+          padding: 18px 50px;
+          border: none;
+          cursor: pointer;
+          transition: all 0.2s;
+          text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+          letter-spacing: 2px;
+          filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.8));
+        }
+
+        .enter-btn:hover {
+          filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.8)) brightness(1.2);
+          transform: translateY(-2px);
+        }
+        .enter-btn:active {
+          background: url('/assets/gui/PNG/buttonLong_brown_pressed.png') center/100% 100%;
+          transform: translateY(2px);
+        }
+
+        /* RIGHT PANEL: Stats & Skills */
+        .info-panel {
+          display: flex;
+          flex-direction: column;
+          gap: 15px;
+          background: rgba(0, 0, 0, 0.4);
+          border-radius: 12px;
+          padding: 15px;
+          border: 1px solid rgba(255,255,255,0.05);
+          overflow-y: auto;
+          scrollbar-width: thin;
+          scrollbar-color: #d4af37 transparent;
         }
 
         .stats-box {
-          background: rgba(0, 0, 0, 0.5);
-          border-radius: 8px;
-          padding: 10px;
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 8px;
-          border: 1px solid rgba(255, 255, 255, 0.1);
+          gap: 10px;
+          background: rgba(20, 15, 30, 0.8);
+          padding: 15px;
+          border-radius: 10px;
+          border: 1px solid rgba(212, 175, 55, 0.3);
+          flex-shrink: 0;
         }
 
         .stat-row {
           display: flex;
           justify-content: space-between;
-          font-size: 10px;
+          font-size: 11px;
           letter-spacing: 1px;
           text-transform: uppercase;
           color: #94a3b8;
@@ -284,16 +328,9 @@ export class CharacterSelectUI {
         }
 
         .stat-row span:last-child {
-          color: #fff;
           font-family: 'Teko', sans-serif;
-          font-size: 15px;
+          font-size: 16px;
           font-weight: 600;
-        }
-
-        .skills-section {
-          display: flex;
-          flex-direction: column;
-          overflow: hidden;
         }
 
         .skills-header {
@@ -301,38 +338,31 @@ export class CharacterSelectUI {
           color: #d4af37;
           font-size: 16px;
           letter-spacing: 2px;
-          margin-bottom: 8px;
+          margin-top: 5px;
           border-bottom: 1px solid rgba(212, 175, 55, 0.3);
-          padding-bottom: 4px;
+          padding-bottom: 5px;
           flex-shrink: 0;
         }
 
         .skills-list {
-          overflow-y: auto;
           display: flex;
           flex-direction: column;
-          gap: 8px;
-          padding-right: 5px;
-          flex: 1;
+          gap: 10px;
         }
-        
-        .skills-list::-webkit-scrollbar { width: 6px; }
-        .skills-list::-webkit-scrollbar-thumb { background: #d4af37; border-radius: 3px; }
-        .skills-list::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); }
 
         .skill-item {
-          background: rgba(20, 15, 30, 0.8);
-          border-radius: 6px;
-          padding: 8px;
+          background: rgba(30, 20, 40, 0.7);
+          border-radius: 8px;
+          padding: 10px;
           display: flex;
           gap: 12px;
           align-items: center;
-          border: 1px solid rgba(255, 255, 255, 0.1);
+          border: 1px solid rgba(255, 255, 255, 0.05);
         }
 
         .skill-icon-wrap {
-          width: 40px;
-          height: 40px;
+          width: 44px;
+          height: 44px;
           background: url('/assets/gui/PNG/buttonSquare_brown.png') center/100% 100%;
           display: flex;
           align-items: center;
@@ -341,7 +371,7 @@ export class CharacterSelectUI {
           position: relative;
         }
         
-        .skill-icon-wrap img { width: 24px; height: 24px; image-rendering: pixelated; }
+        .skill-icon-wrap img { width: 26px; height: 26px; image-rendering: pixelated; }
         
         .skill-key {
           position: absolute;
@@ -350,9 +380,9 @@ export class CharacterSelectUI {
           background: #d4af37;
           color: #000;
           font-weight: 900;
-          font-size: 9px;
-          padding: 1px 4px;
-          border-radius: 3px;
+          font-size: 10px;
+          padding: 1px 5px;
+          border-radius: 4px;
         }
 
         .skill-info { flex: 1; }
@@ -360,99 +390,69 @@ export class CharacterSelectUI {
         .skill-name {
           font-family: 'Outfit', sans-serif;
           font-weight: 800;
-          font-size: 13px;
-          margin-bottom: 2px;
+          font-size: 14px;
+          margin-bottom: 3px;
           display: flex;
           justify-content: space-between;
         }
 
         .skill-cd { color: #38bdf8; font-size: 11px; }
 
-        .skill-desc { color: #94a3b8; font-size: 11px; line-height: 1.3; }
+        .skill-desc { color: #94a3b8; font-size: 11px; line-height: 1.4; }
 
-        .enter-btn-wrap {
-          margin-top: 5px;
-          text-align: center;
-          flex-shrink: 0;
-          width: 100%;
-          display: flex;
-          justify-content: center;
-        }
-
-        .enter-btn {
-          background: url('/assets/gui/PNG/buttonLong_brown.png') center/100% 100%;
-          color: #fff;
-          font-family: 'Cinzel', serif;
-          font-weight: 900;
-          font-size: clamp(16px, 3vw, 22px);
-          padding: 15px 40px;
-          border: none;
-          cursor: pointer;
-          transition: all 0.2s;
-          text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
-          letter-spacing: 2px;
-          filter: drop-shadow(0 5px 15px rgba(0, 0, 0, 0.8));
-          width: 100%;
-          max-width: 400px;
-        }
-
-        .enter-btn:hover {
-          filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.6)) brightness(1.2);
-          transform: translateY(-2px);
-        }
-        
-        .enter-btn:active {
-          background: url('/assets/gui/PNG/buttonLong_brown_pressed.png') center/100% 100%;
-          transform: translateY(2px);
-        }
-
-        #char-select-fs-btn {
-          background: url('/assets/gui/PNG/buttonSquare_brown.png') center/100% 100%;
-          border: none; padding: 10px 15px; color: #fff; cursor: pointer;
-          font-weight: bold; font-family: 'Outfit'; font-size: 10px;
-        }
-
-        /* Mobile & Small Screen Optimization */
-        @media (max-width: 900px), (max-height: 700px) {
-          #char-select-screen { padding: 10px; }
-          .class-detail-container {
+        /* PORTRAIT / EXTREME MOBILE RESPONSIVENESS */
+        @media (max-width: 950px) {
+          .main-layout {
             grid-template-columns: 1fr;
+            grid-template-rows: auto auto 1fr;
             overflow-y: auto;
+            overflow-x: hidden;
+            padding: 10px;
             gap: 15px;
-            padding: 12px;
+            height: auto;
+            max-height: 100vh;
           }
-          .skills-list { overflow: visible; }
-          .skills-section { overflow: visible; }
-          .left-col { overflow: visible; }
-          .char-presentation { border-width: 6px; }
+          
+          .roster-panel {
+            flex-direction: row;
+            overflow-x: auto;
+            overflow-y: hidden;
+            padding-bottom: 5px;
+            mask-image: none;
+          }
+          .class-card { flex: 0 0 80px; }
+          .class-card.active { transform: translateY(-5px); }
+          .class-card.active::before {
+            top: auto; bottom: -5px; left: 50%; transform: translateX(-50%);
+            width: 60%; height: 4px;
+          }
+          
+          .showcase-panel { padding: 10px; }
+          .title-banner { position: relative; margin-bottom: 10px; }
+          .hero-platform { margin-top: 10px; width: 120px; height: 120px; }
+          #hero-showcase-canvas { width: 140px; height: 140px; }
+          
+          .info-panel { overflow: visible; }
+          
           .enter-btn-wrap {
             position: sticky;
             bottom: 0;
-            background: linear-gradient(0deg, rgba(0,0,0,0.9) 0%, transparent 100%);
-            padding-top: 20px;
-            padding-bottom: 10px;
+            background: linear-gradient(0deg, #000 30%, transparent 100%);
+            padding: 20px 0 10px 0;
+            z-index: 100;
           }
-          .stats-box { grid-template-columns: 1fr 1fr 1fr; }
-        }
-        @media (max-width: 500px) {
-          .stats-box { grid-template-columns: 1fr 1fr; }
-          .class-card { flex: 0 0 75px; }
-          .card-sprite-canvas { width: 48px; height: 48px; }
         }
       </style>
 
       <canvas id="bg-canvas"></canvas>
-      <div class="select-content-wrapper">
+      <div class="main-layout">
         
-        <div style="position: absolute; right: 0; top: 0; z-index: 100;">
-          <button id="char-select-fs-btn">FULLSCREEN</button>
+        <div style="position: absolute; right: 10px; top: 10px; z-index: 100;">
+          <button id="char-select-fs-btn" style="background: url('/assets/gui/PNG/buttonSquare_brown.png') center/100% 100%; border: none; padding: 10px; color: #fff; cursor: pointer; font-family: 'Outfit'; font-weight: bold; font-size: 10px;">[ ] FS</button>
         </div>
 
-        <div class="title-banner">
-          <h1 class="select-title">CHOOSE YOUR CHAMPION</h1>
-        </div>
-        
-        <div class="classes-carousel" id="classes-carousel">
+        <!-- LEFT PANEL: ROSTER -->
+        <div class="roster-panel" id="classes-carousel">
           ${CHARACTER_CLASSES.map(c => `
             <div class="class-card ${c.id === this.selectedClass.id ? 'active' : ''}" data-class-id="${c.id}">
               <canvas class="card-sprite-canvas" data-class="${c.id}" width="64" height="64"></canvas>
@@ -462,55 +462,59 @@ export class CharacterSelectUI {
           `).join('')}
         </div>
 
-        <div class="class-detail-container" id="class-detail">
-          <div class="left-col">
-            <div class="char-presentation">
-              <div class="char-display-box">
-                <canvas id="hero-showcase-canvas" width="128" height="128"></canvas>
-              </div>
-              <div class="char-info-text">
-                <h2 style="color: ${this.selectedClass.accentColor}">${this.selectedClass.name}</h2>
-                <div class="char-title" style="color: ${this.selectedClass.themeColor}">${this.selectedClass.title}</div>
-              </div>
-            </div>
-            <div class="lore-box">
-              ${this.selectedClass.description}
-            </div>
-            <div class="stats-box">
-              <div class="stat-row"><span>Health (HP):</span><span style="color:#ef4444">${this.selectedClass.stats.maxHp}</span></div>
-              <div class="stat-row"><span>Energy:</span><span style="color:#3b82f6">Unlimited</span></div>
-              <div class="stat-row"><span>Attack (ATK):</span><span style="color:#f97316">${this.selectedClass.stats.atk}</span></div>
-              <div class="stat-row"><span>Defense (DEF):</span><span style="color:#c084fc">${this.selectedClass.stats.def}</span></div>
-              <div class="stat-row"><span>Critical:</span><span style="color:#ffd700">${Math.round(this.selectedClass.stats.critChance * 100)}%</span></div>
-              <div class="stat-row"><span>Speed:</span><span style="color:#2dd4bf">${this.selectedClass.stats.speed}</span></div>
-            </div>
+        <!-- CENTER PANEL: SHOWCASE -->
+        <div class="showcase-panel">
+          <div class="title-banner">
+            <h1 class="select-title">CHOOSE YOUR CHAMPION</h1>
           </div>
           
-          <div class="skills-section">
-            <div class="skills-header">6 UNIQUE CLASS SKILLS</div>
-            <div class="skills-list">
-              ${this.selectedClass.skills.map((s, idx) => `
-                <div class="skill-item">
-                  <div class="skill-icon-wrap">
-                    <img src="${this.getSkillIcon(s, this.selectedClass.id, idx)}" />
-                    <span class="skill-key">${s.key}</span>
-                  </div>
-                  <div class="skill-info">
-                    <div class="skill-name">
-                      <span style="color: ${s.isUltimate ? '#ffd700' : '#f8fafc'}">${s.name} ${s.isUltimate ? '★ ULTIMATE' : ''}</span>
-                      <span class="skill-cd">CD: ${s.cooldown}s</span>
-                    </div>
-                    <div class="skill-desc">${s.description}</div>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
+          <div class="hero-platform">
+            <canvas id="hero-showcase-canvas" width="128" height="128"></canvas>
+          </div>
+          
+          <div class="hero-name-plate">
+            <h2 style="color: ${this.selectedClass.accentColor}">${this.selectedClass.name}</h2>
+            <h3 style="color: ${this.selectedClass.themeColor}">${this.selectedClass.title}</h3>
+          </div>
+          
+          <div class="lore-box">${this.selectedClass.description}</div>
+          
+          <div class="enter-btn-wrap">
+            <button class="enter-btn" id="start-game-btn">ENTER BATTLE</button>
           </div>
         </div>
 
-        <div class="enter-btn-wrap">
-          <button class="enter-btn" id="start-game-btn">ENTER DUNGEON BATTLE</button>
+        <!-- RIGHT PANEL: INFO -->
+        <div class="info-panel" id="class-detail">
+          <div class="stats-box">
+            <div class="stat-row"><span>HP:</span><span style="color:#ef4444">${this.selectedClass.stats.maxHp}</span></div>
+            <div class="stat-row"><span>Energy:</span><span style="color:#3b82f6">Infinite</span></div>
+            <div class="stat-row"><span>ATK:</span><span style="color:#f97316">${this.selectedClass.stats.atk}</span></div>
+            <div class="stat-row"><span>DEF:</span><span style="color:#c084fc">${this.selectedClass.stats.def}</span></div>
+            <div class="stat-row"><span>CRIT:</span><span style="color:#ffd700">${Math.round(this.selectedClass.stats.critChance * 100)}%</span></div>
+            <div class="stat-row"><span>SPD:</span><span style="color:#2dd4bf">${this.selectedClass.stats.speed}</span></div>
+          </div>
+          
+          <div class="skills-header">UNIQUE SKILLS</div>
+          <div class="skills-list">
+            ${this.selectedClass.skills.map((s, idx) => `
+              <div class="skill-item">
+                <div class="skill-icon-wrap">
+                  <img src="${this.getSkillIcon(s, this.selectedClass.id, idx)}" />
+                  <span class="skill-key">${s.key}</span>
+                </div>
+                <div class="skill-info">
+                  <div class="skill-name">
+                    <span style="color: ${s.isUltimate ? '#ffd700' : '#f8fafc'}">${s.name} ${s.isUltimate ? '★' : ''}</span>
+                    <span class="skill-cd">CD: ${s.cooldown}s</span>
+                  </div>
+                  <div class="skill-desc">${s.description}</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
         </div>
+
       </div>
     `;
 
