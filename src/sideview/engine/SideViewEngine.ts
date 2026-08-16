@@ -512,6 +512,10 @@ export class SideViewEngine {
     const attackX = startX + (facing * (skill.range * 0.6));
     const attackY = startY;
 
+    // VISUAL DEBUG: Let's see if the client is receiving this!
+    this.particles.addFloatingText(startX, startY - 80, `[DEBUG] Remote Cast: ${classId} Skill ${skillIndex}`, '#00ff00', true, 16);
+
+
     // Play SFX
     this.playSkillCastSfx(skill);
 
@@ -849,6 +853,10 @@ export class SideViewEngine {
 
     // Broadcast skill to network immediately
     network.sendPlayerSkill(skillIndex, p.characterClass.id, p.x, p.y, p.facing, this.groundY, this.isTownMode, damage);
+
+    // VISUAL DEBUG: Did we even send it?
+    this.particles.addFloatingText(p.x, p.y - 100, `[DEBUG] Local Cast Sent: Skill ${skillIndex}`, '#ffff00', true, 16);
+
 
     // Play SFX
     this.playSkillCastSfx(skill);

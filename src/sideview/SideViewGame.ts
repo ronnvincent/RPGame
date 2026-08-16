@@ -30,6 +30,7 @@ export class SideViewGame {
   private waveActive: boolean = false;
   private lastTime: number = 0;
   private isRunning: boolean = false;
+  private animationFrameId: number | null = null;
   private keysPressed: { [key: string]: boolean } = {};
   public touchMoveDir: number = 0;
 
@@ -355,9 +356,18 @@ export class SideViewGame {
       this.loadTownHub();
     });
 
+    if (this.isRunning) return;
     this.isRunning = true;
     this.lastTime = performance.now();
-    requestAnimationFrame((t) => this.gameLoop(t));
+    this.animationFrameId = requestAnimationFrame((t) => this.gameLoop(t));
+  }
+
+  public stop() {
+    this.isRunning = false;
+    if (this.animationFrameId !== null) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
   }
 
   public loadTownHub(broadcastParty: boolean = true) {
@@ -663,7 +673,8 @@ export class SideViewGame {
   }
 
   private gameLoop(timestamp: number) {
-    if (!this.isRunning) return;
+    if (!this.engine || !this.isRunning) return;
+    this.animationFrameId = requestAnimationFrame(this.gameLoop.bind(this));
 
     const dt = Math.min((timestamp - this.lastTime) / 1000, 0.1);
     this.lastTime = timestamp;
@@ -735,7 +746,5 @@ export class SideViewGame {
     } catch (err) {
       console.error('GameLoop Error:', err);
     }
-
-    requestAnimationFrame((t) => this.gameLoop(t));
   }
 }
