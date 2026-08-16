@@ -33,8 +33,9 @@ export class NetworkManager {
       
       const uuid = localStorage.getItem('playerUUID');
       const name = localStorage.getItem('playerName');
-      if (uuid && name) {
-        this.socket?.emit('register_player', { uuid, name });
+      const shortId = localStorage.getItem('playerShortId');
+      if (uuid && name && shortId) {
+        this.socket?.emit('register_player', { uuid, name, shortId });
       }
     });
 
@@ -60,15 +61,14 @@ export class NetworkManager {
     });
   }
 
-  public joinMatchmaking(dungeonId: string, onStart: (roomData: any) => void, onWait: (msg: string) => void) {
+  public createLobby(dungeonId: string, onUpdate: (lobbyData: any) => void, onStart: (roomData: any) => void) {
     if (!this.socket) this.connect();
     
-    // Setup listeners once
-    this.socket?.off('matchmaking_status');
+    this.socket?.off('lobby_update');
     this.socket?.off('dungeon_start');
 
-    this.socket?.on('matchmaking_status', (data) => {
-      onWait(data.message);
+    this.socket?.on('lobby_update', (data) => {
+      onUpdate(data);
     });
 
     this.socket?.on('dungeon_start', (data) => {
@@ -76,7 +76,34 @@ export class NetworkManager {
       onStart(data);
     });
 
-    this.socket?.emit('join_matchmaking', { dungeonId });
+    this.socket?.emit('create_lobby', { dungeonId });
+  }
+
+  public invitePlayer(shortId: string, onResponse: (msg: string, success: boolean) => void) {
+    if (!this.socket) return;
+    this.socket.emit('send_invite', { targetShortId: shortId }, (response: { success: boolean, msg: string }) => {
+      onResponse(response.msg, response.success);
+    });
+  }
+
+  public acceptInvite(roomId: string, onStart: (roomData: any) => void) {
+    if (!this.socket) this.connect();
+    
+    this.socket?.off('dungeon_start');
+    this.socket?.on('dungeon_start', (data) => {
+      this.room = data.roomId;
+      onStart(data);
+    });
+
+    this.socket?.emit('accept_invite', { roomId });
+  }
+
+  public listenForInvites(onInviteReceived: (inviteData: { fromName: string, dungeonId: string, roomId: string }) => void) {
+    if (!this.socket) this.connect();
+    this.socket?.off('invite_received');
+    this.socket?.on('invite_received', (data) => {
+      onInviteReceived(data);
+    });
   }
 
   public sendPlayerMove(playerState: PlayerState, isAttacking: boolean = false) {

@@ -1,5 +1,14 @@
 import { SideViewGame } from './sideview/SideViewGame';
 
+function generateShortId() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No I, O, 0, 1
+  let result = '';
+  for (let i = 0; i < 6; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
 function generateUUID() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
     const r = Math.random() * 16 | 0;
@@ -69,6 +78,7 @@ function showGuestLogin(mountPoint: HTMLElement) {
     }
     localStorage.setItem('playerName', name);
     localStorage.setItem('playerUUID', generateUUID());
+    localStorage.setItem('playerShortId', generateShortId());
     document.body.removeChild(overlay);
     startGame(mountPoint);
   };
@@ -95,7 +105,8 @@ function initGame() {
   const existingName = localStorage.getItem('playerName');
   const existingUUID = localStorage.getItem('playerUUID');
 
-  if (!existingName || !existingUUID) {
+  const existingShortId = localStorage.getItem('playerShortId');
+  if (!existingName || !existingUUID || !existingShortId) {
     showGuestLogin(mountPoint);
   } else {
     startGame(mountPoint);

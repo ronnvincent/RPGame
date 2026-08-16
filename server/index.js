@@ -31,56 +31,97 @@ io.on('connection', (socket) => {
     players[socket.id] = {
       uuid: data.uuid,
       name: data.name,
+      shortId: data.shortId,
       socketId: socket.id,
       room: null
     };
-    console.log(`Registered ${data.name} (${data.uuid})`);
+    console.log(`Registered ${data.name} (${data.shortId})`);
   });
 
-  // Matchmaking: Find a dungeon room
-  socket.on('join_matchmaking', (data) => {
-    const dungeonId = data.dungeonId; // e.g., 'goblin_catacombs'
+  // Create Lobby
+  socket.on('create_lobby', (data) => {
     const p = players[socket.id];
     if (!p) return;
 
-    // Find an existing room with 1 player waiting for this dungeon
-    let foundRoomId = null;
-    for (const [roomId, room] of Object.entries(rooms)) {
-      if (room.dungeonId === dungeonId && room.players.length === 1 && !room.started) {
-        foundRoomId = roomId;
-        break;
-      }
+    const newRoomId = `room_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    rooms[newRoomId] = {
+      dungeonId: data.dungeonId,
+      hostId: socket.id,
+      players: [socket.id],
+      started: false
+    };
+    p.room = newRoomId;
+    socket.join(newRoomId);
+    console.log(`${p.name} created lobby ${newRoomId}`);
+    
+    socket.emit('lobby_update', { 
+      roomId: newRoomId, 
+      dungeonId: data.dungeonId,
+      players: [ { name: p.name, shortId: p.shortId } ]
+    });
+  });
+
+  // Send Invite
+  socket.on('send_invite', (data, callback) => {
+    const p = players[socket.id];
+    if (!p || !p.room) return;
+
+    const room = rooms[p.room];
+    if (!room) return;
+
+    // Find player by shortId
+    const targetPlayer = Object.values(players).find(player => player.shortId === data.targetShortId);
+    
+    if (!targetPlayer) {
+      if (callback) callback({ success: false, msg: 'Player not found or offline.' });
+      return;
     }
 
-    if (foundRoomId) {
-      // Join existing room
-      const room = rooms[foundRoomId];
-      room.players.push(socket.id);
-      p.room = foundRoomId;
-      socket.join(foundRoomId);
-      
-      console.log(`${p.name} joined room ${foundRoomId}`);
-      
-      // Start the match!
-      room.started = true;
-      io.to(foundRoomId).emit('dungeon_start', {
-        roomId: foundRoomId,
-        dungeonId: dungeonId,
-        players: room.players.map(id => players[id])
-      });
-    } else {
-      // Create new room
-      const newRoomId = `room_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-      rooms[newRoomId] = {
-        dungeonId: dungeonId,
-        players: [socket.id],
-        started: false
-      };
-      p.room = newRoomId;
-      socket.join(newRoomId);
-      console.log(`${p.name} created room ${newRoomId}`);
-      socket.emit('matchmaking_status', { status: 'waiting', message: 'Waiting for another player...' });
+    if (targetPlayer.socketId === socket.id) {
+      if (callback) callback({ success: false, msg: 'You cannot invite yourself.' });
+      return;
     }
+
+    // Send invite to target
+    io.to(targetPlayer.socketId).emit('invite_received', {
+      fromName: p.name,
+      dungeonId: room.dungeonId,
+      roomId: p.room
+    });
+
+    if (callback) callback({ success: true, msg: `Invite sent to ${targetPlayer.name}!` });
+  });
+
+  // Accept Invite
+  socket.on('accept_invite', (data) => {
+    const p = players[socket.id];
+    if (!p) return;
+
+    const room = rooms[data.roomId];
+    if (!room) {
+      socket.emit('invite_error', { msg: 'Lobby no longer exists.' });
+      return;
+    }
+
+    if (room.started || room.players.length >= 2) {
+      socket.emit('invite_error', { msg: 'Lobby is full or already started.' });
+      return;
+    }
+
+    // Join room
+    room.players.push(socket.id);
+    p.room = data.roomId;
+    socket.join(data.roomId);
+    
+    console.log(`${p.name} joined room ${data.roomId}`);
+    
+    // Start the match!
+    room.started = true;
+    io.to(data.roomId).emit('dungeon_start', {
+      roomId: data.roomId,
+      dungeonId: room.dungeonId,
+      players: room.players.map(id => players[id])
+    });
   });
 
   // In-Game Sync Events

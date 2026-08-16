@@ -15,6 +15,7 @@ import { audio } from '../engine/AudioManager';
 import { sprites } from '../engine/SpriteManager';
 import { SkillDefinition } from '../classes/ClassDefinitions';
 import { SideViewGame } from '../SideViewGame';
+import { network } from '../network/NetworkManager';
 import { quests } from '../quests/QuestManager';
 import { QuestLogUI } from './QuestLogUI';
 import { WorldMapUI } from './WorldMapUI';
@@ -1413,6 +1414,96 @@ export class GameHUD {
     setTimeout(() => {
       toast.style.display = 'none';
     }, 3800);
+  }
+
+  
+  private setupInviteListener() {
+    network.listenForInvites((inviteData) => {
+      // Play sound
+      audio.playLevelUp(); // Reusing level up sound as notification
+
+      const overlay = document.createElement('div');
+      overlay.style.position = 'fixed';
+      overlay.style.inset = '0';
+      overlay.style.backgroundColor = 'rgba(0,0,0,0.85)';
+      overlay.style.display = 'flex';
+      overlay.style.flexDirection = 'column';
+      overlay.style.alignItems = 'center';
+      overlay.style.justifyContent = 'center';
+      overlay.style.zIndex = '100000'; // above everything
+      overlay.style.pointerEvents = 'auto'; // enable clicks
+      overlay.style.fontFamily = "'Outfit', sans-serif";
+      
+      const box = document.createElement('div');
+      box.style.background = "url('/assets/kenney-rpg-ui/panel_brown.png') repeat";
+      box.style.backgroundSize = "100% 100%";
+      box.style.padding = '40px';
+      box.style.border = '4px solid #4a2c11';
+      box.style.borderRadius = '8px';
+      box.style.textAlign = 'center';
+      box.style.color = '#fff';
+      box.style.width = '350px';
+
+      const title = document.createElement('h2');
+      title.innerText = 'CO-OP INVITE';
+      title.style.margin = '0 0 10px 0';
+      title.style.color = '#ffd700';
+
+      const msg = document.createElement('p');
+      msg.innerHTML = `<strong>${inviteData.fromName}</strong> has invited you to clear<br/><strong>${inviteData.dungeonId.toUpperCase().replace('_', ' ')}</strong>!`;
+      msg.style.marginBottom = '20px';
+      msg.style.lineHeight = '1.5';
+
+      const btnWrapper = document.createElement('div');
+      btnWrapper.style.display = 'flex';
+      btnWrapper.style.gap = '10px';
+      btnWrapper.style.justifyContent = 'center';
+
+      const acceptBtn = document.createElement('button');
+      acceptBtn.innerText = 'ACCEPT';
+      acceptBtn.style.background = "url('/assets/kenney-rpg-ui/buttonRound_blue.png') no-repeat center center";
+      acceptBtn.style.backgroundSize = "100% 100%";
+      acceptBtn.style.border = 'none';
+      acceptBtn.style.padding = '8px 24px';
+      acceptBtn.style.color = '#fff';
+      acceptBtn.style.cursor = 'pointer';
+      acceptBtn.style.fontWeight = 'bold';
+      
+      const declineBtn = document.createElement('button');
+      declineBtn.innerText = 'DECLINE';
+      declineBtn.style.background = '#4a2c11';
+      declineBtn.style.border = '2px solid #fff';
+      declineBtn.style.padding = '8px 24px';
+      declineBtn.style.color = '#fff';
+      declineBtn.style.cursor = 'pointer';
+      declineBtn.style.fontWeight = 'bold';
+
+      declineBtn.onclick = () => {
+        document.body.removeChild(overlay);
+      };
+
+      acceptBtn.onclick = () => {
+        document.body.removeChild(overlay);
+        // Force close Town Hub / World Map if open
+        if (this.worldMapUI) this.worldMapUI.close();
+
+        // Join room and wait for dungeon_start
+        network.acceptInvite(inviteData.roomId, (roomData) => {
+          if (this.game) {
+             this.game.onSelectLocation(roomData.dungeonId);
+          }
+        });
+      };
+
+      btnWrapper.appendChild(acceptBtn);
+      btnWrapper.appendChild(declineBtn);
+
+      box.appendChild(title);
+      box.appendChild(msg);
+      box.appendChild(btnWrapper);
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+    });
   }
 
   public update() {
