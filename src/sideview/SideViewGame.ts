@@ -215,13 +215,17 @@ export class SideViewGame {
       
       mod.network.listenForEnemyDied((enemyData) => {
         if (!this.engine || this.engine.isHost) return;
-        // Mock an enemy instance to trigger the defeat logic
+        // Mock an enemy instance to trigger the defeat logic and spawn identical ground loot
         const fakeEnemy: any = {
+          id: enemyData.id,
           name: enemyData.name,
           type: enemyData.type,
           x: enemyData.x,
           y: enemyData.y + this.engine.groundY,
-          drops: enemyData.drops,
+          lootDrop: enemyData.lootDrop || enemyData.drops,
+          expReward: typeof enemyData.expReward === 'number' ? enemyData.expReward : 25,
+          goldReward: typeof enemyData.goldReward === 'number' ? enemyData.goldReward : 15,
+          color: enemyData.color || '#e43b44',
           isDead: false,
           hp: 0
         };
@@ -257,14 +261,14 @@ export class SideViewGame {
       mod.network.listenForDamageEnemy((enemyId, damage, facing) => {
         if (!this.engine || !this.engine.isHost) return;
         const enemy = this.engine.enemies.find(e => e.id === enemyId) || this.engine.enemies[parseInt(enemyId)];
-        if (enemy) {
+        if (enemy && !enemy.isDead) {
           this.engine.applyDamageToEnemy(enemy, damage, false, facing, true);
         }
       });
     });
 
     // Start with Epic Story Prologue Cutscene
-    this.dialogue.playPrologue(() => {
+    this.dialogue!.playPrologue(() => {
       this.loadTownHub();
     });
 

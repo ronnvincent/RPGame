@@ -1321,10 +1321,9 @@ export class SideViewEngine {
     // If we are the client, and this wasn't from a remote packet, send it to the host
     if (!this.isHost && !fromRemote) {
       import('../network/NetworkManager').then(mod => {
-        // enemy needs an ID to be uniquely identified. We will use its array index for now if no ID exists.
-        const eIdx = this.enemies.indexOf(enemy);
-        if (eIdx !== -1) {
-          mod.network.sendDamageEnemy(eIdx.toString(), finalDamage, knockbackDir);
+        const enemyIdentifier = enemy.id || this.enemies.indexOf(enemy).toString();
+        if (enemyIdentifier !== '-1') {
+          mod.network.sendDamageEnemy(enemyIdentifier, finalDamage, knockbackDir);
         }
       });
     }
@@ -1356,11 +1355,15 @@ export class SideViewEngine {
     if (this.isHost) {
       import('../network/NetworkManager').then(mod => {
         mod.network.sendEnemyDied({
+          id: enemy.id,
           name: enemy.name,
           type: enemy.type,
           x: enemy.x,
           y: enemy.y,
-          drops: enemy.lootDrop // Send drops so client can spawn identical loot!
+          lootDrop: enemy.lootDrop,
+          expReward: enemy.expReward,
+          goldReward: enemy.goldReward,
+          color: enemy.color
         }, this.groundY);
       });
     }
@@ -1524,9 +1527,24 @@ export class SideViewEngine {
     p.mp = Math.min(p.maxMp, p.mp + (p.maxMp * 0.05) * dt);
     p.hp = Math.min(p.maxHp, p.hp + (p.maxHp * 0.01) * dt);
 
-    // 4. Update Animation State
+    // 4. Update Animation State & Auto-Revive
     if (p.hp <= 0) {
-      p.animState = 'dead';
+      // Check if player has auto-revive feather in inventory
+      const reviveIdx = p.inventory.findIndex(i => i.id === 'pot_revive_feather' || i.consumableEffect?.type === 'revive');
+      if (reviveIdx !== -1) {
+        const item = p.inventory[reviveIdx];
+        p.inventory.splice(reviveIdx, 1);
+        p.hp = Math.round(p.maxHp * 0.6);
+        p.mp = Math.round(p.maxMp * 0.6);
+        p.iframeTimer = 2.5;
+        p.animState = 'idle';
+        audio.playLevelUp();
+        this.particles.addHolyPillar(p.x, this.groundY);
+        this.particles.addFloatingText(p.x, p.y - 40, '✨ PHOENIX FEATHER RESURRECTION! ✨', '#ffd700', true, 20);
+        this.triggerSave();
+      } else {
+        p.animState = 'dead';
+      }
     } else if (p.attackTimer > 0) {
       p.attackTimer -= dt;
       p.animState = 'attack';
