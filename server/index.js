@@ -157,7 +157,13 @@ io.on('connection', (socket) => {
   // Create Lobby
   socket.on('create_lobby', (data) => {
     console.log(`[LOBBY] create_lobby requested by socket ${socket.id}`);
+    // Force register if missing
+    if (!players[socket.id] && data.uuid && data.name && data.shortId) {
+       players[socket.id] = { uuid: data.uuid, name: data.name, shortId: data.shortId, socketId: socket.id, room: null };
+       console.log(`[AUTH-FALLBACK] Registered ${data.name} via lobby packet`);
+    }
     const p = players[socket.id];
+
     if (!p) {
        console.error(`[LOBBY] ERROR: Player not found for socket ${socket.id} during create_lobby!`);
        return;
@@ -184,7 +190,13 @@ io.on('connection', (socket) => {
   // Send Invite
   socket.on('send_invite', (data, callback) => {
     console.log(`[INVITE] send_invite requested by socket ${socket.id} for target ${data.targetShortId}`);
+    // Force register if missing
+    if (!players[socket.id] && data.uuid && data.name && data.shortId) {
+       players[socket.id] = { uuid: data.uuid, name: data.name, shortId: data.shortId, socketId: socket.id, room: null };
+       console.log(`[AUTH-FALLBACK] Registered ${data.name} via lobby packet`);
+    }
     const p = players[socket.id];
+
     if (!p || !p.room) {
        console.error(`[INVITE] ERROR: Player or room not found for socket ${socket.id}`);
        if (callback) callback({ success: false, msg: 'You are not in a lobby!' });
@@ -219,7 +231,14 @@ io.on('connection', (socket) => {
 
   // Accept Invite
   socket.on('accept_invite', (data) => {
+    console.log(`[INVITE] accept_invite requested by socket ${socket.id}`);
+    // Force register if missing
+    if (!players[socket.id] && data.uuid && data.name && data.shortId) {
+       players[socket.id] = { uuid: data.uuid, name: data.name, shortId: data.shortId, socketId: socket.id, room: null };
+       console.log(`[AUTH-FALLBACK] Registered ${data.name} via lobby packet`);
+    }
     const p = players[socket.id];
+
     if (!p) return;
 
     const room = rooms[data.roomId];

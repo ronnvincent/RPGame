@@ -76,12 +76,18 @@ export class NetworkManager {
       onStart(data);
     });
 
-    this.socket?.emit('create_lobby', { dungeonId });
+    const uuid = localStorage.getItem('playerUUID');
+    const name = localStorage.getItem('playerName');
+    const shortId = localStorage.getItem('playerShortId');
+    this.socket?.emit('create_lobby', { dungeonId, uuid, name, shortId });
   }
 
-  public invitePlayer(shortId: string, onResponse: (msg: string, success: boolean) => void) {
+  public invitePlayer(targetShortId: string, onResponse: (msg: string, success: boolean) => void) {
     if (!this.socket) return;
-    this.socket.emit('send_invite', { targetShortId: shortId }, (response: { success: boolean, msg: string }) => {
+    const uuid = localStorage.getItem('playerUUID');
+    const name = localStorage.getItem('playerName');
+    const shortId = localStorage.getItem('playerShortId');
+    this.socket.emit('send_invite', { targetShortId, uuid, name, shortId }, (response: { success: boolean, msg: string }) => {
       onResponse(response.msg, response.success);
     });
   }
@@ -95,7 +101,10 @@ export class NetworkManager {
       onStart(data);
     });
 
-    this.socket?.emit('accept_invite', { roomId });
+    const uuid = localStorage.getItem('playerUUID');
+    const name = localStorage.getItem('playerName');
+    const shortId = localStorage.getItem('playerShortId');
+    this.socket?.emit('accept_invite', { roomId, uuid, name, shortId });
   }
 
   public listenForInvites(onInviteReceived: (inviteData: { fromName: string, dungeonId: string, roomId: string }) => void) {
