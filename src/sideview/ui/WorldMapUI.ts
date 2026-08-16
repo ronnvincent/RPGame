@@ -6,6 +6,7 @@
 import { DUNGEONS, DungeonDefinition } from '../dungeons/DungeonManager';
 import { quests } from '../quests/QuestManager';
 import { audio } from '../engine/AudioManager';
+import { network } from '../network/NetworkManager';
 
 export interface WorldMapLocation {
   id: string;
@@ -268,9 +269,20 @@ export class WorldMapUI {
             <strong style="color: #fca5a5; display: block; margin-bottom: 2px;">BOSS:</strong> 
             <span style="color: #fff; font-weight: 600;">${loc.bossName}</span>
           </div>
-          <button class="travel-btn dialogue-btn ${isUnlocked ? 'dialogue-btn-quest' : ''}" style="padding: 8px 16px; font-size: 13px; font-weight: 800; white-space: nowrap; border-radius: 6px; transition: 0.2s;" ${!isUnlocked ? 'disabled' : ''}>
-            ${!isUnlocked ? '🔒 LOCKED' : isTown ? 'VISIT ➔' : 'ENTER ⚔️'}
-          </button>
+          ${isTown ? `
+            <button class="travel-btn dialogue-btn ${isUnlocked ? 'dialogue-btn-quest' : ''}" style="padding: 8px 16px; font-size: 13px; font-weight: 800; white-space: nowrap; border-radius: 6px; transition: 0.2s;" ${!isUnlocked ? 'disabled' : ''}>
+              ${!isUnlocked ? '🔒 LOCKED' : 'VISIT ➔'}
+            </button>
+          ` : `
+            <div style="display: flex; gap: 8px;">
+              <button class="travel-btn dialogue-btn ${isUnlocked ? 'dialogue-btn-quest' : ''}" style="padding: 8px 12px; font-size: 11px; font-weight: 800; white-space: nowrap; border-radius: 6px; transition: 0.2s;" ${!isUnlocked ? 'disabled' : ''}>
+                ${!isUnlocked ? '🔒 LOCKED' : 'SOLO'}
+              </button>
+              <button class="coop-btn dialogue-btn" style="padding: 8px 12px; font-size: 11px; font-weight: 800; white-space: nowrap; border-radius: 6px; background-image: url('/assets/kenney-rpg-ui/buttonRound_beige.png'); color: #5a3c11; transition: 0.2s;" ${!isUnlocked ? 'disabled' : ''}>
+                ${!isUnlocked ? '🔒' : 'CO-OP 🌐'}
+              </button>
+            </div>
+          `}
         </div>
       `;
 
@@ -278,7 +290,11 @@ export class WorldMapUI {
         card.querySelector('.travel-btn')?.addEventListener('click', () => {
           audio.playTeleport();
           this.close();
-          this.onSelectLocation(loc.id);
+          this.onSelectLocation(loc.id); // Solo mode
+        });
+        card.querySelector('.coop-btn')?.addEventListener('click', () => {
+          audio.playTeleport();
+          this.showMatchmakingOverlay(loc.id);
         });
       }
 
@@ -305,6 +321,52 @@ export class WorldMapUI {
     this.modalEl.appendChild(frame);
     this.container.appendChild(this.modalEl);
   }
+  
+  private showMatchmakingOverlay(locationId: string) {
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.backgroundColor = 'rgba(0,0,0,0.9)';
+    overlay.style.display = 'flex';
+    overlay.style.flexDirection = 'column';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.zIndex = '999999';
+    overlay.style.color = '#fff';
+    overlay.style.fontFamily = "'Outfit', sans-serif";
+    
+    const text = document.createElement('h2');
+    text.innerText = 'Connecting to Server...';
+    text.style.color = '#ffd700';
+    text.style.marginBottom = '20px';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.innerText = 'Cancel';
+    cancelBtn.style.padding = '8px 24px';
+    cancelBtn.style.background = '#4a2c11';
+    cancelBtn.style.border = '2px solid #fff';
+    cancelBtn.style.color = '#fff';
+    cancelBtn.style.cursor = 'pointer';
+    cancelBtn.onclick = () => {
+      document.body.removeChild(overlay);
+      if (network.socket) network.socket.disconnect();
+      network.socket = null;
+    };
+
+    overlay.appendChild(text);
+    overlay.appendChild(cancelBtn);
+    document.body.appendChild(overlay);
+
+    network.joinMatchmaking(locationId, (roomData) => {
+      // Start match!
+      document.body.removeChild(overlay);
+      this.close();
+      this.onSelectLocation(locationId);
+    }, (msg) => {
+      text.innerText = msg;
+    });
+  }
+
   public close() {
     if (this.modalEl && this.modalEl.parentNode) {
       this.modalEl.parentNode.removeChild(this.modalEl);

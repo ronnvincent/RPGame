@@ -13,6 +13,7 @@ import { sprites } from './SpriteManager';
 import { quests } from '../quests/QuestManager';
 import { TownHub } from '../town/TownHub';
 import { SaveManager } from './SaveManager';
+import { network } from '../network/NetworkManager';
 
 export interface PlayerEquipment {
   helmet?: ItemData;
@@ -1939,6 +1940,40 @@ export class SideViewEngine {
     );
 
     ctx.restore();
+
+    // Render Remote Multiplayer Ghosts
+    if (network.room) {
+      for (const socketId in network.remotePlayers) {
+        const remoteP = network.remotePlayers[socketId];
+        ctx.save();
+        ctx.globalAlpha = 0.6; // ghost effect
+        ctx.filter = 'sepia(1) hue-rotate(180deg) drop-shadow(0 0 10px #4fade5)'; // blueish aura
+        
+        const rIsRun = remoteP.isGrounded && remoteP.x !== undefined; // simple approximation
+        const rRunBob = rIsRun ? -Math.abs(Math.sin(this.playerRunBob) * 1.8) : 0;
+        
+        sprites.drawHero(
+          ctx,
+          remoteP.x,
+          remoteP.y + rRunBob,
+          'knight', // Default remote class for now
+          remoteP.isAttacking ? 'attack' : (rIsRun ? 'run' : 'idle'),
+          remoteP.facing,
+          remoteP.isAttacking ? 0.2 : 0,
+          '#4fade5'
+        );
+        
+        // Remote Name
+        ctx.globalAlpha = 1.0;
+        ctx.filter = 'none';
+        ctx.font = 'bold 10px "Outfit", sans-serif';
+        ctx.fillStyle = '#4fade5';
+        ctx.textAlign = 'center';
+        ctx.fillText(remoteP.name, remoteP.x, remoteP.y - 40);
+        
+        ctx.restore();
+      }
+    }
 
     // 5. Render Particle System (VFX, Projectiles, Minions, Clones, Zones, Floating Text)
     this.particles.draw(ctx);
