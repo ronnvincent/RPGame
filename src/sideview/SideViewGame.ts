@@ -198,7 +198,9 @@ export class SideViewGame {
         if (!this.engine || this.engine.isHost) return;
         console.log('[NET] Received party_next_dungeon from host:', data);
         this.dialogue?.close();
-        this.loadDungeon(data.dungeonIndex, false);
+        if (this.currentDungeonIndex !== data.dungeonIndex || this.engine.isTownMode) {
+          this.loadDungeon(data.dungeonIndex, false);
+        }
       });
 
       mod.network.listenForWaveSync((data) => {
@@ -383,7 +385,7 @@ export class SideViewGame {
           return;
         }
       }
-      this.loadDungeon(dungeonIdx, true);
+      this.loadDungeon(dungeonIdx, isHost);
     }
   }
 
@@ -395,9 +397,9 @@ export class SideViewGame {
     this.engine.player.y = this.engine.groundY;
     this.engine.player.vx = 0;
     this.engine.player.vy = 0;
-    this.engine.enemies = []; // Clear for client
     this.engine.particles.summonedMinions = [];
 
+    const prevDungeonIndex = this.currentDungeonIndex;
     this.currentDungeonIndex = dungeonIndex % DUNGEONS.length;
     this.engine.currentDungeonIndex = this.currentDungeonIndex;
     const dungeon = DUNGEONS[this.currentDungeonIndex];
@@ -406,8 +408,12 @@ export class SideViewGame {
       this.engine.setBattleTheme(dungeon.theme);
       audio.playDungeonBGM(dungeon.theme);
     }
-    this.currentWaveIndex = 0;
-    this.engine.currentWaveIndex = 0;
+
+    if (this.engine.isHost || prevDungeonIndex !== this.currentDungeonIndex) {
+      this.currentWaveIndex = 0;
+      this.engine.currentWaveIndex = 0;
+      this.engine.enemies = [];
+    }
     
     // Only Host spawns waves
     if (this.engine.isHost) {

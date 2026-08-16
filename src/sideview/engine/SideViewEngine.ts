@@ -509,322 +509,267 @@ export class SideViewEngine {
 
     const remoteBaseDamage = typeof skillDamage === 'number' && skillDamage > 0 ? skillDamage : this.player.totalAtk;
 
-    if (typeof localStorage !== 'undefined' && localStorage.getItem('rpg_debug_multiplayer') === '1') {
-      console.log('[SIM][REMOTE] castRemoteSkill', {
-        classId,
-        skillIndex,
-        startX,
-        startY,
-        facing,
-        ownerSocketId,
-        remoteBaseDamage,
-        isHost: this.isHost
-      });
-    }
-
     const attackX = startX + (facing * (skill.range * 0.6));
     const attackY = startY;
 
     // Play SFX
     this.playSkillCastSfx(skill);
 
-      // ---- 1. WARRIOR ----
-      if (classId === 'warrior') {
-        if (skillIndex === 0) {
-          this.particles.playSanjuVfx(attackX, attackY - 15, 'sanju_pure', 25, 24, 1.5, '#ef4444');
-          this.particles.addSpellSlash(attackX, attackY - 20, facing, 1.4, '#ef4444');
-        } else if (skillIndex === 1) {
-          this.particles.playSanjuVfx(attackX, attackY - 20, 'sanju_pure', 25, 24, 1.6, '#f97316');
-          this.particles.addFireSpin(startX, startY - 20, 1.8);
-        } else if (skillIndex === 2) {
-          this.particles.playSanjuVfx(attackX, this.groundY - 40, 'sanju_earth', 25, 24, 1.8);
-          this.particles.addSpellSlash(attackX, attackY, facing, 1.8, '#ef4444');
-        } else if (skillIndex === 3) {
-          this.particles.playSanjuVfx(startX, startY - 20, 'sanju_blood', 25, 24, 1.5);
-          this.particles.addHolyPillar(startX, startY);
-        } else if (skillIndex === 4) {
-          this.particles.playSanjuVfx(startX + facing * 220, startY - 15, 'sanju_pure', 25, 24, 2.0, '#ef4444');
-          this.particles.addSpellSlash(startX + facing * 220, startY - 15, facing, 1.8, '#ffffff');
-          this.particles.addImpactBurst(startX + facing * 220, startY - 15, 15, '#e53935', 'trail');
-        } else if (skillIndex === 5) {
-          this.particles.triggerScreenShake(22, 0.75);
-          this.particles.addScreenFlash('#e53935', 0.6, 0.05);
-          this.particles.spawnTitanEarthShatter(startX, this.groundY, facing);
-          this.particles.addGroundExplosion(attackX, this.groundY, 2.2);
-        }
-        return;
+    // ---- 1. WARRIOR ----
+    if (classId === 'warrior') {
+      if (skillIndex === 0) {
+        this.particles.addSpellSlash(attackX, attackY - 20, facing, 1.4, '#ef4444');
+        this.particles.addImpactBurst(attackX, attackY - 15, 10, '#ef4444', 'spark');
+      } else if (skillIndex === 1) {
+        this.particles.addFireSpin(startX, startY - 20, 1.8);
+        this.particles.addImpactBurst(startX, startY - 15, 12, '#f97316', 'spark');
+      } else if (skillIndex === 2) {
+        this.particles.addSpellSlash(attackX, attackY, facing, 1.8, '#ef4444');
+        this.particles.triggerScreenShake(8, 0.25);
+        this.particles.addImpactBurst(attackX, attackY - 15, 15, '#ffd700', 'spark');
+      } else if (skillIndex === 3) {
+        this.particles.addHolyPillar(startX, startY);
+        this.particles.triggerScreenShake(8, 0.3);
+        this.particles.addFloatingText(startX, startY - 30, 'WAR CRY!', '#ef4444', true, 16);
+      } else if (skillIndex === 4) {
+        this.particles.addSpellSlash(startX + facing * 200, startY - 15, facing, 1.8, '#ffffff');
+        this.particles.addImpactBurst(startX + facing * 200, startY - 15, 18, '#e53935', 'trail');
+      } else if (skillIndex === 5) {
+        this.particles.triggerScreenShake(22, 0.75);
+        this.particles.addScreenFlash('#e53935', 0.6, 0.05);
+        this.particles.spawnTitanEarthShatter(startX, this.groundY, facing);
+        this.particles.addGroundExplosion(attackX, this.groundY, 2.2);
       }
+      return;
+    }
 
-      // ---- 2. ASSASSIN ----
-      if (classId === 'assassin') {
-        if (skillIndex === 0) {
-          this.particles.playSanjuVfx(attackX, attackY - 15, 'sanju_blood', 25, 24, 1.4);
-          this.particles.addSpellSlash(attackX, attackY - 15, facing, 1.4, '#9333ea');
-        } else if (skillIndex === 1) {
-          this.particles.playSanjuVfx(attackX, attackY - 15, 'sanju_cosmic', 25, 24, 1.6, '#a855f7');
-          this.particles.addProjectile(startX + facing * 20, startY - 10, facing * 14, 0, 'dagger', 0, false, true, '#a855f7', 10, false);
-        } else if (skillIndex === 2) {
-          this.particles.playSanjuVfx(startX, startY - 20, 'sanju_blood', 25, 24, 1.8);
-          this.particles.addDarkPillar(startX, startY);
-          this.particles.addImpactBurst(startX, startY - 20, 25, '#7e22ce', 'smoke');
-        } else if (skillIndex === 3) {
-          this.particles.playSanjuVfx(attackX, attackY - 15, 'sanju_pure', 25, 24, 1.5, '#10b981');
-          this.particles.addFanOfKnives(startX, startY, 0, 0);
-        } else if (skillIndex === 4) {
-          this.particles.playSanjuVfx(attackX, attackY - 15, 'sanju_blood', 25, 24, 2.0);
-          this.particles.addImpactBurst(startX, startY - 15, 12, '#9333ea', 'smoke');
-          this.particles.addSpellSlash(attackX, attackY - 15, facing, 1.8, '#ef4444');
-          this.particles.addImpactBurst(attackX, attackY - 15, 20, '#ef4444', 'spark');
-        } else if (skillIndex === 5) {
-          this.particles.triggerScreenShake(22, 0.75);
-          this.particles.addScreenFlash('#7e22ce', 0.6, 0.05);
-          this.particles.triggerShadowTempest([{x: attackX, y: attackY}, {x: attackX - 100, y: attackY}, {x: attackX + 100, y: attackY}], startX, startY);
-        }
-        return;
+    // ---- 2. ASSASSIN ----
+    if (classId === 'assassin') {
+      if (skillIndex === 0) {
+        this.particles.addSpellSlash(attackX, attackY - 15, facing, 1.4, '#9333ea');
+        this.particles.addImpactBurst(attackX, attackY - 15, 10, '#a855f7', 'spark');
+      } else if (skillIndex === 1) {
+        this.particles.addProjectile(startX + facing * 20, startY - 10, facing * 14, 0, 'dagger', 0, false, true, '#a855f7', 10, false);
+      } else if (skillIndex === 2) {
+        this.particles.addDarkPillar(startX, startY);
+        this.particles.addImpactBurst(startX, startY - 20, 25, '#7e22ce', 'smoke');
+      } else if (skillIndex === 3) {
+        this.particles.addFanOfKnives(startX, startY, 0, 0);
+      } else if (skillIndex === 4) {
+        this.particles.addImpactBurst(startX, startY - 15, 12, '#9333ea', 'smoke');
+        this.particles.addSpellSlash(attackX, attackY - 15, facing, 1.8, '#ef4444');
+        this.particles.addImpactBurst(attackX, attackY - 15, 20, '#ef4444', 'spark');
+      } else if (skillIndex === 5) {
+        this.particles.triggerScreenShake(22, 0.75);
+        this.particles.addScreenFlash('#7e22ce', 0.6, 0.05);
+        this.particles.triggerShadowTempest([{x: attackX, y: attackY}, {x: attackX - 100, y: attackY}, {x: attackX + 100, y: attackY}], startX, startY);
       }
+      return;
+    }
 
-      // ---- 3. MAGE ----
-      if (classId === 'mage') {
-        if (skillIndex === 0) {
-          this.particles.playSanjuVfx(attackX, attackY - 15, 'sanju_fire', 25, 24, 1.5);
-          this.particles.addProjectile(startX + facing * 20, startY - 10, facing * 12, 0, 'fireball', 0, false, true, '#f97316', 14, false);
-        } else if (skillIndex === 1) {
-          this.particles.playSanjuVfx(attackX, attackY - 10, 'sanju_water', 25, 24, 1.8);
-          this.particles.addFreezingEffect(attackX, startY - 15, 1.6);
-          this.particles.addGroundExplosion(attackX, this.groundY, 1.5);
-        } else if (skillIndex === 2) {
-          this.particles.playSanjuVfx(attackX, attackY - 45, 'sanju_2d_sparks', 12, 24, 2.0);
-          this.particles.addChainLightning([{x: startX, y: startY - 20}, {x: attackX, y: attackY - 15}, {x: attackX + facing * 80, y: attackY - 15}]);
-        } else if (skillIndex === 3) {
-          this.particles.playSanjuVfx(startX, startY - 30, 'sanju_pure', 25, 24, 1.8, '#38bdf8');
-          this.particles.addMagicBarrier(startX, startY - 15, 1.4);
-          this.particles.addHolyPillar(startX, startY);
-        } else if (skillIndex === 4) {
-          this.particles.playSanjuVfx(attackX, attackY - 40, 'sanju_water', 25, 24, 2.2);
-          this.particles.addGroundZone(attackX, this.groundY, 160, 0, 5.0, 'blizzard', '#60a5fa');
-        } else if (skillIndex === 5) {
-          this.particles.triggerScreenShake(24, 0.8);
-          this.particles.addScreenFlash('#ef4444', 0.6, 0.05);
-          this.particles.spawnArmageddonMeteors(attackX, this.groundY, facing);
-        }
-        return;
+    // ---- 3. MAGE ----
+    if (classId === 'mage') {
+      if (skillIndex === 0) {
+        this.particles.addProjectile(startX + facing * 20, startY - 10, facing * 12, 0, 'fireball', 0, false, true, '#f97316', 14, false);
+      } else if (skillIndex === 1) {
+        this.particles.addFreezingEffect(attackX, startY - 15, 1.6);
+        this.particles.addGroundExplosion(attackX, this.groundY, 1.5);
+      } else if (skillIndex === 2) {
+        this.particles.addChainLightning([{x: startX, y: startY - 20}, {x: attackX, y: attackY - 15}, {x: attackX + facing * 80, y: attackY - 15}]);
+      } else if (skillIndex === 3) {
+        this.particles.addMagicBarrier(startX, startY - 15, 1.4);
+        this.particles.addHolyPillar(startX, startY);
+      } else if (skillIndex === 4) {
+        this.particles.addGroundZone(attackX, this.groundY, 160, 0, 5.0, 'blizzard', '#60a5fa');
+      } else if (skillIndex === 5) {
+        this.particles.triggerScreenShake(24, 0.8);
+        this.particles.addScreenFlash('#ef4444', 0.6, 0.05);
+        this.particles.spawnArmageddonMeteors(attackX, this.groundY, facing);
       }
+      return;
+    }
 
-      // ---- 4. PALADIN ----
-      if (classId === 'paladin') {
-        if (skillIndex === 0) {
-          this.particles.playSanjuVfx(attackX, attackY - 15, 'aaa_light', 25, 24, 1.5);
-          this.particles.addSpellSlash(attackX, attackY, facing, 1.6, '#facc15');
-        } else if (skillIndex === 1) {
-          this.particles.playVfxSprite(startX, startY - 20, 'aaa_holy_shield', facing, 1.8);
-          this.particles.addHolyPillar(startX, startY);
-        } else if (skillIndex === 2) {
-          this.particles.playSanjuVfx(startX, startY - 30, 'aaa_light', 25, 24, 2.0);
-          this.particles.addEnergyImpact(startX, startY - 15, 1.6, '#facc15');
-          this.particles.triggerScreenShake(10, 0.3);
-        } else if (skillIndex === 3) {
-          this.particles.playVfxSprite(startX, this.groundY - 20, 'aaa_magic_sparks', facing, 1.8, '#facc15');
-          this.particles.addGroundZone(startX, this.groundY, 140, 0, 6.0, 'holy_consecration', '#facc15');
-        } else if (skillIndex === 4) {
-          this.particles.playSanjuVfx(startX, startY - 25, 'aaa_light', 25, 24, 2.2);
-          this.particles.addHolyPillar(startX, startY);
-          this.particles.addFloatingText(startX, startY - 30, '+HEAL', '#66bb6a', true, 20);
-        } else if (skillIndex === 5) {
-          this.particles.triggerScreenShake(24, 0.8);
-          this.particles.addScreenFlash('#ffd700', 0.6, 0.05);
-          this.particles.spawnHolyHammerJudgement(attackX, this.groundY);
-        }
-        return;
+    // ---- 4. PALADIN ----
+    if (classId === 'paladin') {
+      if (skillIndex === 0) {
+        this.particles.addSpellSlash(attackX, attackY, facing, 1.6, '#facc15');
+        this.particles.addImpactBurst(attackX, attackY, 12, '#facc15', 'spark');
+      } else if (skillIndex === 1) {
+        this.particles.addHolyPillar(startX, startY);
+        this.particles.addMagicBarrier(startX, startY - 15, 1.5);
+      } else if (skillIndex === 2) {
+        this.particles.addEnergyImpact(startX, startY - 15, 1.6, '#facc15');
+        this.particles.triggerScreenShake(10, 0.3);
+      } else if (skillIndex === 3) {
+        this.particles.addGroundZone(startX, this.groundY, 140, 0, 6.0, 'holy_consecration', '#facc15');
+      } else if (skillIndex === 4) {
+        this.particles.addHolyPillar(startX, startY);
+        this.particles.addFloatingText(startX, startY - 30, '+HEAL', '#66bb6a', true, 20);
+      } else if (skillIndex === 5) {
+        this.particles.triggerScreenShake(24, 0.8);
+        this.particles.addScreenFlash('#ffd700', 0.6, 0.05);
+        this.particles.spawnHolyHammerJudgement(attackX, this.groundY);
       }
+      return;
+    }
 
-      // ---- 5. ARCHER ----
-      if (classId === 'archer') {
-        if (skillIndex === 0) {
-          this.particles.playVfxSprite(attackX, attackY - 15, 'aaa_wind_bolt', facing, 1.5);
-          this.particles.addProjectile(startX + facing * 20, startY - 10, facing * 14, 0, 'arrow', 0, false, true, '#d7ccc8', 12, false);
-        } else if (skillIndex === 1) {
-          this.particles.playVfxSprite(attackX, attackY - 15, 'aaa_magic_sparks', facing, 1.8);
-          this.particles.addImpactBurst(attackX, this.groundY - 10, 15, '#22c55e', 'spark');
-          for (let i = 0; i < 12; i++) {
-            setTimeout(() => {
-              this.particles.addProjectile(attackX + (Math.random() * 160 - 80), 60 + Math.random() * 40, (Math.random() - 0.5) * 2, 15 + Math.random() * 5, 'arrow', 0, false, true, '#a3e635', 10, false);
-            }, i * 45);
-          }
-        } else if (skillIndex === 2) {
-          this.particles.playVfxSprite(attackX, this.groundY - 20, 'aaa_wind_bolt', facing, 1.6);
-          this.particles.addGroundTrap(startX + facing * 40, this.groundY, 'poison', 0);
-        } else if (skillIndex === 3) {
-          this.particles.playVfxSprite(attackX, attackY - 15, 'aaa_magic_sparks', facing, 1.5);
-          this.particles.addProjectile(startX + facing * 20, startY - 10, facing * 14, 0, 'fireball', 0, false, true, '#ff5722', 16, true);
-          this.particles.addGroundExplosion(attackX, this.groundY - 20, 1.5);
-        } else if (skillIndex === 4) {
-          this.particles.playVfxSprite(startX, startY - 20, 'aaa_wind_bolt', facing, 2.0);
-          this.particles.addHolyPillar(startX, startY);
-        } else if (skillIndex === 5) {
-          this.particles.triggerScreenShake(22, 0.75);
-          this.particles.addScreenFlash('#22c55e', 0.6, 0.05);
-          this.particles.spawnAstralDragonPiercer(startX, startY, facing);
+    // ---- 5. ARCHER ----
+    if (classId === 'archer') {
+      if (skillIndex === 0) {
+        this.particles.addProjectile(startX + facing * 20, startY - 10, facing * 14, 0, 'arrow', 0, false, true, '#d7ccc8', 12, false);
+      } else if (skillIndex === 1) {
+        this.particles.addImpactBurst(attackX, this.groundY - 10, 15, '#22c55e', 'spark');
+        for (let i = 0; i < 12; i++) {
+          setTimeout(() => {
+            this.particles.addProjectile(attackX + (Math.random() * 160 - 80), 60 + Math.random() * 40, (Math.random() - 0.5) * 2, 15 + Math.random() * 5, 'arrow', 0, false, true, '#a3e635', 10, false);
+          }, i * 45);
         }
-        return;
+      } else if (skillIndex === 2) {
+        this.particles.addGroundTrap(startX + facing * 40, this.groundY, 0, 'poison');
+      } else if (skillIndex === 3) {
+        this.particles.addProjectile(startX + facing * 20, startY - 10, facing * 14, 0, 'fireball', 0, false, true, '#ff5722', 16, true);
+        this.particles.addGroundExplosion(attackX, this.groundY - 20, 1.5);
+      } else if (skillIndex === 4) {
+        this.particles.addHolyPillar(startX, startY);
+        this.particles.addFloatingText(startX, startY - 30, 'EAGLE EYE!', '#22c55e', true, 16);
+      } else if (skillIndex === 5) {
+        this.particles.triggerScreenShake(22, 0.75);
+        this.particles.addScreenFlash('#22c55e', 0.6, 0.05);
+        this.particles.spawnAstralDragonPiercer(startX, startY, facing);
       }
+      return;
+    }
 
-      // ---- 6. NECROMANCER ----
-      if (classId === 'necromancer') {
-        if (skillIndex === 0) {
-          this.particles.playSanjuVfx(attackX, attackY - 15, 'sanju_blood', 25, 24, 1.5);
-          this.particles.addProjectile(startX + facing * 20, startY - 10, facing * 12, 0, 'dark_skull', 0, false, true, '#c084fc', 14, false);
-        } else if (skillIndex === 1) {
-          this.particles.playSanjuVfx(attackX, attackY - 20, 'sanju_blood', 25, 24, 1.8);
-          this.particles.addDarkPillar(attackX, startY);
-          this.particles.addImpactBurst(attackX, startY - 20, 20, '#a855f7', 'smoke');
-        } else if (skillIndex === 2) {
-          this.particles.playSanjuVfx(startX + facing * 40, this.groundY - 20, 'sanju_blood', 25, 24, 1.8);
-          const summonDamage = Math.max(1, Math.round(remoteBaseDamage * 0.9));
-          if (typeof localStorage !== 'undefined' && localStorage.getItem('rpg_debug_multiplayer') === '1') {
-            console.log('[SIM][REMOTE] summon skeleton', { summonDamage, ownerSocketId });
-          }
-          this.particles.spawnSkeletonMinion(startX + facing * 40, this.groundY, summonDamage, ownerSocketId || null);
-          this.particles.addFloatingText(startX, startY - 40, 'SUMMONED SKELETON!', '#c084fc', true, 16);
-        } else if (skillIndex === 3) {
-          this.particles.playSanjuVfx(attackX, attackY - 25, 'sanju_blood', 25, 24, 2.0);
-          this.particles.addDarkPillar(attackX, this.groundY);
-          this.particles.addImpactBurst(attackX, startY - 20, 20, '#7e22ce', 'smoke');
-        } else if (skillIndex === 4) {
-          this.particles.playSanjuVfx(attackX, attackY - 15, 'sanju_blood', 25, 24, 2.2);
-          this.particles.addDarkPillar(attackX, this.groundY);
-          this.particles.addGroundExplosion(attackX, this.groundY - 20, 1.8);
-          this.particles.triggerScreenShake(12, 0.4);
-        } else if (skillIndex === 5) {
-          this.particles.triggerScreenShake(24, 0.85);
-          this.particles.addScreenFlash('#7e22ce', 0.6, 0.05);
-          const summonDamage = Math.max(1, Math.round(remoteBaseDamage * 1.3));
-          if (typeof localStorage !== 'undefined' && localStorage.getItem('rpg_debug_multiplayer') === '1') {
-            console.log('[SIM][REMOTE] summon reaper', { summonDamage, ownerSocketId });
-          }
-          this.particles.spawnReaperMinion(startX + facing * 50, this.groundY, facing, summonDamage, ownerSocketId || null);
-          this.particles.addDarkPillar(attackX, this.groundY);
-          this.particles.addGroundExplosion(attackX, this.groundY, 2.5);
-        }
-        return;
+    // ---- 6. NECROMANCER ----
+    if (classId === 'necromancer') {
+      if (skillIndex === 0) {
+        this.particles.addProjectile(startX + facing * 20, startY - 10, facing * 12, 0, 'dark_skull', 0, false, true, '#c084fc', 14, false);
+      } else if (skillIndex === 1) {
+        this.particles.addDarkPillar(attackX, startY);
+        this.particles.addImpactBurst(attackX, startY - 20, 20, '#a855f7', 'smoke');
+      } else if (skillIndex === 2) {
+        const summonDamage = Math.max(1, Math.round(remoteBaseDamage * 0.9));
+        this.particles.spawnSkeletonMinion(startX + facing * 40, this.groundY, summonDamage, ownerSocketId || null);
+        this.particles.addFloatingText(startX, startY - 40, 'SUMMONED SKELETON!', '#c084fc', true, 16);
+      } else if (skillIndex === 3) {
+        this.particles.addDarkPillar(attackX, this.groundY);
+        this.particles.addImpactBurst(attackX, startY - 20, 20, '#7e22ce', 'smoke');
+      } else if (skillIndex === 4) {
+        this.particles.addDarkPillar(attackX, this.groundY);
+        this.particles.addGroundExplosion(attackX, this.groundY - 20, 1.8);
+        this.particles.triggerScreenShake(12, 0.4);
+      } else if (skillIndex === 5) {
+        this.particles.triggerScreenShake(24, 0.85);
+        this.particles.addScreenFlash('#7e22ce', 0.6, 0.05);
+        const summonDamage = Math.max(1, Math.round(remoteBaseDamage * 1.3));
+        this.particles.spawnReaperMinion(startX + facing * 50, this.groundY, facing, summonDamage, ownerSocketId || null);
+        this.particles.addDarkPillar(attackX, this.groundY);
+        this.particles.addGroundExplosion(attackX, this.groundY, 2.5);
       }
+      return;
+    }
 
-      // ---- 7. BERSERKER ----
-      if (classId === 'berserker') {
-        if (skillIndex === 0) {
-          this.particles.playSanjuVfx(attackX, attackY - 15, 'sanju_blood', 25, 24, 1.8);
-          this.particles.addSpellSlash(attackX, attackY, facing, 1.6, '#dc2626');
-        } else if (skillIndex === 1) {
-          this.particles.playSanjuVfx(startX, startY - 20, 'sanju_fire', 25, 24, 2.0);
-          this.particles.addHolyPillar(startX, startY);
-          this.particles.addImpactBurst(startX, startY, 20, '#dc2626', 'spark');
-        } else if (skillIndex === 2) {
-          this.particles.playSanjuVfx(attackX, this.groundY - 20, 'sanju_blood', 25, 24, 2.2);
-          this.particles.addGroundExplosion(attackX, this.groundY, 1.8);
-          this.particles.triggerScreenShake(14, 0.45);
-        } else if (skillIndex === 3) {
-          this.particles.playSanjuVfx(attackX, attackY - 15, 'sanju_blood', 25, 24, 2.2);
-          this.particles.addSpellSlash(attackX, attackY, facing, 2.0, '#ef4444');
-          this.particles.addImpactBurst(attackX, attackY, 25, '#dc2626', 'spark');
-        } else if (skillIndex === 4) {
-          this.particles.playSanjuVfx(attackX, attackY - 20, 'sanju_fire', 25, 24, 2.2);
-          this.particles.addFireSpin(startX, startY - 20, 1.8);
-          this.particles.addImpactBurst(attackX, attackY, 20, '#dc2626', 'spark');
-        } else if (skillIndex === 5) {
-          this.particles.triggerScreenShake(26, 0.9);
-          this.particles.addScreenFlash('#dc2626', 0.65, 0.05);
-          this.particles.spawnBloodTitanRampage(startX, this.groundY, facing);
-        }
-        return;
+    // ---- 7. BERSERKER ----
+    if (classId === 'berserker') {
+      if (skillIndex === 0) {
+        this.particles.addSpellSlash(attackX, attackY, facing, 1.6, '#dc2626');
+        this.particles.addImpactBurst(attackX, attackY, 15, '#b91c1c', 'spark');
+      } else if (skillIndex === 1) {
+        this.particles.addHolyPillar(startX, startY);
+        this.particles.addImpactBurst(startX, startY, 20, '#dc2626', 'spark');
+        this.particles.addFloatingText(startX, startY - 30, 'BLOOD RAGE!', '#ef4444', true, 16);
+      } else if (skillIndex === 2) {
+        this.particles.addGroundExplosion(attackX, this.groundY, 1.8);
+        this.particles.triggerScreenShake(14, 0.45);
+      } else if (skillIndex === 3) {
+        this.particles.addSpellSlash(attackX, attackY, facing, 2.0, '#ef4444');
+        this.particles.addImpactBurst(attackX, attackY, 25, '#dc2626', 'spark');
+        this.particles.triggerScreenShake(12, 0.3);
+      } else if (skillIndex === 4) {
+        this.particles.addFireSpin(startX, startY - 20, 1.8);
+        this.particles.addImpactBurst(attackX, attackY, 20, '#dc2626', 'spark');
+      } else if (skillIndex === 5) {
+        this.particles.triggerScreenShake(26, 0.9);
+        this.particles.addScreenFlash('#dc2626', 0.65, 0.05);
+        this.particles.spawnBloodTitanRampage(startX, this.groundY, facing);
       }
+      return;
+    }
 
-      // ---- 8. PRIEST ----
-      if (classId === 'priest') {
-        if (skillIndex === 0) {
-          this.particles.playSanjuVfx(attackX, attackY - 15, 'aaa_light', 25, 24, 1.5);
-          this.particles.addProjectile(startX + facing * 20, startY - 10, facing * 12, 0, 'energy_ball', 0, false, true, '#38bdf8', 14, false);
-        } else if (skillIndex === 1) {
-          this.particles.playSanjuVfx(startX, startY - 25, 'aaa_light', 25, 24, 2.0);
-          this.particles.addHolyPillar(startX, startY);
-          this.particles.addFloatingText(startX, startY - 30, '+HEAL', '#66bb6a', true, 20);
-        } else if (skillIndex === 2) {
-          this.particles.playSanjuVfx(attackX, attackY - 20, 'sanju_fire', 25, 24, 1.8);
-          this.particles.addGroundExplosion(attackX, this.groundY - 20, 1.6);
-        } else if (skillIndex === 3) {
-          this.particles.playVfxSprite(startX, this.groundY - 20, 'aaa_holy_shield', facing, 2.0);
-          this.particles.addGroundZone(startX, this.groundY, 150, 0, 7.0, 'sanctuary_ward', '#38bdf8');
-        } else if (skillIndex === 4) {
-          this.particles.playSanjuVfx(startX, startY - 25, 'aaa_light', 25, 24, 2.2);
-          this.particles.addHolyPillar(attackX, attackY);
-          this.particles.addEnergyImpact(attackX, attackY, 1.8, '#38bdf8');
-        } else if (skillIndex === 5) {
-          this.particles.triggerScreenShake(24, 0.8);
-          this.particles.addScreenFlash('#38bdf8', 0.6, 0.05);
-          this.particles.spawnCelestialDivineRadiance(startX, this.groundY);
-        }
-        return;
+    // ---- 8. PRIEST ----
+    if (classId === 'priest') {
+      if (skillIndex === 0) {
+        this.particles.addProjectile(startX + facing * 20, startY - 10, facing * 12, 0, 'energy_ball', 0, false, true, '#38bdf8', 14, false);
+      } else if (skillIndex === 1) {
+        this.particles.addHolyPillar(startX, startY);
+        this.particles.addFloatingText(startX, startY - 30, '+HEAL', '#66bb6a', true, 20);
+      } else if (skillIndex === 2) {
+        this.particles.addGroundExplosion(attackX, this.groundY - 20, 1.6);
+        this.particles.addImpactBurst(attackX, startY - 20, 16, '#facc15', 'spark');
+      } else if (skillIndex === 3) {
+        this.particles.addGroundZone(startX, this.groundY, 150, 0, 7.0, 'sanctuary_ward', '#38bdf8');
+      } else if (skillIndex === 4) {
+        this.particles.addHolyPillar(attackX, attackY);
+        this.particles.addEnergyImpact(attackX, attackY, 1.8, '#38bdf8');
+        this.particles.triggerScreenShake(8, 0.25);
+      } else if (skillIndex === 5) {
+        this.particles.triggerScreenShake(24, 0.8);
+        this.particles.addScreenFlash('#38bdf8', 0.6, 0.05);
+        this.particles.spawnCelestialDivineRadiance(startX, this.groundY);
       }
+      return;
+    }
 
-      // ---- 9. NINJA ----
-      if (classId === 'ninja') {
-        if (skillIndex === 0) {
-          this.particles.playSanjuVfx(attackX, attackY - 15, 'sanju_pure', 25, 24, 1.5, '#4ade80');
-          this.particles.addSpellSlash(attackX, attackY - 15, facing, 1.4, '#4ade80');
-        } else if (skillIndex === 1) {
-          this.particles.playSanjuVfx(startX, startY - 15, 'sanju_pure', 25, 24, 1.8, '#94a3b8');
-          this.particles.spawnShadowClones(startX, startY, facing, 0);
-        } else if (skillIndex === 2) {
-          this.particles.playSanjuVfx(startX + facing * 200, startY - 15, 'sanju_pure', 25, 24, 1.8, '#4ade80');
-          this.particles.addImpactBurst(startX, startY - 15, 20, '#94a3b8', 'smoke');
-          this.particles.addSpellSlash(startX + facing * 200, startY - 15, facing, 1.4, '#4ade80');
-        } else if (skillIndex === 3) {
-          this.particles.playSanjuVfx(attackX, attackY - 20, 'sanju_fire', 25, 24, 2.0);
-          this.particles.addFlameLash(startX + facing * 50, startY - 20, facing, 1.8);
-        } else if (skillIndex === 4) {
-          this.particles.playSanjuVfx(attackX, attackY - 45, 'sanju_2d_sparks', 12, 24, 2.0);
-          this.particles.addChainLightning([{x: startX, y: startY - 20}, {x: attackX, y: attackY - 15}]);
-        } else if (skillIndex === 5) {
-          this.particles.triggerScreenShake(24, 0.85);
-          this.particles.addScreenFlash('#a855f7', 0.6, 0.05);
-          this.particles.triggerCinematicOmnislash([{x: attackX, y: attackY}, {x: attackX - 120, y: attackY - 20}, {x: attackX + 120, y: attackY - 20}]);
-        }
-        return;
+    // ---- 9. NINJA ----
+    if (classId === 'ninja') {
+      if (skillIndex === 0) {
+        this.particles.addSpellSlash(attackX, attackY - 15, facing, 1.4, '#4ade80');
+        this.particles.addImpactBurst(attackX, attackY - 15, 12, '#22c55e', 'spark');
+      } else if (skillIndex === 1) {
+        this.particles.spawnShadowClones(startX, startY, facing, Math.round(remoteBaseDamage * 0.8));
+      } else if (skillIndex === 2) {
+        this.particles.addImpactBurst(startX, startY - 15, 20, '#94a3b8', 'smoke');
+        this.particles.addSpellSlash(startX + facing * 200, startY - 15, facing, 1.4, '#4ade80');
+      } else if (skillIndex === 3) {
+        this.particles.addFlameLash(startX + facing * 50, startY - 20, facing, 1.8);
+      } else if (skillIndex === 4) {
+        this.particles.addChainLightning([{x: startX, y: startY - 20}, {x: attackX, y: attackY - 15}]);
+      } else if (skillIndex === 5) {
+        this.particles.triggerScreenShake(24, 0.85);
+        this.particles.addScreenFlash('#a855f7', 0.6, 0.05);
+        this.particles.triggerCinematicOmnislash([{x: attackX, y: attackY}, {x: attackX - 120, y: attackY - 20}, {x: attackX + 120, y: attackY - 20}]);
       }
+      return;
+    }
 
-      // ---- 10. DRAGOON ----
-      if (classId === 'dragoon') {
-        if (skillIndex === 0) {
-          this.particles.playSanjuVfx(attackX, attackY - 15, 'sanju_fire', 25, 24, 1.6);
-          this.particles.addSpellSlash(attackX, attackY, facing, 1.6, '#f97316');
-          this.particles.addImpactBurst(attackX, attackY, 10, '#f97316', 'spark');
-        } else if (skillIndex === 1) {
-          this.particles.playSanjuVfx(attackX, this.groundY - 30, 'sanju_fire', 25, 24, 2.2);
-          this.particles.addGroundExplosion(attackX, this.groundY - 20, 1.8);
-          this.particles.triggerScreenShake(14, 0.5);
-        } else if (skillIndex === 2) {
-          this.particles.playSanjuVfx(attackX, attackY - 20, 'sanju_fire', 25, 24, 2.0);
-          this.particles.addFlameLash(startX + facing * 50, startY - 15, facing, 1.8);
-        } else if (skillIndex === 3) {
-          this.particles.playSanjuVfx(attackX, attackY - 15, 'sanju_pure', 25, 24, 2.0, '#f97316');
-          this.particles.addProjectile(startX + facing * 20, startY - 10, facing * 14, 0, 'fireball', 0, false, true, '#ff5722', 18, true);
-        } else if (skillIndex === 4) {
-          this.particles.playSanjuVfx(startX, startY - 25, 'sanju_fire', 25, 24, 2.2);
-          this.particles.addHolyPillar(startX, startY);
-          this.particles.triggerScreenShake(10, 0.35);
-        } else if (skillIndex === 5) {
-          this.particles.triggerScreenShake(26, 0.9);
-          this.particles.addScreenFlash('#ff5722', 0.65, 0.05);
-          this.particles.spawnDragonDescent(startX, startY, facing);
-          const summonDamage = Math.max(1, Math.round(remoteBaseDamage * 0.85));
-          if (typeof localStorage !== 'undefined' && localStorage.getItem('rpg_debug_multiplayer') === '1') {
-            console.log('[SIM][REMOTE] summon dragon', { summonDamage, ownerSocketId });
-          }
-          this.particles.spawnDragonMinion(startX, this.groundY, facing, summonDamage, ownerSocketId || null);
-        }
-        return;
+    // ---- 10. DRAGOON ----
+    if (classId === 'dragoon') {
+      if (skillIndex === 0) {
+        this.particles.addSpellSlash(attackX, attackY - 15, facing, 1.6, '#f97316');
+        this.particles.addImpactBurst(attackX, attackY, 10, '#f97316', 'spark');
+      } else if (skillIndex === 1) {
+        this.particles.addGroundExplosion(attackX, this.groundY - 20, 1.8);
+        this.particles.triggerScreenShake(14, 0.5);
+      } else if (skillIndex === 2) {
+        this.particles.addFlameLash(startX + facing * 50, startY - 15, facing, 1.8);
+      } else if (skillIndex === 3) {
+        this.particles.addProjectile(startX + facing * 20, startY - 10, facing * 14, 0, 'fireball', 0, false, true, '#ff5722', 18, true);
+      } else if (skillIndex === 4) {
+        this.particles.addHolyPillar(startX, startY);
+        this.particles.addFloatingText(startX, startY - 30, 'DRAGON WINGS!', '#06b6d4', true, 16);
+        this.particles.triggerScreenShake(10, 0.35);
+      } else if (skillIndex === 5) {
+        this.particles.triggerScreenShake(26, 0.9);
+        this.particles.addScreenFlash('#ff5722', 0.65, 0.05);
+        this.particles.spawnDragonDescent(startX, startY, facing);
+        const summonDamage = Math.max(1, Math.round(remoteBaseDamage * 0.85));
+        this.particles.spawnDragonMinion(startX, this.groundY, facing, summonDamage, ownerSocketId || null);
       }
+      return;
+    }
 
-      // Generic fallback for any unhandled class
-      this.particles.addSpellSlash(attackX, attackY, facing, 1.5, cls.accentColor);
+    // Generic fallback for any unhandled class
+    this.particles.addSpellSlash(attackX, attackY, facing, 1.5, cls.accentColor);
   }
 
   public castSkill(skillIndex: number) {
