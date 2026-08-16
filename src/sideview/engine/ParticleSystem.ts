@@ -1490,24 +1490,27 @@ export class ParticleSystem {
       } else if (minion.type === 'dragon') {
         ctx.translate(minion.x, minion.y);
         
-        // Raw dragon sprite faces LEFT by default!
-        // When minion.facing > 0 (facing right towards enemies), flip horizontally!
-        if (minion.facing > 0) {
-          ctx.scale(-1, 1);
-        }
-
         // Shadow directly on the ground under dragon feet
         ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
         ctx.beginPath();
         ctx.ellipse(0, 0, 140, 14, 0, 0, Math.PI * 2);
         ctx.fill();
 
+        ctx.save();
+        // Raw dragon sprite faces LEFT by default!
+        // When minion.facing > 0 (facing right towards enemies), flip horizontally!
+        if (minion.facing > 0) {
+          ctx.scale(-1, 1);
+        }
+
         const frameNum = Math.min(40, Math.max(1, Math.floor((minion.animTimer * 16) % 40) + 1));
         let dragonImg: HTMLImageElement | null | undefined = null;
 
-        // Fallback to idle if attack sprites are missing
-        if (minion.state === 'attack2' || minion.state === 'attack' || minion.state === 'walk') {
-           dragonImg = sprites.getImage(`dragon_idle_${frameNum}`);
+        // Use correct animation state
+        if (minion.state === 'attack2' || minion.state === 'attack') {
+           dragonImg = sprites.getImage(`dragon_atk_${frameNum}`);
+        } else if (minion.state === 'walk' || minion.state === 'run') {
+           dragonImg = sprites.getImage(`dragon_walk_${frameNum}`);
         } else {
           dragonImg = sprites.getImage(`dragon_idle_${frameNum}`);
         }
@@ -1529,8 +1532,10 @@ export class ParticleSystem {
           // Mathematical precision: feet land perfectly on y = 0
           ctx.drawImage(dragonImg, -destW * 0.55, -feetYOffset, destW, destH);
         }
+        ctx.restore();
 
         // Dragon Companion Boss Bar (Positioned nicely above the dragon's back)
+        // Drawn AFTER ctx.restore() so text and bar are not flipped backwards
         const barW = 140;
         const hpPct = Math.max(0, minion.hp / minion.maxHp);
         ctx.shadowBlur = 0;
