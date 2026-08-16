@@ -511,30 +511,12 @@ export class SpriteManager {
     this.addToArray(this.priestessHealImgs, (i) => `/assets/priestess/png/11_heal/heal_${i}.png`, 1, 12);
     this.addToArray(this.priestessDeathImgs, (i) => `/assets/priestess/png/14_death/death_${i}.png`, 1, 16);
 
-    // Fallback Dragon pack using Dragoon hero frames (dragon assets are unavailable in this asset pack)
-    const getDragonFrame = (i: number) => {
-      const idx = ((i - 1) % 3) + 1;
-      return `/assets/warrior3/Sprites/Attack${idx}.png`;
-    };
-
-    // Preload Dragon Attack frames (40 frames from dragoon attack fallback)
+    // Preload Elder Dragon Companion (Fully Animated from OpenGameArt)
     for (let i = 1; i <= 40; i++) {
-      this.addImage(`dragon_atk_${i}`, getDragonFrame(i));
-    }
-
-    // Preload Dragon Attack 2 frames (40 frames from dragoon attack fallback)
-    for (let i = 1; i <= 40; i++) {
-      this.addImage(`dragon_atk2_${i}`, getDragonFrame(i));
-    }
-
-    // Preload Dragon Walk frames (40 frames from dragoon movement fallback)
-    for (let i = 1; i <= 40; i++) {
-      this.addImage(`dragon_walk_${i}`, '/assets/warrior3/Sprites/Run.png');
-    }
-
-    // Preload Dragon Idle frames (40 frames from dragoon idle fallback)
-    for (let i = 1; i <= 40; i++) {
-      this.addImage(`dragon_idle_${i}`, '/assets/warrior3/Sprites/Idle.png');
+      this.addImage(`dragon_atk_${i}`, `/assets/elder_dragon/atk/${i}.png`);
+      this.addImage(`dragon_atk2_${i}`, `/assets/elder_dragon/atk/${i}.png`);
+      this.addImage(`dragon_walk_${i}`, `/assets/elder_dragon/walk/${i}.png`);
+      this.addImage(`dragon_idle_${i}`, `/assets/elder_dragon/idle/${i}.png`);
     }
 
     // Preload Reaper Attack, Spell, Cast, Idle, and Walk frames (Clean paths)
