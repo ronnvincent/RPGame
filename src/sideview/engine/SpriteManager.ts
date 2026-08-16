@@ -519,6 +519,47 @@ export class SpriteManager {
       this.addImage(`dragon_idle_${i}`, `/assets/elder_dragon/idle/${i}.png`);
     }
 
+    // Preload Sanju's Ultimate VFX Packs
+    // Cosmic Time (25 frames)
+    for (let i = 1; i <= 25; i++) {
+      const folder = Math.ceil(i / 5);
+      const numStr = i < 10 ? `0${i}` : `${i}`;
+      this.addImage(`sanju_cosmic_${i}`, `/assets/sanju_vfx/cosmic/${folder}/Cosmic_${numStr}.png`);
+    }
+
+    // Fire Wrath (25 frames)
+    for (let i = 1; i <= 25; i++) {
+      const folder = Math.ceil(i / 5);
+      const numStr = i < 10 ? `0${i}` : `${i}`;
+      this.addImage(`sanju_fire_${i}`, `/assets/sanju_vfx/fire/SD/${folder}/Fire-Wrath__${numStr}.png`);
+    }
+
+    // Earth Impact (25 frames)
+    for (let i = 1; i <= 25; i++) {
+      const folder = Math.ceil(i / 5);
+      const numStr = i < 10 ? `0${i}` : `${i}`;
+      this.addImage(`sanju_earth_${i}`, `/assets/sanju_vfx/earth/${folder}/Earth-Impact_${numStr}.png`);
+    }
+
+    // Light Effect (25 frames, no folders)
+    for (let i = 1; i <= 25; i++) {
+      const numStr = i < 10 ? `0${i}` : `${i}`;
+      this.addImage(`sanju_light_${i}`, `/assets/sanju_vfx/light/LightEffect_${numStr}.png`);
+    }
+
+    // Special 2D Effects
+    for (let i = 1; i <= 10; i++) {
+      const numStr = i < 10 ? `0${i}` : `${i}`;
+      this.addImage(`sanju_2d_green_${i}`, `/assets/sanju_vfx/special2d/green_effect/green_effect_${numStr}.png`);
+      this.addImage(`sanju_2d_glow_${i}`, `/assets/sanju_vfx/special2d/light_glow_effect/light_glow_${numStr}.png`);
+      this.addImage(`sanju_2d_magic_${i}`, `/assets/sanju_vfx/special2d/magic_effect/magic_effect_${numStr}.png`);
+      this.addImage(`sanju_2d_magic2_${i}`, `/assets/sanju_vfx/special2d/magic_effect_2/magic_effect_2_${numStr}.png`);
+    }
+    for (let i = 1; i <= 12; i++) {
+      const numStr = i < 10 ? `0${i}` : `${i}`;
+      this.addImage(`sanju_2d_sparks_${i}`, `/assets/sanju_vfx/special2d/sparks_effect/sparks_effect_${numStr}.png`);
+    }
+
     // Preload Reaper Attack, Spell, Cast, Idle, and Walk frames (Clean paths)
     for (let i = 1; i <= 10; i++) {
       this.addImage(`reaper_atk_${i}`, `/assets/reaper/sprites/Attack/Bringer-of-Death_Attack_${i}.png`);

@@ -73,6 +73,7 @@ export interface SpellAnimationFX {
   facing?: number;
   tint?: string;
   isDone: boolean;
+  isFrameByFrame?: boolean;
 }
 
 export interface ShadowCloneEntity {
@@ -398,6 +399,8 @@ export class ParticleSystem {
         this.addGroundExplosion(fissureX, y - 30, 2.0 + i * 0.2);
         this.addFireLine(fissureX, y - 30, facing, 1.8);
         this.addImpactBurst(fissureX, y, 35, '#ff5722', 'fire');
+        // Badass Sanju Earth Effect!
+        this.playSanjuVfx(fissureX, y - 80, 'sanju_earth', 25, 24, 1.8);
       }, i * 90);
     }
   }
@@ -421,6 +424,8 @@ export class ParticleSystem {
         this.playVfxSprite(t.x, t.y - 15, 'vfx_slash_circle', i % 2 === 0 ? 1 : -1, 2.0);
         this.addSpellSlash(t.x, t.y - 15, i % 2 === 0 ? 1 : -1, 2.2, '#ef4444');
         this.addImpactBurst(t.x, t.y - 15, 12, '#ef4444', 'spark');
+        // Sanju 2D Lightning/Sparks
+        this.playSanjuVfx(t.x, t.y - 40, i % 3 === 0 ? 'sanju_2d_green' : (i % 2 === 0 ? 'sanju_2d_sparks' : 'sanju_2d_magic2'), 10, 24, 2.0);
       }, i * 35);
     }
   }
@@ -445,6 +450,8 @@ export class ParticleSystem {
     this.addVortexEffect(x + facing * 80, y - 40, 2.4);
     this.addDarkPillar(x + facing * 80, y);
     this.addImpactBurst(x + facing * 80, y - 40, 40, '#a855f7', 'dark');
+    // Cosmic Time Sanju Effect!
+    this.playSanjuVfx(x + facing * 100, y - 100, 'sanju_cosmic', 25, 18, 3.0, '#7e22ce');
   }
 
   /**
@@ -468,6 +475,8 @@ export class ParticleSystem {
       setTimeout(() => {
         this.addHolyPillar(x + i * 80, groundY);
         this.addImpactBurst(x + i * 80, groundY - 20, 25, '#fde047', 'holy');
+        // Divine Light Effect
+        this.playSanjuVfx(x + i * 80, groundY - 80, 'sanju_light', 25, 24, 2.0);
       }, Math.abs(i) * 100);
     }
   }
@@ -486,6 +495,7 @@ export class ParticleSystem {
         this.addSpellSlash(t.x, t.y - 15, i % 2 === 0 ? 1 : -1, 2.0, '#c084fc');
         this.addImpactBurst(t.x, t.y - 15, 20, '#c084fc', 'smoke');
         this.addImpactBurst(t.x, t.y - 15, 15, '#ef4444', 'spark');
+        this.playSanjuVfx(t.x, t.y - 50, 'sanju_cosmic', 25, 30, 1.8, '#581c87');
       }, i * 60);
     }
   }
@@ -511,9 +521,10 @@ export class ParticleSystem {
           true,
           '#ff3d00',
           34,
-          false
         );
         this.addGroundExplosion(mx + 60, targetY - 20, 2.4);
+        // Add Huge Cosmic Magic Frame By Frame!
+        this.playSanjuVfx(mx + 60, targetY - 60, 'sanju_cosmic', 25, 20, 2.5, '#ef4444');
       }, i * 160);
     }
   }
@@ -559,6 +570,8 @@ export class ParticleSystem {
         this.addGroundExplosion(hitX, y - 20, 2.2);
         this.addFlameLash(hitX, y - 20, facing, 2.2);
         this.addImpactBurst(hitX, y - 20, 30, '#ef4444', 'fire');
+        // HUGE Sanju Fire Wrath Effect!
+        this.playSanjuVfx(hitX, y - 100, 'sanju_fire', 25, 22, 2.5);
       }, i * 110);
     }
   }
@@ -576,6 +589,8 @@ export class ParticleSystem {
         this.addHolyCrystal(beamX, groundY - 40, 2.0);
         this.addHolyPillar(beamX, groundY);
         this.addImpactBurst(beamX, groundY - 30, 30, '#fde047', 'holy');
+        // Divine Light Sanju Effect
+        this.playSanjuVfx(beamX, groundY - 100, 'sanju_light', 25, 20, 2.5);
       }, Math.abs(i) * 80);
     }
   }
@@ -864,7 +879,26 @@ export class ParticleSystem {
       fps,
       timer: 0,
       facing,
+      isDone: false
+    });
+  }
+
+  public playSanjuVfx(x: number, y: number, prefix: string, totalFrames: number, fps: number = 24, scale: number = 2.0, tint?: string) {
+    this.spellAnimations.push({
+      id: `sanju_${prefix}_${Date.now()}_${Math.random()}`,
+      x,
+      y,
+      spriteKey: prefix, // Used as prefix now
+      frameW: 0, // Determined at runtime
+      frameH: 0,
+      totalFrames,
+      isVertical: false,
+      scale,
+      currentFrame: 0,
+      fps,
+      timer: 0,
       tint,
+      isFrameByFrame: true,
       isDone: false
     });
   }
@@ -1755,11 +1789,17 @@ export class ParticleSystem {
 
     // 9. Draw Animated Spell Sprites
     this.spellAnimations.forEach(spell => {
-      const img = sprites.getImage(spell.spriteKey);
+      let img: HTMLImageElement | null | undefined;
+      if (spell.isFrameByFrame) {
+        img = sprites.getImage(`${spell.spriteKey}_${spell.currentFrame + 1}`);
+      } else {
+        img = sprites.getImage(spell.spriteKey);
+      }
+
       if (!this.isDrawableImage(img)) return;
 
-      const frameW = spell.frameW;
-      const frameH = spell.frameH;
+      const frameW = spell.isFrameByFrame ? img.width : spell.frameW;
+      const frameH = spell.isFrameByFrame ? img.height : spell.frameH;
       const destW = frameW * spell.scale;
       const destH = frameH * spell.scale;
 
@@ -1777,15 +1817,17 @@ export class ParticleSystem {
       let srcX = 0;
       let srcY = 0;
 
-      if (spell.isVertical) {
-        srcY = spell.currentFrame * frameH;
-      } else if (spell.cols) {
-        const col = spell.currentFrame % spell.cols;
-        const row = Math.floor(spell.currentFrame / spell.cols);
-        srcX = col * frameW;
-        srcY = row * frameH;
-      } else {
-        srcX = spell.currentFrame * frameW;
+      if (!spell.isFrameByFrame) {
+        if (spell.isVertical) {
+          srcY = spell.currentFrame * frameH;
+        } else if (spell.cols) {
+          const col = spell.currentFrame % spell.cols;
+          const row = Math.floor(spell.currentFrame / spell.cols);
+          srcX = col * frameW;
+          srcY = row * frameH;
+        } else {
+          srcX = spell.currentFrame * frameW;
+        }
       }
 
       ctx.drawImage(
