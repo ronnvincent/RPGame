@@ -505,6 +505,19 @@ export class SideViewEngine {
 
     const remoteBaseDamage = typeof skillDamage === 'number' && skillDamage > 0 ? skillDamage : this.player.totalAtk;
 
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('rpg_debug_multiplayer') === '1') {
+      console.log('[SIM][REMOTE] castRemoteSkill', {
+        classId,
+        skillIndex,
+        startX,
+        startY,
+        facing,
+        ownerSocketId,
+        remoteBaseDamage,
+        isHost: this.isHost
+      });
+    }
+
     const attackX = startX + (facing * (skill.range * 0.6));
     const attackY = startY;
 
@@ -662,7 +675,11 @@ export class SideViewEngine {
           this.particles.addImpactBurst(attackX, startY - 20, 20, '#a855f7', 'smoke');
         } else if (skillIndex === 2) {
           this.particles.playSanjuVfx(startX + facing * 40, this.groundY - 20, 'sanju_blood', 25, 24, 1.8);
-          this.particles.spawnSkeletonMinion(startX + facing * 40, this.groundY, Math.max(1, Math.round(remoteBaseDamage * 0.9)), ownerSocketId || null);
+          const summonDamage = Math.max(1, Math.round(remoteBaseDamage * 0.9));
+          if (typeof localStorage !== 'undefined' && localStorage.getItem('rpg_debug_multiplayer') === '1') {
+            console.log('[SIM][REMOTE] summon skeleton', { summonDamage, ownerSocketId });
+          }
+          this.particles.spawnSkeletonMinion(startX + facing * 40, this.groundY, summonDamage, ownerSocketId || null);
           this.particles.addFloatingText(startX, startY - 40, 'SUMMONED SKELETON!', '#c084fc', true, 16);
         } else if (skillIndex === 3) {
           this.particles.playSanjuVfx(attackX, attackY - 25, 'sanju_blood', 25, 24, 2.0);
@@ -676,7 +693,11 @@ export class SideViewEngine {
         } else if (skillIndex === 5) {
           this.particles.triggerScreenShake(24, 0.85);
           this.particles.addScreenFlash('#7e22ce', 0.6, 0.05);
-          this.particles.spawnReaperMinion(startX + facing * 50, this.groundY, facing, Math.max(1, Math.round(remoteBaseDamage * 1.3)), ownerSocketId || null);
+          const summonDamage = Math.max(1, Math.round(remoteBaseDamage * 1.3));
+          if (typeof localStorage !== 'undefined' && localStorage.getItem('rpg_debug_multiplayer') === '1') {
+            console.log('[SIM][REMOTE] summon reaper', { summonDamage, ownerSocketId });
+          }
+          this.particles.spawnReaperMinion(startX + facing * 50, this.groundY, facing, summonDamage, ownerSocketId || null);
           this.particles.addDarkPillar(attackX, this.groundY);
           this.particles.addGroundExplosion(attackX, this.groundY, 2.5);
         }
@@ -789,7 +810,11 @@ export class SideViewEngine {
           this.particles.triggerScreenShake(26, 0.9);
           this.particles.addScreenFlash('#ff5722', 0.65, 0.05);
           this.particles.spawnDragonDescent(startX, startY, facing);
-          this.particles.spawnDragonMinion(startX, this.groundY, facing, Math.max(1, Math.round(remoteBaseDamage * 0.85)), ownerSocketId || null);
+          const summonDamage = Math.max(1, Math.round(remoteBaseDamage * 0.85));
+          if (typeof localStorage !== 'undefined' && localStorage.getItem('rpg_debug_multiplayer') === '1') {
+            console.log('[SIM][REMOTE] summon dragon', { summonDamage, ownerSocketId });
+          }
+          this.particles.spawnDragonMinion(startX, this.groundY, facing, summonDamage, ownerSocketId || null);
         }
         return;
       }

@@ -126,7 +126,9 @@ export class SideViewGame {
     // Setup Multiplayer Sync Listeners
     import('./network/NetworkManager').then(mod => {
       mod.network.listenForPlayerSkill((socketId, skillIndex, classId, x, y, facing, isTownMode, skillDamage) => {
-        console.log('[NET] Received remote_player_skill:', { socketId, skillIndex, classId, x, y, facing, isTownMode });
+        if (typeof localStorage !== 'undefined' && localStorage.getItem('rpg_debug_multiplayer') === '1') {
+          console.log('[NET] Received remote_player_skill:', { socketId, skillIndex, classId, x, y, facing, isTownMode, skillDamage });
+        }
         if (!this.engine) return;
 
         const remoteP = mod.network.remotePlayers[socketId] || {

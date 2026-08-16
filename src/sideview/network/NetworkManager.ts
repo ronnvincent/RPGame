@@ -5,6 +5,7 @@ export class NetworkManager {
   public socket: Socket | null = null;
   public static instance: NetworkManager;
   public room: string | null = null;
+  private readonly debugKey = 'rpg_debug_multiplayer';
   
   public remotePlayers: Record<string, {
     classId?: string;
@@ -137,7 +138,7 @@ export class NetworkManager {
   ) {
     y = y - groundY;
     if (!this.socket || !this.room) return;
-    this.socket.emit('player_skill', {
+    const payload = {
       skillIndex,
       classId,
       x,
@@ -145,22 +146,44 @@ export class NetworkManager {
       facing,
       isTownMode,
       skillDamage
-    });
+    };
+
+    if (typeof localStorage !== 'undefined' && localStorage.getItem(this.debugKey) === '1') {
+      console.log('[NET][OUT] player_skill', payload);
+    }
+
+    this.socket.emit('player_skill', payload);
   }
 
   public listenForPlayerSkill(onSkill: (socketId: string, skillIndex: number, classId: string, x: number, y: number, facing: number, isTownMode: boolean, skillDamage: number) => void) {
     if (!this.socket) this.connect();
     this.socket?.off('remote_player_skill');
     this.socket?.on('remote_player_skill', (data) => {
-      onSkill(
+      const skillDamage = typeof data.skillDamage === 'number' ? data.skillDamage : 0;
+      const payload = {
         data.socketId,
-        data.skillIndex,
-        data.classId,
-        data.x,
-        data.y,
-        data.facing,
-        Boolean(data.isTownMode),
-        typeof data.skillDamage === 'number' ? data.skillDamage : 0
+        skillIndex: data.skillIndex,
+        classId: data.classId,
+        x: data.x,
+        y: data.y,
+        facing: data.facing,
+        isTownMode: Boolean(data.isTownMode),
+        skillDamage
+      };
+
+      if (typeof localStorage !== 'undefined' && localStorage.getItem(this.debugKey) === '1') {
+        console.log('[NET][IN] remote_player_skill', payload);
+      }
+
+      onSkill(
+        payload.socketId,
+        payload.skillIndex,
+        payload.classId,
+        payload.x,
+        payload.y,
+        payload.facing,
+        payload.isTownMode,
+        payload.skillDamage
       );
     });
   }
@@ -192,6 +215,10 @@ export class NetworkManager {
       name: localStorage.getItem('playerName') || 'Player'
     };
 
+    if (typeof localStorage !== 'undefined' && localStorage.getItem(this.debugKey) === '1') {
+      console.log('[NET][OUT] party_return_town', payload);
+    }
+
     this.socket.emit('party_return_town', payload);
   }
 
@@ -208,6 +235,9 @@ export class NetworkManager {
     if (!this.socket) this.connect();
     this.socket?.off('party_return_town');
     this.socket?.on('party_return_town', (data) => {
+      if (typeof localStorage !== 'undefined' && localStorage.getItem(this.debugKey) === '1') {
+        console.log('[NET][IN] party_return_town', data || { socketId: 'unknown' });
+      }
       onReturn(data || { socketId: 'unknown' });
     });
   }
