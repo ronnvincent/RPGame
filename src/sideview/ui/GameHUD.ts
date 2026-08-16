@@ -1017,7 +1017,7 @@ export class GameHUD {
 
       <!-- Top Center: Epic Boss Health Bar (MapleStory / Dark Souls Style) -->
       <div class="epic-boss-banner" id="epic-boss-banner" style="display: none;">
-        <div class="boss-portrait-icon" id="boss-portrait-icon">👹</div>
+        <div class="boss-portrait-icon" id="boss-portrait-icon"><img src="/assets/gui/PNG/buttonSquare_brown.png" width="32" height="32" /></div>
         <div class="boss-bar-details">
           <div class="boss-header-row">
             <span class="boss-name-text" id="boss-name-text">BOSS NAME</span>
@@ -1038,20 +1038,20 @@ export class GameHUD {
 
       <!-- Top Right: Gold, Audio Toggles & Navigation Buttons -->
       <div class="hud-top-right">
-        <div class="gold-badge">🪙 <span id="hud-gold-text">${p.gold}</span></div>
-        <button class="inv-btn inv-btn-fs" id="toggle-music-btn" title="Toggle Music">🎵</button>
-        <button class="inv-btn inv-btn-fs" id="toggle-sfx-btn" title="Toggle Sound SFX">🔊</button>
+        <div class="gold-badge"><img src="/assets/gui/PNG/iconCircle_brown.png" width="16" height="16" style="vertical-align:middle;margin-right:4px;" /> <span id="hud-gold-text">${p.gold}</span></div>
+        <button class="inv-btn inv-btn-fs" id="toggle-music-btn" title="Toggle Music"><img src="/assets/gui/PNG/iconCircle_blue.png" width="16" height="16" /></button>
+        <button class="inv-btn inv-btn-fs" id="toggle-sfx-btn" title="Toggle Sound SFX"><img src="/assets/gui/PNG/iconCircle_beige.png" width="16" height="16" /></button>
         <button class="inv-btn inv-btn-quest" id="toggle-quests-btn">QUESTS [ J ]</button>
         <button class="inv-btn inv-btn-quest" id="toggle-map-btn">MAP [ M ]</button>
         <button class="inv-btn inv-btn-town" id="return-town-btn" style="display: ${this.engine.isTownMode ? 'none' : 'block'};">TOWN [ T ]</button>
         <button class="inv-btn" id="toggle-inv-btn">BAG [ I ]</button>
-        <button class="inv-btn inv-btn-fs" id="toggle-fullscreen-btn" title="Toggle Fullscreen">⛶</button>
+        <button class="inv-btn inv-btn-fs" id="toggle-fullscreen-btn" title="Toggle Fullscreen"><img src="/assets/gui/PNG/panelInset_brown.png" width="16" height="16" /></button>
       </div>
 
       <!-- Mini Quest Tracker -->
       <div class="mini-quest-tracker" id="mini-quest-tracker">
         <div class="tracker-title">
-          <span>📜 ACTIVE QUEST</span>
+          <span><img src="/assets/gui/PNG/buttonSquare_brown.png" width="12" height="12" style="vertical-align:middle;" /> ACTIVE QUEST</span>
           <span style="font-size: 8.5px; color: #94a3b8;">[CLICK / J]</span>
         </div>
         <div class="tracker-quest-name" id="tracker-quest-name">Act I: The Stolen Keystone</div>
@@ -1086,15 +1086,15 @@ export class GameHUD {
         <!-- Right Side: Touch Action Hub (Talk, Jump & Dash) -->
         <div class="mobile-action-hub">
           <button class="touch-action-btn touch-talk-btn" id="touch-talk-btn">
-            <span style="font-size: 16px;">💬</span>
+            <img src="/assets/gui/PNG/iconCircle_beige.png" width="20" height="20" />
             <span>TALK</span>
           </button>
           <button class="touch-action-btn jump-touch-btn" id="touch-jump-btn">
-            <span style="font-size: 18px;">▲</span>
+            <img src="/assets/gui/PNG/arrowBrown_right.png" width="20" height="20" style="transform: rotate(-90deg);" />
             <span>JUMP</span>
           </button>
           <button class="touch-action-btn dash-touch-btn" id="touch-dash-btn">
-            <span style="font-size: 15px;">⚡</span>
+            <img src="/assets/gui/PNG/cursorSword_silver.png" width="20" height="20" />
             <span>DASH</span>
             <div class="dash-cooldown-overlay" id="dash-cooldown-overlay">0</div>
           </button>
@@ -1210,8 +1210,8 @@ export class GameHUD {
     musicBtn?.addEventListener('click', (e) => {
       e.stopPropagation();
       const enabled = audio.toggleMusic();
-      musicBtn.textContent = enabled ? '🎵' : '🔇';
-      this.showToast(enabled ? '🎵 Music Enabled' : '🔇 Music Muted');
+      musicBtn.innerHTML = enabled ? `<img src='/assets/gui/PNG/iconCircle_blue.png' width='16' height='16'/>` : `<img src='/assets/gui/PNG/iconCross_blue.png' width='16' height='16'/>`;
+      this.showToast(enabled ? 'Music Enabled' : 'Music Muted');
     });
 
     // Sound SFX toggle
@@ -1219,8 +1219,8 @@ export class GameHUD {
     sfxBtn?.addEventListener('click', (e) => {
       e.stopPropagation();
       const enabled = audio.toggleSound();
-      sfxBtn.textContent = enabled ? '🔊' : '🔈';
-      this.showToast(enabled ? '🔊 SFX Enabled' : '🔈 SFX Muted');
+      sfxBtn.innerHTML = enabled ? `<img src='/assets/gui/PNG/iconCircle_beige.png' width='16' height='16'/>` : `<img src='/assets/gui/PNG/iconCross_beige.png' width='16' height='16'/>`;
+      this.showToast(enabled ? 'SFX Enabled' : 'SFX Muted');
     });
 
     // Fullscreen Toggle button
@@ -1480,7 +1480,7 @@ export class GameHUD {
         if (fillEl) fillEl.style.width = `${hpPct}%`;
         if (lagEl) lagEl.style.width = `${hpPct}%`;
         if (iconEl) {
-          iconEl.textContent = activeBoss.name.includes('Dragon') ? '🐉' : activeBoss.name.includes('Lich') ? '💀' : activeBoss.name.includes('NightBorne') ? '🌌' : '👹';
+          iconEl.innerHTML = `<img src='/assets/gui/PNG/buttonSquare_brown.png' width='32' height='32' style='image-rendering:pixelated;' />`;
         }
       }
       if (waveBanner) waveBanner.style.display = 'none';
