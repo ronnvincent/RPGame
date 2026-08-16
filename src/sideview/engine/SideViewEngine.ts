@@ -879,11 +879,11 @@ export class SideViewEngine {
       case 'w_4': this.particles.playVfxSprite(centerX, centerY - 20, 'warrior_vfx4', p.facing, 1.8); break;
       case 'w_5': this.particles.playVfxSprite(centerX, centerY - 15, 'warrior_vfx5', p.facing, 2.0); break;
       // Assassin
-      case 'as_1': this.particles.playVfxSprite(centerX, centerY - 15, 'vfx_weaponhit', p.facing, 1.6); break;
+      case 'as_1': this.particles.playVfxSprite(centerX, centerY - 15, 'pipo_nazoobj01b', p.facing, 1.6); break;
       case 'as_2': this.particles.playVfxSprite(centerX, centerY - 15, 'vfx_phantom', p.facing, 1.5); break;
-      case 'as_3': this.particles.playVfxSprite(centerX, centerY - 20, 'vfx_dark1', p.facing, 2.2); break;
+      case 'as_3': this.particles.playVfxSprite(centerX, centerY - 20, 'pipo_nazoobj03b', p.facing, 2.2); break;
       case 'as_4': this.particles.playVfxSprite(centerX, centerY - 15, 'pipo_mapeffect021', p.facing, 1.8); break;
-      case 'as_5': this.particles.playVfxSprite(centerX, centerY - 15, 'vfx_dark2', p.facing, 1.8); break;
+      case 'as_5': this.particles.playVfxSprite(centerX, centerY - 15, 'pipo_nazoobj03c', p.facing, 1.8); break;
       // Mage
       case 'm_1': this.particles.playVfxSprite(centerX, centerY - 15, 'pipo_mapeffect024', p.facing, 1.6); break;
       case 'm_2': this.particles.playVfxSprite(centerX, centerY - 10, 'vfx_freezing', p.facing, 2.2); break;
@@ -891,30 +891,30 @@ export class SideViewEngine {
       case 'm_4': this.particles.playVfxSprite(centerX, centerY - 30, 'pipo_nazoobj01a', p.facing, 2.0); break;
       case 'm_5': this.particles.playVfxSprite(centerX, centerY - 40, 'fx_ice_burst', p.facing, 2.4); break;
       // Archer
-      case 'ar_1': this.particles.playVfxSprite(centerX, centerY - 15, 'vfx_weaponhit', p.facing, 1.5); break;
-      case 'ar_2': this.particles.playVfxSprite(centerX, centerY - 15, 'fx_energy_impact', p.facing, 1.8); break;
-      case 'ar_3': this.particles.playVfxSprite(centerX, centerY - 20, 'vfx_slash_circle', p.facing, 1.6); break;
+      case 'ar_1': this.particles.playVfxSprite(centerX, centerY - 15, 'pipo_nazoobj01c', p.facing, 1.5); break;
+      case 'ar_2': this.particles.playVfxSprite(centerX, centerY - 15, 'pipo_nazoobj02b', p.facing, 1.8); break;
+      case 'ar_3': this.particles.playVfxSprite(centerX, centerY - 20, 'pipo_nazoobj02c', p.facing, 1.6); break;
       case 'ar_4': this.particles.playVfxSprite(centerX, centerY - 15, 'vfx_bolt', p.facing, 1.5); break;
       case 'ar_5': this.particles.playVfxSprite(centerX, centerY - 20, 'pipo_mapeffect022', p.facing, 2.0); break;
       // Paladin
-      case 'p_1': this.particles.playVfxSprite(centerX, centerY - 15, 'vfx_slash_circle', p.facing, 1.7); break;
-      case 'p_2': this.particles.playVfxSprite(centerX, centerY - 20, 'holy_spell_00', p.facing, 2.0); break;
+      case 'p_1': this.particles.playVfxSprite(centerX, centerY - 15, 'pipo_nazoobj04a', p.facing, 1.7); break;
+      case 'p_2': this.particles.playVfxSprite(centerX, centerY - 20, 'pipo_nazoobj04c', p.facing, 2.0); break;
       case 'p_3': this.particles.playVfxSprite(centerX, centerY - 30, 'pipo_nazoobj03a', p.facing, 2.0); break;
       case 'p_4': this.particles.playVfxSprite(centerX, centerY - 20, 'mp9_spark', p.facing, 1.8); break;
       case 'p_5': this.particles.playVfxSprite(centerX, centerY - 25, 'holy_spell_01', p.facing, 2.2); break;
       // Necromancer
       case 'n_1': this.particles.playVfxSprite(centerX, centerY - 15, 'mp9_darkbolt', p.facing, 1.8); break;
-      case 'n_2': this.particles.playVfxSprite(centerX, centerY - 20, 'vfx_magicspell', p.facing, 1.8); break;
+      case 'n_2': this.particles.playVfxSprite(centerX, centerY - 20, 'pipo_nazoobj02c', p.facing, 1.8); break;
       case 'n_4': this.particles.playVfxSprite(centerX, centerY - 25, 'pipo_nazoobj04b', p.facing, 2.0); break;
-      case 'n_5': this.particles.playVfxSprite(centerX, centerY - 15, 'vfx_dark2', p.facing, 2.2); break;
+      case 'n_5': this.particles.playVfxSprite(centerX, centerY - 15, 'pipo_nazoobj03c', p.facing, 2.2); break;
       // Berserker
       case 'b_1': this.particles.playVfxSprite(centerX, centerY - 15, 'fx_hit_slash', p.facing, 2.0); break;
       case 'b_2': this.particles.playVfxSprite(centerX, centerY - 20, 'pipo_mapeffect025', p.facing, 2.2); break;
-      case 'b_3': this.particles.playVfxSprite(centerX, centerY - 15, 'vfx_slash_circle', p.facing, 2.2); break;
-      case 'b_4': this.particles.playVfxSprite(centerX, centerY - 20, 'vfx_flamelash', p.facing, 2.0); break;
+      case 'b_3': this.particles.playVfxSprite(centerX, centerY - 15, 'pipo_nazoobj01a', p.facing, 2.2); break;
+      case 'b_4': this.particles.playVfxSprite(centerX, centerY - 20, 'pipo_nazoobj01b', p.facing, 2.0); break;
       case 'b_5': this.particles.playVfxSprite(centerX, this.groundY - 30, 'mp9_firebomb', p.facing, 2.4); break;
       // Dragoon
-      case 'd_1': this.particles.playVfxSprite(centerX, centerY - 15, 'vfx_weaponhit', p.facing, 1.8); break;
+      case 'd_1': this.particles.playVfxSprite(centerX, centerY - 15, 'pipo_nazoobj03b', p.facing, 1.8); break;
       case 'd_2': this.particles.playVfxSprite(centerX, centerY - 15, 'fx_energy_impact', p.facing, 2.0); break;
       case 'd_4': this.particles.playVfxSprite(centerX, centerY - 20, 'vfx_flamelash', p.facing, 1.8); break;
       case 'd_5': this.particles.playVfxSprite(centerX, centerY - 20, 'pipo_mapeffect023', p.facing, 2.0); break;
@@ -925,8 +925,8 @@ export class SideViewEngine {
       case 'pr_4': this.particles.playVfxSprite(centerX, centerY - 20, 'vfx_magicspell', p.facing, 1.8); break;
       case 'pr_5': this.particles.playVfxSprite(centerX, centerY - 30, 'holy_spell_01', p.facing, 2.5); break;
       // Nightborne
-      case 'ni_1': this.particles.playVfxSprite(centerX, centerY - 15, 'vfx_dark1', p.facing, 1.8); break;
-      case 'ni_3': this.particles.playVfxSprite(centerX, centerY - 20, 'vfx_dark2', p.facing, 2.0); break;
+      case 'ni_1': this.particles.playVfxSprite(centerX, centerY - 15, 'pipo_nazoobj04a', p.facing, 1.8); break;
+      case 'ni_3': this.particles.playVfxSprite(centerX, centerY - 20, 'pipo_nazoobj04c', p.facing, 2.0); break;
       case 'ni_4': this.particles.playVfxSprite(centerX, centerY - 15, 'pipo_nazoobj05a', p.facing, 2.2); break;
       case 'ni_5': this.particles.playVfxSprite(centerX, centerY - 20, 'pipo_nazoobj05b', p.facing, 2.5); break;
       // Fallback
