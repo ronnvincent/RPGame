@@ -1124,7 +1124,7 @@ export class SpriteManager {
       frameW,
       frameH,
       -96,
-      -(destH - 80),
+      -(destH - 72),
       destW,
       destH
     );
@@ -1202,7 +1202,7 @@ export class SpriteManager {
       frameW,
       frameH,
       -110,
-      -(destH - 105),
+      -(destH - 77),
       destW,
       destH
     );
@@ -1280,7 +1280,7 @@ export class SpriteManager {
       frameW,
       frameH,
       -101,
-      -(destH - 85),
+      -(destH - 75),
       destW,
       destH
     );
@@ -1358,7 +1358,7 @@ export class SpriteManager {
       frameW,
       frameH,
       -46,
-      -(destH - 30),
+      -(destH - 28),
       destW,
       destH
     );
@@ -1436,7 +1436,7 @@ export class SpriteManager {
       frameW,
       frameH,
       -103,
-      -(destH - 85),
+      -(destH - 72),
       destW,
       destH
     );
@@ -1514,7 +1514,7 @@ export class SpriteManager {
       frameW,
       frameH,
       -103,
-      -(destH - 110),
+      -(destH - 86),
       destW,
       destH
     );
@@ -1587,7 +1587,7 @@ export class SpriteManager {
       frameW,
       frameH,
       -83,
-      -(destH - 85),
+      -(destH - 58),
       destW,
       destH
     );
@@ -1665,7 +1665,7 @@ export class SpriteManager {
       frameW,
       frameH,
       -77,
-      -(destH - 30),
+      -(destH - 35),
       destW,
       destH
     );
