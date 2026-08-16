@@ -6,7 +6,8 @@ export class NetworkManager {
   public static instance: NetworkManager;
   public room: string | null = null;
   
-  public remotePlayers: Record<string, { classId?: string; name?: string;
+  public remotePlayers: Record<string, {
+    classId?: string;
     name: string;
     x: number;
     y: number;
@@ -136,7 +137,7 @@ export class NetworkManager {
     if (!this.socket || !this.room) return;
     this.socket.emit('player_move', {
       classId: playerState.characterClass ? playerState.characterClass.id : 'knight',
-      name: playerState.name,
+      name: localStorage.getItem('playerName') || 'Player',
       x: playerState.x,
       y: playerState.y - groundY,
       facing: playerState.facing,

@@ -136,7 +136,13 @@ export class SideViewGame {
         if (data.cleared) {
           this.onDungeonCleared();
         } else {
-          // Play fanfare for new wave?
+          // Update HUD with new wave info
+          const dungeon = DUNGEONS[this.currentDungeonIndex];
+          if (dungeon) {
+            this.hud?.setWaveInfo(`${dungeon.name} - Wave ${this.currentWaveIndex + 1}/${dungeon.waves.length}`, 0);
+            audio.playSlash('heavy');
+            this.engine.particles.addImpactBurst(this.engine.player.x, this.engine.groundY, 12, dungeon.ambientParticles, 'spark');
+          }
         }
       });
       

@@ -2043,8 +2043,8 @@ export class SideViewEngine {
         sprites.drawHero(
           ctx,
           remoteP.x,
-          remoteP.y + rRunBob,
-          'knight', // Default remote class for now
+          remoteP.y + this.groundY + rRunBob,
+          remoteP.classId || 'knight',
           remoteP.isAttacking ? 'attack' : (rIsRun ? 'run' : 'idle'),
           remoteP.facing,
           remoteP.isAttacking ? 0.2 : 0,
@@ -2057,7 +2057,7 @@ export class SideViewEngine {
         ctx.font = 'bold 10px "Outfit", sans-serif';
         ctx.fillStyle = '#4fade5';
         ctx.textAlign = 'center';
-        ctx.fillText(remoteP.name, remoteP.x, remoteP.y - 40);
+        ctx.fillText(remoteP.name || 'Player', remoteP.x, remoteP.y + this.groundY - 40);
         
         ctx.restore();
       }
