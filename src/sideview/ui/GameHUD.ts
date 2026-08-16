@@ -48,6 +48,9 @@ export class GameHUD {
     quests.subscribe((evt) => {
       this.showToast(evt.message);
     });
+
+    // Listen for multiplayer invites
+    this.setupInviteListener();
   }
 
   private getSkillIcon(skill: SkillDefinition, classId: string): string {
