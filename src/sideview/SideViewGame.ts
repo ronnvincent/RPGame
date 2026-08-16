@@ -10,6 +10,7 @@ import { CharacterSelectUI } from './ui/CharacterSelectUI';
 import { GameHUD } from './ui/GameHUD';
 import { DUNGEONS, DungeonDefinition, spawnWaveEnemies } from './dungeons/DungeonManager';
 import { audio } from './engine/AudioManager';
+import { network } from './network/NetworkManager';
 import { sprites } from './engine/SpriteManager';
 import { TownHub } from './town/TownHub';
 import { DialogueSystem } from './dialogue/DialogueSystem';
@@ -126,7 +127,7 @@ export class SideViewGame {
     this.setupInputListeners();
     
     // Setup Multiplayer Sync Listeners
-    import('./network/NetworkManager').then(mod => {
+    Promise.resolve({ network }).then(mod => {
       mod.network.listenForPlayerSkill((socketId, skillIndex, classId, x, y, facing, isTownMode, skillDamage) => {
         if (typeof localStorage !== 'undefined' && localStorage.getItem('rpg_debug_multiplayer') === '1') {
           console.log('[NET] Received remote_player_skill:', { socketId, skillIndex, classId, x, y, facing, isTownMode, skillDamage });
@@ -385,7 +386,7 @@ export class SideViewGame {
     this.hud?.showToast('🏰 Arrived at Haven of Eldermoor');
 
     if (broadcastParty) {
-      import('./network/NetworkManager').then(mod => {
+      Promise.resolve({ network }).then(mod => {
         mod.network.sendPartyReturnTown(this.engine!.player, this.engine!.groundY);
       });
     }
@@ -445,7 +446,7 @@ export class SideViewGame {
     if (this.engine.isHost) {
       this.spawnNextWave();
       if (broadcastParty && dungeon) {
-        import('./network/NetworkManager').then(mod => {
+        Promise.resolve({ network }).then(mod => {
           mod.network.sendPartyNextDungeon(dungeon.id, this.currentDungeonIndex);
         });
       }
@@ -725,7 +726,7 @@ export class SideViewGame {
               }
 
               // Sync wave change to client
-              import('./network/NetworkManager').then(mod => {
+              Promise.resolve({ network }).then(mod => {
                 mod.network.sendWaveSync({
                   waveIndex: this.currentWaveIndex,
                   cleared: isCleared
