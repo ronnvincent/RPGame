@@ -333,11 +333,7 @@ io.on('connection', (socket) => {
       // Broadcast to everyone else in the room
       socket.to(p.room).emit('remote_player_move', {
         socketId: socket.id,
-        x: data.x,
-        y: data.y,
-        facing: data.facing,
-        isGrounded: data.isGrounded,
-        isAttacking: data.isAttacking
+        ...data
       });
     }
   });
