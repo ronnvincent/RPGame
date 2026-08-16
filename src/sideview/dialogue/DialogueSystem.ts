@@ -349,7 +349,11 @@ export class DialogueSystem {
 
     const portrait = document.createElement('div');
     portrait.className = 'dialogue-portrait';
-    portrait.innerHTML = payload.portraitIcon || '🧙‍♂️';
+    if (payload.portraitIcon && payload.portraitIcon.startsWith('/')) {
+      portrait.innerHTML = `<img src="${payload.portraitIcon}" style="width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; border-radius: 4px;" />`;
+    } else {
+      portrait.innerHTML = payload.portraitIcon || '🧙‍♂️';
+    }
 
     const textBody = document.createElement('div');
     textBody.className = 'dialogue-text-body';
@@ -458,7 +462,11 @@ export class DialogueSystem {
         if (opt.type === 'accept_quest') btnClass += ' dialogue-btn-quest';
         if (opt.type === 'turn_in_quest') btnClass += ' dialogue-btn-turnin';
         btn.className = btnClass;
-        btn.innerHTML = `${opt.icon || ''} ${opt.label}`;
+        let iconHtml = opt.icon || '';
+        if (opt.icon && opt.icon.startsWith('/')) {
+            iconHtml = `<img src="${opt.icon}" style="width: 20px; height: 20px; image-rendering: pixelated; vertical-align: middle;" />`;
+        }
+        btn.innerHTML = `${iconHtml} ${opt.label}`;
         btn.onclick = () => {
           if (opt.onSelect) opt.onSelect();
           if (opt.type === 'close') this.close();

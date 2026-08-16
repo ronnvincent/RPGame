@@ -13,7 +13,7 @@ export interface TownNPC {
   id: string;
   name: string;
   title: string;
-  icon: string;
+  portrait: string;
   x: number;
   y: number;
   width: number;
@@ -28,7 +28,7 @@ export class TownHub {
       id: 'elder_justinian',
       name: 'Elder Justinian',
       title: 'Sage of the Sacred Runes',
-      icon: '🧙‍♂️',
+      portrait: '/assets/ui_sprites/portrait_11.png',
       x: 480,
       y: 0,
       width: 48,
@@ -43,7 +43,7 @@ export class TownHub {
       id: 'captain_valerie',
       name: 'Captain Valerie',
       title: 'Eldermoor Vanguard Commander',
-      icon: '🛡️',
+      portrait: '/assets/ui_sprites/portrait_3.png',
       x: 980,
       y: 0,
       width: 50,
@@ -58,7 +58,7 @@ export class TownHub {
       id: 'blacksmith_keith',
       name: 'Blacksmith Keith',
       title: 'Master of the Molten Anvil',
-      icon: '⚒️',
+      portrait: '/assets/ui_sprites/portrait_4.png',
       x: 1480,
       y: 0,
       width: 52,
@@ -72,7 +72,7 @@ export class TownHub {
       id: 'alchemist_morwenna',
       name: 'Alchemist Morwenna',
       title: 'Herbalist & Concoctionist',
-      icon: '🧪',
+      portrait: '/assets/ui_sprites/portrait_7.png',
       x: 1980,
       y: 0,
       width: 48,
@@ -86,7 +86,7 @@ export class TownHub {
       id: 'portal_donald',
       name: 'Portal Master Donald',
       title: 'Keeper of Dimensional Gateways',
-      icon: '🌀',
+      portrait: '/assets/ui_sprites/portrait_10.png',
       x: 2440,
       y: 0,
       width: 54,
@@ -146,7 +146,7 @@ export class TownHub {
           dialogue.showDialogue({
             speakerName: npc.name,
             speakerTitle: npc.title,
-            portraitIcon: npc.icon,
+            portraitIcon: npc.portrait,
             sentences: q.dialogue.completed,
             options: [{ label: 'Farewell', type: 'close' }]
           });
@@ -183,7 +183,7 @@ export class TownHub {
     if (npc.id === 'blacksmith_keith') {
       options.push({
         label: 'Blacksmith Forge (Upgrade Gear)',
-        icon: '⚒️',
+        icon: '/assets/ui_sprites/icons/W_Sword001.png',
         type: 'open_shop',
         onSelect: () => {
           dialogue.close();
@@ -195,7 +195,7 @@ export class TownHub {
     if (npc.id === 'alchemist_morwenna') {
       options.push({
         label: 'Browse Potion Shop',
-        icon: '🧪',
+        icon: '/assets/ui_sprites/icons/P_Green01.png',
         type: 'open_shop',
         onSelect: () => {
           dialogue.close();
@@ -207,7 +207,7 @@ export class TownHub {
     if (npc.id === 'portal_donald') {
       options.push({
         label: 'Open World Map / Dungeons',
-        icon: '🌀',
+        icon: '/assets/ui_sprites/portrait_10.png',
         type: 'custom',
         onSelect: () => {
           dialogue.close();
@@ -225,7 +225,7 @@ export class TownHub {
         dialogue.showDialogue({
           speakerName: npc.name,
           speakerTitle: npc.title,
-          portraitIcon: npc.icon,
+          portraitIcon: npc.portrait,
           sentences: npc.lore,
           options: [{ label: 'Thank you', type: 'close' }]
         });
@@ -241,7 +241,7 @@ export class TownHub {
     dialogue.showDialogue({
       speakerName: npc.name,
       speakerTitle: npc.title,
-      portraitIcon: npc.icon,
+      portraitIcon: npc.portrait,
       sentences,
       options
     });

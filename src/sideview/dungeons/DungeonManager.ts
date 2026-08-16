@@ -92,7 +92,7 @@ export const DUNGEONS: DungeonDefinition[] = [
       {
         waveNumber: 1,
         enemies: [
-          { name: 'Green Slime', type: 'mob', icon: '🟢', color: '#4caf50', maxHp: 80, atk: 12, def: 5, speed: 2.2, expReward: 42, goldReward: 19, width: 36, height: 32, count: 4 }
+          { name: 'Green Slime', type: 'mob', icon: '/assets/ui_sprites/icons/I_Crystal01.png', color: '#4caf50', maxHp: 80, atk: 12, def: 5, speed: 2.2, expReward: 42, goldReward: 19, width: 36, height: 32, count: 4 }
         ]
       },
       {
@@ -105,8 +105,8 @@ export const DUNGEONS: DungeonDefinition[] = [
       {
         waveNumber: 3,
         enemies: [
-          { name: 'Orc Berserker', type: 'elite', icon: '👹', color: '#d84315', maxHp: 350, atk: 30, def: 18, speed: 2.8, expReward: 210, goldReward: 117, width: 52, height: 60, count: 1 },
-          { name: 'Green Slime', type: 'mob', icon: '🟢', color: '#4caf50', maxHp: 95, atk: 14, def: 6, speed: 2.4, expReward: 49, goldReward: 26, width: 36, height: 32, count: 3 }
+          { name: 'Orc Berserker', type: 'elite', icon: '/assets/ui_sprites/icons/E_Bones03.png', color: '#d84315', maxHp: 350, atk: 30, def: 18, speed: 2.8, expReward: 210, goldReward: 117, width: 52, height: 60, count: 1 },
+          { name: 'Green Slime', type: 'mob', icon: '/assets/ui_sprites/icons/I_Crystal01.png', color: '#4caf50', maxHp: 95, atk: 14, def: 6, speed: 2.4, expReward: 49, goldReward: 26, width: 36, height: 32, count: 3 }
         ]
       },
       {
@@ -131,7 +131,7 @@ export const DUNGEONS: DungeonDefinition[] = [
       {
         waveNumber: 1,
         enemies: [
-          { name: 'Skeleton Warrior', type: 'mob', icon: '💀', color: '#e0e0e0', maxHp: 180, atk: 22, def: 12, speed: 2.6, expReward: 77, goldReward: 39, width: 40, height: 52, count: 4 }
+          { name: 'Skeleton Warrior', type: 'mob', icon: '/assets/ui_sprites/icons/I_Bone.png', color: '#e0e0e0', maxHp: 180, atk: 22, def: 12, speed: 2.6, expReward: 77, goldReward: 39, width: 40, height: 52, count: 4 }
         ]
       },
       {
@@ -145,7 +145,7 @@ export const DUNGEONS: DungeonDefinition[] = [
         waveNumber: 3,
         enemies: [
           { name: 'Death Knight', type: 'elite', icon: '🛡️', color: '#4527a0', maxHp: 600, atk: 40, def: 28, speed: 2.5, expReward: 364, goldReward: 208, width: 56, height: 68, count: 1 },
-          { name: 'Skeleton Warrior', type: 'mob', icon: '💀', color: '#e0e0e0', maxHp: 195, atk: 24, def: 14, speed: 2.6, expReward: 84, goldReward: 45, width: 40, height: 52, count: 3 }
+          { name: 'Skeleton Warrior', type: 'mob', icon: '/assets/ui_sprites/icons/I_Bone.png', color: '#e0e0e0', maxHp: 195, atk: 24, def: 14, speed: 2.6, expReward: 84, goldReward: 45, width: 40, height: 52, count: 3 }
         ]
       },
       {
@@ -214,7 +214,7 @@ export const DUNGEONS: DungeonDefinition[] = [
       {
         waveNumber: 2,
         enemies: [
-          { name: 'Astral Slayer', type: 'mob', icon: '🗡️', color: '#7c3aed', maxHp: 420, atk: 58, def: 25, speed: 3.8, expReward: 224, goldReward: 143, width: 46, height: 54, count: 3 },
+          { name: 'Astral Slayer', type: 'mob', icon: '/assets/ui_sprites/icons/W_Sword001.png', color: '#7c3aed', maxHp: 420, atk: 58, def: 25, speed: 3.8, expReward: 224, goldReward: 143, width: 46, height: 54, count: 3 },
           { name: 'Eclipse Sorcerer', type: 'elite', icon: '🔮', color: '#6d28d9', maxHp: 1200, atk: 72, def: 30, speed: 2.5, expReward: 700, goldReward: 455, width: 58, height: 68, count: 1 }
         ]
       },
@@ -240,7 +240,7 @@ export const DUNGEONS: DungeonDefinition[] = [
       {
         waveNumber: 1,
         enemies: [
-          { name: 'Swamp Spider', type: 'mob', icon: '🕷️', color: '#166534', maxHp: 280, atk: 34, def: 14, speed: 3.6, expReward: 112, goldReward: 58, width: 44, height: 36, count: 4 }
+          { name: 'Swamp Spider', type: 'mob', icon: '/assets/ui_sprites/icons/I_Eye.png', color: '#166534', maxHp: 280, atk: 34, def: 14, speed: 3.6, expReward: 112, goldReward: 58, width: 44, height: 36, count: 4 }
         ]
       },
       {
@@ -336,7 +336,7 @@ export const DUNGEONS: DungeonDefinition[] = [
       {
         waveNumber: 1,
         enemies: [
-          { name: 'Cave Bat Swarm', type: 'mob', icon: '🦇', color: '#78350f', maxHp: 290, atk: 40, def: 14, speed: 4.4, expReward: 140, goldReward: 84, width: 42, height: 34, count: 4 }
+          { name: 'Cave Bat Swarm', type: 'mob', icon: '/assets/ui_sprites/icons/I_BatWing.png', color: '#78350f', maxHp: 290, atk: 40, def: 14, speed: 4.4, expReward: 140, goldReward: 84, width: 42, height: 34, count: 4 }
         ]
       },
       {

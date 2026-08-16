@@ -31,7 +31,7 @@ export class WorldMapUI {
       name: 'Haven of Eldermoor',
       actTitle: 'Safe Haven & Town Hub',
       recommendedLevel: 1,
-      icon: '🏰',
+      icon: '/assets/ui_sprites/icons/I_Chest01.png',
       color: '#3b82f6',
       description: 'The peaceful town sanctuary. Meet Elder Justinian, Captain Valerie, Blacksmith Keith, and Alchemist Morwenna.',
       bossName: 'None (Safe Zone)',
@@ -42,7 +42,7 @@ export class WorldMapUI {
       name: 'Goblin Catacombs',
       actTitle: 'Act I: The Verdant Seal',
       recommendedLevel: 1,
-      icon: '🌿',
+      icon: '/assets/ui_sprites/icons/I_Leaf.png',
       color: '#22c55e',
       runeType: 'verdant',
       description: 'Subterranean tunnels infested with goblin thieves, shamans, and berserkers.',
@@ -54,7 +54,7 @@ export class WorldMapUI {
       name: 'Crypt of the Damned',
       actTitle: 'Act II: The Shadow Curse',
       recommendedLevel: 5,
-      icon: '💀',
+      icon: '/assets/ui_sprites/icons/I_Bone.png',
       color: '#a855f7',
       runeType: 'shadow',
       description: 'Ancient royal mausoleums defiled by dark necromancy and wraiths.',
@@ -66,7 +66,7 @@ export class WorldMapUI {
       name: "Inferno Dragon's Lair",
       actTitle: 'Act III: The Molten Caldera',
       recommendedLevel: 9,
-      icon: '🔥',
+      icon: '/assets/ui_sprites/icons/I_Torch01.png',
       color: '#ef4444',
       runeType: 'flame',
       description: 'Volcanic magma chambers erupting with fire imps and the ancient wyrm.',
@@ -78,7 +78,7 @@ export class WorldMapUI {
       name: 'The Void Nexus',
       actTitle: 'Act IV: The Void Eclipse',
       recommendedLevel: 14,
-      icon: '🌌',
+      icon: '/assets/ui_sprites/icons/I_Sapphire.png',
       color: '#8b5cf6',
       runeType: 'void',
       description: 'Cosmic astral rift where NightBorne commands the forces of total eclipse.',
@@ -90,7 +90,7 @@ export class WorldMapUI {
       name: 'Venomous Swamp',
       actTitle: 'Bonus Zone: Gothicvania Swamp',
       recommendedLevel: 3,
-      icon: '🌿',
+      icon: '/assets/ui_sprites/icons/I_Leaf.png',
       color: '#10b981',
       description: 'Murky poison marsh draped in moss, ancient deadwood, spider nests, and bog ghosts.',
       bossName: 'Broodmother Queen',
@@ -101,7 +101,7 @@ export class WorldMapUI {
       name: 'Twilight Peaks',
       actTitle: 'Bonus Zone: Mountain Dusk',
       recommendedLevel: 6,
-      icon: '🏔️',
+      icon: '/assets/ui_sprites/icons/I_Rock01.png',
       color: '#f43f5e',
       description: 'High alpine crags bathed in the crimson radiance of the blood moon and pine ridges.',
       bossName: 'Blood Moon Behemoth',
@@ -112,7 +112,7 @@ export class WorldMapUI {
       name: 'Sunken Abyss',
       actTitle: 'Bonus Zone: Underwater Fantasy',
       recommendedLevel: 10,
-      icon: '🌊',
+      icon: '/assets/ui_sprites/icons/I_Water.png',
       color: '#06b6d4',
       description: 'Submerged ancient temple ruins, coral reefs, sunken statues, and abyssal sirens.',
       bossName: 'Leviathan of the Deep',
@@ -123,7 +123,7 @@ export class WorldMapUI {
       name: 'Gallet Depths',
       actTitle: 'Bonus Zone: Caves of Gallet',
       recommendedLevel: 12,
-      icon: '🕳️',
+      icon: '/assets/ui_sprites/icons/I_Eye.png',
       color: '#f97316',
       description: 'Subterranean lava forge carved with stone channels, torches, and cascading waterfalls.',
       bossName: 'Gallet Forge Overlord',
@@ -134,7 +134,7 @@ export class WorldMapUI {
       name: 'Endless Celestial Arena',
       actTitle: 'Post-Game Mastery Trial',
       recommendedLevel: 16,
-      icon: '⭐',
+      icon: '/assets/ui_sprites/icons/Ac_Medal01.png',
       color: '#eab308',
       description: 'Infinite scaling trial against empowered dimensional waves for legendary records.',
       bossName: 'Continuous Scaling Waves',
@@ -187,16 +187,18 @@ export class WorldMapUI {
     const runeBar = document.createElement('div');
     runeBar.style.cssText = 'display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; background: rgba(0,0,0,0.6); padding: 10px 16px; border-radius: 8px; align-items: center; justify-content: space-around; border: 1px solid rgba(255,255,255,0.05);';
     const runeDefs = [
-      { id: 'verdant', name: 'Verdant Rune', icon: '🟢', color: '#4ade80' },
-      { id: 'shadow', name: 'Shadow Rune', icon: '🟣', color: '#c084fc' },
-      { id: 'flame', name: 'Flame Rune', icon: '🔴', color: '#f87171' },
-      { id: 'void', name: 'Void Rune', icon: '🌌', color: '#a855f7' }
+      { id: 'verdant', name: 'Verdant Rune', icon: '/assets/ui_sprites/icons/I_Jade.png', color: '#4ade80' },
+      { id: 'shadow', name: 'Shadow Rune', icon: '/assets/ui_sprites/icons/I_Amethist.png', color: '#c084fc' },
+      { id: 'flame', name: 'Flame Rune', icon: '/assets/ui_sprites/icons/I_Ruby.png', color: '#f87171' },
+      { id: 'void', name: 'Void Rune', icon: '/assets/ui_sprites/icons/I_Sapphire.png', color: '#a855f7' }
     ];
     runeBar.innerHTML = runeDefs.map(r => {
       const isRestored = quests.unlockedRunes.has(r.id);
       return `
         <div style="display: flex; align-items: center; gap: 6px; opacity: ${isRestored ? '1' : '0.4'}; filter: ${isRestored ? 'none' : 'grayscale(1)'}; transition: 0.3s;">
-          <span style="font-size: 18px; filter: drop-shadow(0 0 4px ${r.color});">${r.icon}</span>
+          <span style="font-size: 18px; filter: drop-shadow(0 0 4px ${r.color});">
+            ${r.icon.startsWith('/') ? `<img src="${r.icon}" style="width:24px; height:24px; vertical-align:middle; image-rendering:pixelated;" />` : r.icon}
+          </span>
           <span style="font-size: 12px; font-weight: 800; color: ${r.color}; letter-spacing: 0.5px;">${r.name} ${isRestored ? '✓' : '(Locked)'}</span>
         </div>
       `;
@@ -246,7 +248,9 @@ export class WorldMapUI {
           <div>
             <div style="font-size: 11px; font-weight: 900; color: ${loc.color}; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; text-shadow: 0 1px 2px rgba(0,0,0,0.8);">${loc.actTitle}</div>
             <div style="font-size: 18px; font-weight: 900; color: #fff; display: flex; align-items: center; gap: 8px; text-shadow: 0 2px 4px rgba(0,0,0,0.8);">
-              <span style="font-size: 22px; filter: drop-shadow(0 0 5px ${loc.color});">${loc.icon}</span>
+              <span style="font-size: 22px; filter: drop-shadow(0 0 5px ${loc.color});">
+              ${loc.icon.startsWith('/') ? `<img src="${loc.icon}" style="width:32px; height:32px; image-rendering:pixelated;" />` : loc.icon}
+            </span>
               <span style="line-height: 1.1;">${loc.name}</span>
             </div>
           </div>

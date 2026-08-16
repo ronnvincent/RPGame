@@ -42,7 +42,7 @@ export const ITEM_DATABASE: ItemData[] = [
     type: 'weapon',
     rarity: 'legendary',
     icon: 'Sword',
-    image: '/assets/rpg-icons/32x32/sword_03a.png',
+    image: '/assets/ui_sprites/icons/W_Sword015.png',
     description: 'A legendary divine blade forged in heavenly fires. Emits a glorious golden aura.',
     price: 1200,
     stats: { atk: 65, crit: 0.15, hp: 120 }
@@ -53,7 +53,7 @@ export const ITEM_DATABASE: ItemData[] = [
     type: 'weapon',
     rarity: 'epic',
     icon: 'Dagger',
-    image: '/assets/rpg-icons/32x32/sword_01a.png',
+    image: '/assets/ui_sprites/icons/W_Dagger004.png',
     description: 'Daggers carved from shadow crystals. Slices the air with eerie silent lethality.',
     price: 650,
     stats: { atk: 48, crit: 0.25, speed: 1.2 }
@@ -64,7 +64,7 @@ export const ITEM_DATABASE: ItemData[] = [
     type: 'weapon',
     rarity: 'epic',
     icon: 'Staff',
-    image: '/assets/rpg-icons/32x32/staff_03a.png',
+    image: '/assets/ui_sprites/icons/W_Staff03.png',
     description: 'Infused with the fiery spirit of an immortal phoenix. Enhances all magic potency.',
     price: 700,
     stats: { atk: 55, mp: 150, crit: 0.10 }
@@ -75,7 +75,7 @@ export const ITEM_DATABASE: ItemData[] = [
     type: 'weapon',
     rarity: 'legendary',
     icon: 'Spear',
-    image: '/assets/rpg-icons/32x32/staff_02ab.png',
+    image: '/assets/ui_sprites/icons/W_Spear002.png',
     description: 'An ancient draconian spear capable of piercing through mountains and dragons.',
     price: 1100,
     stats: { atk: 70, def: 20, hp: 100 }
@@ -169,7 +169,7 @@ export const ITEM_DATABASE: ItemData[] = [
     type: 'boots',
     rarity: 'common',
     icon: 'Boots',
-    image: '/assets/rpg-icons/32x32/boots_01a.png',
+    image: '/assets/ui_sprites/icons/A_Shoes03.png',
     description: 'Comfortable traveling boots with steel-toed caps.',
     price: 120,
     stats: { speed: 0.8, def: 8 }
@@ -300,7 +300,7 @@ export const ITEM_DATABASE: ItemData[] = [
     type: 'consumable',
     rarity: 'common',
     icon: 'Potion',
-    image: '/assets/rpg-icons/32x32/potion_01a.png',
+    image: '/assets/ui_sprites/icons/P_Green01.png',
     description: 'Restores 250 HP instantly when consumed.',
     price: 50,
     consumableEffect: { type: 'heal_hp', value: 250 }
@@ -322,7 +322,7 @@ export const ITEM_DATABASE: ItemData[] = [
     type: 'consumable',
     rarity: 'rare',
     icon: 'Flask',
-    image: '/assets/rpg-icons/32x32/potion_03a.png',
+    image: '/assets/ui_sprites/icons/P_Red01.png',
     description: 'Empowers bearer, boosting ATK by 40% for 15 seconds.',
     price: 150,
     consumableEffect: { type: 'buff_atk', value: 1.40, duration: 15 }
