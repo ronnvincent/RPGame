@@ -125,8 +125,9 @@ export class NetworkManager {
   }
 
   public listenForPlayerSkill(onSkill: (socketId: string, skillIndex: number, classId: string, x: number, y: number, facing: number) => void) {
-    this.socket?.off('remote_player_skill');
-    this.socket?.on('remote_player_skill', (data) => {
+    if (!this.socket) this.connect();
+    this.socket.off('remote_player_skill');
+    this.socket.on('remote_player_skill', (data) => {
       onSkill(data.socketId, data.skillIndex, data.classId, data.x, data.y, data.facing);
     });
   }
@@ -153,8 +154,9 @@ export class NetworkManager {
   }
 
   public listenForEnemySync(onSync: (enemiesData: any[]) => void) {
-    this.socket?.off('enemy_sync');
-    this.socket?.on('enemy_sync', (data) => {
+    if (!this.socket) this.connect();
+    this.socket.off('enemy_sync');
+    this.socket.on('enemy_sync', (data) => {
       onSync(data.enemies);
     });
   }
@@ -165,8 +167,9 @@ export class NetworkManager {
   }
 
   public listenForWaveSync(onSync: (waveData: any) => void) {
-    this.socket?.off('wave_sync');
-    this.socket?.on('wave_sync', (data) => {
+    if (!this.socket) this.connect();
+    this.socket.off('wave_sync');
+    this.socket.on('wave_sync', (data) => {
       onSync(data);
     });
   }
@@ -178,8 +181,9 @@ export class NetworkManager {
   }
 
   public listenForEnemyDied(onDied: (enemyData: any) => void) {
-    this.socket?.off('enemy_died');
-    this.socket?.on('enemy_died', (data) => {
+    if (!this.socket) this.connect();
+    this.socket.off('enemy_died');
+    this.socket.on('enemy_died', (data) => {
       onDied(data);
     });
   }
@@ -190,8 +194,9 @@ export class NetworkManager {
   }
 
   public listenForDamageEnemy(onDamage: (enemyId: string, damage: number, facing: number) => void) {
-    this.socket?.off('damage_enemy');
-    this.socket?.on('damage_enemy', (data) => {
+    if (!this.socket) this.connect();
+    this.socket.off('damage_enemy');
+    this.socket.on('damage_enemy', (data) => {
       onDamage(data.enemyId, data.damage, data.facing);
     });
   }
