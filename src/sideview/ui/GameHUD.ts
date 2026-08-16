@@ -1262,15 +1262,19 @@ export class GameHUD {
     // Skill Hotbar Click & Touch triggers skill with instant feedback
     const slots = this.container.querySelectorAll('.hotbar-slot');
     slots.forEach(slot => {
+      let lastTriggerTime = 0;
       const triggerSkill = (e: Event) => {
         e.preventDefault();
         e.stopPropagation();
+        const now = Date.now();
+        if (now - lastTriggerTime < 180) return; // Debounce synthetic double-tap
+        lastTriggerTime = now;
         const idx = Number(slot.getAttribute('data-skill-idx'));
         this.engine.castSkill(idx);
       };
 
-      slot.addEventListener('click', triggerSkill);
       slot.addEventListener('pointerdown', triggerSkill);
+      slot.addEventListener('click', triggerSkill);
     });
   }
 

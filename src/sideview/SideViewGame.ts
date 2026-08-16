@@ -202,8 +202,7 @@ export class SideViewGame {
       
       mod.network.listenForDamageEnemy((enemyId, damage, facing) => {
         if (!this.engine || !this.engine.isHost) return;
-        const eIdx = parseInt(enemyId);
-        const enemy = this.engine.enemies[eIdx];
+        const enemy = this.engine.enemies.find(e => e.id === enemyId) || this.engine.enemies[parseInt(enemyId)];
         if (enemy) {
           this.engine.applyDamageToEnemy(enemy, damage, false, facing, true);
         }

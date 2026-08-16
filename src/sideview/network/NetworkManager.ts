@@ -139,7 +139,7 @@ export class NetworkManager {
     });
   }
 
-  public sendPlayerMove(playerState: any, groundY: number, isAttacking: boolean = false) {
+  public sendPlayerMove(playerState: any, groundY: number, isAttacking: boolean = false, isTownMode: boolean = false) {
     if (!this.socket || !this.room) return;
     this.socket.emit('player_move', {
       classId: playerState.characterClass ? playerState.characterClass.id : 'knight',
@@ -150,7 +150,7 @@ export class NetworkManager {
       isGrounded: playerState.isGrounded,
       isAttacking,
       animState: playerState.animState || 'idle',
-      isTownMode: !!playerState.isTownMode
+      isTownMode: Boolean(isTownMode)
     });
   }
 

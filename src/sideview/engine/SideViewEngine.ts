@@ -4,7 +4,7 @@
  * Persistent Elemental Zones, Omnislash, Chain Lightning, and 60 Unique Skills.
  */
 
-import { CharacterClass, SkillDefinition } from '../classes/ClassDefinitions';
+import { CharacterClass, SkillDefinition, CHARACTER_CLASSES } from '../classes/ClassDefinitions';
 import { BattleTheme, EnemyInstance } from '../dungeons/DungeonManager';
 import { ItemData } from '../items/ItemDatabase';
 import { ParticleSystem } from './ParticleSystem';
@@ -498,17 +498,16 @@ export class SideViewEngine {
    */
   public castRemoteSkill(classId: string, skillIndex: number, startX: number, startY: number, facing: number) {
     // Replicate VFX without dealing local damage (Host coordinates damage)
-    import('../classes/ClassDefinitions').then(mod => {
-      const cls = mod.CHARACTER_CLASSES.find((c: any) => c.id === classId);
-      if (!cls) return;
-      const skill = cls.skills[skillIndex];
-      if (!skill) return;
+    const cls = CHARACTER_CLASSES.find((c: any) => c.id === classId);
+    if (!cls) return;
+    const skill = cls.skills[skillIndex];
+    if (!skill) return;
 
-      const attackX = startX + (facing * (skill.range * 0.6));
-      const attackY = startY;
+    const attackX = startX + (facing * (skill.range * 0.6));
+    const attackY = startY;
 
-      // Play SFX
-      this.playSkillCastSfx(skill);
+    // Play SFX
+    this.playSkillCastSfx(skill);
 
       // ---- 1. WARRIOR ----
       if (classId === 'warrior') {
@@ -795,7 +794,6 @@ export class SideViewEngine {
 
       // Generic fallback for any unhandled class
       this.particles.addSpellSlash(attackX, attackY, facing, 1.5, cls.accentColor);
-    });
   }
 
   public castSkill(skillIndex: number) {
@@ -819,10 +817,8 @@ export class SideViewEngine {
     p.attackTimer = skill.cooldown === 0 ? 0.22 : 0.45;
     p.animState = 'attack';
 
-    // Broadcast skill to network
-    import('../network/NetworkManager').then(mod => {
-      mod.network.sendPlayerSkill(skillIndex, p.characterClass.id, p.x, p.y, p.facing, this.groundY);
-    });
+    // Broadcast skill to network immediately
+    network.sendPlayerSkill(skillIndex, p.characterClass.id, p.x, p.y, p.facing, this.groundY);
 
     // Play SFX
     this.playSkillCastSfx(skill);
@@ -1616,9 +1612,7 @@ export class SideViewEngine {
     this.playerSyncTimer -= dt;
     if (this.playerSyncTimer <= 0) {
       this.playerSyncTimer = 0.05;
-      import('../network/NetworkManager').then(mod => {
-        mod.network.sendPlayerMove(this.player, this.groundY, this.player.attackTimer > 0);
-      });
+      network.sendPlayerMove(this.player, this.groundY, this.player.attackTimer > 0, this.isTownMode);
     }
 
     // 11. Host Broadcasts Enemy State over Network (10 times a second)
@@ -1626,9 +1620,7 @@ export class SideViewEngine {
       this.syncTimer -= dt;
       if (this.syncTimer <= 0) {
         this.syncTimer = 0.1;
-        import('../network/NetworkManager').then(mod => {
-          mod.network.sendEnemySync(this.enemies, this.groundY, this.currentWaveIndex);
-        });
+        network.sendEnemySync(this.enemies, this.groundY, this.currentWaveIndex);
       }
     }
   }
@@ -1637,7 +1629,7 @@ export class SideViewEngine {
     // A. Update Summoned Minions (Skeletons & Active Elder Dragon Companion)
     this.particles.summonedMinions.forEach(minion => {
       let targetEnemy: EnemyInstance | null = null;
-      let minDist = minion.type === 'dragon' ? 600 : 400;
+      let minDist = minion.type === 'dragon' ? 950 : 800;
 
       this.enemies.forEach(e => {
         if (e.isDead) return;
@@ -1652,22 +1644,32 @@ export class SideViewEngine {
         if (targetEnemy) {
           const dx = (targetEnemy as EnemyInstance).x - minion.x;
           minion.facing = dx > 0 ? 1 : -1;
-          if (Math.abs(dx) > 40) {
+          if (Math.abs(dx) > 45) {
             minion.state = 'walk';
-            minion.x += minion.facing * 2.2;
+            minion.x += minion.facing * 3.5;
           } else {
             // Attack!
             if (minion.attackCooldown <= 0) {
               minion.state = 'attack';
-              minion.attackCooldown = 1.0;
-              this.particles.addSpellSlash((targetEnemy as EnemyInstance).x, (targetEnemy as EnemyInstance).y - 15, minion.facing, 1.2, '#a855f7');
+              minion.attackCooldown = 0.9;
+              this.particles.addSpellSlash((targetEnemy as EnemyInstance).x, (targetEnemy as EnemyInstance).y - 15, minion.facing, 1.3, '#a855f7');
               this.applyDamageToEnemy(targetEnemy, minion.damage, false, minion.facing);
             } else {
               minion.state = 'idle';
             }
           }
         } else {
-          minion.state = 'idle';
+          // Follow master smoothly
+          const followX = this.player.x - this.player.facing * 45;
+          const distToPlayer = followX - minion.x;
+          if (Math.abs(distToPlayer) > 30) {
+            minion.facing = distToPlayer > 0 ? 1 : -1;
+            minion.x += minion.facing * 3.0;
+            minion.state = 'walk';
+          } else {
+            minion.facing = this.player.facing;
+            minion.state = 'idle';
+          }
         }
       } else if (minion.type === 'dragon') {
         minion.y = this.groundY; // Firmly anchored on ground
@@ -1724,7 +1726,7 @@ export class SideViewEngine {
           } else if (dist > 180) {
             // Advance forward along the ground
             minion.state = 'walk';
-            minion.x += minion.facing * 3.3;
+            minion.x += minion.facing * 3.6;
           } else {
             // 🔥 SKILL 1: Continuous Apocalyptic Flame Breath
             if (minion.attackCooldown <= 0) {
@@ -1753,7 +1755,7 @@ export class SideViewEngine {
           const distToPlayer = followX - minion.x;
           if (Math.abs(distToPlayer) > 35) {
             minion.facing = distToPlayer > 0 ? 1 : -1;
-            minion.x += minion.facing * 2.8;
+            minion.x += minion.facing * 3.2;
             minion.state = 'walk';
           } else {
             minion.facing = this.player.facing;
@@ -1819,7 +1821,7 @@ export class SideViewEngine {
           } else if (dist > 90) {
             // Striding towards enemy on ground
             minion.state = 'walk';
-            minion.x += minion.facing * 2.9;
+            minion.x += minion.facing * 3.4;
           } else {
             // 🗡️ SKILL 3: Grim Scythe Execution Slash
             if (minion.attackCooldown <= 0) {
@@ -1843,11 +1845,11 @@ export class SideViewEngine {
           }
         } else {
           // Follow Necromancer smoothly on ground
-          const followX = this.player.x - this.player.facing * 60;
+          const followX = this.player.x - this.player.facing * 75;
           const distToPlayer = followX - minion.x;
-          if (Math.abs(distToPlayer) > 30) {
+          if (Math.abs(distToPlayer) > 35) {
             minion.facing = distToPlayer > 0 ? 1 : -1;
-            minion.x += minion.facing * 2.5;
+            minion.x += minion.facing * 3.0;
             minion.state = 'walk';
           } else {
             minion.facing = this.player.facing;
@@ -2304,7 +2306,7 @@ export class SideViewEngine {
       for (const socketId in network.remotePlayers) {
         const remoteP = network.remotePlayers[socketId];
         // Only render remote player if they are in the same environment (Town vs Dungeon)
-        if (remoteP.isTownMode !== this.isTownMode) continue;
+        if (Boolean(remoteP.isTownMode) !== Boolean(this.isTownMode)) continue;
 
         ctx.save();
         ctx.globalAlpha = 0.95;
