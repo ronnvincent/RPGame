@@ -287,6 +287,40 @@ export class SpriteManager {
       holy_spell_00: '/assets/vfx/holy_pack/00.png',
       holy_spell_01: '/assets/vfx/holy_pack/01.png',
 
+      // 18f. Magic Pack 9
+      mp9_darkbolt: '/assets/vfx/magic_pack_9/Dark-Bolt.png',
+      mp9_firebomb: '/assets/vfx/magic_pack_9/Fire-bomb.png',
+      mp9_lightning: '/assets/vfx/magic_pack_9/Lightning.png',
+      mp9_spark: '/assets/vfx/magic_pack_9/spark.png',
+
+      // 18e. Warrior VFX
+      warrior_vfx1: '/assets/vfx/warrior/vfx1.png',
+      warrior_vfx2: '/assets/vfx/warrior/vfx2.png',
+      warrior_vfx3: '/assets/vfx/warrior/vfx3.png',
+      warrior_vfx4: '/assets/vfx/warrior/vfx4.png',
+      warrior_vfx5: '/assets/vfx/warrior/vfx5.png',
+
+      // 18d. Pipoya VFX
+      pipo_mapeffect021: '/assets/vfx/pipoya/pipo-mapeffect021_192.png',
+      pipo_mapeffect022: '/assets/vfx/pipoya/pipo-mapeffect022_192.png',
+      pipo_mapeffect023: '/assets/vfx/pipoya/pipo-mapeffect023_192.png',
+      pipo_mapeffect024: '/assets/vfx/pipoya/pipo-mapeffect024_192.png',
+      pipo_mapeffect025: '/assets/vfx/pipoya/pipo-mapeffect025_192.png',
+      pipo_nazoobj01a: '/assets/vfx/pipoya/pipo-nazoobj01a_192.png',
+      pipo_nazoobj01b: '/assets/vfx/pipoya/pipo-nazoobj01b_192.png',
+      pipo_nazoobj01c: '/assets/vfx/pipoya/pipo-nazoobj01c_192.png',
+      pipo_nazoobj02a: '/assets/vfx/pipoya/pipo-nazoobj02a_192.png',
+      pipo_nazoobj02b: '/assets/vfx/pipoya/pipo-nazoobj02b_192.png',
+      pipo_nazoobj02c: '/assets/vfx/pipoya/pipo-nazoobj02c_192.png',
+      pipo_nazoobj03a: '/assets/vfx/pipoya/pipo-nazoobj03a_192.png',
+      pipo_nazoobj03b: '/assets/vfx/pipoya/pipo-nazoobj03b_192.png',
+      pipo_nazoobj03c: '/assets/vfx/pipoya/pipo-nazoobj03c_192.png',
+      pipo_nazoobj04a: '/assets/vfx/pipoya/pipo-nazoobj04a_192.png',
+      pipo_nazoobj04b: '/assets/vfx/pipoya/pipo-nazoobj04b_192.png',
+      pipo_nazoobj04c: '/assets/vfx/pipoya/pipo-nazoobj04c_192.png',
+      pipo_nazoobj05a: '/assets/vfx/pipoya/pipo-nazoobj05a_192.png',
+      pipo_nazoobj05b: '/assets/vfx/pipoya/pipo-nazoobj05b_192.png',
+      pipo_nazoobj05c: '/assets/vfx/pipoya/pipo-nazoobj05c_192.png',
       // 19. Treasure Hunters Platform Terrain & Environment
       th_terrain: '/assets/treasure-hunters/Palm Tree Island/Sprites/Terrain/Terrain (32x32).png',
       th_palm_back: '/assets/treasure-hunters/Palm Tree Island/Sprites/Back Palm Trees/Back Palm Tree Left 01.png',
@@ -435,8 +469,8 @@ export class SpriteManager {
       wc_plant_big: '/assets/warped-files/warped-files/Assets/PNG/environment/props/plant-big.png',
       wc_plant_small: '/assets/warped-files/warped-files/Assets/PNG/environment/props/plant-small.png',
 
-      // 27. Green Portal Animated Sprite Sheet (512x192, 8 frames x 3 rows, 64x64 per frame)
-      green_portal: '/assets/green-portal.png',
+      // 27. Green Portal Animated Sprite Sheet (256x128, 4 frames x 2 rows, 64x64 per frame)
+      green_portal: '/assets/portal/new_portal.png',
 
       // 28. Gothicvania Swamp (Poison Marsh Biome)
       swamp_bg: '/assets/swamp/background.png',
@@ -2068,12 +2102,15 @@ export class SpriteManager {
 
     // --- 2. Animated Green Portal Sprite ---
     if (portalImg && portalImg.complete && portalImg.naturalWidth > 0) {
-      const cols = 8;
-      const rows = 3;
+      const cols = 4;
+      const rows = 2;
+      const totalFrames = 7;
       const frameW = portalImg.naturalWidth / cols;   // 64
       const frameH = portalImg.naturalHeight / rows;  // 64
-      const row = 0; // idle loop row
-      const frameIndex = Math.floor(this.animTimer * 10) % cols;
+      
+      const frameIndex = Math.floor(this.animTimer * 10) % totalFrames;
+      const col = frameIndex % cols;
+      const row = Math.floor(frameIndex / cols);
 
       const scale = 3.0; // Scale up from 64px to ~192px
       const destW = frameW * scale;
@@ -2083,7 +2120,7 @@ export class SpriteManager {
       ctx.shadowBlur = 20;
       ctx.drawImage(
         portalImg,
-        frameIndex * frameW,
+        col * frameW,
         row * frameH,
         frameW,
         frameH,

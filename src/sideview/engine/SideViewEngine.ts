@@ -866,38 +866,69 @@ export class SideViewEngine {
       this.particles.triggerScreenShake(18, 0.65);
     }
 
-    // Trigger visual effects
-    if (skill.vfx === 'slash') {
-      this.particles.addSpellSlash(centerX, centerY - 15, p.facing, 1.5, p.characterClass.accentColor);
-      this.particles.addSlashVFX(centerX, centerY - 15, p.facing, p.characterClass.accentColor, skill.aoeRadius + 30);
-    } else if (skill.vfx === 'whirlwind') {
-      this.particles.addFireSpin(centerX, centerY - 20, 1.6);
-    } else if (skill.vfx === 'blade_dash') {
-      this.particles.addSpellSlash(centerX, centerY - 15, p.facing, 1.8, '#ffffff');
-      this.particles.addImpactBurst(p.x, p.y - 15, 12, p.characterClass.accentColor, 'trail');
-    } else if (skill.vfx === 'ground_slam') {
-      this.particles.triggerScreenShake(12, 0.4);
-      this.particles.addGroundExplosion(centerX, this.groundY - 40, 1.8);
-      this.particles.addFireLine(centerX, this.groundY - 30, p.facing, 1.5);
-      this.particles.addImpactBurst(centerX, this.groundY, 30, '#ff5722', 'spark');
-    } else if (skill.vfx === 'frost_nova') {
-      this.particles.addFreezingEffect(centerX, centerY - 10, 1.6);
-      this.particles.addImpactBurst(centerX, centerY - 10, 30, '#80deea', 'ice');
-    } else if (skill.vfx === 'lightning') {
-      this.particles.addThunderBolt(centerX, centerY - 45, 1.7);
-      this.particles.addImpactBurst(centerX, centerY - 10, 25, '#fff59d', 'electric');
-    } else if (skill.vfx === 'holy_light') {
-      this.particles.addHolyCrystal(centerX, centerY - 25, 1.5);
-      this.particles.addHolyPillar(centerX, this.groundY);
-      this.particles.addImpactBurst(centerX, centerY - 10, 25, '#ffd54f', 'holy');
-    } else if (skill.vfx === 'shield') {
-      this.particles.addMagicBarrier(p.x, p.y - 30, 1.4);
-      this.particles.addHolyPillar(p.x, this.groundY);
-    } else if (skill.vfx === 'dark_burst') {
-      this.particles.addDarkPillar(centerX, this.groundY);
-      this.particles.addImpactBurst(centerX, centerY - 10, 30, '#ba68c8', 'dark');
-    } else {
-      this.particles.addSpellSlash(centerX, centerY - 15, p.facing, 1.4, p.characterClass.accentColor);
+    // Trigger unique sprite-based visual effects for each skill
+    switch (skill.id) {
+      // Warrior
+      case 'w_1': this.particles.playVfxSprite(centerX, centerY - 15, 'warrior_vfx1', p.facing, 1.8); break;
+      case 'w_2': this.particles.playVfxSprite(centerX, centerY - 20, 'warrior_vfx2', p.facing, 1.6); break;
+      case 'w_3': this.particles.playVfxSprite(centerX, this.groundY - 40, 'warrior_vfx3', p.facing, 2.0); break;
+      case 'w_4': this.particles.playVfxSprite(centerX, centerY - 20, 'warrior_vfx4', p.facing, 1.8); break;
+      case 'w_5': this.particles.playVfxSprite(centerX, centerY - 15, 'warrior_vfx5', p.facing, 2.0); break;
+      // Assassin
+      case 'as_1': this.particles.playVfxSprite(centerX, centerY - 15, 'vfx_weaponhit', p.facing, 1.6); break;
+      case 'as_2': this.particles.playVfxSprite(centerX, centerY - 15, 'vfx_phantom', p.facing, 1.5); break;
+      case 'as_3': this.particles.playVfxSprite(centerX, centerY - 20, 'vfx_dark1', p.facing, 2.2); break;
+      case 'as_4': this.particles.playVfxSprite(centerX, centerY - 15, 'pipo_mapeffect021', p.facing, 1.8); break;
+      case 'as_5': this.particles.playVfxSprite(centerX, centerY - 15, 'vfx_dark2', p.facing, 1.8); break;
+      // Mage
+      case 'm_1': this.particles.playVfxSprite(centerX, centerY - 15, 'pipo_mapeffect024', p.facing, 1.6); break;
+      case 'm_2': this.particles.playVfxSprite(centerX, centerY - 10, 'vfx_freezing', p.facing, 2.2); break;
+      case 'm_3': this.particles.playVfxSprite(centerX, centerY - 45, 'mp9_lightning', p.facing, 2.0); break;
+      case 'm_4': this.particles.playVfxSprite(centerX, centerY - 30, 'pipo_nazoobj01a', p.facing, 2.0); break;
+      case 'm_5': this.particles.playVfxSprite(centerX, centerY - 40, 'fx_ice_burst', p.facing, 2.4); break;
+      // Archer
+      case 'ar_1': this.particles.playVfxSprite(centerX, centerY - 15, 'vfx_weaponhit', p.facing, 1.5); break;
+      case 'ar_2': this.particles.playVfxSprite(centerX, centerY - 15, 'fx_energy_impact', p.facing, 1.8); break;
+      case 'ar_3': this.particles.playVfxSprite(centerX, centerY - 20, 'vfx_slash_circle', p.facing, 1.6); break;
+      case 'ar_4': this.particles.playVfxSprite(centerX, centerY - 15, 'vfx_bolt', p.facing, 1.5); break;
+      case 'ar_5': this.particles.playVfxSprite(centerX, centerY - 20, 'pipo_mapeffect022', p.facing, 2.0); break;
+      // Paladin
+      case 'p_1': this.particles.playVfxSprite(centerX, centerY - 15, 'vfx_slash_circle', p.facing, 1.7); break;
+      case 'p_2': this.particles.playVfxSprite(centerX, centerY - 20, 'holy_spell_00', p.facing, 2.0); break;
+      case 'p_3': this.particles.playVfxSprite(centerX, centerY - 30, 'pipo_nazoobj03a', p.facing, 2.0); break;
+      case 'p_4': this.particles.playVfxSprite(centerX, centerY - 20, 'mp9_spark', p.facing, 1.8); break;
+      case 'p_5': this.particles.playVfxSprite(centerX, centerY - 25, 'holy_spell_01', p.facing, 2.2); break;
+      // Necromancer
+      case 'n_1': this.particles.playVfxSprite(centerX, centerY - 15, 'mp9_darkbolt', p.facing, 1.8); break;
+      case 'n_2': this.particles.playVfxSprite(centerX, centerY - 20, 'vfx_magicspell', p.facing, 1.8); break;
+      case 'n_4': this.particles.playVfxSprite(centerX, centerY - 25, 'pipo_nazoobj04b', p.facing, 2.0); break;
+      case 'n_5': this.particles.playVfxSprite(centerX, centerY - 15, 'vfx_dark2', p.facing, 2.2); break;
+      // Berserker
+      case 'b_1': this.particles.playVfxSprite(centerX, centerY - 15, 'fx_hit_slash', p.facing, 2.0); break;
+      case 'b_2': this.particles.playVfxSprite(centerX, centerY - 20, 'pipo_mapeffect025', p.facing, 2.2); break;
+      case 'b_3': this.particles.playVfxSprite(centerX, centerY - 15, 'vfx_slash_circle', p.facing, 2.2); break;
+      case 'b_4': this.particles.playVfxSprite(centerX, centerY - 20, 'vfx_flamelash', p.facing, 2.0); break;
+      case 'b_5': this.particles.playVfxSprite(centerX, this.groundY - 30, 'mp9_firebomb', p.facing, 2.4); break;
+      // Dragoon
+      case 'd_1': this.particles.playVfxSprite(centerX, centerY - 15, 'vfx_weaponhit', p.facing, 1.8); break;
+      case 'd_2': this.particles.playVfxSprite(centerX, centerY - 15, 'fx_energy_impact', p.facing, 2.0); break;
+      case 'd_4': this.particles.playVfxSprite(centerX, centerY - 20, 'vfx_flamelash', p.facing, 1.8); break;
+      case 'd_5': this.particles.playVfxSprite(centerX, centerY - 20, 'pipo_mapeffect023', p.facing, 2.0); break;
+      // Priest
+      case 'pr_1': this.particles.playVfxSprite(centerX, centerY - 15, 'holy_spell_00', p.facing, 1.5); break;
+      case 'pr_2': this.particles.playVfxSprite(centerX, centerY - 20, 'pipo_nazoobj02a', p.facing, 2.0); break;
+      case 'pr_3': this.particles.playVfxSprite(centerX, centerY - 20, 'pipo_nazoobj05c', p.facing, 2.2); break;
+      case 'pr_4': this.particles.playVfxSprite(centerX, centerY - 20, 'vfx_magicspell', p.facing, 1.8); break;
+      case 'pr_5': this.particles.playVfxSprite(centerX, centerY - 30, 'holy_spell_01', p.facing, 2.5); break;
+      // Nightborne
+      case 'ni_1': this.particles.playVfxSprite(centerX, centerY - 15, 'vfx_dark1', p.facing, 1.8); break;
+      case 'ni_3': this.particles.playVfxSprite(centerX, centerY - 20, 'vfx_dark2', p.facing, 2.0); break;
+      case 'ni_4': this.particles.playVfxSprite(centerX, centerY - 15, 'pipo_nazoobj05a', p.facing, 2.2); break;
+      case 'ni_5': this.particles.playVfxSprite(centerX, centerY - 20, 'pipo_nazoobj05b', p.facing, 2.5); break;
+      // Fallback
+      default:
+        this.particles.playVfxSprite(centerX, centerY - 15, 'vfx_magicspell', p.facing, 1.5);
+        break;
     }
 
     let hitAny = false;
@@ -933,6 +964,11 @@ export class SideViewEngine {
     audio.playHit(isCrit);
     this.particles.addFloatingText(enemy.x, enemy.y - enemy.height / 2, `${finalDamage}`, isCrit ? '#ffd54f' : '#ffffff', isCrit);
     this.particles.addImpactBurst(enemy.x, enemy.y, isCrit ? 18 : 8, '#e53935', 'spark');
+
+    // Custom Hit VFX for Warrior
+    if (this.player && this.player.characterClass.id === 'warrior') {
+      this.particles.playVfxSprite(enemy.x, enemy.y, 'warrior_vfx1', 1, 1.2);
+    }
 
     if (enemy.hp <= 0 && !enemy.isDead) {
       this.onEnemyDefeated(enemy);

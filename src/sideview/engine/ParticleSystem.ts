@@ -416,18 +416,9 @@ export class ParticleSystem {
     for (let i = 0; i < cuts; i++) {
       setTimeout(() => {
         const t = safeTargets[i % safeTargets.length];
-        const offsetAngle = Math.random() * Math.PI * 2;
-        const len = 90 + Math.random() * 60;
-        this.omnislashLines.push({
-          id: `omni_${Date.now()}_${i}`,
-          x1: t.x - Math.cos(offsetAngle) * len,
-          y1: t.y - Math.sin(offsetAngle) * len,
-          x2: t.x + Math.cos(offsetAngle) * len,
-          y2: t.y + Math.sin(offsetAngle) * len,
-          color: i % 3 === 0 ? '#ef4444' : (i % 3 === 1 ? '#38bdf8' : '#ffffff'),
-          life: 0,
-          maxLife: 0.6
-        });
+        
+        // Replace hardcoded lines with slash sprites
+        this.playVfxSprite(t.x, t.y - 15, 'vfx_slash_circle', i % 2 === 0 ? 1 : -1, 2.0);
         this.addSpellSlash(t.x, t.y - 15, i % 2 === 0 ? 1 : -1, 2.2, '#ef4444');
         this.addImpactBurst(t.x, t.y - 15, 12, '#ef4444', 'spark');
       }, i * 35);
@@ -811,35 +802,72 @@ export class ParticleSystem {
 
   public addChainLightning(chainPoints: { x: number; y: number }[]) {
     if (chainPoints.length < 2) return;
-    const arcPoints: { x: number; y: number }[] = [];
-
-    for (let i = 0; i < chainPoints.length - 1; i++) {
-      const p1 = chainPoints[i];
-      const p2 = chainPoints[i + 1];
-      arcPoints.push(p1);
-
-      const dx = p2.x - p1.x;
-      const dy = p2.y - p1.y;
-      const mid1 = { x: p1.x + dx * 0.33 + (Math.random() * 24 - 12), y: p1.y + dy * 0.33 + (Math.random() * 24 - 12) };
-      const mid2 = { x: p1.x + dx * 0.66 + (Math.random() * 24 - 12), y: p1.y + dy * 0.66 + (Math.random() * 24 - 12) };
-      arcPoints.push(mid1, mid2);
-    }
-    arcPoints.push(chainPoints[chainPoints.length - 1]);
-
-    this.chainLightningArcs.push({
-      id: `lightning_${Date.now()}_${Math.random()}`,
-      points: arcPoints,
-      life: 0,
-      maxLife: 0.35,
-      color: '#60a5fa'
-    });
-
+    
+    // Replace hardcoded canvas arcs with lightning sprites!
     chainPoints.forEach(p => {
+      this.playVfxSprite(p.x, p.y - 15, 'fx_thunder', 1, 1.6);
       this.addImpactBurst(p.x, p.y - 15, 10, '#93c5fd', 'electric');
     });
   }
 
   // --- ANIMATION SHEET HELPERS ---
+
+  public playVfxSprite(x: number, y: number, spriteKey: string, facing: number = 1, scale: number = 1.5, tint?: string) {
+    let frameW = 100;
+    let frameH = 100;
+    let totalFrames = 8;
+    let cols = 8;
+    let fps = 18;
+    let isVertical = false;
+
+    if (spriteKey.includes('vfx_magicspell') || spriteKey.includes('vfx_ansimuz_explosion') || spriteKey.includes('vfx_phantom')) {
+      frameW = 100; frameH = 100; totalFrames = 8; cols = 8;
+    } else if (spriteKey.includes('vfx_dark')) {
+      frameW = 48; frameH = 64; totalFrames = 16; cols = 16;
+    } else if (spriteKey.includes('vfx_freezing')) {
+      frameW = 100; frameH = 100; totalFrames = 10; cols = 10;
+    } else if (spriteKey.includes('vfx_slash_circle') || spriteKey.includes('vfx_weaponhit')) {
+      frameW = 100; frameH = 100; totalFrames = 5; cols = 5; fps = 24;
+    } else if (spriteKey.includes('vfx_flamelash')) {
+      frameW = 100; frameH = 100; totalFrames = 7; cols = 7;
+    } else if (spriteKey.includes('holy_spell')) {
+      frameW = 32; frameH = 32; totalFrames = 38; cols = 38; scale *= 2;
+    } else if (spriteKey.includes('pipo_mapeffect')) {
+      frameW = 192; frameH = 192; totalFrames = 20; cols = 5; scale *= 1.2;
+    } else if (spriteKey.includes('pipo_nazoobj')) {
+      frameW = 192; frameH = 192; totalFrames = 30; cols = 5; scale *= 1.2;
+    } else if (spriteKey.includes('warrior_vfx')) {
+      frameW = 128; frameH = 128; cols = 2; scale *= 1.5;
+      totalFrames = (spriteKey === 'warrior_vfx4' || spriteKey === 'warrior_vfx5') ? 8 : 10;
+    } else if (spriteKey.includes('mp9_')) {
+      isVertical = false; cols = 0; // Strip
+      if (spriteKey === 'mp9_darkbolt') { frameW = 88; frameH = 88; totalFrames = 8; }
+      else if (spriteKey === 'mp9_firebomb') { frameW = 64; frameH = 64; totalFrames = 14; scale *= 2; }
+      else if (spriteKey === 'mp9_lightning') { frameW = 128; frameH = 128; totalFrames = 5; }
+      else if (spriteKey === 'mp9_spark') { frameW = 32; frameH = 32; totalFrames = 7; scale *= 2; }
+    } else if (spriteKey.includes('fx_')) {
+      frameW = 128; frameH = 128; totalFrames = 7; isVertical = true; cols = 0;
+    }
+
+    this.spellAnimations.push({
+      id: `vfx_${spriteKey}_${Date.now()}_${Math.random()}`,
+      x,
+      y,
+      spriteKey,
+      frameW,
+      frameH,
+      totalFrames,
+      isVertical,
+      cols,
+      scale,
+      currentFrame: 0,
+      fps,
+      timer: 0,
+      facing,
+      tint,
+      isDone: false
+    });
+  }
 
   public addSpellSlash(x: number, y: number, facing: number = 1, scale: number = 1.3, tint?: string) {
     this.spellAnimations.push({
