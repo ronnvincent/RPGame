@@ -151,13 +151,17 @@ io.on('connection', (socket) => {
       socketId: socket.id,
       room: null
     };
-    console.log(`Registered ${data.name} (${data.shortId})`);
+    console.log(`[AUTH] Registered ${data.name} (${data.shortId}) on socket ${socket.id}`);
   });
 
   // Create Lobby
   socket.on('create_lobby', (data) => {
+    console.log(`[LOBBY] create_lobby requested by socket ${socket.id}`);
     const p = players[socket.id];
-    if (!p) return;
+    if (!p) {
+       console.error(`[LOBBY] ERROR: Player not found for socket ${socket.id} during create_lobby!`);
+       return;
+    }
 
     const newRoomId = `room_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
     rooms[newRoomId] = {
@@ -179,8 +183,13 @@ io.on('connection', (socket) => {
 
   // Send Invite
   socket.on('send_invite', (data, callback) => {
+    console.log(`[INVITE] send_invite requested by socket ${socket.id} for target ${data.targetShortId}`);
     const p = players[socket.id];
-    if (!p || !p.room) return;
+    if (!p || !p.room) {
+       console.error(`[INVITE] ERROR: Player or room not found for socket ${socket.id}`);
+       if (callback) callback({ success: false, msg: 'You are not in a lobby!' });
+       return;
+    }
 
     const room = rooms[p.room];
     if (!room) return;
@@ -281,7 +290,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    console.log(`User disconnected: ${socket.id}`);
+    console.log(`[AUTH] User disconnected: ${socket.id}`);
     const p = players[socket.id];
     if (p) {
       if (p.room) {
