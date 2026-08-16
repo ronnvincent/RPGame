@@ -58,21 +58,17 @@ export class CharacterSelectUI {
   public render() {
     this.container.innerHTML = `
       <style>
-        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Outfit:wght@400;600;800&family=Teko:wght@400;600&display=swap');
-        
         #char-select-screen {
           position: fixed;
           inset: 0;
-          color: #f8fafc;
-          font-family: 'Outfit', sans-serif;
           z-index: 1000;
           background: #000;
+          color: #f8fafc;
+          font-family: 'Outfit', sans-serif;
           user-select: none;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          padding: 2vh 4vw;
-          box-sizing: border-box;
+          -webkit-user-select: none;
+          -webkit-touch-callout: none;
+          overflow: hidden;
         }
 
         #bg-canvas {
@@ -83,404 +79,251 @@ export class CharacterSelectUI {
           z-index: 0;
           pointer-events: none;
           image-rendering: pixelated;
-          filter: blur(8px) brightness(0.5) hue-rotate(30deg);
+          filter: blur(4px) brightness(0.5);
           transform: scale(1.1);
         }
         
         .main-layout {
-          position: relative;
+          position: absolute;
+          inset: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
           z-index: 2;
+          display: flex;
+          gap: 20px;
+        }
+
+        /* Mobile / Portrait Mode */
+        @media (max-width: 800px), (orientation: portrait) {
+          .main-layout {
+            flex-direction: column;
+            gap: 10px;
+          }
+          .showcase-area {
+            height: 40vh !important;
+            flex: none !important;
+          }
+          .details-area {
+            flex: 1;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch;
+          }
+        }
+
+        .showcase-area {
+          flex: 1;
+          position: relative;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-image: url('/assets/kenney-rpg-ui/panel_brown.png') 16 fill;
+          border-style: solid;
+          border-width: 16px;
+          image-rendering: pixelated;
+          box-shadow: 0 10px 20px rgba(0,0,0,0.8);
+        }
+
+        #hero-showcase-canvas {
           width: 100%;
           height: 100%;
-          max-width: 1200px;
-          max-height: 850px;
-          display: grid;
-          grid-template-columns: 1fr 400px;
-          gap: 30px;
-          border: 2px solid rgba(212, 175, 55, 0.4);
-          background: rgba(10, 5, 15, 0.6);
-          backdrop-filter: blur(12px);
-          border-radius: 16px;
-          padding: 30px;
-          box-shadow: inset 0 0 50px rgba(0,0,0,0.8), 0 20px 50px rgba(0,0,0,0.8);
-          box-sizing: border-box;
+          image-rendering: pixelated;
+          cursor: pointer;
+          filter: drop-shadow(0 15px 20px rgba(0,0,0,0.8));
+          z-index: 2;
         }
 
-        /* LEFT PANEL: Hero Showcase with Arrows */
-        .showcase-panel {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: space-between;
-          position: relative;
-          background: radial-gradient(circle at center, rgba(30, 20, 50, 0.4) 0%, transparent 70%);
-          border-radius: 16px;
-          padding: 20px;
-        }
-        
-        .title-banner {
-          width: 100%;
-          text-align: center;
-          margin-bottom: 20px;
-        }
-        
-        .select-title {
-          font-family: 'Cinzel', serif;
-          font-size: clamp(24px, 4vw, 38px);
-          font-weight: 900;
-          color: #ffeba1;
-          text-shadow: 0 0 20px rgba(255, 215, 0, 0.8), 2px 2px 0px #4a3000;
-          margin: 0;
-          letter-spacing: 4px;
-        }
-
-        .hero-stage-container {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 30px;
-          width: 100%;
-          flex: 1;
-        }
-
-        .nav-btn {
-          background: rgba(0, 0, 0, 0.6);
-          border: 2px solid rgba(212, 175, 55, 0.5);
-          color: #ffd700;
-          font-size: 32px;
-          font-family: 'Cinzel', serif;
-          width: 60px;
-          height: 60px;
-          border-radius: 50%;
+        .cycle-btn {
+          position: absolute;
+          top: 50%;
+          transform: translateY(-50%);
+          width: 50px;
+          height: 50px;
+          border-image: url('/assets/kenney-rpg-ui/buttonSquare_brown.png') 10 fill;
+          border-style: solid;
+          border-width: 10px;
+          background: transparent;
           cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
-          transition: all 0.2s;
-          box-shadow: 0 0 15px rgba(212, 175, 55, 0.2);
-        }
-        
-        .nav-btn:hover {
-          transform: scale(1.1);
-          background: rgba(212, 175, 55, 0.2);
-          box-shadow: 0 0 25px rgba(212, 175, 55, 0.5);
-        }
-        
-        .nav-btn:active { transform: scale(0.95); }
-
-        .hero-platform {
-          position: relative;
-          width: 180px;
-          height: 180px;
-          background: rgba(0, 0, 0, 0.5);
-          border: 3px solid rgba(212, 175, 55, 0.6);
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          box-shadow: 0 0 50px rgba(212, 175, 55, 0.4);
-        }
-
-        #hero-showcase-canvas { 
-          width: 200px; 
-          height: 200px; 
-          image-rendering: pixelated; 
-          cursor: pointer;
-          transition: transform 0.1s;
-        }
-        #hero-showcase-canvas:active { transform: scale(0.95); }
-
-        .hero-name-plate {
-          text-align: center;
-          margin-top: 10px;
-        }
-
-        .hero-name-plate h2 {
-          font-family: 'Cinzel', serif;
-          font-size: 48px;
-          margin: 0;
-          text-shadow: 0 4px 10px rgba(0, 0, 0, 0.9);
-        }
-
-        .hero-name-plate h3 {
-          font-family: 'Outfit', sans-serif;
-          font-size: 16px;
-          margin: 5px 0 0 0;
-          letter-spacing: 4px;
-          text-transform: uppercase;
-        }
-        
-        .role-badge {
-          display: inline-block;
-          font-size: 12px;
-          font-weight: 800;
-          padding: 4px 12px;
-          border-radius: 6px;
-          margin-top: 10px;
-          text-transform: uppercase;
-          border: 1px solid rgba(255, 255, 255, 0.3);
-          background: rgba(0, 0, 0, 0.5);
-        }
-
-        .lore-box {
-          font-style: italic;
-          color: #cbd5e1;
-          font-size: 14px;
-          line-height: 1.6;
-          text-align: center;
-          margin-top: 20px;
-          max-width: 85%;
-          text-shadow: 0 1px 3px #000;
-        }
-        
-        .enter-btn-wrap {
-          width: 100%;
-          display: flex;
-          justify-content: center;
-          padding-top: 30px;
-        }
-
-        .enter-btn {
-          background: url('/assets/gui/PNG/buttonLong_brown.png') center/100% 100%;
           color: #fff;
-          font-family: 'Cinzel', serif;
           font-weight: 900;
           font-size: 24px;
-          padding: 20px 60px;
-          border: none;
-          cursor: pointer;
-          transition: all 0.2s;
-          text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
-          letter-spacing: 2px;
-          filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.8));
+          z-index: 10;
+        }
+        .cycle-btn:active { filter: brightness(0.8); transform: translateY(-46%); }
+        #prev-char-btn { left: 5px; }
+        #next-char-btn { right: 5px; }
+
+        .class-badge {
+          position: absolute;
+          top: 10px;
+          left: 50%;
+          transform: translateX(-50%);
+          border-image: url('/assets/kenney-rpg-ui/panelInset_brown.png') 10 fill;
+          border-style: solid;
+          border-width: 10px;
+          font-family: 'Cinzel', serif;
+          font-size: 22px;
+          font-weight: 900;
+          color: #facc15;
+          text-shadow: 2px 2px 0 #000;
+          z-index: 5;
+          padding: 0 20px;
         }
 
-        .enter-btn:hover {
-          filter: drop-shadow(0 0 25px rgba(255, 215, 0, 0.8)) brightness(1.2);
-          transform: translateY(-2px);
-        }
-        .enter-btn:active {
-          background: url('/assets/gui/PNG/buttonLong_brown_pressed.png') center/100% 100%;
-          transform: translateY(2px);
-        }
-
-        /* RIGHT PANEL: Stats & Skills */
-        .info-panel {
+        .details-area {
+          width: 100%;
+          max-width: 450px;
           display: flex;
           flex-direction: column;
           gap: 15px;
-          background: rgba(0, 0, 0, 0.4);
-          border-radius: 12px;
-          padding: 15px;
-          border: 1px solid rgba(255,255,255,0.05);
+          border-image: url('/assets/kenney-rpg-ui/panel_brown.png') 16 fill;
+          border-style: solid;
+          border-width: 16px;
+          image-rendering: pixelated;
+          box-shadow: 0 10px 20px rgba(0,0,0,0.8);
           overflow-y: auto;
-          scrollbar-width: thin;
-          scrollbar-color: #d4af37 transparent;
+          -webkit-overflow-scrolling: touch;
+          padding-right: 5px; /* Scrollbar breathing room */
         }
 
-        .stats-box {
+        /* Scrollbar Styling for Details Area */
+        .details-area::-webkit-scrollbar { width: 8px; }
+        .details-area::-webkit-scrollbar-track { background: rgba(0,0,0,0.5); border-radius: 4px; }
+        .details-area::-webkit-scrollbar-thumb { background: #8b5a2b; border-radius: 4px; border: 1px solid #3e2723; }
+
+        .info-header h2 { margin: 0; font-family: 'Cinzel', serif; font-size: 28px; color: #facc15; text-shadow: 2px 2px 0 #000; text-align: center; }
+        .info-header p { margin: 10px 0 0; font-size: 15px; color: #cbd5e1; line-height: 1.5; text-align: justify; }
+
+        .stats-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 10px;
-          background: rgba(20, 15, 30, 0.8);
-          padding: 15px;
-          border-radius: 10px;
-          border: 1px solid rgba(212, 175, 55, 0.3);
-          flex-shrink: 0;
         }
-
-        .stat-row {
-          display: flex;
-          justify-content: space-between;
-          font-size: 11px;
-          letter-spacing: 1px;
-          text-transform: uppercase;
-          color: #94a3b8;
-          align-items: center;
-        }
-
-        .stat-row span:last-child {
-          font-family: 'Teko', sans-serif;
-          font-size: 18px;
-          font-weight: 600;
-        }
-
-        .skills-header {
-          font-family: 'Cinzel', serif;
-          color: #d4af37;
-          font-size: 18px;
-          letter-spacing: 2px;
-          margin-top: 5px;
-          border-bottom: 1px solid rgba(212, 175, 55, 0.3);
-          padding-bottom: 5px;
-          flex-shrink: 0;
-        }
-
-        .skills-list {
+        .stat-box {
+          border-image: url('/assets/kenney-rpg-ui/panelInset_brown.png') 10 fill;
+          border-style: solid;
+          border-width: 10px;
           display: flex;
           flex-direction: column;
+          align-items: center;
+          padding: 5px 0;
+        }
+        .stat-val { font-family: 'Teko', sans-serif; font-size: 26px; font-weight: 600; line-height: 1; text-shadow: 1px 1px 0 #000; }
+        .stat-label { font-size: 11px; color: #94a3b8; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+        
+        .skills-grid {
+          display: grid;
+          grid-template-columns: 1fr;
           gap: 10px;
         }
-
-        .skill-item {
-          background: rgba(30, 20, 40, 0.7);
-          border-radius: 8px;
-          padding: 10px;
+        .skill-card {
+          border-image: url('/assets/kenney-rpg-ui/panelInset_brown.png') 10 fill;
+          border-style: solid;
+          border-width: 10px;
           display: flex;
           gap: 12px;
           align-items: center;
-          border: 1px solid rgba(255, 255, 255, 0.05);
         }
-
         .skill-icon-wrap {
-          width: 44px;
-          height: 44px;
-          background: url('/assets/gui/PNG/buttonSquare_brown.png') center/100% 100%;
+          width: 48px;
+          height: 48px;
+          border-image: url('/assets/kenney-rpg-ui/buttonSquare_brown.png') 10 fill;
+          border-style: solid;
+          border-width: 10px;
           display: flex;
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
-          position: relative;
         }
-        
-        .skill-icon-wrap img { width: 26px; height: 26px; image-rendering: pixelated; }
-        
-        .skill-key {
-          position: absolute;
-          bottom: -4px;
-          right: -4px;
-          background: #d4af37;
-          color: #000;
+        .skill-info { flex: 1; min-width: 0; }
+        .skill-name { font-size: 15px; font-weight: 900; color: #facc15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 1px 1px 0 #000; }
+        .skill-desc { font-size: 12px; color: #cbd5e1; line-height: 1.3; margin-top: 4px; }
+
+        #start-game-btn {
+          margin-top: 10px;
+          width: 100%;
+          min-height: 60px;
+          border-image: url('/assets/kenney-rpg-ui/buttonLong_brown.png') 10 fill;
+          border-style: solid;
+          border-width: 10px;
+          background: transparent;
+          color: #fff;
+          font-family: 'Cinzel', serif;
+          font-size: 22px;
           font-weight: 900;
-          font-size: 10px;
-          padding: 1px 5px;
-          border-radius: 4px;
+          text-shadow: 2px 2px 0px rgba(0,0,0,0.8);
+          cursor: pointer;
+          transition: transform 0.1s;
         }
+        #start-game-btn:active { transform: scale(0.96); filter: brightness(0.8); }
 
-        .skill-info { flex: 1; }
-
-        .skill-name {
-          font-family: 'Outfit', sans-serif;
-          font-weight: 800;
-          font-size: 14px;
-          margin-bottom: 3px;
+        #char-select-fs-btn {
+          position: absolute;
+          top: max(10px, env(safe-area-inset-top));
+          right: max(10px, env(safe-area-inset-right));
+          width: 50px;
+          height: 50px;
+          border-image: url('/assets/kenney-rpg-ui/buttonSquare_brown.png') 10 fill;
+          border-style: solid;
+          border-width: 10px;
+          background: transparent;
+          cursor: pointer;
           display: flex;
-          justify-content: space-between;
-        }
-
-        .skill-cd { color: #38bdf8; font-size: 11px; }
-
-        .skill-desc { color: #94a3b8; font-size: 11px; line-height: 1.4; }
-
-        /* MOBILE RESPONSIVENESS */
-        @media (max-width: 950px) {
-          .main-layout {
-            grid-template-columns: 1fr;
-            grid-template-rows: auto 1fr;
-            padding: 15px;
-            gap: 20px;
-            height: 100%;
-            overflow-y: auto;
-            overflow-x: hidden;
-            display: flex;
-            flex-direction: column;
-          }
-          
-          .hero-stage-container { gap: 15px; }
-          .nav-btn { width: 45px; height: 45px; font-size: 24px; }
-          .hero-platform { width: 140px; height: 140px; }
-          #hero-showcase-canvas { width: 160px; height: 160px; }
-          
-          .info-panel { overflow: visible; flex: none; }
-          .stats-box { grid-template-columns: 1fr 1fr 1fr; }
-          
-          .enter-btn-wrap {
-            position: sticky;
-            bottom: 0;
-            background: linear-gradient(0deg, rgba(0,0,0,0.95) 40%, transparent 100%);
-            padding: 30px 0 10px 0;
-            z-index: 100;
-          }
-          .enter-btn { padding: 15px 40px; font-size: 18px; width: 100%; max-width: 350px;}
-        }
-        @media (max-width: 500px) {
-           .stats-box { grid-template-columns: 1fr 1fr; }
-           .hero-name-plate h2 { font-size: 32px; }
-           .nav-btn { position: absolute; z-index: 10; }
-           #prev-char-btn { left: 0; }
-           #next-char-btn { right: 0; }
+          align-items: center;
+          justify-content: center;
+          z-index: 100;
+          color: #fff;
+          font-weight: bold;
         }
       </style>
 
       <canvas id="bg-canvas"></canvas>
+      <button id="char-select-fs-btn" title="Toggle Fullscreen">FS</button>
+      
       <div class="main-layout">
-        
-        <div style="position: absolute; right: 10px; top: 10px; z-index: 100;">
-          <button id="char-select-fs-btn" style="background: url('/assets/gui/PNG/buttonSquare_brown.png') center/100% 100%; border: none; padding: 10px; color: #fff; cursor: pointer; font-family: 'Outfit'; font-weight: bold; font-size: 10px;">[ ] FS</button>
+        <!-- Left: Stage & Character Showcase -->
+        <div class="showcase-area">
+          <div class="class-badge">${this.selectedClass.name}</div>
+          <button class="cycle-btn" id="prev-char-btn">&lt;</button>
+          <canvas id="hero-showcase-canvas"></canvas>
+          <button class="cycle-btn" id="next-char-btn">&gt;</button>
         </div>
 
-        <!-- LEFT PANEL: SHOWCASE WITH ARROWS -->
-        <div class="showcase-panel">
-          <div class="title-banner">
-            <h1 class="select-title">CHOOSE YOUR CHAMPION</h1>
+        <!-- Right: Details, Stats, Skills -->
+        <div class="details-area">
+          <div class="info-header">
+            <h2>${this.selectedClass.name}</h2>
+            <p>${this.selectedClass.description}</p>
           </div>
-          
-          <div class="hero-stage-container">
-            <button class="nav-btn" id="prev-char-btn">&#10094;</button>
-            
-            <div class="hero-platform">
-              <canvas id="hero-showcase-canvas" width="128" height="128"></canvas>
-            </div>
-            
-            <button class="nav-btn" id="next-char-btn">&#10095;</button>
-          </div>
-          
-          <div class="hero-name-plate">
-            <h2 style="color: ${this.selectedClass.accentColor}">${this.selectedClass.name}</h2>
-            <div class="role-badge" style="color: ${this.selectedClass.themeColor}; border-color: ${this.selectedClass.themeColor};">${this.selectedClass.role}</div>
-          </div>
-          
-          <div class="lore-box">${this.selectedClass.description}</div>
-          
-          <div class="enter-btn-wrap">
-            <button class="enter-btn" id="start-game-btn">ENTER BATTLE</button>
-          </div>
-        </div>
 
-        <!-- RIGHT PANEL: INFO -->
-        <div class="info-panel" id="class-detail">
-          <div class="stats-box">
-            <div class="stat-row"><span>HP:</span><span style="color:#ef4444">${this.selectedClass.stats.maxHp}</span></div>
-            <div class="stat-row"><span>Energy:</span><span style="color:#3b82f6">Infinite</span></div>
-            <div class="stat-row"><span>ATK:</span><span style="color:#f97316">${this.selectedClass.stats.atk}</span></div>
-            <div class="stat-row"><span>DEF:</span><span style="color:#c084fc">${this.selectedClass.stats.def}</span></div>
-            <div class="stat-row"><span>CRIT:</span><span style="color:#ffd700">${Math.round(this.selectedClass.stats.critChance * 100)}%</span></div>
-            <div class="stat-row"><span>SPD:</span><span style="color:#2dd4bf">${this.selectedClass.stats.speed}</span></div>
+          <div class="stats-grid">
+            <div class="stat-box"><span class="stat-val" style="color: #ef4444;">${this.selectedClass.stats.maxHp}</span><span class="stat-label">Max HP</span></div>
+            <div class="stat-box"><span class="stat-val" style="color: #3b82f6;">${this.selectedClass.stats.maxMp}</span><span class="stat-label">Max MP</span></div>
+            <div class="stat-box"><span class="stat-val" style="color: #f97316;">${this.selectedClass.stats.atk}</span><span class="stat-label">Attack</span></div>
+            <div class="stat-box"><span class="stat-val" style="color: #8b5cf6;">${this.selectedClass.stats.def}</span><span class="stat-label">Defense</span></div>
+            <div class="stat-box"><span class="stat-val" style="color: #22c55e;">${this.selectedClass.stats.speed}</span><span class="stat-label">Speed</span></div>
+            <div class="stat-box"><span class="stat-val" style="color: #eab308;">${this.selectedClass.stats.critChance * 100}%</span><span class="stat-label">Crit Rate</span></div>
           </div>
-          
-          <div class="skills-header">UNIQUE SKILLS</div>
-          <div class="skills-list">
+
+          <div style="font-family: 'Cinzel', serif; font-size: 18px; color: #facc15; border-bottom: 2px solid #5a4031; padding-bottom: 4px; margin-top: 10px;">Class Skills</div>
+          <div class="skills-grid">
             ${this.selectedClass.skills.map((s, idx) => `
-              <div class="skill-item">
+              <div class="skill-card">
                 <div class="skill-icon-wrap">
-                  <img src="${this.getSkillIcon(s, this.selectedClass.id, idx)}" />
-                  <span class="skill-key">${s.key}</span>
+                  <img src="${this.getSkillIcon(s, this.selectedClass.id, idx)}" width="32" height="32" style="image-rendering: pixelated;" />
                 </div>
                 <div class="skill-info">
-                  <div class="skill-name">
-                    <span style="color: ${s.isUltimate ? '#ffd700' : '#f8fafc'}">${s.name} ${s.isUltimate ? '★' : ''}</span>
-                    <span class="skill-cd">CD: ${s.cooldown}s</span>
-                  </div>
+                  <div class="skill-name">${s.name}</div>
                   <div class="skill-desc">${s.description}</div>
                 </div>
               </div>
             `).join('')}
           </div>
-        </div>
 
+          <button id="start-game-btn">BEGIN JOURNEY</button>
+        </div>
       </div>
     `;
-
     this.attachEvents();
   }
 
