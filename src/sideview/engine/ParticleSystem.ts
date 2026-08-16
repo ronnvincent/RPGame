@@ -1907,59 +1907,51 @@ export class ParticleSystem {
         ctx.rotate(proj.rotation);
       }
 
-      if (proj.type === 'arrow') {
-        const arrowImg = sprites.getImage('arrow_proj');
-        if (arrowImg && arrowImg.complete) {
+      const frame = Math.floor(proj.life * 24) % 25 + 1; // 24 FPS, 25 frames
+
+      if (proj.type === 'arrow' || proj.type === 'dagger' || proj.type === 'kunai' || proj.type === 'shuriken') {
+        const img = sprites.getImage(`sanju_pure_${frame}`);
+        if (this.isDrawableImage(img)) {
           if (proj.vx < 0 && proj.rotation === undefined) ctx.scale(-1, 1);
-          ctx.drawImage(arrowImg, -16, -16, 32, 32);
-        } else {
-          ctx.fillStyle = proj.color;
-          ctx.fillRect(-14, -2, 28, 4);
+          ctx.filter = `drop-shadow(0 0 8px #facc15)`; // Yellow glow for physical projectiles
+          ctx.drawImage(img, -24, -24, 48, 48);
+          ctx.filter = 'none';
         }
-      } else if (proj.type === 'dagger' || proj.type === 'kunai' || proj.type === 'shuriken') {
-        const slashImg = sprites.getImage('vfx_slash_circle');
-        if (slashImg && slashImg.complete) {
-          ctx.drawImage(slashImg, -14, -14, 28, 28);
-        } else {
-          ctx.fillStyle = '#f8fafc';
-          ctx.fillRect(-10, -2, 20, 4);
-        }
-      } else if (proj.type === 'fireball') {
-        const fireImg = sprites.getImage('vfx_brightfire');
-        if (fireImg && fireImg.complete) {
-          const frame = Math.floor(proj.life * 14) % 8;
-          ctx.shadowColor = '#ff5722';
-          ctx.shadowBlur = 14;
-          ctx.drawImage(fireImg, frame * 100, 0, 100, 100, -24, -24, 48, 48);
-        } else {
-          ctx.fillStyle = proj.color;
-          ctx.fillRect(-12, -12, 24, 24);
-        }
-      } else if (proj.type === 'meteor') {
-        const fireImg = sprites.getImage('vfx_brightfire');
-        if (fireImg && fireImg.complete) {
-          const frame = Math.floor(proj.life * 12) % 8;
-          ctx.shadowColor = '#ff3d00';
-          ctx.shadowBlur = 24;
-          ctx.drawImage(fireImg, frame * 100, 0, 100, 100, -proj.radius, -proj.radius, proj.radius * 2, proj.radius * 2);
-        } else {
-          ctx.fillStyle = '#d84315';
-          ctx.fillRect(-proj.radius, -proj.radius, proj.radius * 2, proj.radius * 2);
+      } else if (proj.type === 'fireball' || proj.type === 'meteor') {
+        const img = sprites.getImage(`sanju_pure_${frame}`);
+        if (this.isDrawableImage(img)) {
+          ctx.filter = `drop-shadow(0 0 12px #ef4444) hue-rotate(320deg)`; // Red/Orange tint for fire
+          const size = proj.type === 'meteor' ? proj.radius * 2 : 56;
+          ctx.drawImage(img, -size/2, -size/2, size, size);
+          ctx.filter = 'none';
         }
       } else if (proj.type === 'dark_skull') {
-        const darkImg = sprites.getImage('vfx_dark1');
-        if (darkImg && darkImg.complete) {
-          const frame = Math.floor(proj.life * 12) % 16;
-          ctx.shadowColor = '#a855f7';
-          ctx.shadowBlur = 14;
-          ctx.drawImage(darkImg, frame * 40, 0, 40, 32, -20, -16, 40, 32);
-        } else {
-          ctx.fillStyle = '#a855f7';
-          ctx.fillRect(-12, -12, 24, 24);
+        const img = sprites.getImage(`sanju_blood_${frame}`);
+        if (this.isDrawableImage(img)) {
+          ctx.filter = `drop-shadow(0 0 12px #7e22ce) hue-rotate(260deg)`; // Dark purple/blood tint
+          ctx.drawImage(img, -32, -32, 64, 64);
+          ctx.filter = 'none';
+        }
+      } else if (proj.type === 'ice_shard') {
+        const img = sprites.getImage(`sanju_water_${frame}`);
+        if (this.isDrawableImage(img)) {
+          ctx.filter = `drop-shadow(0 0 10px #38bdf8)`; // Cyan glow for ice
+          ctx.drawImage(img, -28, -28, 56, 56);
+          ctx.filter = 'none';
+        }
+      } else if (proj.type === 'lightning_orb' || proj.type === 'energy_ball') {
+        const img = sprites.getImage(`sanju_pure_${frame}`);
+        if (this.isDrawableImage(img)) {
+          ctx.filter = `drop-shadow(0 0 12px #3b82f6) hue-rotate(200deg)`; // Blue tint for lightning/energy
+          ctx.drawImage(img, -32, -32, 64, 64);
+          ctx.filter = 'none';
         }
       } else {
-        ctx.fillStyle = proj.color;
-        ctx.fillRect(-proj.radius, -proj.radius, proj.radius * 2, proj.radius * 2);
+        // Fallback for anything else
+        const img = sprites.getImage(`sanju_pure_${frame}`);
+        if (this.isDrawableImage(img)) {
+          ctx.drawImage(img, -24, -24, 48, 48);
+        }
       }
 
       ctx.restore();

@@ -560,6 +560,34 @@ export class SpriteManager {
       this.addImage(`sanju_2d_sparks_${i}`, `/assets/sanju_vfx/special2d/sparks_effect/sparks_effect_${numStr}.png`);
     }
 
+    // Preload Sanju's Normal VFX Packs
+    // Blood Magic (25 frames)
+    for (let i = 1; i <= 25; i++) {
+      const numStr = i < 10 ? `0${i}` : `${i}`;
+      this.addImage(`sanju_blood_${i}`, `/assets/sanju_normals/blood/Blood-Magic-Effect_${numStr}.png`);
+    }
+
+    // Pure Projectile (25 frames)
+    for (let i = 1; i <= 25; i++) {
+      const numStr = i < 10 ? `0${i}` : `${i}`;
+      this.addImage(`sanju_pure_${i}`, `/assets/sanju_normals/projectile/Files/Pure_${numStr}.png`);
+    }
+
+    // Water Effect (25 frames)
+    for (let i = 1; i <= 25; i++) {
+      const folder = Math.ceil(i / 5);
+      const folderStr = folder < 10 ? `0${folder}` : `${folder}`;
+      const frameInFolder = ((i - 1) % 5) + 1;
+      const frameStr = frameInFolder < 10 ? `0${frameInFolder}` : `${frameInFolder}`;
+      this.addImage(`sanju_water_${i}`, `/assets/sanju_normals/water/${folderStr}/Water__${frameStr}.png`);
+    }
+
+    // Nature Magic (4 effects)
+    for (let i = 1; i <= 5; i++) this.addImage(`sanju_nature_0_${i}`, `/assets/sanju_normals/nature/0-${i}.png`);
+    for (let i = 1; i <= 7; i++) this.addImage(`sanju_nature_1_${i}`, `/assets/sanju_normals/nature/1-${i}.png`);
+    for (let i = 1; i <= 7; i++) this.addImage(`sanju_nature_2_${i}`, `/assets/sanju_normals/nature/2-${i}.png`);
+    for (let i = 1; i <= 5; i++) this.addImage(`sanju_nature_3_${i}`, `/assets/sanju_normals/nature/3-${i}.png`);
+
     // Preload Reaper Attack, Spell, Cast, Idle, and Walk frames (Clean paths)
     for (let i = 1; i <= 10; i++) {
       this.addImage(`reaper_atk_${i}`, `/assets/reaper/sprites/Attack/Bringer-of-Death_Attack_${i}.png`);

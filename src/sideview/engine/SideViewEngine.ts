@@ -873,65 +873,65 @@ export class SideViewEngine {
     // Trigger unique sprite-based visual effects for each skill
     switch (skill.id) {
       // Warrior
-      case 'w_1': this.particles.playVfxSprite(centerX, centerY - 15, 'warrior_vfx1', p.facing, 1.8); break;
-      case 'w_2': this.particles.playVfxSprite(centerX, centerY - 20, 'warrior_vfx2', p.facing, 1.6); break;
-      case 'w_3': this.particles.playVfxSprite(centerX, this.groundY - 40, 'warrior_vfx3', p.facing, 2.0); break;
-      case 'w_4': this.particles.playVfxSprite(centerX, centerY - 20, 'warrior_vfx4', p.facing, 1.8); break;
-      case 'w_5': this.particles.playVfxSprite(centerX, centerY - 15, 'warrior_vfx5', p.facing, 2.0); break;
+      case 'w_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_pure', 25, 24, 1.5, '#ef4444'); break;
+      case 'w_2': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_pure', 25, 24, 1.6, '#f97316'); break;
+      case 'w_3': this.particles.playSanjuVfx(centerX, this.groundY - 40, 'sanju_earth', 25, 24, 1.8); break;
+      case 'w_4': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_blood', 25, 24, 1.5); break;
+      case 'w_5': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_pure', 25, 24, 2.0, '#ef4444'); break;
       // Assassin
-      case 'as_1': this.particles.playVfxSprite(centerX, centerY - 15, 'pipo_nazoobj01b', p.facing, 1.6); break;
-      case 'as_2': this.particles.playVfxSprite(centerX, centerY - 15, 'vfx_phantom', p.facing, 1.5); break;
-      case 'as_3': this.particles.playVfxSprite(centerX, centerY - 20, 'pipo_nazoobj03b', p.facing, 2.2); break;
-      case 'as_4': this.particles.playVfxSprite(centerX, centerY - 15, 'pipo_mapeffect021', p.facing, 1.8); break;
-      case 'as_5': this.particles.playVfxSprite(centerX, centerY - 15, 'pipo_nazoobj03c', p.facing, 1.8); break;
+      case 'as_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_blood', 25, 24, 1.4); break;
+      case 'as_2': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_cosmic', 25, 24, 1.6, '#a855f7'); break;
+      case 'as_3': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_blood', 25, 24, 1.8); break;
+      case 'as_4': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_pure', 25, 24, 1.5, '#10b981'); break;
+      case 'as_5': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_blood', 25, 24, 2.0); break;
       // Mage
-      case 'm_1': this.particles.playVfxSprite(centerX, centerY - 15, 'pipo_mapeffect024', p.facing, 1.6); break;
-      case 'm_2': this.particles.playVfxSprite(centerX, centerY - 10, 'vfx_freezing', p.facing, 2.2); break;
-      case 'm_3': this.particles.playVfxSprite(centerX, centerY - 45, 'mp9_lightning', p.facing, 2.0); break;
-      case 'm_4': this.particles.playVfxSprite(centerX, centerY - 30, 'pipo_nazoobj01a', p.facing, 2.0); break;
-      case 'm_5': this.particles.playVfxSprite(centerX, centerY - 40, 'fx_ice_burst', p.facing, 2.4); break;
+      case 'm_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_pure', 25, 24, 1.5, '#3b82f6'); break;
+      case 'm_2': this.particles.playSanjuVfx(centerX, centerY - 10, 'sanju_water', 25, 24, 1.8); break;
+      case 'm_3': this.particles.playSanjuVfx(centerX, centerY - 45, 'sanju_2d_sparks', 12, 24, 2.0); break;
+      case 'm_4': this.particles.playSanjuVfx(centerX, centerY - 30, 'sanju_pure', 25, 24, 1.8, '#ef4444'); break;
+      case 'm_5': this.particles.playSanjuVfx(centerX, centerY - 40, 'sanju_water', 25, 24, 2.2); break;
       // Archer
-      case 'ar_1': this.particles.playVfxSprite(centerX, centerY - 15, 'pipo_nazoobj01c', p.facing, 1.5); break;
-      case 'ar_2': this.particles.playVfxSprite(centerX, centerY - 15, 'pipo_nazoobj02b', p.facing, 1.8); break;
-      case 'ar_3': this.particles.playVfxSprite(centerX, centerY - 20, 'pipo_nazoobj02c', p.facing, 1.6); break;
-      case 'ar_4': this.particles.playVfxSprite(centerX, centerY - 15, 'vfx_bolt', p.facing, 1.5); break;
-      case 'ar_5': this.particles.playVfxSprite(centerX, centerY - 20, 'pipo_mapeffect022', p.facing, 2.0); break;
+      case 'ar_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_nature_0', 5, 12, 1.5); break;
+      case 'ar_2': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_nature_1', 7, 12, 1.8); break;
+      case 'ar_3': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_nature_2', 7, 12, 1.6); break;
+      case 'ar_4': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_pure', 25, 24, 1.5, '#10b981'); break;
+      case 'ar_5': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_nature_3', 5, 12, 2.0); break;
       // Paladin
-      case 'p_1': this.particles.playVfxSprite(centerX, centerY - 15, 'pipo_nazoobj04a', p.facing, 1.7); break;
-      case 'p_2': this.particles.playVfxSprite(centerX, centerY - 20, 'pipo_nazoobj04c', p.facing, 2.0); break;
-      case 'p_3': this.particles.playVfxSprite(centerX, centerY - 30, 'pipo_nazoobj03a', p.facing, 2.0); break;
-      case 'p_4': this.particles.playVfxSprite(centerX, centerY - 20, 'mp9_spark', p.facing, 1.8); break;
-      case 'p_5': this.particles.playVfxSprite(centerX, centerY - 25, 'holy_spell_01', p.facing, 2.2); break;
+      case 'p_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_light', 25, 24, 1.5); break;
+      case 'p_2': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_light', 25, 24, 1.8); break;
+      case 'p_3': this.particles.playSanjuVfx(centerX, centerY - 30, 'sanju_light', 25, 24, 2.0); break;
+      case 'p_4': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_2d_sparks', 12, 24, 1.8, '#facc15'); break;
+      case 'p_5': this.particles.playSanjuVfx(centerX, centerY - 25, 'sanju_light', 25, 24, 2.2); break;
       // Necromancer
-      case 'n_1': this.particles.playVfxSprite(centerX, centerY - 15, 'mp9_darkbolt', p.facing, 1.8); break;
-      case 'n_2': this.particles.playVfxSprite(centerX, centerY - 20, 'pipo_nazoobj02c', p.facing, 1.8); break;
-      case 'n_4': this.particles.playVfxSprite(centerX, centerY - 25, 'pipo_nazoobj04b', p.facing, 2.0); break;
-      case 'n_5': this.particles.playVfxSprite(centerX, centerY - 15, 'pipo_nazoobj03c', p.facing, 2.2); break;
+      case 'n_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_blood', 25, 24, 1.5); break;
+      case 'n_2': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_blood', 25, 24, 1.8); break;
+      case 'n_4': this.particles.playSanjuVfx(centerX, centerY - 25, 'sanju_blood', 25, 24, 2.0); break;
+      case 'n_5': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_blood', 25, 24, 2.2); break;
       // Berserker
-      case 'b_1': this.particles.playVfxSprite(centerX, centerY - 15, 'fx_hit_slash', p.facing, 2.0); break;
-      case 'b_2': this.particles.playVfxSprite(centerX, centerY - 20, 'pipo_mapeffect025', p.facing, 2.2); break;
-      case 'b_3': this.particles.playVfxSprite(centerX, centerY - 15, 'pipo_nazoobj01a', p.facing, 2.2); break;
-      case 'b_4': this.particles.playVfxSprite(centerX, centerY - 20, 'pipo_nazoobj01b', p.facing, 2.0); break;
-      case 'b_5': this.particles.playVfxSprite(centerX, this.groundY - 30, 'mp9_firebomb', p.facing, 2.4); break;
+      case 'b_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_blood', 25, 24, 1.8); break;
+      case 'b_2': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_fire', 25, 24, 2.0); break;
+      case 'b_3': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_blood', 25, 24, 2.2); break;
+      case 'b_4': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_fire', 25, 24, 2.0); break;
+      case 'b_5': this.particles.playSanjuVfx(centerX, this.groundY - 30, 'sanju_fire', 25, 24, 2.4); break;
       // Dragoon
-      case 'd_1': this.particles.playVfxSprite(centerX, centerY - 15, 'pipo_nazoobj03b', p.facing, 1.8); break;
-      case 'd_2': this.particles.playVfxSprite(centerX, centerY - 15, 'fx_energy_impact', p.facing, 2.0); break;
-      case 'd_4': this.particles.playVfxSprite(centerX, centerY - 20, 'vfx_flamelash', p.facing, 1.8); break;
-      case 'd_5': this.particles.playVfxSprite(centerX, centerY - 20, 'pipo_mapeffect023', p.facing, 2.0); break;
+      case 'd_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_fire', 25, 24, 1.6); break;
+      case 'd_2': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_pure', 25, 24, 1.8, '#f97316'); break;
+      case 'd_4': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_fire', 25, 24, 1.8); break;
+      case 'd_5': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_fire', 25, 24, 2.0); break;
       // Priest
-      case 'pr_1': this.particles.playVfxSprite(centerX, centerY - 15, 'holy_spell_00', p.facing, 1.5); break;
-      case 'pr_2': this.particles.playVfxSprite(centerX, centerY - 20, 'pipo_nazoobj02a', p.facing, 2.0); break;
-      case 'pr_3': this.particles.playVfxSprite(centerX, centerY - 20, 'pipo_nazoobj05c', p.facing, 2.2); break;
-      case 'pr_4': this.particles.playVfxSprite(centerX, centerY - 20, 'vfx_magicspell', p.facing, 1.8); break;
-      case 'pr_5': this.particles.playVfxSprite(centerX, centerY - 30, 'holy_spell_01', p.facing, 2.5); break;
+      case 'pr_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_light', 25, 24, 1.5); break;
+      case 'pr_2': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_nature_1', 7, 12, 1.8); break;
+      case 'pr_3': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_nature_2', 7, 12, 2.0); break;
+      case 'pr_4': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_light', 25, 24, 1.8); break;
+      case 'pr_5': this.particles.playSanjuVfx(centerX, centerY - 30, 'sanju_light', 25, 24, 2.2); break;
       // Nightborne
-      case 'ni_1': this.particles.playVfxSprite(centerX, centerY - 15, 'pipo_nazoobj04a', p.facing, 1.8); break;
-      case 'ni_3': this.particles.playVfxSprite(centerX, centerY - 20, 'pipo_nazoobj04c', p.facing, 2.0); break;
-      case 'ni_4': this.particles.playVfxSprite(centerX, centerY - 15, 'pipo_nazoobj05a', p.facing, 2.2); break;
-      case 'ni_5': this.particles.playVfxSprite(centerX, centerY - 20, 'pipo_nazoobj05b', p.facing, 2.5); break;
+      case 'ni_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_cosmic', 25, 24, 1.5); break;
+      case 'ni_3': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_pure', 25, 24, 1.8, '#a855f7'); break;
+      case 'ni_4': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_cosmic', 25, 24, 2.0); break;
+      case 'ni_5': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_cosmic', 25, 24, 2.2); break;
       // Fallback
       default:
-        this.particles.playVfxSprite(centerX, centerY - 15, 'vfx_magicspell', p.facing, 1.5);
+        this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_pure', 25, 24, 1.5);
         break;
     }
 
