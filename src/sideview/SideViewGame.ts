@@ -301,7 +301,7 @@ export class SideViewGame {
     const activeNpc = this.townHub.getActiveNpc();
     if (activeNpc) {
       this.townHub.interactWithNpc(activeNpc, this.engine, this.dialogue, () => {
-        this.worldMap?.open();
+        this.worldMap?.open(this.engine?.player.maxDungeonCleared || 0);
       });
     }
   }
@@ -332,7 +332,7 @@ export class SideViewGame {
 
       // World Map toggle: KeyM
       if (e.code === 'KeyM') {
-        this.worldMap?.open();
+        this.worldMap?.open(this.engine?.player.maxDungeonCleared || 0);
       }
 
       // Return to Town: KeyT
@@ -408,7 +408,7 @@ export class SideViewGame {
 
           // Auto-open WorldMap when player enters portal zone
           if (this.engine.isPlayerNearPortal && !wasNear && !this.dialogue?.isOpen) {
-            this.worldMap?.open();
+            this.worldMap?.open(this.engine?.player.maxDungeonCleared || 0);
           }
           // Auto-close WorldMap when player leaves portal zone
           if (!this.engine.isPlayerNearPortal && wasNear) {

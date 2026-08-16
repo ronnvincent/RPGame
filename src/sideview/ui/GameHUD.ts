@@ -1194,7 +1194,7 @@ export class GameHUD {
     const mapBtn = this.container.querySelector('#toggle-map-btn');
     mapBtn?.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.worldMapUI?.open();
+      this.worldMapUI?.open(this.engine.player.maxDungeonCleared || 0);
     });
 
     // Return to Town button
