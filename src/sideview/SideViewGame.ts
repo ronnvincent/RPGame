@@ -125,6 +125,11 @@ export class SideViewGame {
     
     // Setup Multiplayer Sync Listeners
     import('./network/NetworkManager').then(mod => {
+      mod.network.listenForPlayerSkill((socketId, skillIndex, classId, x, y, facing) => {
+        if (!this.engine) return;
+        this.engine.castRemoteSkill(classId, skillIndex, x, y, facing);
+      });
+
       mod.network.listenForWaveSync((data) => {
         if (!this.engine || this.engine.isHost) return;
         this.currentWaveIndex = data.waveIndex;
@@ -205,7 +210,8 @@ export class SideViewGame {
     if (dungeonIdx !== -1) {
       if (this.engine) {
         const maxCleared = this.engine.player.maxDungeonCleared || 0;
-        if (dungeonIdx > maxCleared) {
+        // Only enforce progression if you are the Host (or playing Solo)
+        if (this.engine.isHost && dungeonIdx > maxCleared) {
           this.engine.particles.addFloatingText(this.engine.player.x, this.engine.player.y - 60, `Clear previous zones first!`, '#ef4444', false, 18);
           return;
         }

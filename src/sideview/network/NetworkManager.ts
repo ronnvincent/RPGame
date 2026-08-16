@@ -115,6 +115,18 @@ export class NetworkManager {
     });
   }
 
+  public sendPlayerSkill(skillIndex: number, classId: string, x: number, y: number, facing: number) {
+    if (!this.socket || !this.room) return;
+    this.socket.emit('player_skill', { skillIndex, classId, x, y, facing });
+  }
+
+  public listenForPlayerSkill(onSkill: (socketId: string, skillIndex: number, classId: string, x: number, y: number, facing: number) => void) {
+    this.socket?.off('remote_player_skill');
+    this.socket?.on('remote_player_skill', (data) => {
+      onSkill(data.socketId, data.skillIndex, data.classId, data.x, data.y, data.facing);
+    });
+  }
+
   public sendPlayerMove(playerState: PlayerState, isAttacking: boolean = false) {
     if (!this.socket || !this.room) return;
     this.socket.emit('player_move', {

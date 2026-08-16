@@ -317,6 +317,16 @@ io.on('connection', (socket) => {
   });
 
   // In-Game Sync Events
+  socket.on('player_skill', (data) => {
+    const p = players[socket.id];
+    if (p && p.room) {
+      socket.to(p.room).emit('remote_player_skill', {
+        socketId: socket.id,
+        ...data
+      });
+    }
+  });
+
   socket.on('player_move', (data) => {
     const p = players[socket.id];
     if (p && p.room) {

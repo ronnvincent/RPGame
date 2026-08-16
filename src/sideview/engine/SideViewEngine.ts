@@ -140,6 +140,7 @@ export class SideViewEngine {
   public isTownMode: boolean = true;
   public isHost: boolean = true;
   private syncTimer: number = 0;
+  private playerSyncTimer: number = 0;
   public townHub: TownHub | null = null;
   public readonly portalX: number = 2560;
   public isPlayerNearPortal: boolean = false;
@@ -494,6 +495,50 @@ export class SideViewEngine {
   /**
    * Cast one of the 6 specialized skills
    */
+  public castRemoteSkill(classId: string, skillIndex: number, startX: number, startY: number, facing: number) {
+    // Replicate VFX without dealing damage (Host handles damage)
+    import('../../data/CharacterClasses').then(mod => {
+      const cls = mod.CHARACTER_CLASSES[classId];
+      if (!cls) return;
+      const skill = cls.skills[skillIndex];
+      if (!skill) return;
+
+      const attackX = startX + (facing * (skill.range * 0.6));
+      const attackY = startY;
+
+      // Play SFX
+      this.playSkillCastSfx(skill);
+
+      // Basic Attack 3-hit combo visual approx
+      if (skillIndex === 0) {
+        this.particles.addSpellSlash(attackX, attackY - 20, facing, 1.4, cls.accentColor);
+        return;
+      }
+
+      // Class specific VFX
+      if (classId === 'ninja') {
+        if (skillIndex === 1) this.particles.addSpellSlash(startX, startY, facing, 1.8, '#94a3b8');
+        if (skillIndex === 2) this.particles.spawnShadowClones(startX, startY, facing, 0); // 0 dmg
+        if (skillIndex === 3) {
+          this.particles.addImpactBurst(startX, startY - 15, 20, '#94a3b8', 'smoke');
+          this.particles.addSpellSlash(startX + facing * 200, startY - 15, facing, 1.4, '#4ade80');
+        }
+        if (skillIndex === 4) this.particles.addFlameLash(startX + facing * 50, startY - 20, facing, 1.8);
+        if (skillIndex === 5) this.particles.triggerCinematicOmnislash([{x: attackX, y: attackY}]);
+      } else if (classId === 'necromancer') {
+        // ... (minimal replication)
+        if (skillIndex === 1) this.particles.addGroundExplosion(attackX, this.groundY, 1.2);
+        if (skillIndex === 3) this.particles.addGroundExplosion(attackX, this.groundY, 1.8);
+        if (skillIndex === 5) this.particles.addGroundExplosion(attackX, this.groundY, 2.5);
+      } else if (classId === 'mage') {
+        this.particles.addGroundExplosion(attackX, this.groundY, 1.5);
+      } else {
+        // generic fallback
+        this.particles.addSpellSlash(attackX, attackY, facing, 1.5, cls.accentColor);
+      }
+    });
+  }
+
   public castSkill(skillIndex: number) {
     const p = this.player;
     const skill: SkillDefinition = p.characterClass.skills[skillIndex];
@@ -514,6 +559,11 @@ export class SideViewEngine {
     p.skillCooldowns[skill.id] = skill.cooldown;
     p.attackTimer = skill.cooldown === 0 ? 0.22 : 0.45;
     p.animState = 'attack';
+
+    // Broadcast skill to network
+    import('../network/NetworkManager').then(mod => {
+      mod.network.sendPlayerSkill(skillIndex, p.characterClass.id, p.x, p.y, p.facing);
+    });
 
     // Play SFX
     this.playSkillCastSfx(skill);
@@ -1302,6 +1352,15 @@ export class SideViewEngine {
     this.particles.update(dt);
     this.checkProjectileCollisions();
     this.checkSpecialSkillEntities(dt);
+
+    // 10. Sync Player Position over Network (20 times a second)
+    this.playerSyncTimer -= dt;
+    if (this.playerSyncTimer <= 0) {
+      this.playerSyncTimer = 0.05;
+      import('../network/NetworkManager').then(mod => {
+        mod.network.sendPlayerMove(this.player, this.player.attackTimer > 0);
+      });
+    }
   }
 
   private checkSpecialSkillEntities(dt: number) {
