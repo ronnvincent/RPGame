@@ -106,7 +106,7 @@ export class SideViewGame {
       this.engine.loadSaveData(saveData);
     } else {
       // Auto-save initial character creation
-      SaveManager.saveGame(this.engine.player, this.engine.inventory, this.engine.maxDungeonCleared);
+      SaveManager.saveGame(this.engine.player, this.engine.player.inventory, this.engine.player.maxDungeonCleared);
     }
     this.engine.arenaHeight = this.canvas.height;
 

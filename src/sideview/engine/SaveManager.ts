@@ -49,12 +49,12 @@ export class SaveManager {
         lastUpdated: Date.now()
       };
 
+      const uuid = localStorage.getItem('playerUUID');
       // 1. Save locally
       await db.put('saveData', saveData, uuid || 'slot1');
       console.log('Game saved locally.');
 
       // 2. Sync to cloud
-      const uuid = localStorage.getItem('playerUUID');
       if (uuid) {
         const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
         const API_URL = isLocal ? 'http://localhost:3001/api' : 'https://rpgame-production-3453.up.railway.app/api';
