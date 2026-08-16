@@ -58,6 +58,8 @@ export class CharacterSelectUI {
   public render() {
     this.container.innerHTML = `
       <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Outfit:wght@400;600;800&family=Teko:wght@400;600&display=swap');
+        
         #char-select-screen {
           position: fixed;
           inset: 0;
@@ -65,18 +67,17 @@ export class CharacterSelectUI {
           flex-direction: column;
           align-items: center;
           justify-content: space-between;
-          padding: 12px 18px;
+          padding: 20px 30px;
           box-sizing: border-box;
           color: #f8fafc;
-          font-family: 'Cinzel', 'Outfit', 'Inter', -apple-system, sans-serif;
+          font-family: 'Outfit', sans-serif;
           z-index: 1000;
           overflow-y: auto;
           overflow-x: hidden;
           user-select: none;
-          background: #08060c;
+          background: radial-gradient(circle at center, rgba(15, 10, 25, 0.4) 0%, rgba(5, 3, 10, 0.95) 100%);
         }
 
-        /* Live Parallax Background Canvas */
         #bg-canvas {
           position: fixed;
           inset: 0;
@@ -85,14 +86,8 @@ export class CharacterSelectUI {
           z-index: 0;
           pointer-events: none;
           image-rendering: pixelated;
-        }
-
-        .vignette-overlay {
-          position: fixed;
-          inset: 0;
-          background: radial-gradient(circle at center, rgba(10, 8, 18, 0.35) 0%, rgba(3, 2, 6, 0.88) 100%);
-          pointer-events: none;
-          z-index: 1;
+          filter: blur(8px) brightness(0.7) hue-rotate(30deg);
+          transform: scale(1.1);
         }
 
         .select-content-wrapper {
@@ -103,120 +98,119 @@ export class CharacterSelectUI {
           align-items: center;
           width: 100%;
           height: 100%;
-          max-width: 1080px;
-          gap: 10px;
+          max-width: 1100px;
+          gap: 15px;
         }
 
-        /* Tiny Wonder Ornate Header Plaque */
         .title-banner {
           text-align: center;
-          background: linear-gradient(180deg, #241608 0%, #110903 100%);
-          border: 3px solid #d4af37;
-          border-radius: 8px;
-          padding: 8px 36px;
-          box-shadow: 0 0 22px rgba(212, 175, 55, 0.45), inset 0 0 15px rgba(0, 0, 0, 0.9), 0 5px 0 #080401;
+          background: rgba(10, 5, 15, 0.7);
+          backdrop-filter: blur(12px);
+          border-top: 2px solid rgba(212, 175, 55, 0.8);
+          border-bottom: 2px solid rgba(212, 175, 55, 0.8);
+          padding: 12px 60px;
+          box-shadow: 0 0 40px rgba(212, 175, 55, 0.2), inset 0 0 20px rgba(0, 0, 0, 0.8);
           position: relative;
+          overflow: hidden;
         }
 
-        .title-banner::before, .title-banner::after {
-          content: '◆';
+        .title-banner::before {
+          content: '';
           position: absolute;
-          top: 50%;
-          transform: translateY(-50%);
-          color: #f59e0b;
-          font-size: 15px;
-          text-shadow: 0 0 10px #f59e0b;
+          inset: 0;
+          background: linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.1), transparent);
+          animation: shine 3s infinite;
         }
-        .title-banner::before { left: 12px; }
-        .title-banner::after { right: 12px; }
+
+        @keyframes shine {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
 
         .select-title {
-          font-size: 23px;
+          font-family: 'Cinzel', serif;
+          font-size: 32px;
           font-weight: 900;
-          color: #ffd700;
-          text-shadow: 2px 2px 0 #3d1e03, -1px -1px 0 #78350f, 0 0 12px rgba(251, 191, 36, 0.85);
+          color: #ffeba1;
+          text-shadow: 0 0 15px rgba(255, 215, 0, 0.6), 2px 2px 0px #4a3000;
           margin: 0;
-          letter-spacing: 3px;
-          text-transform: uppercase;
-        }
-
-        .select-subtitle {
-          color: #e2e8f0;
-          font-size: 11px;
-          font-weight: 600;
-          margin-top: 1px;
-          letter-spacing: 1px;
-          font-family: 'Outfit', sans-serif;
+          letter-spacing: 6px;
         }
 
         .classes-carousel {
           display: flex;
-          gap: 10px;
-          overflow-x: auto;
-          overflow-y: hidden;
-          padding: 20px 16px 28px 16px;
-          margin-top: -4px;
-          margin-bottom: -12px;
+          gap: 12px;
+          padding: 20px;
+          margin-top: -10px;
           max-width: 100%;
-          scrollbar-width: thin;
-          scrollbar-color: #f4b41b #181425;
+          overflow-x: auto;
+          scrollbar-width: none;
+        }
+
+        .classes-carousel::-webkit-scrollbar {
+          display: none;
         }
 
         .class-card {
-          flex: 0 0 90px;
-          background: linear-gradient(180deg, #1e162c 0%, #0d0815 100%);
-          border: 2px solid #3c3250;
-          border-radius: 8px;
-          padding: 6px 4px;
+          flex: 0 0 100px;
+          background: rgba(20, 15, 30, 0.6);
+          backdrop-filter: blur(6px);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 12px;
+          padding: 10px 5px;
           text-align: center;
           cursor: pointer;
-          transition: all 0.16s cubic-bezier(0.4, 0, 0.2, 1);
-          box-shadow: 0 4px 0 #07040b;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
+          transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+          box-shadow: 0 8px 15px rgba(0, 0, 0, 0.5);
           position: relative;
         }
 
         .class-card:hover {
-          transform: translateY(-4px);
-          border-color: #f4b41b;
-          background: linear-gradient(180deg, #2b1f40 0%, #160e22 100%);
-          box-shadow: 0 0 15px rgba(244, 180, 27, 0.5), 0 5px 0 #07040b;
+          transform: translateY(-8px);
+          border-color: rgba(212, 175, 55, 0.6);
+          background: rgba(40, 25, 60, 0.8);
+          box-shadow: 0 15px 25px rgba(212, 175, 55, 0.3);
         }
 
         .class-card.active {
           border-color: #ffd700;
-          background: linear-gradient(180deg, #3d2258 0%, #1c0e2c 100%);
-          box-shadow: 0 0 20px rgba(255, 215, 0, 0.75), inset 0 0 10px rgba(255, 215, 0, 0.25), 0 5px 0 #07040b;
-          transform: translateY(-3px) scale(1.03);
+          background: linear-gradient(180deg, rgba(70, 40, 100, 0.9) 0%, rgba(20, 10, 30, 0.9) 100%);
+          box-shadow: 0 0 30px rgba(255, 215, 0, 0.5), inset 0 0 15px rgba(255, 215, 0, 0.3);
+          transform: translateY(-5px) scale(1.05);
         }
 
-        .class-card.active::after {
-          content: '▼';
+        .class-card.active::before {
+          content: '';
           position: absolute;
-          bottom: -13px;
-          left: 50%;
-          transform: translateX(-50%);
-          color: #ffd700;
-          font-size: 10px;
-          text-shadow: 0 0 6px #f59e0b;
+          inset: -3px;
+          border-radius: 14px;
+          background: linear-gradient(45deg, #ffd700, #ff8c00, #ffd700);
+          z-index: -1;
+          filter: blur(8px);
+          opacity: 0.7;
+          animation: pulseGlow 2s infinite alternate;
         }
 
+        @keyframes pulseGlow {
+          0% { opacity: 0.4; }
+          100% { opacity: 0.8; }
+        }
+        
         .card-sprite-canvas {
           image-rendering: pixelated;
           margin-bottom: 2px;
         }
 
         .class-card-name {
-          font-size: 11px;
-          font-weight: 800;
-          color: #ffffff;
-          margin-top: 2px;
+          font-family: 'Teko', sans-serif;
+          font-size: 18px;
+          letter-spacing: 1px;
+          color: #fff;
+          margin-top: 5px;
         }
 
         .class-card-role {
-          font-size: 8px;
+          font-size: 9px;
           font-weight: 800;
           padding: 2px 6px;
           border-radius: 4px;
@@ -225,203 +219,184 @@ export class CharacterSelectUI {
           border: 1px solid rgba(255, 255, 255, 0.15);
         }
 
-        /* Grand Fantasy Ornate Dialog Frame */
         .class-detail-container {
-          background: linear-gradient(180deg, #1a1226 0%, #0d0815 100%);
-          border: 3px solid #9c7b4f;
-          border-radius: 10px;
-          padding: 14px 18px;
-          box-shadow: 0 0 30px rgba(0, 0, 0, 0.95), inset 0 0 20px rgba(0, 0, 0, 0.85), 0 6px 0 #060309;
+          background: rgba(10, 5, 15, 0.75);
+          backdrop-filter: blur(16px);
+          border: 1px solid rgba(255, 255, 255, 0.15);
+          border-radius: 16px;
+          padding: 24px;
+          box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), inset 0 0 0 1px rgba(212, 175, 55, 0.2);
           display: grid;
-          grid-template-columns: 1.15fr 1.25fr;
-          gap: 18px;
+          grid-template-columns: 1fr 1.3fr;
+          gap: 30px;
           width: 100%;
           flex: 1;
           min-height: 0;
-          box-sizing: border-box;
           position: relative;
         }
 
-        .class-detail-container::before {
-          content: '';
-          position: absolute;
-          inset: 2px;
-          border: 1px solid rgba(212, 175, 55, 0.3);
-          border-radius: 7px;
-          pointer-events: none;
-        }
-
-        /* Left Hero Showcase & Stats */
-        .hero-summary {
+        .left-col {
           display: flex;
           flex-direction: column;
-          gap: 9px;
+          gap: 15px;
         }
 
-        .hero-preview-row {
+        .char-presentation {
+          border-image: url('/assets/gui/PNG/panel_brown.png') 30 stretch;
+          border-style: solid;
+          border-width: 12px;
+          border-radius: 8px;
+          padding: 10px;
           display: flex;
           align-items: center;
-          gap: 14px;
-          background: #0f0a18;
-          border: 2px solid #2d2042;
-          border-radius: 8px;
-          padding: 8px 10px;
-          box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.8);
+          gap: 20px;
+          box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+          min-height: 120px;
+          image-rendering: pixelated;
         }
 
+        .char-display-box {
+          position: relative;
+          width: 80px;
+          height: 80px;
+          background: rgba(0, 0, 0, 0.5);
+          border: 2px solid rgba(212, 175, 55, 0.5);
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
+        }
+        
         #hero-showcase-canvas {
           image-rendering: pixelated;
           cursor: pointer;
-          background: radial-gradient(circle at center, rgba(30, 20, 52, 0.85) 0%, rgba(9, 5, 16, 0.98) 100%);
-          border: 2px solid #4a3568;
-          border-radius: 6px;
-          transition: transform 0.15s ease, border-color 0.15s ease;
-          box-shadow: 0 0 15px rgba(0, 0, 0, 0.8);
+          transition: transform 0.15s ease;
         }
 
         #hero-showcase-canvas:hover {
-          transform: scale(1.04);
-          border-color: #ffd700;
-          box-shadow: 0 0 20px rgba(255, 215, 0, 0.45);
+          transform: scale(1.1);
         }
 
-        .hero-names h2 {
+        .char-info-text h2 {
+          font-family: 'Cinzel', serif;
           margin: 0;
-          font-size: 20px;
-          font-weight: 900;
-          letter-spacing: 1px;
-          text-shadow: 2px 2px 0 #000;
-        }
-
-        .hero-names p {
-          margin: 1px 0 4px 0;
-          font-size: 10.5px;
+          font-size: 26px;
           color: #ffd700;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 1.5px;
+          text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
         }
 
-        .click-hint {
-          font-size: 9px;
-          color: #94a3b8;
-          font-style: italic;
-        }
-
-        .hero-desc {
-          font-size: 11px;
-          line-height: 1.45;
-          color: #e2e8f0;
-          margin: 0;
-          background: rgba(14, 9, 22, 0.75);
-          padding: 8px 12px;
-          border-radius: 6px;
-          border-left: 3px solid #f4b41b;
+        .char-info-text .char-title {
           font-family: 'Outfit', sans-serif;
+          color: #ffeba1;
+          font-size: 13px;
+          text-transform: uppercase;
+          letter-spacing: 2px;
+          margin-top: 4px;
         }
 
-        /* Stats Grid */
-        .stats-grid {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 6px;
-          background: #0f0a18;
-          border: 2px solid #2d2042;
+        .lore-box {
+          font-style: italic;
+          color: #cbd5e1;
+          font-size: 14px;
+          line-height: 1.6;
+          border-left: 3px solid #d4af37;
+          padding-left: 15px;
+          background: linear-gradient(90deg, rgba(212, 175, 55, 0.1), transparent);
+          padding-top: 10px;
+          padding-bottom: 10px;
+        }
+
+        .stats-box {
+          background: rgba(0, 0, 0, 0.4);
           border-radius: 8px;
-          padding: 8px;
+          padding: 15px;
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+          border: 1px solid rgba(255, 255, 255, 0.05);
         }
 
-        .stat-item {
+        .stat-row {
           display: flex;
           justify-content: space-between;
-          font-size: 10.5px;
-          padding: 3px 6px;
-          background: #181026;
-          border-radius: 4px;
-          border: 1px solid #271a3e;
-        }
-
-        .stat-label {
+          font-size: 12px;
+          letter-spacing: 1px;
+          text-transform: uppercase;
           color: #94a3b8;
-          font-weight: 700;
         }
 
-        .stat-val {
-          font-weight: 900;
-          font-family: 'Outfit', sans-serif;
-        }
-
-        /* Right: 6 Skills Section with Kyrise 32x32 Icons */
-        .skills-section {
-          display: flex;
-          flex-direction: column;
-          min-height: 0;
-        }
-        
-        .skills-section h3 {
-          margin: 0 0 8px 0;
-          font-size: 13px;
-          color: #f4b41b;
-          letter-spacing: 1.5px;
-          text-shadow: 1px 1px 0 #000;
-          border-bottom: 2px solid #2d2042;
-          padding-bottom: 4px;
-          flex-shrink: 0;
+        .stat-row span:last-child {
+          color: #fff;
+          font-family: 'Teko', sans-serif;
+          font-size: 16px;
+          font-weight: 600;
+          text-shadow: 0 0 5px rgba(255, 255, 255, 0.4);
         }
 
         .skills-list {
+          overflow-y: auto;
+          padding-right: 10px;
           display: flex;
           flex-direction: column;
-          gap: 6px;
-          flex: 1;
-          overflow-y: auto;
-          padding-right: 6px;
-          min-height: 0;
+          gap: 10px;
+        }
+        
+        .skills-header {
+          font-family: 'Cinzel', serif;
+          color: #d4af37;
+          font-size: 18px;
+          letter-spacing: 2px;
+          margin-bottom: 5px;
+          text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+          border-bottom: 1px solid rgba(212, 175, 55, 0.3);
+          padding-bottom: 5px;
         }
 
         .skill-item {
+          background: rgba(20, 15, 30, 0.8);
+          border-radius: 8px;
+          padding: 12px;
           display: flex;
+          gap: 15px;
           align-items: center;
-          gap: 9px;
-          background: linear-gradient(90deg, #160f24 0%, #0e0918 100%);
-          border: 1px solid #2b1f40;
-          border-radius: 6px;
-          padding: 4px 8px;
-          transition: border-color 0.15s ease, background 0.15s ease;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          transition: transform 0.2s, box-shadow 0.2s;
         }
 
         .skill-item:hover {
-          border-color: #f4b41b;
-          background: linear-gradient(90deg, #221736 0%, #130c20 100%);
+          transform: translateX(5px);
+          border-color: rgba(212, 175, 55, 0.4);
+          box-shadow: -5px 0 15px rgba(212, 175, 55, 0.15);
         }
 
-        .skill-icon-box {
-          width: 32px;
-          height: 32px;
-          background: #090512;
-          border: 2px solid #3c2e54;
-          border-radius: 5px;
+        .skill-icon-wrap {
+          width: 48px;
+          height: 48px;
+          background: url('/assets/gui/PNG/buttonSquare_brown.png') center/100% 100%;
           display: flex;
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
           position: relative;
         }
-
-        .skill-icon-box img {
+        
+        .skill-icon-wrap img {
+          width: 24px;
+          height: 24px;
           image-rendering: pixelated;
         }
-
-        .skill-key-badge {
+        
+        .skill-key {
           position: absolute;
-          bottom: -3px;
-          right: -3px;
-          background: #d97706;
-          color: #fff;
-          font-size: 7.5px;
+          bottom: -5px;
+          right: -5px;
+          background: #d4af37;
+          color: #000;
           font-weight: 900;
-          padding: 1px 3px;
-          border-radius: 2px;
+          font-size: 10px;
+          padding: 2px 5px;
+          border-radius: 3px;
           border: 1px solid #000;
         }
 
@@ -429,244 +404,119 @@ export class CharacterSelectUI {
           flex: 1;
         }
 
-        .skill-name-row {
+        .skill-name {
+          font-family: 'Outfit', sans-serif;
+          font-weight: 800;
+          color: #fff;
+          font-size: 15px;
+          margin-bottom: 2px;
           display: flex;
           justify-content: space-between;
-          align-items: center;
-          font-size: 10.5px;
-          font-weight: 800;
         }
 
-        .skill-meta {
-          font-size: 8.5px;
-          color: #94a3b8;
-          font-family: 'Outfit', sans-serif;
+        .skill-cd {
+          color: #38bdf8;
+          font-size: 12px;
         }
 
         .skill-desc {
-          font-size: 9px;
-          color: #cbd5e1;
-          margin-top: 1px;
-          line-height: 1.3;
-          font-family: 'Outfit', sans-serif;
+          color: #94a3b8;
+          font-size: 12px;
+          line-height: 1.4;
         }
 
-        /* Start Game Button */
-        .start-btn {
-          background: linear-gradient(180deg, #22c55e 0%, #15803d 50%, #14532d 100%);
-          border: 3px solid #86efac;
-          border-radius: 8px;
-          color: #ffffff;
-          font-size: 15px;
-          font-weight: 900;
-          padding: 11px 40px;
-          cursor: pointer;
-          box-shadow: 0 0 25px rgba(34, 197, 94, 0.6), inset 0 2px 0 rgba(255, 255, 255, 0.4), 0 5px 0 #052e16;
-          letter-spacing: 2px;
-          text-transform: uppercase;
-          transition: all 0.15s ease;
+        .enter-btn-wrap {
+          margin-top: 15px;
+          text-align: center;
+          position: relative;
+          z-index: 10;
+        }
+
+        .enter-btn {
+          background: url('/assets/gui/PNG/buttonLong_brown.png') center/100% 100%;
+          color: #fff;
           font-family: 'Cinzel', serif;
-          margin-top: 2px;
+          font-weight: 900;
+          font-size: 22px;
+          padding: 20px 60px;
+          border: none;
+          cursor: pointer;
+          transition: all 0.2s;
+          text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+          letter-spacing: 2px;
+          filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.6));
         }
 
-        .start-btn:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 0 35px rgba(34, 197, 94, 0.9), inset 0 2px 0 rgba(255, 255, 255, 0.6), 0 7px 0 #052e16;
-          background: linear-gradient(180deg, #4ade80 0%, #16a34a 50%, #15803d 100%);
+        .enter-btn:hover {
+          filter: drop-shadow(0 0 25px rgba(255, 215, 0, 0.6)) brightness(1.2);
+          transform: translateY(-2px) scale(1.05);
+        }
+        
+        .enter-btn:active {
+          background: url('/assets/gui/PNG/buttonLong_brown_pressed.png') center/100% 100%;
+          transform: translateY(2px) scale(0.98);
         }
 
-        .start-btn:active {
-          transform: translateY(2px);
-          box-shadow: 0 0 15px rgba(34, 197, 94, 0.4), 0 2px 0 #052e16;
-        }
-
-        /* Mobile Landscape Optimization */
-        @media (max-height: 650px), (max-width: 900px) {
-          #char-select-screen {
-            padding: 4px 8px;
-            justify-content: flex-start;
-            gap: 4px;
-          }
-          .title-banner {
-            padding: 2px 16px;
-          }
-          .select-title {
-            font-size: 14px;
-            letter-spacing: 1.5px;
-          }
-          .select-subtitle {
-            display: none;
-          }
-          .classes-carousel {
-            gap: 4px;
-            padding: 10px 8px 14px 8px;
-            margin-top: -6px;
-            margin-bottom: -6px;
-            max-width: 100%;
-          }
-          .class-card {
-            flex: 0 0 58px;
-            padding: 2px 1px;
-            border-width: 1.5px;
-          }
-          .class-card.active {
-            box-shadow: 0 0 12px rgba(255, 215, 0, 0.75), inset 0 0 6px rgba(255, 215, 0, 0.25), 0 4px 0 #07040b;
-            transform: translateY(-2px) scale(1.02);
-          }
-          .card-sprite-canvas {
-            width: 36px;
-            height: 36px;
-          }
-          .class-card-name {
-            font-size: 8px;
-            margin-top: 1px;
-          }
-          .class-card-role {
-            font-size: 6.5px;
-            padding: 0 3px;
-          }
-          .class-detail-container {
-            padding: 4px 8px;
-            gap: 8px;
-            margin-top: 0;
-          }
-          .hero-preview-row {
-            padding: 4px 6px;
-            gap: 8px;
-          }
-          #hero-showcase-canvas {
-            width: 56px;
-            height: 56px;
-          }
-          .hero-names h2 {
-            font-size: 13px;
-          }
-          .hero-names p {
-            font-size: 8px;
-            margin: 0;
-          }
-          .click-hint {
-            display: none;
-          }
-          .hero-desc {
-            font-size: 8px;
-            line-height: 1.2;
-            padding: 3px 6px;
-            margin: 0;
-          }
-          .stats-grid {
-            grid-template-columns: repeat(3, 1fr);
-            gap: 2px;
-            padding: 4px;
-          }
-          .stat-item {
-            padding: 1px 4px;
-            font-size: 7px;
-          }
-          .skills-section h3 {
-            font-size: 8.5px;
-            margin-bottom: 2px;
-          }
-          .skills-list {
-            gap: 2px;
-            max-height: 80px;
-            overflow-y: auto;
-          }
-          .skill-item {
-            padding: 2px 4px;
-          }
-          .skill-icon-box {
-            width: 24px;
-            height: 24px;
-          }
-          .skill-icon-box img {
-            width: 18px;
-            height: 18px;
-          }
-          .skill-name-row {
-            font-size: 9px;
-          }
-          .skill-meta {
-            font-size: 7.5px;
-          }
-          .skill-desc {
-            display: none;
-          }
-          .start-btn {
-            font-size: 11px;
-            padding: 5px 22px;
-            letter-spacing: 1px;
-            margin-top: 2px;
-          }
-        }
       </style>
 
-      <!-- Live Parallax Background Canvas -->
       <canvas id="bg-canvas"></canvas>
-      <div class="vignette-overlay"></div>
-
       <div class="select-content-wrapper">
-        <!-- Title Banner with Fullscreen Trigger -->
-        <div style="display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; position: relative;">
-          <div class="title-banner">
-            <h1 class="select-title">CHOOSE YOUR CHAMPION</h1>
-            <div class="select-subtitle">Select your battle archetype wielding 6 specialized combat skills</div>
-          </div>
-          <button id="char-select-fs-btn" style="position: absolute; right: 0; top: 50%; transform: translateY(-50%); background: #241608; border: 2px solid #d4af37; color: #ffd700; border-radius: 6px; padding: 4px 8px; font-size: 12px; font-weight: 900; cursor: pointer; display: flex; align-items: center; gap: 4px; box-shadow: 0 0 10px rgba(0,0,0,0.8);" title="Toggle Fullscreen">
-            <span>⛶</span>
-            <span style="font-size: 9px; font-family: 'Cinzel', serif;">FULLSCREEN</span>
-          </button>
+        
+        <div style="position: absolute; right: -10px; top: -10px; z-index: 100;">
+          <button id="char-select-fs-btn" style="background: url('/assets/gui/PNG/buttonSquare_brown.png') center/100% 100%; border:none; padding:10px 15px; color:#fff; cursor:pointer; font-weight:bold; font-family:'Outfit';">FULLSCREEN</button>
         </div>
 
-        <!-- 10 Roles Carousel with Animated Sprite Canvases -->
-        <div class="classes-carousel" id="class-carousel">
+        <div class="title-banner">
+          <h1 class="select-title">CHOOSE YOUR CHAMPION</h1>
+        </div>
+        
+        <div class="classes-carousel" id="classes-carousel">
           ${CHARACTER_CLASSES.map(c => `
             <div class="class-card ${c.id === this.selectedClass.id ? 'active' : ''}" data-class-id="${c.id}">
-              <canvas class="card-sprite-canvas" data-class="${c.id}" width="72" height="72"></canvas>
+              <canvas class="card-sprite-canvas" data-class="${c.id}" width="64" height="64"></canvas>
               <div class="class-card-name">${c.name}</div>
-              <span class="class-card-role" style="background: ${c.themeColor}33; color: ${c.accentColor};">${c.role}</span>
+              <div class="class-card-role" style="color:${c.themeColor}; border-color:${c.themeColor}">${c.role}</div>
             </div>
           `).join('')}
         </div>
 
-        <!-- Selected Class Detail Showcase -->
-        <div class="class-detail-container">
-          <!-- Left: Hero Showcase & Stats -->
-          <div class="hero-summary">
-            <div class="hero-preview-row">
-              <canvas id="hero-showcase-canvas" width="130" height="130" title="Click to test attack!"></canvas>
-              <div class="hero-names">
+        <div class="class-detail-container" id="class-detail">
+          <div class="left-col">
+            <div class="char-presentation">
+              <div class="char-display-box">
+                <canvas id="hero-showcase-canvas" width="128" height="128"></canvas>
+              </div>
+              <div class="char-info-text">
                 <h2 style="color: ${this.selectedClass.accentColor}">${this.selectedClass.name}</h2>
-                <p>${this.selectedClass.title}</p>
-                <div class="click-hint">⚡ Click hero to test combat animation</div>
+                <div class="char-title" style="color: ${this.selectedClass.themeColor}">${this.selectedClass.title}</div>
               </div>
             </div>
-            <p class="hero-desc">${this.selectedClass.description}</p>
-            
-            <div class="stats-grid">
-              <div class="stat-item"><span class="stat-label">Health (HP):</span><span class="stat-val" style="color:#ef4444">${this.selectedClass.stats.maxHp}</span></div>
-              <div class="stat-item"><span class="stat-label">Energy:</span><span class="stat-val" style="color:#38bdf8">∞ Unlimited</span></div>
-              <div class="stat-item"><span class="stat-label">Attack (ATK):</span><span class="stat-val" style="color:#f59e0b">${this.selectedClass.stats.atk}</span></div>
-              <div class="stat-item"><span class="stat-label">Defense (DEF):</span><span class="stat-val" style="color:#c084fc">${this.selectedClass.stats.def}</span></div>
-              <div class="stat-item"><span class="stat-label">Critical Rate:</span><span class="stat-val" style="color:#ffd700">${Math.round(this.selectedClass.stats.critChance * 100)}%</span></div>
-              <div class="stat-item"><span class="stat-label">Speed:</span><span class="stat-val" style="color:#2dd4bf">${this.selectedClass.stats.speed}</span></div>
+            <div class="lore-box">
+              ${this.selectedClass.description}
+            </div>
+            <div class="stats-box">
+              <div class="stat-row"><span>Health (HP):</span><span style="color:#ef4444">${this.selectedClass.stats.hp}</span></div>
+              <div class="stat-row"><span>Energy:</span><span style="color:#3b82f6">Unlimited</span></div>
+              <div class="stat-row"><span>Attack (ATK):</span><span style="color:#f97316">${this.selectedClass.stats.atk}</span></div>
+              <div class="stat-row"><span>Defense (DEF):</span><span style="color:#c084fc">${this.selectedClass.stats.def}</span></div>
+              <div class="stat-row"><span>Critical Rate:</span><span style="color:#ffd700">${Math.round(this.selectedClass.stats.critChance * 100)}%</span></div>
+              <div class="stat-row"><span>Speed:</span><span style="color:#2dd4bf">${this.selectedClass.stats.speed}</span></div>
             </div>
           </div>
-
-          <!-- Right: 6 Skills List with Real Kyrise RPG Icons -->
+          
           <div class="skills-section">
-            <h3>6 UNIQUE CLASS SKILLS</h3>
+            <div class="skills-header">6 UNIQUE CLASS SKILLS</div>
             <div class="skills-list">
               ${this.selectedClass.skills.map((s, idx) => `
                 <div class="skill-item">
-                  <div class="skill-icon-box">
-                    <img src="${this.getSkillIcon(s, this.selectedClass.id, idx)}" width="24" height="24" />
-                    <span class="skill-key-badge">${s.key}</span>
+                  <div class="skill-icon-wrap">
+                    <img src="${this.getSkillIcon(s, this.selectedClass.id, idx)}" />
+                    <span class="skill-key">${s.key}</span>
                   </div>
                   <div class="skill-info">
-                    <div class="skill-name-row">
+                    <div class="skill-name">
                       <span style="color: ${s.isUltimate ? '#ffd700' : '#f8fafc'}">${s.name} ${s.isUltimate ? '★ ULTIMATE' : ''}</span>
-                      <span class="skill-meta" style="color: #38bdf8;">CD: ${s.cooldown}s</span>
+                      <span class="skill-cd">CD: ${s.cooldown}s</span>
                     </div>
                     <div class="skill-desc">${s.description}</div>
                   </div>
@@ -676,8 +526,9 @@ export class CharacterSelectUI {
           </div>
         </div>
 
-        <!-- Start Game Button -->
-        <button class="start-btn" id="start-game-btn">⚔ ENTER DUNGEON BATTLE ⚔</button>
+        <div class="enter-btn-wrap">
+          <button class="enter-btn" id="start-game-btn">ENTER DUNGEON BATTLE</button>
+        </div>
       </div>
     `;
 
