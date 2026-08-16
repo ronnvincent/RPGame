@@ -6,7 +6,7 @@
 
 import { CharacterClass, SkillDefinition, CHARACTER_CLASSES } from '../classes/ClassDefinitions';
 import { BattleTheme, EnemyInstance } from '../dungeons/DungeonManager';
-import { ItemData } from '../items/ItemDatabase';
+import { ItemData, RARITY_CONFIGS } from '../items/ItemDatabase';
 import { ParticleSystem } from './ParticleSystem';
 import { audio } from './AudioManager';
 import { sprites } from './SpriteManager';
@@ -35,6 +35,8 @@ export interface DroppedLoot {
   vy: number;
   isGrounded: boolean;
   bobTimer: number;
+  despawnTimer: number;
+  maxLifetime: number;
 }
 
 export interface Platform {
@@ -410,7 +412,7 @@ export class SideViewEngine {
       assassin: ['dagger', 'poison_shot', 'dark_shot', 'dark_wave', 'dash', 'dark_wave'],
       mage: ['fire_shot', 'ice_shot', 'lightning_chain', 'holy_shield', 'ice_wave', 'fire_burst'],
       paladin: ['holy_cast', 'holy_shield', 'sword_impact', 'holy_wave', 'heal', 'holy_wave'],
-      archer: ['lightning_shot', 'lightning_shot', 'poison_shot', 'fire_shot', 'buff', 'dark_wave'],
+      archer: ['light_slash', 'light_slash', 'poison_shot', 'fire_shot', 'buff', 'dark_wave'],
       necromancer: ['dark_shot', 'poison_shot', 'earth_shock', 'dark_wave', 'dark_wave', 'dark_wave'],
       berserker: ['heavy_slash', 'buff', 'earth_shock', 'sword_impact', 'lightning_shot', 'fire_burst'],
       priest: ['holy_cast', 'heal', 'holy_wave', 'holy_shield', 'holy_wave', 'holy_wave'],
@@ -582,8 +584,8 @@ export class SideViewEngine {
       // ---- 3. MAGE ----
       if (classId === 'mage') {
         if (skillIndex === 0) {
-          this.particles.playSanjuVfx(attackX, attackY - 15, 'sanju_pure', 25, 24, 1.5, '#3b82f6');
-          this.particles.addProjectile(startX + facing * 20, startY - 10, facing * 12, 0, 'fireball', 0, false, true, '#3b82f6', 14, false);
+          this.particles.playSanjuVfx(attackX, attackY - 15, 'sanju_fire', 25, 24, 1.5);
+          this.particles.addProjectile(startX + facing * 20, startY - 10, facing * 12, 0, 'fireball', 0, false, true, '#f97316', 14, false);
         } else if (skillIndex === 1) {
           this.particles.playSanjuVfx(attackX, attackY - 10, 'sanju_water', 25, 24, 1.8);
           this.particles.addFreezingEffect(attackX, startY - 15, 1.6);
@@ -592,7 +594,7 @@ export class SideViewEngine {
           this.particles.playSanjuVfx(attackX, attackY - 45, 'sanju_2d_sparks', 12, 24, 2.0);
           this.particles.addChainLightning([{x: startX, y: startY - 20}, {x: attackX, y: attackY - 15}, {x: attackX + facing * 80, y: attackY - 15}]);
         } else if (skillIndex === 3) {
-          this.particles.playSanjuVfx(startX, startY - 30, 'sanju_pure', 25, 24, 1.8, '#ef4444');
+          this.particles.playSanjuVfx(startX, startY - 30, 'sanju_pure', 25, 24, 1.8, '#38bdf8');
           this.particles.addMagicBarrier(startX, startY - 15, 1.4);
           this.particles.addHolyPillar(startX, startY);
         } else if (skillIndex === 4) {
@@ -1223,10 +1225,10 @@ export class SideViewEngine {
       case 'as_4': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_pure', 25, 24, 1.5, '#10b981'); break;
       case 'as_5': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_blood', 25, 24, 2.0); break;
       // Mage
-      case 'm_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_pure', 25, 24, 1.5, '#3b82f6'); break;
+      case 'm_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_fire', 25, 24, 1.5); break;
       case 'm_2': this.particles.playSanjuVfx(centerX, centerY - 10, 'sanju_water', 25, 24, 1.8); break;
       case 'm_3': this.particles.playSanjuVfx(centerX, centerY - 45, 'sanju_2d_sparks', 12, 24, 2.0); break;
-      case 'm_4': this.particles.playSanjuVfx(centerX, centerY - 30, 'sanju_pure', 25, 24, 1.8, '#ef4444'); break;
+      case 'm_4': this.particles.playSanjuVfx(centerX, centerY - 30, 'sanju_pure', 25, 24, 1.8, '#38bdf8'); break;
       case 'm_5': this.particles.playSanjuVfx(centerX, centerY - 40, 'sanju_water', 25, 24, 2.2); break;
       // Archer
       case 'ar_1': this.particles.playVfxSprite(centerX, centerY - 15, 'aaa_wind_bolt', p.facing, 1.5); break;
@@ -1252,7 +1254,7 @@ export class SideViewEngine {
       case 'b_4': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_fire', 25, 24, 2.0); break;
       case 'b_5': this.particles.playSanjuVfx(centerX, this.groundY - 30, 'sanju_fire', 25, 24, 2.4); break;
       // Dragoon
-      case 'd_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_fire', 25, 24, 1.6); break;
+      case 'd_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_pure', 25, 24, 1.6, '#f97316'); break;
       case 'd_2': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_pure', 25, 24, 1.8, '#f97316'); break;
       case 'd_4': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_fire', 25, 24, 1.8); break;
       case 'd_5': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_fire', 25, 24, 2.0); break;
@@ -1266,7 +1268,7 @@ export class SideViewEngine {
       case 'ni_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_cosmic', 25, 24, 1.5); break;
       case 'ni_3': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_pure', 25, 24, 1.8, '#a855f7'); break;
       case 'ni_4': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_cosmic', 25, 24, 2.0); break;
-      case 'ni_5': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_cosmic', 25, 24, 2.2); break;
+      case 'ni_5': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_2d_sparks', 12, 24, 2.0); break;
       // Fallback
       default:
         this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_pure', 25, 24, 1.5);
@@ -1402,7 +1404,9 @@ export class SideViewEngine {
       vx: (Math.random() - 0.5) * 4,
       vy: -5,
       isGrounded: false,
-      bobTimer: Math.random() * Math.PI * 2
+      bobTimer: Math.random() * Math.PI * 2,
+      despawnTimer: 30,
+      maxLifetime: 30
     });
   }
 
@@ -2102,6 +2106,14 @@ export class SideViewEngine {
     for (let i = this.droppedLoots.length - 1; i >= 0; i--) {
       const loot = this.droppedLoots[i];
       loot.bobTimer += dt * 3;
+      loot.despawnTimer = (loot.despawnTimer !== undefined ? loot.despawnTimer : 30) - dt;
+
+      // Despawn on 30s timeout with smoke puff
+      if (loot.despawnTimer <= 0) {
+        this.particles.addImpactBurst(loot.x, loot.y - 10, 10, '#94a3b8', 'smoke');
+        this.droppedLoots.splice(i, 1);
+        continue;
+      }
 
       if (!loot.isGrounded) {
         loot.vy += this.gravity * 0.8 * dtFrame;
@@ -2122,7 +2134,9 @@ export class SideViewEngine {
         // Collect item into inventory
         p.inventory.push(loot.item);
         audio.playLoot(loot.item.rarity);
-        this.particles.addFloatingText(p.x, p.y - 25, `+ ${loot.item.name}`, loot.item.rarity === 'legendary' ? '#ff9800' : '#4fc3f7', true, 16);
+        const rConfig = RARITY_CONFIGS[loot.item.rarity] || RARITY_CONFIGS.common;
+        this.particles.addFloatingText(p.x, p.y - 25, `+ ${loot.item.name} (${rConfig.name})`, rConfig.color, true, 16);
+        this.particles.addImpactBurst(loot.x, loot.y - 10, 12, rConfig.color, 'spark');
         this.droppedLoots.splice(i, 1);
       }
     }
@@ -2200,13 +2214,28 @@ export class SideViewEngine {
     }
 
     // Equipable items
-    const slot = p.equipment[item.type];
-    if (slot) {
-      p.inventory.push(slot);
+    p.inventory.splice(invIdx, 1);
+    const prevEquipped = p.equipment[item.type as keyof PlayerEquipment];
+    if (prevEquipped) {
+      p.inventory.push(prevEquipped);
     }
-    p.equipment[item.type] = item;
+    p.equipment[item.type as keyof PlayerEquipment] = item;
     this.recomputeStats();
+    this.triggerSave();
     this.particles.addFloatingText(p.x, p.y - 24, `Equipped ${item.name}`, '#22c55e', true, 14);
+    audio.playClick();
+  }
+
+  public unequipItem(slotType: keyof PlayerEquipment) {
+    const p = this.player;
+    const item = p.equipment[slotType];
+    if (!item) return;
+
+    p.equipment[slotType] = undefined;
+    p.inventory.push(item);
+    this.recomputeStats();
+    this.triggerSave();
+    this.particles.addFloatingText(p.x, p.y - 24, `Unequipped ${item.name}`, '#94a3b8', true, 14);
     audio.playClick();
   }
 
@@ -2242,13 +2271,35 @@ export class SideViewEngine {
     // 1.5 Draw Multi-Level Platforms
     sprites.drawPlatforms(ctx, this.platforms, currentTheme);
 
-    // 2. Render Dropped Loot
+    // 2. Render Dropped Loot with Rarity Beacons & Cached Sprites
     for (const loot of this.droppedLoots) {
       const bobY = loot.y + Math.sin(loot.bobTimer) * 4;
-      const glowColor = loot.item.rarity === 'legendary' ? '#ff9800' : loot.item.rarity === 'epic' ? '#ab47bc' : '#29b6f6';
+      const rConfig = RARITY_CONFIGS[loot.item.rarity] || RARITY_CONFIGS.common;
+      const glowColor = rConfig.color;
+
+      ctx.save();
+
+      // Despawn blink when under 5s
+      if (loot.despawnTimer !== undefined && loot.despawnTimer < 5.0) {
+        if (Math.floor(Date.now() / 120) % 2 === 0) {
+          ctx.globalAlpha = 0.35;
+        }
+      }
+
+      // Vertical beacon of light for Epic and Legendary items
+      if (rConfig.beaconColor) {
+        const beaconGrad = ctx.createLinearGradient(loot.x, bobY, loot.x, bobY - 260);
+        beaconGrad.addColorStop(0, rConfig.beaconColor);
+        beaconGrad.addColorStop(1, 'transparent');
+        ctx.fillStyle = beaconGrad;
+        ctx.fillRect(loot.x - 4, bobY - 260, 8, 260);
+
+        // Core light beam
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.fillRect(loot.x - 1.5, bobY - 260, 3, 260);
+      }
 
       // Shadow on ground
-      ctx.save();
       ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
       ctx.beginPath();
       ctx.ellipse(loot.x, loot.y + 10, 12, 4, 0, 0, Math.PI * 2);
@@ -2257,19 +2308,48 @@ export class SideViewEngine {
       // Glow halo
       ctx.shadowColor = glowColor;
       ctx.shadowBlur = 12;
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.fillStyle = rConfig.bg || 'rgba(255, 255, 255, 0.15)';
       ctx.beginPath();
       ctx.arc(loot.x, bobY, 16, 0, Math.PI * 2);
       ctx.fill();
 
-      // Icon image
+      // Icon image from SpriteManager cache
       if (loot.item.image) {
-        const itemImg = new Image();
-        itemImg.src = loot.item.image;
-        if (itemImg.complete) {
+        const itemImg = sprites.getImage(loot.item.image);
+        if (itemImg && itemImg.complete) {
           ctx.drawImage(itemImg, loot.x - 14, bobY - 14, 28, 28);
         }
       }
+
+      // Floating Name Tag Pill with Rarity Style
+      const tagY = bobY - 24;
+      ctx.font = 'bold 10px "Cinzel", sans-serif';
+      const nameText = loot.item.name;
+      const textWidth = ctx.measureText(nameText).width;
+      const pillW = textWidth + 14;
+      const pillH = 16;
+
+      ctx.shadowBlur = 6;
+      ctx.shadowColor = glowColor;
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+      ctx.strokeStyle = glowColor;
+      ctx.lineWidth = 1;
+      if (ctx.roundRect) {
+        ctx.beginPath();
+        ctx.roundRect(loot.x - pillW / 2, tagY - pillH / 2, pillW, pillH, 4);
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        ctx.fillRect(loot.x - pillW / 2, tagY - pillH / 2, pillW, pillH);
+        ctx.strokeRect(loot.x - pillW / 2, tagY - pillH / 2, pillW, pillH);
+      }
+
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = glowColor;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(nameText, loot.x, tagY);
+
       ctx.restore();
     }
 

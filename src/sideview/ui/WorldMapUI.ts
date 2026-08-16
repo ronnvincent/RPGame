@@ -159,34 +159,31 @@ export class WorldMapUI {
 
     const frame = document.createElement('div');
     frame.className = 'dialogue-box-frame world-map-modal';
-    frame.style.maxWidth = '900px';
+    frame.style.maxWidth = '920px';
     frame.style.width = '94vw';
     frame.style.maxHeight = '90dvh';
     frame.style.overflowY = 'auto';
     frame.style.touchAction = 'pan-y';
-    frame.style.padding = '16px 24px';
-    frame.style.background = 'linear-gradient(135deg, rgba(20, 15, 30, 0.95), rgba(10, 8, 15, 0.98))';
-    frame.style.border = '2px solid rgba(255, 215, 0, 0.4)';
-    frame.style.boxShadow = '0 10px 40px rgba(0,0,0,0.8), inset 0 0 20px rgba(255, 215, 0, 0.1)';
+    frame.style.padding = '16px 20px';
 
     // Header
     const header = document.createElement('div');
     header.className = 'dialogue-header-row';
-    header.style.borderBottom = '1px solid rgba(255,255,255,0.1)';
-    header.style.paddingBottom = '12px';
-    header.style.marginBottom = '16px';
+    header.style.borderBottom = '2px solid rgba(255,215,0,0.25)';
+    header.style.paddingBottom = '10px';
+    header.style.marginBottom = '14px';
     header.innerHTML = `
-      <div style="font-size: 22px; font-weight: 900; color: #ffd700; display: flex; align-items: center; gap: 10px; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">
+      <div style="font-size: 20px; font-weight: 900; color: #ffd700; display: flex; align-items: center; gap: 8px; text-shadow: 0 2px 4px rgba(0,0,0,0.8);">
         <span>🗺️ WORLD MAP & GATEWAYS</span>
       </div>
-      <div style="font-size: 14px; color: #cbd5e1; font-weight: 700; background: rgba(255,255,255,0.1); padding: 4px 12px; border-radius: 12px;">
+      <div style="font-size: 13px; color: #fef08a; font-weight: 900; background: rgba(0,0,0,0.5); padding: 4px 12px; border-radius: 4px; border: 1px solid #ffd700;">
         Runes Restored: <span style="color: #4ade80;">${Array.from(quests.unlockedRunes).length}/4</span>
       </div>
     `;
 
     // Rune Status Bar
     const runeBar = document.createElement('div');
-    runeBar.style.cssText = 'display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; background: rgba(0,0,0,0.6); padding: 10px 16px; border-radius: 8px; align-items: center; justify-content: space-around; border: 1px solid rgba(255,255,255,0.05);';
+    runeBar.style.cssText = 'display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; background: url(\'/assets/kenney-rpg-ui/panelInset_brown.png\') repeat; background-size: 100% 100%; padding: 8px 14px; border-radius: 4px; align-items: center; justify-content: space-around;';
     const runeDefs = [
       { id: 'verdant', name: 'Verdant Rune', icon: '/assets/ui_sprites/icons/I_Jade.png', color: '#4ade80' },
       { id: 'shadow', name: 'Shadow Rune', icon: '/assets/ui_sprites/icons/I_Amethist.png', color: '#c084fc' },
@@ -198,16 +195,16 @@ export class WorldMapUI {
       return `
         <div style="display: flex; align-items: center; gap: 6px; opacity: ${isRestored ? '1' : '0.4'}; filter: ${isRestored ? 'none' : 'grayscale(1)'}; transition: 0.3s;">
           <span style="font-size: 18px; filter: drop-shadow(0 0 4px ${r.color});">
-            ${r.icon.startsWith('/') ? `<img src="${r.icon}" style="width:24px; height:24px; vertical-align:middle; image-rendering:pixelated;" />` : r.icon}
+            ${r.icon.startsWith('/') ? `<img src="${r.icon}" style="width:22px; height:22px; vertical-align:middle; image-rendering:pixelated;" />` : r.icon}
           </span>
-          <span style="font-size: 12px; font-weight: 800; color: ${r.color}; letter-spacing: 0.5px;">${r.name} ${isRestored ? '✓' : '(Locked)'}</span>
+          <span style="font-size: 11.5px; font-weight: 800; color: ${r.color}; letter-spacing: 0.5px; font-family: 'Cinzel', serif;">${r.name} ${isRestored ? '✓' : '(Locked)'}</span>
         </div>
       `;
     }).join('');
 
     // Locations Grid
     const grid = document.createElement('div');
-    grid.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-bottom: 20px;';
+    grid.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; margin-bottom: 16px;';
 
     WorldMapUI.LOCATIONS.forEach((loc) => {
       const isTown = loc.id === 'town_eldermoor';
@@ -216,16 +213,17 @@ export class WorldMapUI {
 
       const card = document.createElement('div');
       card.style.cssText = `
-        background: ${isUnlocked ? 'linear-gradient(145deg, rgba(30, 25, 45, 0.85), rgba(20, 15, 25, 0.95))' : 'linear-gradient(145deg, rgba(20, 20, 25, 0.9), rgba(10, 10, 15, 0.95))'}, url('${loc.bgImage}') center/cover;
-        border: 2px solid ${isUnlocked ? loc.color : 'rgba(255,255,255,0.1)'};
-        border-radius: 12px;
-        padding: 16px;
+        background: url('/assets/kenney-rpg-ui/panelInset_brown.png') repeat;
+        background-size: 100% 100%;
+        border: 2px solid ${isUnlocked ? loc.color : 'rgba(255,255,255,0.15)'};
+        border-radius: 4px;
+        padding: 14px;
         display: flex;
         flex-direction: column;
         justify-content: space-between;
-        gap: 12px;
+        gap: 10px;
         opacity: ${isUnlocked ? '1' : '0.6'};
-        box-shadow: ${isUnlocked ? `0 4px 15px ${loc.color}20` : 'none'};
+        box-shadow: ${isUnlocked ? `0 4px 15px ${loc.color}25` : 'none'};
         transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s ease, border-color 0.2s ease;
         position: relative;
         overflow: hidden;
@@ -233,13 +231,13 @@ export class WorldMapUI {
 
       if (isUnlocked) {
         card.onmouseenter = () => {
-          card.style.transform = 'translateY(-4px) scale(1.02)';
-          card.style.boxShadow = `0 8px 25px ${loc.color}40`;
-          card.style.borderColor = '#fff';
+          card.style.transform = 'translateY(-3px) scale(1.01)';
+          card.style.boxShadow = `0 6px 20px ${loc.color}50`;
+          card.style.borderColor = '#ffd700';
         };
         card.onmouseleave = () => {
           card.style.transform = 'none';
-          card.style.boxShadow = `0 4px 15px ${loc.color}20`;
+          card.style.boxShadow = `0 4px 15px ${loc.color}25`;
           card.style.borderColor = loc.color;
         };
       }
@@ -247,38 +245,38 @@ export class WorldMapUI {
       card.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: flex-start; z-index: 1;">
           <div>
-            <div style="font-size: 11px; font-weight: 900; color: ${loc.color}; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; text-shadow: 0 1px 2px rgba(0,0,0,0.8);">${loc.actTitle}</div>
-            <div style="font-size: 18px; font-weight: 900; color: #fff; display: flex; align-items: center; gap: 8px; text-shadow: 0 2px 4px rgba(0,0,0,0.8);">
-              <span style="font-size: 22px; filter: drop-shadow(0 0 5px ${loc.color});">
-              ${loc.icon.startsWith('/') ? `<img src="${loc.icon}" style="width:32px; height:32px; image-rendering:pixelated;" />` : loc.icon}
+            <div style="font-size: 10.5px; font-weight: 900; color: ${loc.color}; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 2px; text-shadow: 0 1px 2px rgba(0,0,0,0.8); font-family: 'Cinzel', serif;">${loc.actTitle}</div>
+            <div style="font-size: 16px; font-weight: 900; color: #fef08a; display: flex; align-items: center; gap: 8px; text-shadow: 0 2px 4px rgba(0,0,0,0.8); font-family: 'Cinzel', serif;">
+              <span style="font-size: 20px; filter: drop-shadow(0 0 5px ${loc.color});">
+              ${loc.icon.startsWith('/') ? `<img src="${loc.icon}" style="width:28px; height:28px; image-rendering:pixelated;" />` : loc.icon}
             </span>
               <span style="line-height: 1.1;">${loc.name}</span>
             </div>
           </div>
-          <div style="font-size: 12px; background: ${isTown ? 'rgba(59, 130, 246, 0.3)' : 'rgba(0,0,0,0.7)'}; padding: 4px 10px; border-radius: 6px; color: ${isTown ? '#93c5fd' : '#fef08a'}; font-weight: 800; border: 1px solid ${isTown ? '#3b82f6' : 'rgba(254, 240, 138, 0.3)'};">
+          <div style="font-size: 11px; background: rgba(0,0,0,0.6); padding: 3px 8px; border-radius: 4px; color: ${isTown ? '#93c5fd' : '#fef08a'}; font-weight: 800; border: 1px solid ${isTown ? '#3b82f6' : 'rgba(254, 240, 138, 0.3)'};">
             ${isTown ? 'SAFE' : `Lv. ${loc.recommendedLevel}+`}
           </div>
         </div>
 
-        <div style="font-size: 13px; color: #cbd5e1; line-height: 1.5; z-index: 1; flex-grow: 1;">
+        <div style="font-size: 12px; color: #cbd5e1; line-height: 1.4; z-index: 1; flex-grow: 1;">
           ${loc.description}
         </div>
 
-        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 8px; z-index: 1;">
-          <div style="font-size: 11px; color: #94a3b8; max-width: 60%; line-height: 1.3;">
-            <strong style="color: #fca5a5; display: block; margin-bottom: 2px;">BOSS:</strong> 
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 6px; z-index: 1;">
+          <div style="font-size: 10.5px; color: #94a3b8; max-width: 60%; line-height: 1.3;">
+            <strong style="color: #fca5a5; display: block; margin-bottom: 1px;">BOSS:</strong> 
             <span style="color: #fff; font-weight: 600;">${loc.bossName}</span>
           </div>
           ${isTown ? `
-            <button class="travel-btn dialogue-btn ${isUnlocked ? 'dialogue-btn-quest' : ''}" style="padding: 8px 16px; font-size: 13px; font-weight: 800; white-space: nowrap; border-radius: 6px; transition: 0.2s;" ${!isUnlocked ? 'disabled' : ''}>
+            <button class="travel-btn dialogue-btn ${isUnlocked ? 'dialogue-btn-quest' : ''}" style="padding: 6px 14px; font-size: 12px; font-weight: 800; white-space: nowrap;" ${!isUnlocked ? 'disabled' : ''}>
               ${!isUnlocked ? '🔒 LOCKED' : 'VISIT ➔'}
             </button>
           ` : `
-            <div style="display: flex; gap: 8px;">
-              <button class="travel-btn dialogue-btn ${isUnlocked ? 'dialogue-btn-quest' : ''}" style="padding: 8px 12px; font-size: 11px; font-weight: 800; white-space: nowrap; border-radius: 6px; transition: 0.2s;" ${!isUnlocked ? 'disabled' : ''}>
+            <div style="display: flex; gap: 6px;">
+              <button class="travel-btn dialogue-btn ${isUnlocked ? 'dialogue-btn-quest' : ''}" style="padding: 6px 10px; font-size: 11px; font-weight: 800; white-space: nowrap;" ${!isUnlocked ? 'disabled' : ''}>
                 ${!isUnlocked ? '🔒 LOCKED' : 'SOLO'}
               </button>
-              <button class="coop-btn dialogue-btn" style="padding: 8px 12px; font-size: 11px; font-weight: 800; white-space: nowrap; border-radius: 6px; background-image: url('/assets/kenney-rpg-ui/buttonRound_beige.png'); color: #5a3c11; transition: 0.2s;" ${!isUnlocked ? 'disabled' : ''}>
+              <button class="coop-btn dialogue-btn" style="padding: 6px 10px; font-size: 11px; font-weight: 800; white-space: nowrap;" ${!isUnlocked ? 'disabled' : ''}>
                 ${!isUnlocked ? '🔒' : 'CO-OP 🌐'}
               </button>
             </div>
@@ -304,10 +302,10 @@ export class WorldMapUI {
     // Footer Actions
     const footer = document.createElement('div');
     footer.className = 'dialogue-actions-row';
-    footer.style.borderTop = '1px solid rgba(255,255,255,0.1)';
-    footer.style.paddingTop = '16px';
+    footer.style.borderTop = '2px solid rgba(255,215,0,0.2)';
+    footer.style.paddingTop = '12px';
     footer.innerHTML = `
-      <button id="close-map-btn" class="dialogue-btn" style="padding: 10px 24px; font-size: 14px; font-weight: bold; background: rgba(255,255,255,0.1); color: #fff;">Close ✕</button>
+      <button id="close-map-btn" class="dialogue-btn">Close ✕</button>
     `;
 
     footer.querySelector('#close-map-btn')?.addEventListener('click', () => {

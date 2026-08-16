@@ -10,7 +10,7 @@
  */
 
 import { SideViewEngine } from '../engine/SideViewEngine';
-import { ItemData } from '../items/ItemDatabase';
+import { ItemData, RARITY_CONFIGS } from '../items/ItemDatabase';
 import { audio } from '../engine/AudioManager';
 import { sprites } from '../engine/SpriteManager';
 import { SkillDefinition } from '../classes/ClassDefinitions';
@@ -27,6 +27,7 @@ export class GameHUD {
   private inventoryOpen: boolean = false;
   public questLogUI: QuestLogUI | null = null;
   public worldMapUI: WorldMapUI | null = null;
+  private selectedItem: { item: ItemData; isEquipped: boolean; slotOrIdx: string | number } | null = null;
 
   // Joystick state
   private joystickActive: boolean = false;
@@ -154,9 +155,21 @@ export class GameHUD {
         overflow: hidden;
       }
 
+      .sprite-bar-lag {
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 100%;
+        background: #f59e0b;
+        transition: width 0.55s ease-out;
+        z-index: 1;
+      }
+
       .sprite-bar-fill {
         height: 100%;
-        transition: width 0.15s ease;
+        position: relative;
+        z-index: 2;
+        transition: width 0.12s linear;
       }
 
       .sprite-bar-hp {
@@ -164,10 +177,15 @@ export class GameHUD {
         background-size: auto 100%;
       }
 
+      .sprite-bar-mp {
+        background: url('/assets/kenney-rpg-ui/barBlue_horizontalMid.png') repeat-x;
+        background-size: auto 100%;
+      }
+
       .sprite-bar-exp {
         background: url('/assets/kenney-rpg-ui/barYellow_horizontalMid.png') repeat-x;
         background-size: auto 100%;
-        height: 8px;
+        height: 7px;
       }
 
       /* Top Center: Wave Banner with Sprite Panel */
@@ -913,11 +931,11 @@ export class GameHUD {
 
       .inv-grid-container {
         display: grid;
-        grid-template-columns: 1fr 1.3fr;
+        grid-template-columns: 1fr 1.2fr;
         gap: 10px;
       }
 
-      @media (max-width: 520px) {
+      @media (max-width: 540px) {
         .inv-grid-container {
           grid-template-columns: 1fr;
         }
@@ -933,7 +951,7 @@ export class GameHUD {
       }
 
       .equip-slot {
-        height: 44px;
+        height: 48px;
         background: url('/assets/kenney-rpg-ui/buttonSquare_beige.png') no-repeat center center;
         background-size: 100% 100%;
         display: flex;
@@ -942,6 +960,12 @@ export class GameHUD {
         justify-content: center;
         cursor: pointer;
         position: relative;
+        border-radius: 4px;
+        transition: transform 0.1s ease;
+      }
+
+      .equip-slot:hover {
+        transform: scale(1.04);
       }
 
       .equip-slot.filled {
@@ -962,13 +986,13 @@ export class GameHUD {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
         gap: 6px;
-        max-height: 200px;
+        max-height: 220px;
         overflow-y: auto;
       }
 
       .bag-slot {
-        width: 44px;
-        height: 44px;
+        width: 48px;
+        height: 48px;
         background: url('/assets/kenney-rpg-ui/buttonSquare_beige.png') no-repeat center center;
         background-size: 100% 100%;
         display: flex;
@@ -978,11 +1002,197 @@ export class GameHUD {
         cursor: pointer;
         position: relative;
         padding: 2px;
+        border-radius: 4px;
+        transition: transform 0.1s ease;
+      }
+
+      .bag-slot:hover {
+        transform: scale(1.05);
       }
 
       .bag-slot:active {
         background-image: url('/assets/kenney-rpg-ui/buttonSquare_beige_pressed.png');
         transform: scale(0.96);
+      }
+
+      /* Rarity Styling for Slots & Badges */
+      .rarity-common {
+        border: 1.5px solid #94a3b8 !important;
+        box-shadow: 0 0 4px rgba(148, 163, 184, 0.4);
+      }
+      .rarity-uncommon {
+        border: 1.5px solid #4ade80 !important;
+        box-shadow: 0 0 6px rgba(74, 222, 128, 0.5);
+      }
+      .rarity-rare {
+        border: 1.5px solid #38bdf8 !important;
+        box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+      }
+      .rarity-epic {
+        border: 1.5px solid #c084fc !important;
+        box-shadow: 0 0 10px rgba(192, 132, 252, 0.7);
+      }
+      .rarity-legendary {
+        border: 1.5px solid #fbbf24 !important;
+        box-shadow: 0 0 14px rgba(251, 191, 36, 0.85);
+        animation: legendaryPulse 2s infinite alternate;
+      }
+
+      @keyframes legendaryPulse {
+        from { box-shadow: 0 0 8px rgba(251, 191, 36, 0.6); }
+        to { box-shadow: 0 0 18px rgba(251, 191, 36, 1.0); }
+      }
+
+      /* Item Inspection Pane Card */
+      .item-inspector-pane {
+        grid-column: 1 / -1;
+        background: url('/assets/kenney-rpg-ui/panelInset_beige.png') repeat;
+        background-size: 100% 100%;
+        padding: 10px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        border: 2px solid #5a3d1c;
+        border-radius: 4px;
+        color: #1e1b4b;
+      }
+
+      .inspector-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .inspector-icon-box {
+        width: 44px;
+        height: 44px;
+        background: url('/assets/kenney-rpg-ui/buttonSquare_brown.png') no-repeat center center;
+        background-size: 100% 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+
+      .inspector-title-col {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+
+      .inspector-item-name {
+        font-family: 'Cinzel', serif;
+        font-weight: 900;
+        font-size: 13px;
+        text-shadow: 1px 1px 1px rgba(0,0,0,0.3);
+      }
+
+      .inspector-rarity-pill {
+        font-size: 9px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        display: inline-flex;
+        gap: 4px;
+      }
+
+      .inspector-stats-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        font-size: 11px;
+        font-weight: 800;
+        background: rgba(0, 0, 0, 0.08);
+        padding: 6px 8px;
+        border-radius: 4px;
+      }
+
+      .stat-chip {
+        color: #065f46;
+      }
+
+      .inspector-desc {
+        font-size: 10.5px;
+        font-style: italic;
+        color: #334155;
+        line-height: 1.3;
+      }
+
+      .inspector-actions {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+        margin-top: 4px;
+      }
+
+      .inspector-btn {
+        background: url('/assets/kenney-rpg-ui/buttonLong_blue.png') no-repeat center center;
+        background-size: 100% 100%;
+        border: none;
+        color: #ffffff;
+        padding: 5px 14px;
+        font-weight: 900;
+        font-size: 11px;
+        font-family: 'Cinzel', serif;
+        cursor: pointer;
+        text-shadow: 1px 1px 2px #000;
+      }
+
+      .inspector-btn:active {
+        background-image: url('/assets/kenney-rpg-ui/buttonLong_blue_pressed.png');
+        transform: translateY(1px);
+      }
+
+      .inspector-btn-danger {
+        background: url('/assets/kenney-rpg-ui/buttonLong_brown.png') no-repeat center center !important;
+        background-size: 100% 100% !important;
+        color: #f87171 !important;
+      }
+
+      /* Hotbar Skill Floating Tooltip */
+      .skill-tooltip-popup {
+        position: absolute;
+        bottom: 68px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 220px;
+        background: url('/assets/kenney-rpg-ui/panel_brown.png') repeat;
+        background-size: 100% 100%;
+        padding: 8px 12px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.9);
+        display: none;
+        flex-direction: column;
+        gap: 4px;
+        pointer-events: none;
+        z-index: 100;
+        animation: tooltipFade 0.15s ease-out;
+      }
+
+      @keyframes tooltipFade {
+        from { opacity: 0; transform: translate(-50%, 6px); }
+        to { opacity: 1; transform: translate(-50%, 0); }
+      }
+
+      .tooltip-skill-name {
+        font-family: 'Cinzel', serif;
+        font-weight: 900;
+        font-size: 12px;
+        color: #ffd700;
+        text-shadow: 1px 1px 2px #000;
+      }
+
+      .tooltip-badges-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 9.5px;
+        font-weight: 800;
+        color: #38bdf8;
+      }
+
+      .tooltip-desc {
+        font-size: 9px;
+        color: #e2e8f0;
+        line-height: 1.3;
       }
     `;
     document.head.appendChild(style);
@@ -1002,12 +1212,18 @@ export class GameHUD {
             <span style="color: ${p.characterClass.accentColor}">${p.characterClass.name}</span>
             <span style="color: #ffd700">Lv. ${p.level}</span>
           </div>
-          <!-- HP Bar Sprite Frame -->
+          <!-- HP Bar Sprite Frame with Delayed Hit Lag Bar -->
           <div class="sprite-bar-frame" title="Health (HP)">
+            <div class="sprite-bar-lag sprite-bar-lag-hp" id="hud-hp-lag" style="width: 100%"></div>
             <div class="sprite-bar-fill sprite-bar-hp" id="hud-hp-bar" style="width: 100%"></div>
           </div>
+          <!-- MP Bar Sprite Frame with Blue Fill -->
+          <div class="sprite-bar-frame" style="height: 10px;" title="Mana (MP)">
+            <div class="sprite-bar-lag sprite-bar-lag-mp" id="hud-mp-lag" style="width: 100%; background: #60a5fa;"></div>
+            <div class="sprite-bar-fill sprite-bar-mp" id="hud-mp-bar" style="width: 100%"></div>
+          </div>
           <!-- EXP Bar Sprite Frame -->
-          <div class="sprite-bar-frame" style="height: 8px;" title="Experience (EXP)">
+          <div class="sprite-bar-frame" style="height: 7px;" title="Experience (EXP)">
             <div class="sprite-bar-fill sprite-bar-exp" id="hud-exp-bar" style="width: 0%"></div>
           </div>
         </div>
@@ -1066,6 +1282,7 @@ export class GameHUD {
 
       <!-- Bottom Center: 6-Skill Cooldown Hotbar with Kyrise Icons & Sprite Slots -->
       <div class="skills-hotbar" id="skills-hotbar">
+        <div class="skill-tooltip-popup" id="skill-tooltip-popup"></div>
         ${p.characterClass.skills.map((s, idx) => `
           <div class="hotbar-slot" data-skill-idx="${idx}" title="${s.name} (${s.description})">
             <span class="slot-key-badge">${s.key}</span>
@@ -1114,35 +1331,35 @@ export class GameHUD {
         <div class="inv-grid-container">
           <!-- Left: Equipment Paperdoll Slots -->
           <div class="equipment-paperdoll">
-            <div class="equip-slot ${p.equipment.helmet ? 'filled' : ''}" data-slot="helmet">
+            <div class="equip-slot ${p.equipment.helmet ? 'filled rarity-' + p.equipment.helmet.rarity : ''}" data-slot="helmet">
               <span class="equip-slot-label">Helm</span>
               ${p.equipment.helmet ? `<img src="${p.equipment.helmet.image}" width="28" height="28" style="image-rendering:pixelated;" />` : ''}
             </div>
-            <div class="equip-slot ${p.equipment.wings ? 'filled' : ''}" data-slot="wings">
+            <div class="equip-slot ${p.equipment.wings ? 'filled rarity-' + p.equipment.wings.rarity : ''}" data-slot="wings">
               <span class="equip-slot-label">Wings</span>
               ${p.equipment.wings ? `<img src="${p.equipment.wings.image}" width="28" height="28" style="image-rendering:pixelated;" />` : ''}
             </div>
-            <div class="equip-slot ${p.equipment.amulet ? 'filled' : ''}" data-slot="amulet">
+            <div class="equip-slot ${p.equipment.amulet ? 'filled rarity-' + p.equipment.amulet.rarity : ''}" data-slot="amulet">
               <span class="equip-slot-label">Amulet</span>
               ${p.equipment.amulet ? `<img src="${p.equipment.amulet.image}" width="28" height="28" style="image-rendering:pixelated;" />` : ''}
             </div>
-            <div class="equip-slot ${p.equipment.weapon ? 'filled' : ''}" data-slot="weapon">
+            <div class="equip-slot ${p.equipment.weapon ? 'filled rarity-' + p.equipment.weapon.rarity : ''}" data-slot="weapon">
               <span class="equip-slot-label">Weapon</span>
               ${p.equipment.weapon ? `<img src="${p.equipment.weapon.image}" width="28" height="28" style="image-rendering:pixelated;" />` : ''}
             </div>
-            <div class="equip-slot ${p.equipment.armor ? 'filled' : ''}" data-slot="armor">
+            <div class="equip-slot ${p.equipment.armor ? 'filled rarity-' + p.equipment.armor.rarity : ''}" data-slot="armor">
               <span class="equip-slot-label">Armor</span>
               ${p.equipment.armor ? `<img src="${p.equipment.armor.image}" width="28" height="28" style="image-rendering:pixelated;" />` : ''}
             </div>
-            <div class="equip-slot ${p.equipment.shield ? 'filled' : ''}" data-slot="shield">
+            <div class="equip-slot ${p.equipment.shield ? 'filled rarity-' + p.equipment.shield.rarity : ''}" data-slot="shield">
               <span class="equip-slot-label">Shield</span>
               ${p.equipment.shield ? `<img src="${p.equipment.shield.image}" width="28" height="28" style="image-rendering:pixelated;" />` : ''}
             </div>
-            <div class="equip-slot ${p.equipment.ring ? 'filled' : ''}" data-slot="ring">
+            <div class="equip-slot ${p.equipment.ring ? 'filled rarity-' + p.equipment.ring.rarity : ''}" data-slot="ring">
               <span class="equip-slot-label">Ring</span>
               ${p.equipment.ring ? `<img src="${p.equipment.ring.image}" width="28" height="28" style="image-rendering:pixelated;" />` : ''}
             </div>
-            <div class="equip-slot ${p.equipment.boots ? 'filled' : ''}" data-slot="boots">
+            <div class="equip-slot ${p.equipment.boots ? 'filled rarity-' + p.equipment.boots.rarity : ''}" data-slot="boots">
               <span class="equip-slot-label">Boots</span>
               ${p.equipment.boots ? `<img src="${p.equipment.boots.image}" width="28" height="28" style="image-rendering:pixelated;" />` : ''}
             </div>
@@ -1151,6 +1368,11 @@ export class GameHUD {
           <!-- Right: Bag Items -->
           <div class="inventory-bag" id="inv-bag-grid">
             <!-- Rendered dynamically -->
+          </div>
+
+          <!-- Bottom: Item Inspection Details Pane -->
+          <div class="item-inspector-pane" id="item-inspector-pane">
+            <div style="font-size: 11px; color: #64748b; font-style: italic; text-align: center;">Click any item or equipment slot to inspect details & stats</div>
           </div>
         </div>
       </div>
@@ -1259,17 +1481,43 @@ export class GameHUD {
       this.game?.interactWithActiveNpc();
     }, { passive: false });
 
-    // Skill Hotbar Click & Touch triggers skill with instant feedback
+    // Skill Hotbar Hover Tooltips & Click / Touch Triggers
+    const tooltipPopup = this.container.querySelector('#skill-tooltip-popup') as HTMLElement;
     const slots = this.container.querySelectorAll('.hotbar-slot');
+    const p = this.engine.player;
+
     slots.forEach(slot => {
       let lastTriggerTime = 0;
+      const idx = Number(slot.getAttribute('data-skill-idx'));
+      const skill = p.characterClass.skills[idx];
+
+      const showTooltip = () => {
+        if (!tooltipPopup || !skill) return;
+        tooltipPopup.innerHTML = `
+          <div class="tooltip-skill-name">${skill.name}</div>
+          <div class="tooltip-badges-row">
+            <span>🔹 ${skill.mpCost} MP</span>
+            <span>⏱️ ${skill.cooldown}s CD</span>
+            <span>⚔️ ${Math.round(skill.damageMultiplier * 100)}% DMG</span>
+          </div>
+          <div class="tooltip-desc">${skill.description}</div>
+        `;
+        tooltipPopup.style.display = 'flex';
+      };
+
+      const hideTooltip = () => {
+        if (tooltipPopup) tooltipPopup.style.display = 'none';
+      };
+
+      slot.addEventListener('mouseenter', showTooltip);
+      slot.addEventListener('mouseleave', hideTooltip);
+
       const triggerSkill = (e: Event) => {
         e.preventDefault();
         e.stopPropagation();
         const now = Date.now();
         if (now - lastTriggerTime < 180) return; // Debounce synthetic double-tap
         lastTriggerTime = now;
-        const idx = Number(slot.getAttribute('data-skill-idx'));
         this.engine.castSkill(idx);
       };
 
@@ -1516,13 +1764,23 @@ export class GameHUD {
   public update() {
     const p = this.engine.player;
 
-    // HP, MP, EXP bars
+    // HP, MP, EXP bars with delayed hit lag catchup
     const hpBar = this.container.querySelector('#hud-hp-bar') as HTMLElement;
+    const hpLag = this.container.querySelector('#hud-hp-lag') as HTMLElement;
+    const mpBar = this.container.querySelector('#hud-mp-bar') as HTMLElement;
+    const mpLag = this.container.querySelector('#hud-mp-lag') as HTMLElement;
     const expBar = this.container.querySelector('#hud-exp-bar') as HTMLElement;
     const goldText = this.container.querySelector('#hud-gold-text');
 
-    if (hpBar) hpBar.style.width = `${Math.max(0, (p.hp / p.maxHp) * 100)}%`;
-    if (expBar) expBar.style.width = `${Math.max(0, (p.exp / p.maxExp) * 100)}%`;
+    const hpPct = Math.max(0, (p.hp / p.maxHp) * 100);
+    const mpPct = Math.max(0, (p.mp / p.maxMp) * 100);
+    const expPct = Math.max(0, (p.exp / p.maxExp) * 100);
+
+    if (hpBar) hpBar.style.width = `${hpPct}%`;
+    if (hpLag) hpLag.style.width = `${hpPct}%`;
+    if (mpBar) mpBar.style.width = `${mpPct}%`;
+    if (mpLag) mpLag.style.width = `${mpPct}%`;
+    if (expBar) expBar.style.width = `${expPct}%`;
     if (goldText) goldText.textContent = `${p.gold}`;
 
     // Town Return button
@@ -1650,29 +1908,139 @@ export class GameHUD {
     }
   }
 
+  private selectItemForInspection(item: ItemData, isEquipped: boolean, slotOrIdx: string | number) {
+    this.selectedItem = { item, isEquipped, slotOrIdx };
+    this.renderInspectorPane();
+  }
+
+  private renderInspectorPane() {
+    const pane = this.container.querySelector('#item-inspector-pane');
+    if (!pane) return;
+
+    if (!this.selectedItem) {
+      pane.innerHTML = `<div style="font-size: 11px; color: #64748b; font-style: italic; text-align: center;">Click any item or equipment slot to inspect details & stats</div>`;
+      return;
+    }
+
+    const { item, isEquipped, slotOrIdx } = this.selectedItem;
+    const rConfig = RARITY_CONFIGS[item.rarity] || RARITY_CONFIGS.common;
+
+    // Stat bonuses breakdown
+    const statChips: string[] = [];
+    if (item.stats) {
+      if (item.stats.atk) statChips.push(`<span class="stat-chip">⚔️ +${item.stats.atk} ATK</span>`);
+      if (item.stats.def) statChips.push(`<span class="stat-chip">🛡️ +${item.stats.def} DEF</span>`);
+      if (item.stats.hp) statChips.push(`<span class="stat-chip">❤️ +${item.stats.hp} HP</span>`);
+      if (item.stats.mp) statChips.push(`<span class="stat-chip">🔷 +${item.stats.mp} MP</span>`);
+      if (item.stats.crit) statChips.push(`<span class="stat-chip">⚡ +${Math.round(item.stats.crit * 100)}% CRIT</span>`);
+      if (item.stats.speed) statChips.push(`<span class="stat-chip">💨 +${item.stats.speed} SPD</span>`);
+    }
+    if (item.consumableEffect) {
+      if (item.consumableEffect.type === 'heal_hp') statChips.push(`<span class="stat-chip">❤️ Heals +${item.consumableEffect.value} HP</span>`);
+      if (item.consumableEffect.type === 'heal_mp') statChips.push(`<span class="stat-chip">🔷 Restores +${item.consumableEffect.value} MP</span>`);
+      if (item.consumableEffect.type === 'buff_atk') statChips.push(`<span class="stat-chip">⚔️ +${Math.round((item.consumableEffect.value - 1) * 100)}% ATK (${item.consumableEffect.duration || 10}s)</span>`);
+      if (item.consumableEffect.type === 'buff_speed') statChips.push(`<span class="stat-chip">💨 +${Math.round((item.consumableEffect.value - 1) * 100)}% SPD (${item.consumableEffect.duration || 10}s)</span>`);
+      if (item.consumableEffect.type === 'revive') statChips.push(`<span class="stat-chip">✨ Revives with ${item.consumableEffect.value} HP</span>`);
+    }
+
+    pane.innerHTML = `
+      <div class="inspector-header">
+        <div class="inspector-icon-box rarity-${item.rarity}">
+          ${item.image ? `<img src="${item.image}" width="32" height="32" style="image-rendering:pixelated;" />` : ''}
+        </div>
+        <div class="inspector-title-col">
+          <div class="inspector-item-name" style="color: ${rConfig.color};">${item.name}</div>
+          <div class="inspector-rarity-pill">
+            <span style="color: ${rConfig.color};">${rConfig.name}</span>
+            <span style="color: #64748b;">• ${item.type.toUpperCase()}</span>
+          </div>
+        </div>
+      </div>
+      ${statChips.length > 0 ? `<div class="inspector-stats-grid">${statChips.join('')}</div>` : ''}
+      <div class="inspector-desc">${item.description}</div>
+      <div class="inspector-actions">
+        ${isEquipped
+          ? `<button class="inspector-btn inspector-btn-danger" id="inspector-unequip-btn">UNEQUIP</button>`
+          : item.type === 'consumable'
+            ? `<button class="inspector-btn" id="inspector-action-btn">USE</button>`
+            : `<button class="inspector-btn" id="inspector-action-btn">EQUIP</button>`
+        }
+        <button class="inspector-btn inspector-btn-danger" id="inspector-close-btn">CLOSE</button>
+      </div>
+    `;
+
+    // Action listener
+    const actBtn = pane.querySelector('#inspector-action-btn');
+    actBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.engine.useOrEquipItem(Number(slotOrIdx));
+      this.selectedItem = null;
+      this.render();
+      this.renderInventoryItems();
+    });
+
+    const unequipBtn = pane.querySelector('#inspector-unequip-btn');
+    unequipBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.engine.unequipItem(String(slotOrIdx) as any);
+      this.selectedItem = null;
+      this.render();
+      this.renderInventoryItems();
+    });
+
+    const closeBtn = pane.querySelector('#inspector-close-btn');
+    closeBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.selectedItem = null;
+      this.renderInspectorPane();
+    });
+  }
+
   private renderInventoryItems() {
     const bagGrid = this.container.querySelector('#inv-bag-grid');
     if (!bagGrid) return;
     const p = this.engine.player;
 
+    // Render bag slots
     bagGrid.innerHTML = p.inventory.map((item, idx) => `
-      <div class="bag-slot rarity-${item.rarity}" data-inv-idx="${idx}" title="${item.name} (${item.rarity.toUpperCase()})&#10;${item.description}">
+      <div class="bag-slot rarity-${item.rarity}" data-inv-idx="${idx}" title="${item.name} (${item.rarity.toUpperCase()})">
         ${item.image ? `<img src="${item.image}" width="28" height="28" style="image-rendering:pixelated;" />` : ''}
       </div>
     `).join('');
 
-    // Click/Touch to equip or use
+    // Bag slot click handlers
     const slots = bagGrid.querySelectorAll('.bag-slot');
     slots.forEach(slot => {
-      const useItem = (e: Event) => {
+      const onSlotClick = (e: Event) => {
         e.stopPropagation();
         const idx = Number(slot.getAttribute('data-inv-idx'));
-        this.engine.useOrEquipItem(idx);
-        this.render();
-        this.renderInventoryItems();
+        const itm = p.inventory[idx];
+        if (itm) {
+          audio.playClick();
+          this.selectItemForInspection(itm, false, idx);
+        }
       };
-      slot.addEventListener('click', useItem);
-      slot.addEventListener('touchstart', useItem, { passive: true });
+      slot.addEventListener('click', onSlotClick);
+      slot.addEventListener('touchstart', onSlotClick, { passive: true });
     });
+
+    // Equipment Paperdoll slot click handlers
+    const paperdollSlots = this.container.querySelectorAll('.equipment-paperdoll .equip-slot');
+    paperdollSlots.forEach(eqSlot => {
+      const onEquipClick = (e: Event) => {
+        e.stopPropagation();
+        const slotKey = eqSlot.getAttribute('data-slot') as keyof typeof p.equipment;
+        const itm = p.equipment[slotKey];
+        if (itm) {
+          audio.playClick();
+          this.selectItemForInspection(itm, true, slotKey);
+        }
+      };
+      eqSlot.addEventListener('click', onEquipClick);
+      eqSlot.addEventListener('touchstart', onEquipClick, { passive: true });
+    });
+
+    // Render current inspector pane state
+    this.renderInspectorPane();
   }
 }

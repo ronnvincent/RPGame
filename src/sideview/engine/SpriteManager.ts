@@ -18,6 +18,8 @@
  * 15. UI: Cryo's Mini GUI
  */
 
+import { ITEM_DATABASE } from '../items/ItemDatabase';
+
 type BattleTheme = 'catacombs' | 'crypt' | 'inferno' | 'void' | 'town' | 'swamp' | 'mountain' | 'underwater' | 'caves';
 
 export class SpriteManager {
@@ -56,6 +58,15 @@ export class SpriteManager {
     img.onerror = () => this.finishLoadCycle();
     img.src = src;
     return img;
+  }
+
+  public getImage(keyOrSrc: string): HTMLImageElement | undefined {
+    if (this.images[keyOrSrc]) return this.images[keyOrSrc];
+    if (keyOrSrc.startsWith('/') || keyOrSrc.startsWith('http') || keyOrSrc.startsWith('data:')) {
+      this.addImage(keyOrSrc, keyOrSrc);
+      return this.images[keyOrSrc];
+    }
+    return undefined;
   }
 
   private addImage(key: string, src: string) {
@@ -503,6 +514,13 @@ export class SpriteManager {
 
     Object.entries(assetsToLoad).forEach(([key, src]) => {
       this.addImage(key, src);
+    });
+
+    // Preload item icons from ITEM_DATABASE for zero-lag rendering
+    ITEM_DATABASE.forEach(item => {
+      if (item.image) {
+        this.addImage(item.image, item.image);
+      }
     });
 
     // Preload Water Priestess frames (288x128)

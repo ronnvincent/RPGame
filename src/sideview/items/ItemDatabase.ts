@@ -1,8 +1,9 @@
 /**
- * Comprehensive Item & Equipment Database (20+ Items)
+ * Comprehensive Item & Equipment Database
  * Equipment paperdoll slots: helmet, armor, boots, weapon, wings, ring, amulet, shield
  * Consumables: Potions, Elixirs, Buff Flasks, Resurrection Feathers.
- * Fully mapped to Kyrise's 16x16 / 32x32 Pixel-Art RPG Icons Pack!
+ * Fully mapped to Kyrise's 16x16 / 32x32 Pixel-Art RPG Icons Pack & UI Sprites!
+ * Built using the Weighted Drop Tables & Rarity Tiers pattern from SKILL.md.
  */
 
 export type ItemRarity = 'common' | 'rare' | 'epic' | 'legendary';
@@ -34,6 +35,55 @@ export interface ItemData {
   };
 }
 
+export interface RarityConfig {
+  name: string;
+  color: string;
+  bgColor: string;
+  borderColor: string;
+  glowColor: string;
+  beamColor: string;
+  textColor: string;
+}
+
+export const RARITY_CONFIGS: Record<ItemRarity, RarityConfig> = {
+  common: {
+    name: 'Common',
+    color: '#94a3b8',
+    bgColor: 'rgba(148, 163, 184, 0.15)',
+    borderColor: '#64748b',
+    glowColor: 'rgba(148, 163, 184, 0.4)',
+    beamColor: 'rgba(203, 213, 225, 0.5)',
+    textColor: '#f1f5f9'
+  },
+  rare: {
+    name: 'Rare',
+    color: '#38bdf8',
+    bgColor: 'rgba(56, 189, 248, 0.2)',
+    borderColor: '#0284c7',
+    glowColor: 'rgba(56, 189, 248, 0.65)',
+    beamColor: 'rgba(56, 189, 248, 0.75)',
+    textColor: '#e0f2fe'
+  },
+  epic: {
+    name: 'Epic',
+    color: '#c084fc',
+    bgColor: 'rgba(192, 132, 252, 0.25)',
+    borderColor: '#9333ea',
+    glowColor: 'rgba(192, 132, 252, 0.8)',
+    beamColor: 'rgba(192, 132, 252, 0.85)',
+    textColor: '#f3e8ff'
+  },
+  legendary: {
+    name: 'Legendary',
+    color: '#fbbf24',
+    bgColor: 'rgba(251, 191, 36, 0.3)',
+    borderColor: '#d97706',
+    glowColor: 'rgba(251, 191, 36, 0.95)',
+    beamColor: 'rgba(251, 191, 36, 0.9)',
+    textColor: '#fef3c7'
+  }
+};
+
 export const ITEM_DATABASE: ItemData[] = [
   // --- WEAPONS ---
   {
@@ -46,6 +96,17 @@ export const ITEM_DATABASE: ItemData[] = [
     description: 'A legendary divine blade forged in heavenly fires. Emits a glorious golden aura.',
     price: 1200,
     stats: { atk: 65, crit: 0.15, hp: 120 }
+  },
+  {
+    id: 'wep_muramasa',
+    name: 'Cursed Katana Muramasa',
+    type: 'weapon',
+    rarity: 'epic',
+    icon: 'Katana',
+    image: '/assets/rpg-icons/32x32/sword_01a.png',
+    description: 'A blood-drinking ancient blade that thirsts for combat with extreme critical strikes.',
+    price: 750,
+    stats: { atk: 58, crit: 0.22, speed: 1.0 }
   },
   {
     id: 'wep_void_daggers',
@@ -91,6 +152,17 @@ export const ITEM_DATABASE: ItemData[] = [
     price: 600,
     stats: { atk: 50, crit: 0.20, speed: 1.0 }
   },
+  {
+    id: 'wep_iron_sword',
+    name: 'Iron Broadsword',
+    type: 'weapon',
+    rarity: 'common',
+    icon: 'Sword',
+    image: '/assets/rpg-icons/32x32/sword_03a.png',
+    description: 'Standard reliable steel broadsword favored by town guardsmen.',
+    price: 120,
+    stats: { atk: 18 }
+  },
 
   // --- HELMETS ---
   {
@@ -116,6 +188,17 @@ export const ITEM_DATABASE: ItemData[] = [
     stats: { def: 18, crit: 0.08, speed: 0.5 }
   },
   {
+    id: 'helm_archmage_cowl',
+    name: 'Archmage Mystic Cowl',
+    type: 'helmet',
+    rarity: 'rare',
+    icon: 'Hood',
+    image: '/assets/rpg-icons/32x32/hat_01a.png',
+    description: 'A velvet cowl saturated with primordial mana for arcane masters.',
+    price: 360,
+    stats: { def: 16, mp: 120, atk: 15 }
+  },
+  {
     id: 'helm_valkyrie_crown',
     name: 'Valkyrie Winged Crown',
     type: 'helmet',
@@ -138,6 +221,17 @@ export const ITEM_DATABASE: ItemData[] = [
     description: 'Thick overlapping steel plates designed to deflect blade strikes.',
     price: 200,
     stats: { def: 20, hp: 80 }
+  },
+  {
+    id: 'armor_paladin_chest',
+    name: 'Paladin Radiant Cuirass',
+    type: 'armor',
+    rarity: 'rare',
+    icon: 'Cuirass',
+    image: '/assets/rpg-icons/32x32/armor_01a.png',
+    description: 'Blessed breastplate inscribed with sacred protection runes.',
+    price: 450,
+    stats: { def: 32, hp: 140, mp: 40 }
   },
   {
     id: 'armor_dragon_mail',
@@ -210,6 +304,17 @@ export const ITEM_DATABASE: ItemData[] = [
     stats: { speed: 2.0, hp: 150, mp: 100, def: 20 }
   },
   {
+    id: 'wings_valkyrie',
+    name: 'Valkyrie Feather Wings',
+    type: 'wings',
+    rarity: 'epic',
+    icon: 'Wings',
+    image: '/assets/rpg-icons/32x32/crystal_01g.png',
+    description: 'Wings of sacred silver feathers that empower aerial double jumping.',
+    price: 1200,
+    stats: { speed: 1.8, atk: 25, hp: 120 }
+  },
+  {
     id: 'wings_demon',
     name: 'Abyssal Dragon Wings',
     type: 'wings',
@@ -234,6 +339,17 @@ export const ITEM_DATABASE: ItemData[] = [
     stats: { atk: 22, hp: 80 }
   },
   {
+    id: 'ring_celestial_band',
+    name: 'Celestial Starlight Band',
+    type: 'ring',
+    rarity: 'rare',
+    icon: 'Ring',
+    image: '/assets/rpg-icons/32x32/ring_02a.png',
+    description: 'An ethereal band pulsing with starry equilibrium and spell crit.',
+    price: 420,
+    stats: { atk: 18, mp: 100, crit: 0.12 }
+  },
+  {
     id: 'ring_diamond',
     name: 'Omniscient Diamond Band',
     type: 'ring',
@@ -256,6 +372,17 @@ export const ITEM_DATABASE: ItemData[] = [
     description: 'Glowing silver pendant that replenishes magical energies.',
     price: 400,
     stats: { mp: 120, crit: 0.10 }
+  },
+  {
+    id: 'amulet_dragons_heart',
+    name: 'Dragon Heart Talisman',
+    type: 'amulet',
+    rarity: 'rare',
+    icon: 'Talisman',
+    image: '/assets/rpg-icons/32x32/necklace_01a.png',
+    description: 'A crimson talisman pulsing with draconian vitality.',
+    price: 450,
+    stats: { hp: 160, atk: 20 }
   },
   {
     id: 'amulet_heart_of_titans',
@@ -295,6 +422,28 @@ export const ITEM_DATABASE: ItemData[] = [
 
   // --- CONSUMABLES ---
   {
+    id: 'pot_hp_small',
+    name: 'Small Health Potion',
+    type: 'consumable',
+    rarity: 'common',
+    icon: 'Potion',
+    image: '/assets/ui_sprites/icons/P_Green01.png',
+    description: 'Restores 120 HP instantly when consumed.',
+    price: 25,
+    consumableEffect: { type: 'heal_hp', value: 120 }
+  },
+  {
+    id: 'pot_hp_large',
+    name: 'Large Health Potion',
+    type: 'consumable',
+    rarity: 'common',
+    icon: 'Potion',
+    image: '/assets/ui_sprites/icons/P_Green01.png',
+    description: 'Restores 280 HP instantly when consumed.',
+    price: 60,
+    consumableEffect: { type: 'heal_hp', value: 280 }
+  },
+  {
     id: 'pot_hp_greater',
     name: 'Greater Health Potion',
     type: 'consumable',
@@ -304,6 +453,17 @@ export const ITEM_DATABASE: ItemData[] = [
     description: 'Restores 250 HP instantly when consumed.',
     price: 50,
     consumableEffect: { type: 'heal_hp', value: 250 }
+  },
+  {
+    id: 'pot_mp_large',
+    name: 'Large Mana Potion',
+    type: 'consumable',
+    rarity: 'common',
+    icon: 'Potion',
+    image: '/assets/rpg-icons/32x32/potion_02a.png',
+    description: 'Restores 200 MP instantly when consumed.',
+    price: 60,
+    consumableEffect: { type: 'heal_mp', value: 200 }
   },
   {
     id: 'pot_mp_greater',
@@ -317,6 +477,28 @@ export const ITEM_DATABASE: ItemData[] = [
     consumableEffect: { type: 'heal_mp', value: 180 }
   },
   {
+    id: 'pot_elixir',
+    name: 'Elixir of Full Restoration',
+    type: 'consumable',
+    rarity: 'rare',
+    icon: 'Elixir',
+    image: '/assets/rpg-icons/32x32/potion_01a.png',
+    description: 'Fully restores 450 HP and 250 MP simultaneously.',
+    price: 180,
+    consumableEffect: { type: 'heal_hp', value: 450 }
+  },
+  {
+    id: 'pot_atk_flask',
+    name: 'Heroic Strength Flask',
+    type: 'consumable',
+    rarity: 'rare',
+    icon: 'Flask',
+    image: '/assets/ui_sprites/icons/P_Red01.png',
+    description: 'Boosts ATK by 35% for 12 seconds.',
+    price: 120,
+    consumableEffect: { type: 'buff_atk', value: 1.35, duration: 12 }
+  },
+  {
     id: 'pot_fury_flask',
     name: 'Berserk Fury Flask',
     type: 'consumable',
@@ -326,45 +508,67 @@ export const ITEM_DATABASE: ItemData[] = [
     description: 'Empowers bearer, boosting ATK by 40% for 15 seconds.',
     price: 150,
     consumableEffect: { type: 'buff_atk', value: 1.40, duration: 15 }
+  },
+  {
+    id: 'pot_revive_feather',
+    name: 'Phoenix Resurrection Feather',
+    type: 'consumable',
+    rarity: 'epic',
+    icon: 'Feather',
+    image: '/assets/rpg-icons/32x32/crystal_01j.png',
+    description: 'Mystic phoenix plume that restores the bearer to life with 500 HP.',
+    price: 300,
+    consumableEffect: { type: 'revive', value: 500 }
   }
 ];
 
 export type LootTier = 'boss' | 'mid' | 'low';
 
-export function getRandomLoot(tier: LootTier = 'mid'): ItemData {
-  const roll = Math.random();
-  let pool: ItemData[] = [];
+export interface WeightedDrop {
+  item: ItemData | null;
+  weight: number;
+}
 
-  if (tier === 'boss') {
-    if (roll < 0.20) {
-      pool = ITEM_DATABASE.filter(i => i.rarity === 'legendary');
-    } else if (roll < 0.55) {
-      pool = ITEM_DATABASE.filter(i => i.rarity === 'epic');
-    } else if (roll < 0.85) {
-      pool = ITEM_DATABASE.filter(i => i.rarity === 'rare');
-    } else {
-      pool = ITEM_DATABASE.filter(i => i.rarity === 'common');
-    }
-  } else if (tier === 'mid') {
-    if (roll < 0.06) {
-      pool = ITEM_DATABASE.filter(i => i.rarity === 'legendary');
-    } else if (roll < 0.22) {
-      pool = ITEM_DATABASE.filter(i => i.rarity === 'epic');
-    } else if (roll < 0.60) {
-      pool = ITEM_DATABASE.filter(i => i.rarity === 'rare');
-    } else {
-      pool = ITEM_DATABASE.filter(i => i.rarity === 'common');
-    }
-  } else {
-    if (roll < 0.02) {
-      pool = ITEM_DATABASE.filter(i => i.rarity === 'legendary');
-    } else if (roll < 0.12) {
-      pool = ITEM_DATABASE.filter(i => i.rarity === 'epic');
-    } else if (roll < 0.45) {
-      pool = ITEM_DATABASE.filter(i => i.rarity === 'rare');
-    } else {
-      pool = ITEM_DATABASE.filter(i => i.rarity === 'common');
+/**
+ * Weighted Table Drop Roller (SKILL.md standard pattern)
+ * Rolls one number across the accumulated weight sum.
+ */
+export function rollDrop(table: WeightedDrop[]): ItemData | null {
+  const total = table.reduce((sum, d) => sum + d.weight, 0);
+  if (total <= 0) return null;
+  let r = Math.random() * total;
+  for (const drop of table) {
+    if ((r -= drop.weight) <= 0) {
+      return drop.item;
     }
   }
-  return pool[Math.floor(Math.random() * pool.length)] || ITEM_DATABASE[0];
+  return table[table.length - 1]?.item || null;
 }
+
+/**
+ * Generates balanced weighted drop tables per tier with guaranteed totals.
+ */
+export function getRandomLoot(tier: LootTier = 'mid'): ItemData {
+  const legendaries = ITEM_DATABASE.filter(i => i.rarity === 'legendary');
+  const epics = ITEM_DATABASE.filter(i => i.rarity === 'epic');
+  const rares = ITEM_DATABASE.filter(i => i.rarity === 'rare');
+  const commons = ITEM_DATABASE.filter(i => i.rarity === 'common');
+
+  // Weights for (Legendary, Epic, Rare, Common)
+  let weights = { leg: 2, epic: 10, rare: 35, com: 53 };
+  if (tier === 'boss') {
+    weights = { leg: 25, epic: 40, rare: 25, com: 10 };
+  } else if (tier === 'mid') {
+    weights = { leg: 6, epic: 20, rare: 44, com: 30 };
+  }
+
+  const table: WeightedDrop[] = [
+    ...legendaries.map(i => ({ item: i, weight: weights.leg / Math.max(1, legendaries.length) })),
+    ...epics.map(i => ({ item: i, weight: weights.epic / Math.max(1, epics.length) })),
+    ...rares.map(i => ({ item: i, weight: weights.rare / Math.max(1, rares.length) })),
+    ...commons.map(i => ({ item: i, weight: weights.com / Math.max(1, commons.length) }))
+  ];
+
+  return rollDrop(table) || ITEM_DATABASE[0];
+}
+

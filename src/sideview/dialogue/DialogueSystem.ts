@@ -74,16 +74,23 @@ export class DialogueSystem {
         width: min(880px, 92vw);
         background: url('/assets/kenney-rpg-ui/panel_brown.png') repeat;
         background-size: 100% 100%;
-        border: 4px solid #4a2c11;
-        border-radius: 8px;
-        box-shadow: 0 12px 35px rgba(0, 0, 0, 0.85), inset 0 0 15px rgba(0, 0, 0, 0.6);
-        padding: 16px 20px 18px 20px;
+        border-style: solid;
+        border-width: 14px;
+        border-image: url('/assets/kenney-rpg-ui/panel_brown.png') 14 fill repeat;
+        box-shadow: 0 12px 35px rgba(0, 0, 0, 0.85);
+        padding: 12px 16px 14px 16px;
         display: flex;
         flex-direction: column;
-        gap: 12px;
+        gap: 10px;
         color: #f8fafc;
         position: relative;
         image-rendering: pixelated;
+        animation: dialogueSlideUp 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      @keyframes dialogueSlideUp {
+        from { transform: translateY(24px) scale(0.96); opacity: 0; }
+        to { transform: translateY(0) scale(1); opacity: 1; }
       }
 
       .dialogue-header-row {
@@ -119,17 +126,18 @@ export class DialogueSystem {
       }
 
       .dialogue-portrait {
-        width: 64px;
-        height: 64px;
+        width: 72px;
+        height: 72px;
         flex-shrink: 0;
-        background: url('/assets/kenney-rpg-ui/panelInset_beigeLight.png') no-repeat center center;
-        background-size: 100% 100%;
-        border-radius: 6px;
+        border-style: solid;
+        border-width: 8px;
+        border-image: url('/assets/kenney-rpg-ui/panelInset_beigeLight.png') 8 fill repeat;
         display: flex;
         align-items: center;
         justify-content: center;
         font-size: 36px;
         box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+        image-rendering: pixelated;
       }
 
       .dialogue-text-body {
@@ -153,20 +161,21 @@ export class DialogueSystem {
       }
 
       .dialogue-btn {
-        background: url('/assets/kenney-rpg-ui/buttonRound_brown.png') no-repeat center center;
+        background: url('/assets/kenney-rpg-ui/buttonLong_brown.png') no-repeat center center;
         background-size: 100% 100%;
-        border: 2px solid #2e1a0b;
+        border: none;
         color: #fef08a;
-        font-size: 13px;
-        font-weight: 800;
-        padding: 6px 14px;
+        font-size: 12.5px;
+        font-weight: 900;
+        padding: 6px 16px 8px 16px;
         cursor: pointer;
-        border-radius: 4px;
         transition: transform 0.1s ease, filter 0.1s ease;
         display: flex;
         align-items: center;
         gap: 6px;
         text-shadow: 1px 1px 2px #000;
+        font-family: 'Cinzel', serif;
+        image-rendering: pixelated;
       }
 
       .dialogue-btn:hover {
@@ -175,18 +184,21 @@ export class DialogueSystem {
       }
 
       .dialogue-btn:active {
+        background-image: url('/assets/kenney-rpg-ui/buttonLong_brown_pressed.png');
         transform: translateY(1px);
       }
 
       .dialogue-btn-quest {
-        background: url('/assets/kenney-rpg-ui/buttonRound_blue.png') no-repeat center center !important;
-        background-size: 100% 100% !important;
+        background-image: url('/assets/kenney-rpg-ui/buttonLong_blue.png') !important;
         color: #ffffff !important;
       }
 
+      .dialogue-btn-quest:active {
+        background-image: url('/assets/kenney-rpg-ui/buttonLong_blue_pressed.png') !important;
+      }
+
       .dialogue-btn-turnin {
-        background: url('/assets/kenney-rpg-ui/buttonRound_blue.png') no-repeat center center !important;
-        background-size: 100% 100% !important;
+        background-image: url('/assets/kenney-rpg-ui/buttonLong_blue.png') !important;
         color: #ffd700 !important;
         animation: pulseTurnIn 1.5s infinite ease-in-out;
       }

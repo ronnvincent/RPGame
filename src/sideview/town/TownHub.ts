@@ -262,35 +262,48 @@ export class TownHub {
     const renderContent = () => {
       modal.innerHTML = `
         <div class="dialogue-header-row">
-          <div style="font-size: 18px; font-weight: 900; color: #ffd700;">⚒️ BLACKSMITH FORGE & REFORGING</div>
-          <div style="font-size: 13px; color: #fef08a; font-weight: 800;">💰 Gold: ${engine.player.gold}G</div>
+          <div style="font-size: 18px; font-weight: 900; color: #ffd700; display: flex; align-items: center; gap: 8px;">
+            <span>⚒️ BLACKSMITH FORGE & REFORGING</span>
+          </div>
+          <div style="font-size: 13px; color: #fef08a; font-weight: 900; background: rgba(0,0,0,0.5); padding: 4px 10px; border-radius: 4px; border: 1px solid #ffd700;">
+            💰 ${engine.player.gold} Gold
+          </div>
         </div>
-        <div style="font-size: 13px; color: #cbd5e1; margin: 4px 0 10px 0;">
+        <div style="font-size: 12.5px; color: #cbd5e1; margin: 4px 0 10px 0; font-style: italic;">
           Keith can reforge your equipped weapons and armor plates to boost raw Attack & Defense stats!
         </div>
-        <div style="display: flex; flex-direction: column; gap: 8px;">
-          <div style="background: rgba(0,0,0,0.5); padding: 10px 14px; border-radius: 6px; display: flex; align-items: center; justify-content: space-between;">
-            <div>
-              <div style="font-weight: 800; color: #f87171;">⚔️ Reforge Blade (+6 Base ATK)</div>
-              <div style="font-size: 11px; color: #94a3b8;">Current ATK: ${engine.player.totalAtk}</div>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <div style="background: url('/assets/kenney-rpg-ui/panelInset_brown.png') repeat; background-size: 100% 100%; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; border-radius: 4px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <img src="/assets/rpg-icons/32x32/sword_03a.png" style="width: 32px; height: 32px; image-rendering: pixelated;" />
+              <div>
+                <div style="font-weight: 900; color: #f87171; font-family: 'Cinzel', serif; font-size: 13px;">Reforge Blade (+6 Base ATK)</div>
+                <div style="font-size: 11px; color: #94a3b8;">Current ATK: ${engine.player.totalAtk}</div>
+              </div>
             </div>
-            <button id="forge-atk-btn" class="dialogue-btn" style="padding: 6px 16px;">Upgrade (150G)</button>
+            <button id="forge-atk-btn" class="dialogue-btn dialogue-btn-quest" style="padding: 6px 16px;">150G Upgrade</button>
           </div>
 
-          <div style="background: rgba(0,0,0,0.5); padding: 10px 14px; border-radius: 6px; display: flex; align-items: center; justify-content: space-between;">
-            <div>
-              <div style="font-weight: 800; color: #60a5fa;">🛡️ Reinforce Plate Armor (+4 Base DEF)</div>
-              <div style="font-size: 11px; color: #94a3b8;">Current DEF: ${engine.player.totalDef}</div>
+          <div style="background: url('/assets/kenney-rpg-ui/panelInset_brown.png') repeat; background-size: 100% 100%; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; border-radius: 4px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <img src="/assets/rpg-icons/32x32/shield_01a.png" style="width: 32px; height: 32px; image-rendering: pixelated;" />
+              <div>
+                <div style="font-weight: 900; color: #60a5fa; font-family: 'Cinzel', serif; font-size: 13px;">Reinforce Armor (+4 Base DEF)</div>
+                <div style="font-size: 11px; color: #94a3b8;">Current DEF: ${engine.player.totalDef}</div>
+              </div>
             </div>
-            <button id="forge-def-btn" class="dialogue-btn" style="padding: 6px 16px;">Upgrade (150G)</button>
+            <button id="forge-def-btn" class="dialogue-btn dialogue-btn-quest" style="padding: 6px 16px;">150G Upgrade</button>
           </div>
 
-          <div style="background: rgba(0,0,0,0.5); padding: 10px 14px; border-radius: 6px; display: flex; align-items: center; justify-content: space-between;">
-            <div>
-              <div style="font-weight: 800; color: #4ade80;">❤️ Vitality Blessing (+50 Max HP)</div>
-              <div style="font-size: 11px; color: #94a3b8;">Current HP: ${engine.player.hp}/${engine.player.maxHp}</div>
+          <div style="background: url('/assets/kenney-rpg-ui/panelInset_brown.png') repeat; background-size: 100% 100%; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; border-radius: 4px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <img src="/assets/rpg-icons/32x32/gem_01b.png" style="width: 32px; height: 32px; image-rendering: pixelated;" />
+              <div>
+                <div style="font-weight: 900; color: #4ade80; font-family: 'Cinzel', serif; font-size: 13px;">Vitality Blessing (+50 Max HP)</div>
+                <div style="font-size: 11px; color: #94a3b8;">Current HP: ${Math.round(engine.player.hp)} / ${engine.player.maxHp}</div>
+              </div>
             </div>
-            <button id="forge-hp-btn" class="dialogue-btn" style="padding: 6px 16px;">Upgrade (200G)</button>
+            <button id="forge-hp-btn" class="dialogue-btn dialogue-btn-quest" style="padding: 6px 16px;">200G Upgrade</button>
           </div>
         </div>
         <div class="dialogue-actions-row" style="margin-top: 14px;">
@@ -375,20 +388,24 @@ export class TownHub {
     const renderContent = () => {
       modal.innerHTML = `
         <div class="dialogue-header-row">
-          <div style="font-size: 18px; font-weight: 900; color: #ffd700;">🧪 ALCHEMIST MORWENNA'S APOTHECARY</div>
-          <div style="font-size: 13px; color: #fef08a; font-weight: 800;">💰 Gold: ${engine.player.gold}G</div>
+          <div style="font-size: 18px; font-weight: 900; color: #ffd700; display: flex; align-items: center; gap: 8px;">
+            <span>🧪 ALCHEMIST MORWENNA'S APOTHECARY</span>
+          </div>
+          <div style="font-size: 13px; color: #fef08a; font-weight: 900; background: rgba(0,0,0,0.5); padding: 4px 10px; border-radius: 4px; border: 1px solid #ffd700;">
+            💰 ${engine.player.gold} Gold
+          </div>
         </div>
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; margin: 10px 0;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; margin: 12px 0;">
           ${shopItems.map((item, idx) => `
-            <div style="background: rgba(0,0,0,0.5); padding: 8px 12px; border-radius: 6px; display: flex; align-items: center; justify-content: space-between; border: 1px solid #334155;">
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <img src="${item.image}" style="width: 28px; height: 28px; image-rendering: pixelated;" />
+            <div style="background: url('/assets/kenney-rpg-ui/panelInset_brown.png') repeat; background-size: 100% 100%; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; border-radius: 4px;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <img src="${item.image}" style="width: 32px; height: 32px; image-rendering: pixelated;" />
                 <div>
-                  <div style="font-size: 12px; font-weight: 800; color: #f8fafc;">${item.name}</div>
-                  <div style="font-size: 10px; color: #94a3b8;">${item.description}</div>
+                  <div style="font-size: 12px; font-weight: 900; color: #fef08a; font-family: 'Cinzel', serif;">${item.name}</div>
+                  <div style="font-size: 10px; color: #cbd5e1; line-height: 1.2;">${item.description}</div>
                 </div>
               </div>
-              <button class="buy-pot-btn dialogue-btn" data-idx="${idx}" style="padding: 4px 10px; font-size: 11px;">
+              <button class="buy-pot-btn dialogue-btn dialogue-btn-quest" data-idx="${idx}" style="padding: 5px 12px; font-size: 11px; white-space: nowrap;">
                 ${item.price}G
               </button>
             </div>

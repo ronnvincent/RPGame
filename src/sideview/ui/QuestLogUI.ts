@@ -54,12 +54,12 @@ export class QuestLogUI {
       <div style="font-size: 18px; font-weight: 900; color: #ffd700; display: flex; align-items: center; gap: 8px;">
         <span>📜 QUEST LOG & LORE ARCHIVE</span>
       </div>
-      <div style="font-size: 11px; color: #94a3b8;">[J / Esc to Close]</div>
+      <div style="font-size: 11px; color: #94a3b8; font-weight: 700;">[J / Esc to Close]</div>
     `;
 
     // Tabs Row
     const tabsRow = document.createElement('div');
-    tabsRow.style.cssText = 'display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px 0; border-bottom: 2px solid rgba(255,255,255,0.1); padding-bottom: 6px;';
+    tabsRow.style.cssText = 'display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 10px 0; border-bottom: 2px solid rgba(255,215,0,0.2); padding-bottom: 8px;';
     
     const tabs: { id: 'main' | 'side' | 'completed' | 'lore'; label: string; icon: string }[] = [
       { id: 'main', label: 'Main Story', icon: '⚔️' },
@@ -113,7 +113,7 @@ export class QuestLogUI {
 
       if (activeList.length === 0) {
         container.innerHTML = `
-          <div style="text-align: center; color: #94a3b8; font-size: 14px; padding: 40px;">
+          <div style="text-align: center; color: #94a3b8; font-size: 14px; padding: 40px; font-style: italic;">
             No active ${this.currentTab === 'main' ? 'Main Story' : 'Side'} quests currently.
             <div style="font-size: 12px; color: #64748b; margin-top: 6px;">Talk to NPCs in the Haven of Eldermoor to accept new assignments!</div>
           </div>
@@ -124,19 +124,19 @@ export class QuestLogUI {
       activeList.forEach(({ quest, objectives, state }) => {
         const card = document.createElement('div');
         card.style.cssText = `
-          background: rgba(18, 12, 28, 0.85);
-          border: 2px solid ${state === 'ready_to_turn_in' ? '#ffd700' : '#475569'};
-          border-radius: 8px;
-          padding: 14px;
+          background: url('/assets/kenney-rpg-ui/panelInset_brown.png') repeat;
+          background-size: 100% 100%;
+          padding: 14px 16px;
           display: flex;
           flex-direction: column;
           gap: 8px;
+          border-radius: 4px;
         `;
 
         card.innerHTML = `
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div style="font-size: 16px; font-weight: 900; color: #ffd700;">${quest.title}</div>
-            <span style="font-size: 11px; padding: 3px 8px; border-radius: 4px; font-weight: 800; background: ${state === 'ready_to_turn_in' ? '#22c55e' : '#3b82f6'}; color: #fff;">
+            <div style="font-size: 15px; font-weight: 900; color: #fef08a; font-family: 'Cinzel', serif;">${quest.title}</div>
+            <span style="font-size: 10.5px; padding: 3px 8px; border-radius: 4px; font-weight: 800; background: ${state === 'ready_to_turn_in' ? '#22c55e' : '#3b82f6'}; color: #fff;">
               ${state === 'ready_to_turn_in' ? 'READY TO TURN IN' : 'IN PROGRESS'}
             </span>
           </div>
@@ -144,11 +144,11 @@ export class QuestLogUI {
           <div style="font-size: 12px; color: #cbd5e1; line-height: 1.4;">${quest.description}</div>
           <div style="font-size: 11px; color: #94a3b8;"><strong>Quest Giver:</strong> ${quest.giverName} (Haven of Eldermoor)</div>
 
-          <div style="margin-top: 4px; background: rgba(0,0,0,0.5); padding: 8px 12px; border-radius: 6px;">
-            <div style="font-size: 12px; font-weight: 800; color: #fef08a; margin-bottom: 6px;">Objectives:</div>
+          <div style="margin-top: 4px; background: rgba(0,0,0,0.5); padding: 8px 12px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
+            <div style="font-size: 11.5px; font-weight: 800; color: #fef08a; margin-bottom: 6px;">Objectives:</div>
             <div style="display: flex; flex-direction: column; gap: 4px;">
               ${objectives.map(obj => `
-                <div style="display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: ${obj.isCompleted ? '#4ade80' : '#e2e8f0'};">
+                <div style="display: flex; align-items: center; justify-content: space-between; font-size: 11.5px; color: ${obj.isCompleted ? '#4ade80' : '#e2e8f0'};">
                   <span>${obj.isCompleted ? '☑️' : '◻️'} ${obj.description}</span>
                   <span style="font-weight: 700;">${obj.currentCount}/${obj.requiredCount}</span>
                 </div>
@@ -166,19 +166,27 @@ export class QuestLogUI {
     } else if (this.currentTab === 'completed') {
       const completed = quests.getAllCompletedQuests();
       if (completed.length === 0) {
-        container.innerHTML = `<div style="text-align: center; color: #94a3b8; padding: 40px;">No completed quests yet. Embark on your journey!</div>`;
+        container.innerHTML = `<div style="text-align: center; color: #94a3b8; padding: 40px; font-style: italic;">No completed quests yet. Embark on your journey!</div>`;
         return;
       }
 
       completed.forEach(q => {
         const card = document.createElement('div');
-        card.style.cssText = 'background: rgba(10, 20, 10, 0.7); border: 1px solid #166534; border-radius: 6px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;';
+        card.style.cssText = `
+          background: url('/assets/kenney-rpg-ui/panelInset_brown.png') repeat;
+          background-size: 100% 100%;
+          padding: 10px 14px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          border-radius: 4px;
+        `;
         card.innerHTML = `
           <div>
-            <div style="font-size: 14px; font-weight: 800; color: #4ade80;">✓ ${q.title}</div>
-            <div style="font-size: 11px; color: #86efac;">${q.description}</div>
+            <div style="font-size: 13.5px; font-weight: 900; color: #4ade80; font-family: 'Cinzel', serif;">✓ ${q.title}</div>
+            <div style="font-size: 11px; color: #cbd5e1;">${q.description}</div>
           </div>
-          <span style="font-size: 11px; color: #fef08a; font-weight: 700;">+${q.rewards.exp} EXP / +${q.rewards.gold}G</span>
+          <span style="font-size: 11px; color: #fef08a; font-weight: 800;">+${q.rewards.exp} EXP / +${q.rewards.gold}G</span>
         `;
         container.appendChild(card);
       });
