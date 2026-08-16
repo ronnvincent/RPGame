@@ -195,7 +195,10 @@ export class SideViewGame {
       });
 
       mod.network.listenForPartyNextDungeon((data) => {
-        if (!this.engine || this.engine.isHost) return;
+        if (!this.engine) return;
+        if (this.engine.isHost) {
+          this.engine.isHost = false;
+        }
         console.log('[NET] Received party_next_dungeon from host:', data);
         this.dialogue?.close();
         if (this.currentDungeonIndex !== data.dungeonIndex || this.engine.isTownMode) {
@@ -204,7 +207,12 @@ export class SideViewGame {
       });
 
       mod.network.listenForWaveSync((data) => {
-        if (!this.engine || this.engine.isHost) return;
+        if (!this.engine) return;
+        
+        if (this.engine.isHost) {
+          this.engine.isHost = false;
+        }
+
         this.currentWaveIndex = data.waveIndex;
         this.engine.currentWaveIndex = data.waveIndex;
         if (data.cleared) {
@@ -241,7 +249,12 @@ export class SideViewGame {
       });
 
       mod.network.listenForEnemySync((enemies, waveIndex, dungeonIndex, dungeonId) => {
-        if (!this.engine || this.engine.isHost) return;
+        if (!this.engine) return;
+        
+        // If we receive this, we cannot be the host. Force client state.
+        if (this.engine.isHost) {
+          this.engine.isHost = false;
+        }
         
         // Ensure client is in dungeon mode
         if (this.engine.isTownMode) {
@@ -312,7 +325,10 @@ export class SideViewGame {
       });
 
       mod.network.listenForEnemyHit((hitData) => {
-        if (!this.engine || this.engine.isHost) return;
+        if (!this.engine) return;
+        if (this.engine.isHost) {
+          this.engine.isHost = false;
+        }
         const enemy = this.engine.enemies.find(e => e.id === hitData.enemyId) || this.engine.enemies[parseInt(hitData.enemyId)];
         if (enemy) {
           enemy.hp = hitData.newHp;
