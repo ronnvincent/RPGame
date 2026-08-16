@@ -55,7 +55,7 @@ export class SideViewGame {
     this.container.addEventListener('touchmove', (e) => {
       // Allow scrolling only inside scrollable modal bodies
       const target = e.target as HTMLElement;
-      if (!target.closest('.dialogue-box-frame, .inventory-modal, .world-map-modal, .quest-log-modal')) {
+      if (!target.closest('.dialogue-box-frame, .inventory-modal, .world-map-modal, .quest-log-modal, .details-area')) {
         e.preventDefault();
       }
     }, { passive: false });

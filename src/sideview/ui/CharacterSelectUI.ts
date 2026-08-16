@@ -242,7 +242,7 @@ export class CharacterSelectUI {
 
         #start-game-btn {
           position: absolute;
-          bottom: 20px;
+          bottom: 35px;
           left: 50%;
           transform: translateX(-50%);
           width: 80%;
