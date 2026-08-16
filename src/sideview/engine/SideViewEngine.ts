@@ -12,6 +12,7 @@ import { audio } from './AudioManager';
 import { sprites } from './SpriteManager';
 import { quests } from '../quests/QuestManager';
 import { TownHub } from '../town/TownHub';
+import { SaveManager } from './SaveManager';
 
 export interface PlayerEquipment {
   helmet?: ItemData;
@@ -45,6 +46,7 @@ export interface Platform {
 
 export interface PlayerState {
   characterClass: CharacterClass;
+  maxDungeonCleared: number;
   level: number;
   exp: number;
   maxExp: number;
@@ -179,6 +181,7 @@ export class SideViewEngine {
       y: this.groundY,
       vx: 0,
       vy: 0,
+      maxDungeonCleared: 0,
       facing: 1,
       isGrounded: true,
       canDoubleJump: true,
@@ -1052,6 +1055,7 @@ export class SideViewEngine {
       p.exp -= p.maxExp;
       p.level++;
       p.maxExp = Math.round(p.maxExp * 1.5);
+      this.triggerSave();
       this.recomputeStats();
       p.hp = p.maxHp;
       p.mp = p.maxMp;
@@ -1061,6 +1065,28 @@ export class SideViewEngine {
       this.particles.addFloatingText(p.x, p.y - 60, '★ LEVEL UP! ★', '#ffd700', true, 24);
       this.particles.addImpactBurst(p.x, p.y, 40, '#ffd700', 'spark');
     }
+  }
+
+
+  public triggerSave() {
+    SaveManager.saveGame(this.player, this.player.inventory, this.player.maxDungeonCleared);
+  }
+
+  public loadSaveData(data: any) {
+    if (!data || !data.playerState) return;
+    
+    // Restore player state
+    const ps = data.playerState;
+    if (ps.level) this.player.level = ps.level;
+    if (ps.exp) this.player.exp = ps.exp;
+    if (ps.maxExp) this.player.maxExp = ps.maxExp;
+    if (ps.gold) this.player.gold = ps.gold;
+    if (data.maxDungeonCleared) this.player.maxDungeonCleared = data.maxDungeonCleared;
+    if (data.inventory) this.player.inventory = data.inventory;
+    
+    this.recomputeStats();
+    this.player.hp = this.player.maxHp;
+    this.player.mp = this.player.maxMp;
   }
 
   public update(dt: number) {
@@ -1731,6 +1757,7 @@ export class SideViewEngine {
     // Consumables
     if (item.type === 'consumable') {
       p.inventory.splice(invIdx, 1);
+      this.triggerSave();
 
       if (!item.consumableEffect) {
         audio.playClick();

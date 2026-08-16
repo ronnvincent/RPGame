@@ -183,6 +183,7 @@ export class SpriteManager {
       // 11. Epic Boss: NightBorne
       nightborne_sheet: '/assets/nightborne/NightBorne.png',
 
+
       // 12. Tiny RPG Orc Animations (Orc Berserker, Orc Chief Boss)
       orc_idle: '/assets/tiny-rpg/Characters(100x100 split)/Orc/Orc with shadows/Orc_Idle.png',
       orc_walk: '/assets/tiny-rpg/Characters(100x100 split)/Orc/Orc with shadows/Orc_Walk.png',
@@ -1780,6 +1781,12 @@ export class SpriteManager {
       return;
     }
 
+    // 0b. Reaper / Bringer of Death Boss
+    if (lower.includes('reaper') || lower.includes('bringer') || lower.includes('leviathan') || lower.includes('behemoth') || lower.includes('overlord')) {
+      this.drawReaperBoss(ctx, x, y, state, facing, hitStun);
+      return;
+    }
+
     // 1. Skeleton Warrior
     if (lower.includes('skeleton')) {
       this.drawFantasyMob(ctx, x, y, 'skel', state, facing, isBoss, hitStun);
@@ -1805,8 +1812,26 @@ export class SpriteManager {
     }
 
     // 5. Tiny RPG Orc / Warlord Grimjaw / Death Knight / Bosses
-    if (lower.includes('orc') || lower.includes('warlord') || lower.includes('grimjaw') || lower.includes('titan') || lower.includes('golem') || lower.includes('knight')) {
+    if (lower.includes('orc') || lower.includes('warlord') || lower.includes('grimjaw') || lower.includes('titan') || lower.includes('golem') || lower.includes('knight') || lower.includes('sentry') || lower.includes('forge')) {
       this.drawOrcMob(ctx, x, y, state, facing, isBoss, hitStun);
+      return;
+    }
+
+    // 5b. Wraith / Ghost / Phantom / Sorcerer / Siren -> Skeleton with purple tint
+    if (lower.includes('wraith') || lower.includes('phantom') || lower.includes('ghost') || lower.includes('sorcerer') || lower.includes('siren') || lower.includes('stalker') || lower.includes('slayer')) {
+      this.drawFantasyMob(ctx, x, y, 'skel', state, facing, isBoss, hitStun);
+      return;
+    }
+
+    // 5c. Spider / Crab / Hound / Wolf -> Mushroom style (low to ground)
+    if (lower.includes('spider') || lower.includes('crab') || lower.includes('hound') || lower.includes('wolf')) {
+      this.drawFantasyMob(ctx, x, y, 'mush', state, facing, isBoss, hitStun);
+      return;
+    }
+
+    // 5d. Harpy / Drake -> Flying Eye
+    if (lower.includes('harpy') || lower.includes('drake')) {
+      this.drawFantasyMob(ctx, x, y, 'eye', state, facing, isBoss, hitStun);
       return;
     }
 
@@ -1918,7 +1943,7 @@ export class SpriteManager {
     ctx.imageSmoothingEnabled = false;
     ctx.translate(x, y);
 
-    if (facing < 0) {
+    if (facing > 0) {
       ctx.scale(-1, 1);
     }
 
@@ -1944,6 +1969,77 @@ export class SpriteManager {
   /**
    * Draw Monsters_Creatures_Fantasy 150x150 Sprites (Skeleton, Goblin, Flying Eye, Mushroom)
    */
+
+  private drawReaperBoss(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    state: 'idle' | 'walk' | 'run' | 'hit' | 'dead',
+    facing: number,
+    hitStun: number
+  ) {
+    const img = this.images['reaper_sheet'];
+    if (!img) return;
+
+    // Bringer of Death spritesheet: 1120x744, 8 cols
+    // Row 0: Idle (8 frames), Row 1: Walk (8), Row 2: Attack (8), Row 3: Cast (8)
+    // Row 4: Spell (8), Row 5: Hurt (3), Row 6: Death (10), Row 7: Walk2 (8)
+    const frameW = 140;
+    const frameH = 93;
+    let row = 0;
+    let frameCount = 8;
+    let fps = 8;
+
+    if (state === 'dead') {
+      row = 6;
+      frameCount = 8;
+      fps = 6;
+    } else if (state === 'hit' || hitStun > 0) {
+      row = 5;
+      frameCount = 3;
+      fps = 8;
+    } else if (state === 'run' || state === 'walk') {
+      row = 1;
+      frameCount = 8;
+      fps = 10;
+    } else {
+      row = 0;
+      frameCount = 8;
+      fps = 6;
+    }
+
+    const currentFrame = Math.floor(this.animTimer * fps) % frameCount;
+    const scale = 2.8;
+    const destW = frameW * scale;
+    const destH = frameH * scale;
+
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.translate(x, y);
+
+    if (facing > 0) {
+      ctx.scale(-1, 1);
+    }
+
+    if (hitStun > 0) {
+      ctx.filter = 'brightness(2.2) contrast(1.5)';
+    }
+
+    ctx.drawImage(
+      img,
+      currentFrame * frameW,
+      row * frameH,
+      frameW,
+      frameH,
+      -destW / 2,
+      -(destH - 40),
+      destW,
+      destH
+    );
+
+    ctx.restore();
+  }
+
   private drawFantasyMob(
     ctx: CanvasRenderingContext2D,
     x: number,
@@ -1986,7 +2082,7 @@ export class SpriteManager {
     ctx.imageSmoothingEnabled = false;
     ctx.translate(x, y);
 
-    if (facing < 0) {
+    if (facing > 0) {
       ctx.scale(-1, 1);
     }
 
@@ -2053,7 +2149,7 @@ export class SpriteManager {
     ctx.imageSmoothingEnabled = false;
     ctx.translate(x, y);
 
-    if (facing < 0) {
+    if (facing > 0) {
       ctx.scale(-1, 1);
     }
 
@@ -2121,7 +2217,7 @@ export class SpriteManager {
     ctx.imageSmoothingEnabled = false;
     ctx.translate(x, y);
 
-    if (facing < 0) {
+    if (facing > 0) {
       ctx.scale(-1, 1);
     }
 

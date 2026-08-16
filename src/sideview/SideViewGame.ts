@@ -3,7 +3,8 @@
  * Manages canvas rendering loop, input handling, Town Hub, Dungeons, Quests, Dialogues, and Cutscenes.
  */
 
-import { CharacterClass } from './classes/ClassDefinitions';
+import { CharacterClass, CHARACTER_CLASSES } from './classes/ClassDefinitions';
+import { SaveManager } from './engine/SaveManager';
 import { SideViewEngine } from './engine/SideViewEngine';
 import { CharacterSelectUI } from './ui/CharacterSelectUI';
 import { GameHUD } from './ui/GameHUD';
@@ -66,10 +67,21 @@ export class SideViewGame {
       window.visualViewport.addEventListener('resize', () => this.handleResize());
     }
 
-    // Show Character Selection Screen
-    new CharacterSelectUI(this.container, (selectedClass) => {
-      this.startGame(selectedClass);
-    });
+    this.loadOrStart();
+  }
+
+  private async loadOrStart() {
+    const saveData = await SaveManager.loadGame();
+    if (saveData && saveData.playerState && saveData.playerState.characterClass) {
+      const savedClassId = saveData.playerState.characterClass.id;
+      const fullClass = CHARACTER_CLASSES.find(c => c.id === savedClassId) || CHARACTER_CLASSES[0];
+      this.startGame(fullClass, saveData);
+    } else {
+      // Show Character Selection Screen
+      new CharacterSelectUI(this.container, (selectedClass) => {
+        this.startGame(selectedClass, null);
+      });
+    }
   }
 
   private handleResize() {
@@ -86,9 +98,13 @@ export class SideViewGame {
     }
   }
 
-  public startGame(selectedClass: CharacterClass) {
+  public startGame(selectedClass: CharacterClass, saveData: any = null) {
     this.engine = new SideViewEngine(selectedClass);
     this.engine.groundY = this.canvas.height - 90;
+    
+    if (saveData) {
+      this.engine.loadSaveData(saveData);
+    }
     this.engine.arenaHeight = this.canvas.height;
 
     this.townHub = new TownHub();
@@ -135,6 +151,13 @@ export class SideViewGame {
 
     const dungeonIdx = DUNGEONS.findIndex(d => d.id === locationId);
     if (dungeonIdx !== -1) {
+      if (this.engine) {
+        const maxCleared = this.engine.player.maxDungeonCleared || 0;
+        if (dungeonIdx > maxCleared) {
+          this.engine.particles.addFloatingText(this.engine.player.x, this.engine.player.y - 60, `Clear previous zones first!`, '#ef4444', false, 18);
+          return;
+        }
+      }
       this.loadDungeon(dungeonIdx);
     }
   }
@@ -187,6 +210,13 @@ export class SideViewGame {
 
   private onDungeonCleared() {
     if (!this.engine) return;
+    
+    // Update max cleared dungeon for progression gating
+    if (this.currentDungeonIndex >= (this.engine.player.maxDungeonCleared || 0)) {
+      this.engine.player.maxDungeonCleared = this.currentDungeonIndex + 1;
+      this.engine.triggerSave();
+    }
+    
     const dungeon = DUNGEONS[this.currentDungeonIndex];
     audio.playFanfare();
     this.engine.particles.addHolyPillar(this.engine.player.x, this.engine.player.y);
