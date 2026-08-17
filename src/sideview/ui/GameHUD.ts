@@ -1746,12 +1746,15 @@ export class GameHUD {
         if (this.worldMapUI) this.worldMapUI.close();
 
         // Join room and wait for dungeon_start
+        // Accepting puts you in the party LOBBY. The run begins only when the
+        // leader presses START, which arrives as dungeon_start below.
         network.acceptInvite(inviteData.roomId, (roomData) => {
           if (this.game) {
              // network.isHost was set from this same packet by NetworkManager.
              this.game.onSelectLocation(roomData.dungeonId, network.isHost);
           }
         });
+        this.game?.coopLobby?.open();
       };
 
       btnWrapper.appendChild(acceptBtn);

@@ -17,6 +17,7 @@ import { DialogueSystem } from './dialogue/DialogueSystem';
 import { WorldMapUI } from './ui/WorldMapUI';
 import { quests } from './quests/QuestManager';
 import { CoopDebugOverlay } from './ui/CoopDebugOverlay';
+import { CoopLobbyUI } from './ui/CoopLobbyUI';
 
 export class SideViewGame {
   private container: HTMLElement;
@@ -28,6 +29,7 @@ export class SideViewGame {
   private dialogue: DialogueSystem | null = null;
   private worldMap: WorldMapUI | null = null;
   private coopDebug: CoopDebugOverlay | null = null;
+  public coopLobby: CoopLobbyUI | null = null;
   private currentDungeonIndex: number = 0;
   private currentWaveIndex: number = 0;
   private waveActive: boolean = false;
@@ -156,6 +158,16 @@ export class SideViewGame {
 
     // No-op unless ?coopdebug=1 (or the rpg_debug_multiplayer key) is set.
     this.coopDebug = new CoopDebugOverlay(this.container);
+
+    // Party lobby. Closes itself and enters the dungeon when the host starts.
+    this.coopLobby = new CoopLobbyUI(this.container, () => {});
+    this.worldMap.onOpenLobby = () => this.coopLobby?.open();
+
+    // Class and level travel with lobby packets so party cards can show them.
+    network.profile = {
+      classId: this.engine.player.characterClass.id,
+      level: this.engine.player.level
+    };
 
     this.setupInputListeners();
     
@@ -463,6 +475,9 @@ export class SideViewGame {
   }
 
   public onSelectLocation(locationId: string, isHost: boolean = true) {
+    // The run is starting (or we are heading to town) - the lobby is done.
+    this.coopLobby?.close();
+
     if (locationId === 'town_eldermoor') {
       this.loadTownHub();
       return;

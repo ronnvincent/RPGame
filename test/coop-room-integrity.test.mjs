@@ -50,8 +50,13 @@ const run = async () => {
   b.emit('register_player', B);
   await new Promise(r => setTimeout(r, 150));
 
-  const bStart = waitFor(b, 'dungeon_start');
   b.emit('accept_invite', { roomId: room1, ...B });
+  await new Promise(r => setTimeout(r, 200));
+  b.emit('lobby_ready', { ready: true });
+  await new Promise(r => setTimeout(r, 150));
+
+  const bStart = waitFor(b, 'dungeon_start');
+  a.emit('lobby_start');
   const started = await bStart;
   check('guest joined and got dungeon_start', !!started);
   check('guest is NOT host', started && started.isHost === false);

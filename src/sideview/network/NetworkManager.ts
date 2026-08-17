@@ -13,6 +13,32 @@ export interface RemotePlayerState {
   isTownMode?: boolean;
 }
 
+export interface LobbyMember {
+  uuid: string;
+  socketId: string | null;
+  name: string;
+  shortId: string;
+  classId: string | null;
+  level: number;
+  ready: boolean;
+  isHost: boolean;
+  online: boolean;
+}
+
+export interface LobbyState {
+  roomId: string;
+  dungeonId: string;
+  maxPlayers: number;
+  started: boolean;
+  members: LobbyMember[];
+}
+
+/** Sent with lobby packets so other players' cards can show class and level. */
+export interface LocalProfile {
+  classId?: string;
+  level?: number;
+}
+
 export interface FullSyncSnapshot {
   requesterId?: string;
   waveIndex: number;
@@ -78,6 +104,11 @@ export class NetworkManager {
   private onFullSyncCb: ((snapshot: FullSyncSnapshot) => void) | null = null;
   private onRoleChangeCb: ((isHost: boolean) => void) | null = null;
   private onLobbyErrorCb: ((msg: string) => void) | null = null;
+  private onLobbyStateCb: ((state: LobbyState) => void) | null = null;
+  private onLobbyLeftCb: (() => void) | null = null;
+
+  /** Class/level of the local player, attached to lobby packets. */
+  public profile: LocalProfile = {};
 
   constructor() {
     NetworkManager.instance = this;
@@ -220,6 +251,18 @@ export class NetworkManager {
       this.onLobbyErrorCb?.(data?.msg || 'Could not create lobby.');
     });
 
+    this.socket.on('lobby_state', (state: LobbyState) => {
+      this.debug('IN', 'lobby_state', { members: state?.members?.length });
+      if (state?.roomId) this.setRoom(state.roomId);
+      if (state) this.onLobbyStateCb?.(state);
+    });
+
+    this.socket.on('lobby_left', () => {
+      this.setRoom(null);
+      this.isHost = true;
+      this.onLobbyLeftCb?.();
+    });
+
     this.socket.on('remote_player_skill', (data) => {
       const skillDamage = typeof data.skillDamage === 'number' ? data.skillDamage : 0;
       this.stats.skillsRecv++;
@@ -288,7 +331,7 @@ export class NetworkManager {
     const uuid = localStorage.getItem('playerUUID');
     const name = localStorage.getItem('playerName');
     const shortId = localStorage.getItem('playerShortId');
-    this.socket?.emit('create_lobby', { dungeonId, uuid, name, shortId });
+    this.socket?.emit('create_lobby', { dungeonId, uuid, name, shortId, ...this.profile });
   }
 
   public invitePlayer(targetShortId: string, onResponse: (msg: string, success: boolean) => void) {
@@ -309,7 +352,7 @@ export class NetworkManager {
     const uuid = localStorage.getItem('playerUUID');
     const name = localStorage.getItem('playerName');
     const shortId = localStorage.getItem('playerShortId');
-    this.socket?.emit('accept_invite', { roomId, uuid, name, shortId });
+    this.socket?.emit('accept_invite', { roomId, uuid, name, shortId, ...this.profile });
   }
 
   public listenForInvites(onInviteReceived: (inviteData: { fromName: string, dungeonId: string, roomId: string }) => void) {
@@ -426,6 +469,35 @@ export class NetworkManager {
   public onLobbyError(cb: (msg: string) => void) {
     if (!this.socket) this.connect();
     this.onLobbyErrorCb = cb;
+  }
+
+  // ================= LOBBY =================
+
+  public onLobbyState(cb: (state: LobbyState) => void) {
+    if (!this.socket) this.connect();
+    this.onLobbyStateCb = cb;
+  }
+
+  public onLobbyLeft(cb: () => void) {
+    if (!this.socket) this.connect();
+    this.onLobbyLeftCb = cb;
+  }
+
+  /** Toggle readiness. Ignored for the host, who is always ready. */
+  public sendReady(ready: boolean) {
+    if (!this.socket || !this.room) return;
+    this.socket.emit('lobby_ready', { ready });
+  }
+
+  /** Host only - launches the run for everyone. */
+  public startMatch() {
+    if (!this.socket || !this.room) return;
+    this.socket.emit('lobby_start');
+  }
+
+  public leaveLobby() {
+    if (!this.socket || !this.room) return;
+    this.socket.emit('leave_lobby');
   }
 
   // ================= SYNC EVENTS =================

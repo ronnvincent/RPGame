@@ -39,9 +39,15 @@ const run = async () => {
   guestSock.emit('register_player', B);
   await new Promise(r => setTimeout(r, 100));
 
+  // Joining now lands in the LOBBY; the host launches the run explicitly.
+  guestSock.emit('accept_invite', { roomId, ...B });
+  await new Promise(r => setTimeout(r, 200));
+  guestSock.emit('lobby_ready', { ready: true });
+  await new Promise(r => setTimeout(r, 150));
+
   const hostStart = waitFor(hostSock, 'dungeon_start');
   const guestStart = waitFor(guestSock, 'dungeon_start');
-  guestSock.emit('accept_invite', { roomId, ...B });
+  hostSock.emit('lobby_start');
   const [hs, gs] = await Promise.all([hostStart, guestStart]);
   check('host dungeon_start isHost=true', hs.isHost === true);
   check('guest dungeon_start isHost=false', gs.isHost === false);

@@ -147,6 +147,9 @@ const reconnectTimers = {}; // uuid    -> setTimeout handle
 // How long a disconnected player keeps their slot in a room before we evict them.
 const RECONNECT_GRACE_MS = 45000;
 
+// Party size. Was hard-capped at 2; the lobby now supports a full squad.
+const MAX_PARTY = 4;
+
 function socketIdFor(uuid) {
   const rec = playersByUuid[uuid];
   return rec && rec.socketId ? rec.socketId : null;
@@ -175,11 +178,57 @@ function broadcastRoles(roomId) {
   });
 }
 
+/**
+ * Full lobby snapshot. This is the single payload the lobby UI renders from -
+ * slots, readiness, who the host is, and which dungeon is queued.
+ */
+function buildLobbyState(roomId) {
+  const room = rooms[roomId];
+  if (!room) return null;
+  return {
+    roomId,
+    dungeonId: room.dungeonId,
+    maxPlayers: MAX_PARTY,
+    started: room.started,
+    members: room.members.map(uuid => {
+      const rec = playersByUuid[uuid] || {};
+      return {
+        uuid,
+        socketId: rec.socketId || null,
+        name: rec.name || 'Adventurer',
+        shortId: rec.shortId || '',
+        classId: rec.classId || null,
+        level: rec.level || 1,
+        ready: uuid === room.hostUuid ? true : !!room.ready[uuid],
+        isHost: uuid === room.hostUuid,
+        online: !!rec.socketId
+      };
+    })
+  };
+}
+
+function broadcastLobby(roomId) {
+  const state = buildLobbyState(roomId);
+  if (!state) return;
+  for (const uuid of rooms[roomId].members) {
+    const sid = socketIdFor(uuid);
+    if (sid) io.to(sid).emit('lobby_state', state);
+  }
+}
+
+/** Members carry their class and level so the lobby can draw proper cards. */
+function applyProfile(p, data) {
+  if (!p || !data) return;
+  if (data.classId) p.classId = data.classId;
+  if (typeof data.level === 'number') p.level = data.level;
+}
+
 function removeMemberFromRoom(uuid, roomId) {
   const room = rooms[roomId];
   if (!room) return;
 
   room.members = room.members.filter(id => id !== uuid);
+  if (room.ready) delete room.ready[uuid];
 
   const rec = playersByUuid[uuid];
   if (rec) {
@@ -199,6 +248,7 @@ function removeMemberFromRoom(uuid, roomId) {
     console.log(`[ROOM] ${roomId} host migrated to ${playersByUuid[room.hostUuid]?.name}`);
   }
   broadcastRoles(roomId);
+  broadcastLobby(roomId);
 }
 
 io.on('connection', (socket) => {
@@ -309,11 +359,14 @@ io.on('connection', (socket) => {
       removeMemberFromRoom(p.uuid, p.room);
     }
 
+    applyProfile(p, data);
+
     const newRoomId = `room_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
     rooms[newRoomId] = {
       dungeonId: data.dungeonId,
       hostUuid: p.uuid,
       members: [p.uuid],
+      ready: {},
       started: false
     };
     p.room = newRoomId;
@@ -327,6 +380,61 @@ io.on('connection', (socket) => {
       players: [ { name: p.name, shortId: p.shortId } ]
     });
     broadcastRoles(newRoomId);
+    broadcastLobby(newRoomId);
+  });
+
+  // Toggle readiness. The host is implicitly always ready.
+  socket.on('lobby_ready', (data = {}) => {
+    const p = players[socket.id];
+    if (!p || !p.room) return;
+    const room = rooms[p.room];
+    if (!room || room.started) return;
+    room.ready[p.uuid] = !!data.ready;
+    broadcastLobby(p.room);
+  });
+
+  // Host launches the run once everyone has readied up.
+  socket.on('lobby_start', () => {
+    const p = players[socket.id];
+    if (!p || !p.room) return;
+    const room = rooms[p.room];
+    if (!room) return;
+
+    if (p.uuid !== room.hostUuid) {
+      socket.emit('lobby_error', { msg: 'Only the party leader can start.' });
+      return;
+    }
+    const notReady = room.members.filter(u => u !== room.hostUuid && !room.ready[u]);
+    if (notReady.length > 0) {
+      socket.emit('lobby_error', { msg: 'Not everyone is ready yet.' });
+      return;
+    }
+
+    room.started = true;
+    const roster = buildLobbyState(p.room).members;
+    room.members.forEach(uuid => {
+      const sid = socketIdFor(uuid);
+      if (sid) {
+        io.to(sid).emit('dungeon_start', {
+          roomId: p.room,
+          dungeonId: room.dungeonId,
+          players: roster,
+          isHost: uuid === room.hostUuid
+        });
+      }
+    });
+    console.log(`[LOBBY] ${p.name} started ${p.room} with ${room.members.length} player(s)`);
+  });
+
+  // Deliberate exit. Without this a partied player has no way back to solo.
+  socket.on('leave_lobby', () => {
+    const p = players[socket.id];
+    if (!p || !p.room) return;
+    const roomId = p.room;
+    socket.leave(roomId);
+    removeMemberFromRoom(p.uuid, roomId);
+    socket.emit('lobby_left', {});
+    if (rooms[roomId]) broadcastLobby(roomId);
   });
 
   // Send Invite
@@ -381,36 +489,27 @@ io.on('connection', (socket) => {
     }
 
     const alreadyMember = room.members.includes(p.uuid);
-    if (!alreadyMember && room.members.length >= 2) {
-      socket.emit('invite_error', { msg: 'Lobby is full or already started.' });
+    if (room.started && !alreadyMember) {
+      socket.emit('invite_error', { msg: 'That run has already started.' });
+      return;
+    }
+    if (!alreadyMember && room.members.length >= MAX_PARTY) {
+      socket.emit('invite_error', { msg: 'Party is full.' });
       return;
     }
 
-    // Join room
+    applyProfile(p, data);
+
+    // Join the LOBBY. The run no longer auto-starts here - the host launches it
+    // with lobby_start once everyone has readied up.
     if (!alreadyMember) room.members.push(p.uuid);
     p.room = data.roomId;
     socket.join(data.roomId);
 
-    console.log(`${p.name} joined room ${data.roomId}`);
+    console.log(`${p.name} joined lobby ${data.roomId} (${room.members.length}/${MAX_PARTY})`);
 
-    // Start the match!
-    room.started = true;
-
-    const roster = memberRecords(data.roomId).map(r => ({
-      uuid: r.uuid, name: r.name, shortId: r.shortId, socketId: r.socketId
-    }));
-
-    room.members.forEach(uuid => {
-      const sid = socketIdFor(uuid);
-      if (sid) {
-        io.to(sid).emit('dungeon_start', {
-          roomId: data.roomId,
-          dungeonId: room.dungeonId,
-          players: roster,
-          isHost: uuid === room.hostUuid
-        });
-      }
-    });
+    broadcastRoles(data.roomId);
+    broadcastLobby(data.roomId);
   });
 
   // A client that just (re)joined asks the host for a complete state snapshot.

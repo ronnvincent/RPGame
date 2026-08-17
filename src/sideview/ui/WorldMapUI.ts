@@ -25,6 +25,8 @@ export class WorldMapUI {
   private container: HTMLElement;
   private modalEl: HTMLElement | null = null;
   private onSelectLocation: (locationId: string, isHost?: boolean) => void;
+  /** Opens the party lobby once a co-op lobby has been created. */
+  public onOpenLobby: (() => void) | null = null;
 
   public static LOCATIONS: WorldMapLocation[] = [
     {
@@ -320,125 +322,20 @@ export class WorldMapUI {
     this.container.appendChild(this.modalEl);
   }
   
+  /**
+   * Opens the co-op party lobby. The old inline overlay auto-started the run on
+   * the first accepted invite and had a Cancel button that nulled the socket,
+   * leaving it with no listeners. Both are gone - CoopLobbyUI owns this now.
+   */
   private showMatchmakingOverlay(locationId: string) {
-    const overlay = document.createElement('div');
-    overlay.style.position = 'fixed';
-    overlay.style.inset = '0';
-    overlay.style.backgroundColor = 'rgba(0,0,0,0.9)';
-    overlay.style.display = 'flex';
-    overlay.style.flexDirection = 'column';
-    overlay.style.alignItems = 'center';
-    overlay.style.justifyContent = 'center';
-    overlay.style.zIndex = '999999';
-    overlay.style.color = '#fff';
-    overlay.style.fontFamily = "'Outfit', sans-serif";
-    
-    const box = document.createElement('div');
-    box.style.background = "url('/assets/kenney-rpg-ui/panel_brown.png') repeat";
-    box.style.backgroundSize = "100% 100%";
-    box.style.padding = '40px';
-    box.style.border = '4px solid #4a2c11';
-    box.style.borderRadius = '8px';
-    box.style.textAlign = 'center';
-    box.style.color = '#fef08a';
-    box.style.width = '350px';
-
-    const title = document.createElement('h2');
-    title.innerText = 'CO-OP LOBBY';
-    title.style.margin = '0 0 10px 0';
-    title.style.textShadow = '2px 2px 4px #000';
-
-    const myIdText = document.createElement('p');
-    const myShortId = localStorage.getItem('playerShortId') || 'UNKNOWN';
-    myIdText.innerHTML = `Your ID: <strong style="color:#fff; font-size:24px; letter-spacing:2px; background: rgba(0,0,0,0.5); padding: 4px 12px; border-radius: 4px;">${myShortId}</strong>`;
-    myIdText.style.marginBottom = '20px';
-
-    const statusText = document.createElement('p');
-    statusText.innerText = 'Creating lobby...';
-    statusText.style.color = '#a3a3a3';
-    statusText.style.marginBottom = '20px';
-
-    // Invite Section
-    const inviteWrapper = document.createElement('div');
-    inviteWrapper.style.display = 'flex';
-    inviteWrapper.style.gap = '8px';
-    inviteWrapper.style.marginBottom = '20px';
-
-    const inviteInput = document.createElement('input');
-    inviteInput.type = 'text';
-    inviteInput.placeholder = 'Enter Player ID to Invite';
-    inviteInput.style.flex = '1';
-    inviteInput.style.padding = '8px';
-    inviteInput.style.fontSize = '14px';
-    inviteInput.style.border = '2px solid #2e1a0b';
-    inviteInput.style.borderRadius = '4px';
-    inviteInput.style.background = '#000';
-    inviteInput.style.color = '#fff';
-    inviteInput.style.outline = 'none';
-
-    const inviteBtn = document.createElement('button');
-    inviteBtn.innerText = 'INVITE';
-    inviteBtn.style.background = "url('/assets/kenney-rpg-ui/buttonRound_blue.png') no-repeat center center";
-    inviteBtn.style.backgroundSize = "100% 100%";
-    inviteBtn.style.border = 'none';
-    inviteBtn.style.padding = '8px 16px';
-    inviteBtn.style.color = '#fff';
-    inviteBtn.style.cursor = 'pointer';
-    inviteBtn.style.fontWeight = 'bold';
-    
-    inviteBtn.onclick = () => {
-      const target = inviteInput.value.trim().toUpperCase();
-      if (target.length !== 6) {
-        alert('Player ID must be 6 characters.');
-        return;
-      }
-      inviteBtn.innerText = '...';
-      inviteBtn.disabled = true;
-      network.invitePlayer(target, (msg, success) => {
-        alert(msg);
-        inviteBtn.innerText = 'INVITE';
-        inviteBtn.disabled = false;
-        inviteInput.value = '';
-      });
-    };
-
-    inviteWrapper.appendChild(inviteInput);
-    inviteWrapper.appendChild(inviteBtn);
-
-    const cancelBtn = document.createElement('button');
-    cancelBtn.innerText = 'Cancel';
-    cancelBtn.style.padding = '8px 24px';
-    cancelBtn.style.background = '#4a2c11';
-    cancelBtn.style.border = '2px solid #fff';
-    cancelBtn.style.color = '#fff';
-    cancelBtn.style.cursor = 'pointer';
-    cancelBtn.style.width = '100%';
-    cancelBtn.onclick = () => {
-      document.body.removeChild(overlay);
-      if (network.socket) network.socket.disconnect();
-      network.socket = null;
-    };
-
-    box.appendChild(title);
-    box.appendChild(myIdText);
-    box.appendChild(statusText);
-    box.appendChild(inviteWrapper);
-    box.appendChild(cancelBtn);
-    overlay.appendChild(box);
-    document.body.appendChild(overlay);
-
-    network.createLobby(locationId, (lobbyData) => {
-      statusText.innerHTML = `Lobby created! <br/> Players: ${lobbyData.players.length}/2`;
-    }, (roomData) => {
-      // Start match!
-      document.body.removeChild(overlay);
+    network.createLobby(locationId, () => {}, () => {
+      // dungeon_start: the host launched the run.
       this.close();
-      // Role comes from the server (NetworkManager already applied it from the
-      // dungeon_start packet). Never assume host here - guessing wrong is what
-      // made both devices simulate their own waves.
       this.onSelectLocation(locationId, network.isHost);
     });
+    this.onOpenLobby?.();
   }
+
 
   public close() {
     if (this.modalEl && this.modalEl.parentNode) {
