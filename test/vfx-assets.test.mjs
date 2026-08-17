@@ -99,6 +99,25 @@ for (const cls of CHARACTER_CLASSES) {
   }
 }
 
+// 5. Grid row slicing: palette sheets must read across one row, not wrap.
+{
+  const { SpriteSheet } = await import('../src/sideview/engine/SpriteSheet.ts');
+  const stub = { complete: true, naturalWidth: 640, naturalHeight: 576 };
+  const resolve = () => stub;
+
+  const row3 = new SpriteSheet('x', { kind: 'grid', frameW: 64, frameH: 64, cols: 10, rows: 9, row: 3, count: 10 }, resolve);
+  if (row3.frameCount !== 10) fail(`grid row: expected 10 frames, got ${row3.frameCount}`);
+  const f0 = row3.frame(0), f9 = row3.frame(9);
+  if (!f0 || f0.sx !== 0 || f0.sy !== 192) fail(`grid row: frame 0 should be (0,192), got (${f0?.sx},${f0?.sy})`);
+  if (!f9 || f9.sx !== 576 || f9.sy !== 192) fail(`grid row: frame 9 should be (576,192), got (${f9?.sx},${f9?.sy})`);
+
+  // Without a row it must still walk the whole grid.
+  const full = new SpriteSheet('x', { kind: 'grid', frameW: 64, frameH: 64, cols: 10, rows: 9 }, resolve);
+  if (full.frameCount !== 90) fail(`full grid: expected 90 frames, got ${full.frameCount}`);
+  const f10 = full.frame(10);
+  if (!f10 || f10.sx !== 0 || f10.sy !== 64) fail(`full grid: frame 10 should wrap to (0,64), got (${f10?.sx},${f10?.sy})`);
+}
+
 console.log(`Checked ${skillCount} skills across ${CHARACTER_CLASSES.length} classes`);
 console.log(`\n${failures === 0 ? 'ALL VFX ASSETS OK' : failures + ' PROBLEM(S)'}\n`);
 process.exit(failures === 0 ? 0 : 1);

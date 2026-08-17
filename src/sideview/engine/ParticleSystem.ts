@@ -855,11 +855,20 @@ export class ParticleSystem {
   private sheetCache: Map<string, SpriteSheet> = new Map();
   private vfxWarmed = false;
 
-  private sheetFor(id: string, def: VfxDef): SpriteSheet {
-    let sheet = this.sheetCache.get(id);
+  /**
+   * @param row Colour row for palette sheets (one animation per row, nine
+   *            colours). Cached per row so each variant is built once.
+   */
+  private sheetFor(id: string, def: VfxDef, row?: number): SpriteSheet {
+    const key = row === undefined ? id : `${id}:${row}`;
+    let sheet = this.sheetCache.get(key);
     if (!sheet) {
-      sheet = new SpriteSheet(def.src, def.layout, (src) => sprites.getImage(src));
-      this.sheetCache.set(id, sheet);
+      let layout = def.layout;
+      if (row !== undefined && layout.kind === 'grid' && layout.rows > 1) {
+        layout = { ...layout, row: Math.min(row, layout.rows - 1), count: layout.cols };
+      }
+      sheet = new SpriteSheet(def.src, layout, (src) => sprites.getImage(src));
+      this.sheetCache.set(key, sheet);
     }
     return sheet;
   }
@@ -880,7 +889,7 @@ export class ParticleSystem {
     id: string,
     x: number,
     y: number,
-    opts: { facing?: number; scale?: number; vx?: number; vy?: number; fadeOut?: boolean } = {}
+    opts: { facing?: number; scale?: number; vx?: number; vy?: number; fadeOut?: boolean; row?: number } = {}
   ) {
     const def = VFX[id];
     if (!def) {
@@ -888,7 +897,7 @@ export class ParticleSystem {
       return;
     }
 
-    const sheet = this.sheetFor(id, def);
+    const sheet = this.sheetFor(id, def, opts.row);
     this.spriteVfx.push({
       anim: new AnimatedSprite(sheet, { fps: def.fps, loop: false }),
       def,

@@ -8,6 +8,7 @@ import { CharacterClass, SkillDefinition, CHARACTER_CLASSES } from '../classes/C
 import { BattleTheme, EnemyInstance } from '../dungeons/DungeonManager';
 import { ItemData, RARITY_CONFIGS } from '../items/ItemDatabase';
 import { ParticleSystem } from './ParticleSystem';
+import { FX_COLOUR_ROW } from './VfxLibrary';
 import { audio } from './AudioManager';
 import { sprites } from './SpriteManager';
 import { quests } from '../quests/QuestManager';
@@ -550,16 +551,21 @@ export class SideViewEngine {
     const targetX = originX + facing * (skill.range * 0.6);
     const targetY = originY;
 
+    // Palette sheets carry the same animation in nine colours; pick the row that
+    // matches the skill's element so one sheet serves every damage type.
+    const row = FX_COLOUR_ROW[skill.damageType] ?? 5;
+
     this.playSkillCastSfx(skill);
 
     if (vfx.cast) {
-      this.particles.playVfx(vfx.cast, originX, originY - 18, { facing });
+      this.particles.playVfx(vfx.cast, originX, originY - 18, { facing, row });
     }
 
     if (vfx.projectile) {
       // Travels toward the aim direction and fades as it goes.
       this.particles.playVfx(vfx.projectile, originX + facing * 24, originY - 14, {
         facing,
+        row,
         vx: facing * 420,
         fadeOut: true
       });
@@ -567,7 +573,7 @@ export class SideViewEngine {
 
     if (vfx.impact) {
       const delay = vfx.projectile ? Math.min(0.35, skill.range / 900) : 0;
-      const fire = () => this.particles.playVfx(vfx.impact!, targetX, targetY - 18, { facing });
+      const fire = () => this.particles.playVfx(vfx.impact!, targetX, targetY - 18, { facing, row });
       if (delay > 0) window.setTimeout(fire, delay * 1000);
       else fire();
     }

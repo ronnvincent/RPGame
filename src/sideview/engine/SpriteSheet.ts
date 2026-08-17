@@ -12,7 +12,13 @@
  */
 
 export type SheetLayout =
-  | { kind: 'grid'; frameW: number; frameH: number; cols: number; rows: number; count?: number }
+  /**
+   * 2D grid. Set `row` to play a single row instead of every cell - several
+   * packs ship one animation per row, with each row a different colour, so the
+   * effect can be tinted by choosing a row rather than by recolouring at
+   * runtime.
+   */
+  | { kind: 'grid'; frameW: number; frameH: number; cols: number; rows: number; count?: number; row?: number }
   | { kind: 'strip'; dir: 'h' | 'v'; frameW: number; frameH: number; count: number }
   | { kind: 'frames'; paths: string[] };
 
@@ -65,6 +71,9 @@ export class SpriteSheet {
       this.frameCount = layout.paths.length;
     } else if (layout.kind === 'strip') {
       this.frameCount = layout.count;
+    } else if (layout.row !== undefined) {
+      // A single row of the grid.
+      this.frameCount = layout.count ?? layout.cols;
     } else {
       this.frameCount = layout.count ?? layout.cols * layout.rows;
     }
@@ -91,8 +100,8 @@ export class SpriteSheet {
       return { img, sx, sy, sw: l.frameW, sh: l.frameH };
     }
 
-    const col = i % l.cols;
-    const row = Math.floor(i / l.cols);
+    const col = l.row !== undefined ? i : i % l.cols;
+    const row = l.row !== undefined ? l.row : Math.floor(i / l.cols);
     return { img, sx: col * l.frameW, sy: row * l.frameH, sw: l.frameW, sh: l.frameH };
   }
 }

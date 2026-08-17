@@ -49,7 +49,123 @@ function vstrip(frameW: number, frameH: number, count: number): SheetLayout {
   return { kind: 'strip', dir: 'v', frameW, frameH, count };
 }
 
+// ---------------------------------------------------------------------------
+// AAAAA download packs, copied to public/assets/fxpack.
+// Every layout below was measured with tools/analyze-spritesheet.mjs, which
+// reads the alpha channel and finds frame gutters, rather than inferred from
+// image dimensions.
+// ---------------------------------------------------------------------------
+
+const FXP = '/assets/fxpack';
+const ANIMPACK = `${FXP}/Animation Pack/Animation Pack`;
+const MAGIC = `${FXP}/free-pixel-magic-sprite-effects-pack/1 Magic`;
+const ATTACK = `${FXP}/ATTACK FREE`;
+const FIRE1 = `${FXP}/Fire Effect 1/Fire Effect 1`;
+
+/**
+ * BDragon "Effect and FX Pixel" sheets: a 64x64 grid, N columns of animation
+ * by 9 rows of colour. Verified identical row order across every pack:
+ *   0 orange/gold  1 magenta  2 cyan  3 green  4 tan
+ *   5 white/grey   6 mauve    7 red   8 navy
+ * The row is chosen at play time from the skill's damage type, so one entry
+ * covers all nine variants - see FX_COLOUR_ROW.
+ */
+function palette(pack: string, file: string, cols: number): VfxDef {
+  return {
+    src: `${FXP}/${pack}/${file}.png`,
+    layout: { kind: 'grid', frameW: 64, frameH: 64, cols, rows: 9 },
+    fps: 20, scale: 1.5, blend: 'lighter'
+  };
+}
+
+/** Damage type -> colour row in the palette sheets. */
+export const FX_COLOUR_ROW: Record<string, number> = {
+  fire: 7, holy: 0, dark: 1, ice: 2, lightning: 2, physical: 5, magical: 1
+};
+
+const P1 = 'Effect and FX Pixel Part 1 Free/Free';
+const P8 = 'Effect and FX Pixel Part 8 Free/Free';
+const P10 = 'Effect and FX Pixel Part 10 Free/Free';
+const P12 = 'Effect and FX Pixel Part 12 Free/Effect and FX Pixel Part 12 Free';
+
 export const VFX: Record<string, VfxDef> = {
+  // ---------- Palette sheets (auto-tinted by damage type) ----------
+  fx_swirl_a: palette(P1, '03', 13), fx_swirl_b: palette(P1, '04', 14),
+  fx_swirl_c: palette(P1, '05', 14), fx_swirl_d: palette(P1, '06', 15),
+  fx_ring_a: palette(P1, '13', 13), fx_ring_b: palette(P1, '14', 14),
+  fx_ring_c: palette(P1, '15', 14), fx_ring_d: palette(P1, '16', 14),
+  fx_burst_a: palette(P1, '23', 14), fx_burst_b: palette(P1, '24', 14),
+  fx_burst_c: palette(P1, '25', 14), fx_burst_d: palette(P1, '26', 14),
+
+  fx_swipe_a: palette(P8, '375', 8), fx_swipe_b: palette(P8, '376', 8),
+  fx_swipe_c: palette(P8, '377', 8), fx_swipe_d: palette(P8, '378', 8),
+  fx_arc_a: palette(P8, '385', 8), fx_arc_b: palette(P8, '386', 9),
+  fx_arc_c: palette(P8, '387', 8), fx_arc_d: palette(P8, '388', 9),
+  fx_cleave_a: palette(P8, '395', 9), fx_cleave_b: palette(P8, '396', 8),
+  fx_cleave_c: palette(P8, '397', 9), fx_cleave_d: palette(P8, '398', 9),
+
+  fx_pulse_a: palette(P10, '464', 11), fx_pulse_b: palette(P10, '465', 12),
+  fx_pulse_c: palette(P10, '466', 11), fx_pulse_d: palette(P10, '467', 11),
+  fx_wave_a: palette(P10, '474', 11), fx_wave_b: palette(P10, '475', 12),
+  fx_wave_c: palette(P10, '476', 12), fx_wave_d: palette(P10, '477', 12),
+  fx_spiral_a: palette(P10, '484', 12), fx_spiral_b: palette(P10, '485', 12),
+  fx_spiral_c: palette(P10, '486', 12), fx_spiral_d: palette(P10, '487', 11),
+
+  fx_star_a: palette(P12, '566', 13), fx_star_b: palette(P12, '567', 13),
+  fx_star_c: palette(P12, '568', 14), fx_star_d: palette(P12, '569', 13),
+  fx_bloom_a: palette(P12, '576', 14), fx_bloom_b: palette(P12, '577', 14),
+  fx_bloom_c: palette(P12, '578', 11), fx_bloom_d: palette(P12, '579', 14),
+  fx_flare_a: palette(P12, '586', 14), fx_flare_b: palette(P12, '587', 13),
+  fx_flare_c: palette(P12, '588', 14), fx_flare_d: palette(P12, '589', 14),
+
+  // ---------- Named elemental sheets ----------
+  fx_thunder: { src: `${ANIMPACK}/Thunder.png`, layout: hstrip(256, 256, 2), fps: 12, scale: 1.4, blend: 'lighter' },
+  fx_hit_big: { src: `${ANIMPACK}/Hit Effect.png`, layout: vstrip(128, 128, 5), fps: 18, scale: 1.2, blend: 'lighter' },
+  fx_magic_mirror: { src: `${ANIMPACK}/Magic Mirror.png`, layout: vstrip(128, 128, 5), fps: 14, scale: 1.3, blend: 'lighter' },
+  fx_explosion_big: { src: `${ANIMPACK}/explosioneffect.png`, layout: vstrip(128, 128, 8), fps: 18, scale: 1.5 },
+  fx_energy_ball: { src: `${ANIMPACK}/Energy ball/EnergyBall.png`, layout: hstrip(128, 128, 9), fps: 18, scale: 1.1, blend: 'lighter', directional: true },
+  fx_energy_impact: { src: `${ANIMPACK}/Energy ball/energyBallImpact.png`, layout: vstrip(128, 128, 8), fps: 20, scale: 1.2, blend: 'lighter' },
+  fx_burn: { src: `${ANIMPACK}/Fire/Burn.png`, layout: vstrip(128, 128, 10), fps: 16, scale: 1.3, anchor: 'bottom' },
+  fx_shine: { src: `${ANIMPACK}/Fire/Shine.png`, layout: hstrip(64, 64, 6), fps: 16, scale: 1.6, blend: 'lighter' },
+  fx_ice_ball: { src: `${ANIMPACK}/Ice/Ball of ice.png`, layout: vstrip(128, 128, 4), fps: 14, scale: 1.1, blend: 'lighter', directional: true },
+  fx_ice_burst: { src: `${ANIMPACK}/Ice/Burst of ice.png`, layout: vstrip(128, 128, 7), fps: 18, scale: 1.3, blend: 'lighter' },
+
+  fx_firebolt: { src: `${FIRE1}/Firebolt SpriteSheet.png`, layout: hstrip(48, 48, 10), fps: 18, scale: 1.8, blend: 'lighter', directional: true },
+
+  // ---------- Melee sheets (Sangoro attack pack) ----------
+  fx_slash_big: { src: `${ATTACK}/BigSlashV.png`, layout: hstrip(64, 48, 5), fps: 22, scale: 2.0, directional: true },
+  fx_slash_h: { src: `${ATTACK}/Hslash1.png`, layout: hstrip(64, 32, 5), fps: 22, scale: 2.0, directional: true },
+  fx_punch: { src: `${ATTACK}/PunchImp1.png`, layout: hstrip(48, 32, 5), fps: 22, scale: 1.9, directional: true },
+  fx_slash_small: { src: `${ATTACK}/VslashSmall1.png`, layout: hstrip(32, 48, 4), fps: 22, scale: 1.9, directional: true },
+  fx_slash_v: { src: `${ATTACK}/vSlash1.png`, layout: hstrip(64, 48, 4), fps: 22, scale: 2.0, directional: true },
+
+  // ---------- Thrusts ----------
+  fx_thrust_a: { src: `${FXP}/Thrust/Thrusts 1 SpriteSheet.png`, layout: vstrip(64, 32, 5), fps: 20, scale: 2.0, directional: true },
+  fx_thrust_b: { src: `${FXP}/Thrust/Thrust 2 SpriteSheet.png`, layout: vstrip(64, 32, 5), fps: 20, scale: 2.0, directional: true },
+
+  // ---------- Small effects ----------
+  fx_spark_a: { src: `${FXP}/Effects/Effect 1 - Sprite Sheet.png`, layout: vstrip(64, 32, 4), fps: 18, scale: 2.0, blend: 'lighter' },
+  fx_spark_b: { src: `${FXP}/Effects/Effect 2 - Sprite Sheet.png`, layout: vstrip(64, 32, 4), fps: 18, scale: 2.0, blend: 'lighter' },
+  fx_spark_c: { src: `${FXP}/Effects/Effect 3 - Sprite Sheet.png`, layout: vstrip(32, 32, 4), fps: 18, scale: 2.2, blend: 'lighter' },
+  fx_spark_d: { src: `${FXP}/Effects/Effect 4 - Sprite Sheet.png`, layout: vstrip(32, 32, 4), fps: 18, scale: 2.2, blend: 'lighter' },
+
+  // ---------- Magic pack (uniform 72x72; the detector over-split these
+  //            because the art has internal transparent bands) ----------
+  fx_magic_a: { src: `${MAGIC}/1.png`, layout: hstrip(72, 72, 8), fps: 18, scale: 1.5, blend: 'lighter' },
+  fx_magic_b: { src: `${MAGIC}/2.png`, layout: hstrip(72, 72, 8), fps: 18, scale: 1.5, blend: 'lighter' },
+  fx_magic_c: { src: `${MAGIC}/3.png`, layout: hstrip(72, 72, 8), fps: 18, scale: 1.5, blend: 'lighter' },
+  fx_magic_d: { src: `${MAGIC}/5.png`, layout: hstrip(72, 72, 8), fps: 18, scale: 1.5, blend: 'lighter' },
+  fx_magic_e: { src: `${MAGIC}/7.png`, layout: hstrip(72, 72, 8), fps: 18, scale: 1.5, blend: 'lighter' },
+  fx_magic_f: { src: `${MAGIC}/8.png`, layout: hstrip(72, 72, 8), fps: 18, scale: 1.5, blend: 'lighter' },
+  fx_magic_g: { src: `${MAGIC}/9.png`, layout: hstrip(72, 72, 8), fps: 18, scale: 1.5, blend: 'lighter' },
+  fx_magic_h: { src: `${MAGIC}/10.png`, layout: hstrip(72, 72, 6), fps: 18, scale: 1.5, blend: 'lighter' },
+  fx_magic_i: { src: `${MAGIC}/6_2.png`, layout: hstrip(72, 72, 4), fps: 16, scale: 1.5, blend: 'lighter' },
+  fx_magic_j: { src: `${MAGIC}/4_1.png`, layout: hstrip(72, 72, 4), fps: 16, scale: 1.5, blend: 'lighter' },
+  fx_magic_k: { src: `${MAGIC}/4_2.png`, layout: hstrip(72, 72, 4), fps: 16, scale: 1.5, blend: 'lighter' },
+  fx_magic_l: { src: `${MAGIC}/3_2.png`, layout: hstrip(72, 72, 8), fps: 18, scale: 1.5, blend: 'lighter' },
+  fx_magic_m: { src: `${MAGIC}/1_2.png`, layout: hstrip(72, 72, 8), fps: 18, scale: 1.5, blend: 'lighter' },
+
+
   // ---------- Slashes (physical melee) ----------
   slash_horizontal: {
     src: '', layout: { kind: 'frames', paths: grotto('slash-horizontal', 5) },
