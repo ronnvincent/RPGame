@@ -9,7 +9,8 @@
     "test:coop": "node test/coop-sync.test.mjs",
     "test:vfx": "node test/vfx-assets.test.mjs",
     "test:lobby": "node test/coop-lobby.test.mjs",
-    "test:rooms": "node test/coop-room-integrity.test.mjs"
+    "test:rooms": "node test/coop-room-integrity.test.mjs",
+    "test:friends": "node test/coop-friends.test.mjs"
   },
   "keywords": [],
   "author": "",

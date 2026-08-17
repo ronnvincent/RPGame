@@ -33,6 +33,16 @@ export interface LobbyState {
   members: LobbyMember[];
 }
 
+export interface FriendEntry {
+  uuid: string;
+  name: string;
+  shortId: string;
+  classId: string | null;
+  level: number;
+  online: boolean;
+  inParty: boolean;
+}
+
 /** Sent with lobby packets so other players' cards can show class and level. */
 export interface LocalProfile {
   classId?: string;
@@ -106,6 +116,8 @@ export class NetworkManager {
   private onLobbyErrorCb: ((msg: string) => void) | null = null;
   private onLobbyStateCb: ((state: LobbyState) => void) | null = null;
   private onLobbyLeftCb: (() => void) | null = null;
+  private onFriendsCb: ((friends: FriendEntry[]) => void) | null = null;
+  private onFriendNoticeCb: ((msg: string) => void) | null = null;
 
   /** Class/level of the local player, attached to lobby packets. */
   public profile: LocalProfile = {};
@@ -255,6 +267,19 @@ export class NetworkManager {
       this.debug('IN', 'lobby_state', { members: state?.members?.length });
       if (state?.roomId) this.setRoom(state.roomId);
       if (state) this.onLobbyStateCb?.(state);
+    });
+
+    this.socket.on('friends_list', (data) => {
+      this.onFriendsCb?.(data?.friends || []);
+    });
+
+    // The server uses this channel for both failures and confirmations.
+    this.socket.on('friend_error', (data) => {
+      this.onFriendNoticeCb?.(data?.msg || 'Something went wrong.');
+    });
+
+    this.socket.on('friend_added', (data) => {
+      this.onFriendNoticeCb?.(`${data?.name || 'Player'} added as a friend.`);
     });
 
     this.socket.on('lobby_left', () => {
@@ -498,6 +523,37 @@ export class NetworkManager {
   public leaveLobby() {
     if (!this.socket || !this.room) return;
     this.socket.emit('leave_lobby');
+  }
+
+  // ================= FRIENDS =================
+
+  public onFriends(cb: (friends: FriendEntry[]) => void) {
+    if (!this.socket) this.connect();
+    this.onFriendsCb = cb;
+  }
+
+  public onFriendNotice(cb: (msg: string) => void) {
+    if (!this.socket) this.connect();
+    this.onFriendNoticeCb = cb;
+  }
+
+  public requestFriends() {
+    if (!this.socket) this.connect();
+    this.socket?.emit('friends_request_list');
+  }
+
+  public addFriend(shortId: string) {
+    if (!this.socket) this.connect();
+    this.socket?.emit('friend_add', { shortId });
+  }
+
+  public removeFriend(uuid: string) {
+    this.socket?.emit('friend_remove', { uuid });
+  }
+
+  /** Pull a friend straight into the current party. */
+  public inviteFriend(uuid: string) {
+    this.socket?.emit('friend_invite', { uuid });
   }
 
   // ================= SYNC EVENTS =================

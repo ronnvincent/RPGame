@@ -8,7 +8,7 @@
  * ready-up, and a host-driven START.
  */
 
-import { network, LobbyState, LobbyMember } from '../network/NetworkManager';
+import { network, LobbyState, LobbyMember, FriendEntry } from '../network/NetworkManager';
 import { CHARACTER_CLASSES } from '../classes/ClassDefinitions';
 import { DUNGEONS } from '../dungeons/DungeonManager';
 
@@ -30,6 +30,7 @@ export class CoopLobbyUI {
   private parent: HTMLElement;
   private onLaunch: () => void;
   private localReady = false;
+  private friends: FriendEntry[] = [];
 
   constructor(parent: HTMLElement, onLaunch: () => void) {
     this.parent = parent;
@@ -47,6 +48,12 @@ export class CoopLobbyUI {
 
     network.onLobbyLeft(() => this.close());
     network.onLobbyError(msg => this.toast(msg));
+
+    network.onFriends(friends => {
+      this.friends = friends;
+      if (this.root) this.render();
+    });
+    network.onFriendNotice(msg => this.toast(msg));
   }
 
   public get isOpen(): boolean {
@@ -62,6 +69,7 @@ export class CoopLobbyUI {
     root.innerHTML = '<div class="cl-panel"><div class="cl-body">Opening party…</div></div>';
     this.parent.appendChild(root);
     this.root = root;
+    network.requestFriends();
     this.render();
   }
 
@@ -113,9 +121,24 @@ export class CoopLobbyUI {
 
         <div class="cl-slots">${slots.join('')}</div>
 
-        <div class="cl-invite">
-          <input class="cl-id" type="text" maxlength="6" placeholder="PLAYER ID" />
-          <button class="cl-btn cl-inv">INVITE</button>
+        <div class="cl-cols">
+          <div class="cl-col">
+            <div class="cl-label">INVITE BY ID</div>
+            <div class="cl-invite">
+              <input class="cl-id" type="text" maxlength="6" placeholder="PLAYER ID" />
+              <button class="cl-btn cl-inv">INVITE</button>
+            </div>
+            <div class="cl-myid">Your ID: <b>${localStorage.getItem('playerShortId') || '—'}</b></div>
+          </div>
+
+          <div class="cl-col">
+            <div class="cl-label">FRIENDS</div>
+            <div class="cl-invite">
+              <input class="cl-fid" type="text" maxlength="6" placeholder="ADD BY ID" />
+              <button class="cl-btn cl-addf">ADD</button>
+            </div>
+            <div class="cl-friends">${this.friendRows()}</div>
+          </div>
         </div>
 
         <div class="cl-toast"></div>
@@ -149,6 +172,27 @@ export class CoopLobbyUI {
         <div class="cl-class">${cls ? cls.name : 'Choosing…'}</div>
         ${badge}
       </div>`;
+  }
+
+  private friendRows(): string {
+    if (!this.friends.length) {
+      return '<div class="cl-nofriends">No friends yet — add one by their Player ID.</div>';
+    }
+    return this.friends.map(f => {
+      const cls = classOf(f.classId);
+      const status = f.inParty ? 'In party' : f.online ? 'Online' : 'Offline';
+      const canInvite = f.online && !f.inParty;
+      return `
+        <div class="cl-friend ${f.online ? '' : 'is-off'}">
+          <span class="cl-dot ${f.online ? 'on' : ''}"></span>
+          <div class="cl-fmeta">
+            <div class="cl-fname">${f.name}</div>
+            <div class="cl-fsub">Lv ${f.level}${cls ? ' · ' + cls.name : ''} · ${status}</div>
+          </div>
+          <button class="cl-mini cl-finv" data-uuid="${f.uuid}" ${canInvite ? '' : 'disabled'}>INVITE</button>
+          <button class="cl-mini cl-frem" data-uuid="${f.uuid}" title="Remove">✕</button>
+        </div>`;
+    }).join('');
   }
 
   private emptySlot(): string {
@@ -189,6 +233,21 @@ export class CoopLobbyUI {
     };
     q<HTMLButtonElement>('.cl-inv')?.addEventListener('click', invite);
     input?.addEventListener('keydown', e => { if (e.key === 'Enter') invite(); });
+
+    const fInput = q<HTMLInputElement>('.cl-fid');
+    const addFriend = () => {
+      const id = (fInput?.value || '').trim().toUpperCase();
+      if (id.length < 4) { this.toast('Enter a valid Player ID.'); return; }
+      network.addFriend(id);
+      if (fInput) fInput.value = '';
+    };
+    q<HTMLButtonElement>('.cl-addf')?.addEventListener('click', addFriend);
+    fInput?.addEventListener('keydown', e => { if (e.key === 'Enter') addFriend(); });
+
+    this.root.querySelectorAll<HTMLButtonElement>('.cl-finv').forEach(btn =>
+      btn.addEventListener('click', () => network.inviteFriend(btn.dataset.uuid || '')));
+    this.root.querySelectorAll<HTMLButtonElement>('.cl-frem').forEach(btn =>
+      btn.addEventListener('click', () => network.removeFriend(btn.dataset.uuid || '')));
   }
 
   private injectStyle() {
@@ -228,7 +287,30 @@ export class CoopLobbyUI {
       .cl-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;
         border-style:dashed;opacity:.5;padding-bottom:12px;}
       .cl-plus{font-size:30px;color:#8d7a5c;}
-      .cl-invite{display:flex;gap:8px;margin-top:14px;}
+      .cl-cols{display:grid;grid-template-columns:1fr 1.2fr;gap:14px;margin-top:16px;}
+      @media (max-width:700px){.cl-cols{grid-template-columns:1fr;}}
+      .cl-label{font-size:11px;letter-spacing:2px;color:#c9a961;margin-bottom:6px;}
+      .cl-myid{font-size:11px;opacity:.7;margin-top:6px;font-family:'Outfit',sans-serif;}
+      .cl-myid b{color:#ffd77a;letter-spacing:2px;}
+      .cl-friends{margin-top:8px;max-height:150px;overflow-y:auto;
+        background:#150e08;border:2px solid #3a2a18;border-radius:6px;}
+      .cl-nofriends{padding:14px 10px;font-size:11px;opacity:.6;text-align:center;
+        font-family:'Outfit',sans-serif;}
+      .cl-friend{display:flex;align-items:center;gap:8px;padding:7px 9px;
+        border-bottom:1px solid #2a1e12;}
+      .cl-friend:last-child{border-bottom:none;}
+      .cl-friend.is-off{opacity:.5;}
+      .cl-dot{width:8px;height:8px;border-radius:50%;background:#6b5a44;flex:none;}
+      .cl-dot.on{background:#4ade80;box-shadow:0 0 6px #4ade80;}
+      .cl-fmeta{flex:1;min-width:0;}
+      .cl-fname{font-size:13px;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+      .cl-fsub{font-size:10px;opacity:.65;font-family:'Outfit',sans-serif;}
+      .cl-mini{padding:4px 8px;font-size:10px;letter-spacing:1px;border:1px solid #6b4a24;
+        border-radius:4px;background:#3b2a16;color:#ffe9a8;cursor:pointer;font-family:'Cinzel',serif;}
+      .cl-mini:hover{background:#4c3720;}
+      .cl-mini:disabled{opacity:.35;cursor:not-allowed;}
+      .cl-frem{color:#ffb4b4;border-color:#7a3a3a;background:#3a1f1f;}
+      .cl-invite{display:flex;gap:8px;}
       .cl-id{flex:1;padding:9px;background:#0e0906;border:2px solid #4a3320;border-radius:5px;
         color:#fff;letter-spacing:3px;text-align:center;font-family:'Outfit',sans-serif;}
       .cl-id:focus{outline:none;border-color:#a1791f;}

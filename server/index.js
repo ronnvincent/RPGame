@@ -33,6 +33,16 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
+    // Friendships are stored once per pair, with the two uuids ordered so the
+    // relationship is inherently mutual and cannot be duplicated.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS friendships (
+        uuid_low  VARCHAR(255) NOT NULL,
+        uuid_high VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (uuid_low, uuid_high)
+      );
+    `);
     console.log("Database tables initialized.");
   } catch (err) {
     console.error("DB Init error:", err);
@@ -216,6 +226,107 @@ function broadcastLobby(roomId) {
   }
 }
 
+// ----------------- FRIENDS -----------------
+// Backed by Postgres in production. Without DATABASE_URL the same API is served
+// from memory, so the friends flow is testable locally instead of only after a
+// deploy.
+const hasDB = () => !!process.env.DATABASE_URL;
+const memFriends = new Set();          // "uuidLow|uuidHigh"
+const memUsersByShortId = new Map();   // shortId -> { uuid, name, shortId }
+
+const pairKey = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+
+async function lookupByShortId(shortId) {
+  if (!shortId) return null;
+  const id = String(shortId).toUpperCase();
+  if (hasDB()) {
+    try {
+      const r = await pool.query('SELECT uuid, username, short_id FROM users WHERE UPPER(short_id) = $1', [id]);
+      if (!r.rows.length) return null;
+      return { uuid: r.rows[0].uuid, name: r.rows[0].username, shortId: r.rows[0].short_id };
+    } catch (e) {
+      console.error('[FRIENDS] lookup failed:', e.message);
+      return null;
+    }
+  }
+  return memUsersByShortId.get(id) || null;
+}
+
+async function addFriendship(a, b) {
+  const [low, high] = a < b ? [a, b] : [b, a];
+  if (hasDB()) {
+    await pool.query(
+      'INSERT INTO friendships (uuid_low, uuid_high) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [low, high]
+    );
+  } else {
+    memFriends.add(pairKey(a, b));
+  }
+}
+
+async function removeFriendship(a, b) {
+  const [low, high] = a < b ? [a, b] : [b, a];
+  if (hasDB()) {
+    await pool.query('DELETE FROM friendships WHERE uuid_low = $1 AND uuid_high = $2', [low, high]);
+  } else {
+    memFriends.delete(pairKey(a, b));
+  }
+}
+
+async function friendUuidsOf(uuid) {
+  if (hasDB()) {
+    const r = await pool.query(
+      'SELECT uuid_low, uuid_high FROM friendships WHERE uuid_low = $1 OR uuid_high = $1',
+      [uuid]
+    );
+    return r.rows.map(row => (row.uuid_low === uuid ? row.uuid_high : row.uuid_low));
+  }
+  const out = [];
+  for (const key of memFriends) {
+    const [x, y] = key.split('|');
+    if (x === uuid) out.push(y);
+    else if (y === uuid) out.push(x);
+  }
+  return out;
+}
+
+/** Friend list with live presence, pulled from the connected-player registry. */
+async function buildFriendList(uuid) {
+  const uuids = await friendUuidsOf(uuid);
+  const entries = [];
+  for (const fid of uuids) {
+    const live = playersByUuid[fid];
+    let base = live;
+    if (!base && hasDB()) {
+      try {
+        const r = await pool.query('SELECT uuid, username, short_id FROM users WHERE uuid = $1', [fid]);
+        if (r.rows.length) base = { uuid: fid, name: r.rows[0].username, shortId: r.rows[0].short_id };
+      } catch { /* fall through to the placeholder below */ }
+    }
+    entries.push({
+      uuid: fid,
+      name: base?.name || 'Adventurer',
+      shortId: base?.shortId || '',
+      classId: live?.classId || null,
+      level: live?.level || 1,
+      online: !!(live && live.socketId),
+      inParty: !!(live && live.room)
+    });
+  }
+  entries.sort((a, b) => (b.online ? 1 : 0) - (a.online ? 1 : 0) || a.name.localeCompare(b.name));
+  return entries;
+}
+
+async function pushFriendList(uuid) {
+  const sid = socketIdFor(uuid);
+  if (!sid) return;
+  try {
+    io.to(sid).emit('friends_list', { friends: await buildFriendList(uuid) });
+  } catch (e) {
+    console.error('[FRIENDS] push failed:', e.message);
+  }
+}
+
 /** Members carry their class and level so the lobby can draw proper cards. */
 function applyProfile(p, data) {
   if (!p || !data) return;
@@ -276,6 +387,7 @@ io.on('connection', (socket) => {
       existing.socketId = socket.id;
       existing.name = data.name || existing.name;
       existing.shortId = data.shortId || existing.shortId;
+      applyProfile(existing, data);
       players[socket.id] = existing;
 
       const room = existing.room ? rooms[existing.room] : null;
@@ -304,8 +416,15 @@ io.on('connection', (socket) => {
       socketId: socket.id,
       room: null
     };
+    applyProfile(record, data);
     players[socket.id] = record;
     playersByUuid[data.uuid] = record;
+    // Local lookup so friend-by-ID works without a database attached.
+    if (data.shortId) {
+      memUsersByShortId.set(String(data.shortId).toUpperCase(), {
+        uuid: data.uuid, name: data.name, shortId: data.shortId
+      });
+    }
     console.log(`[AUTH] Registered ${data.name} (${data.shortId}) on socket ${socket.id}`);
   });
 
@@ -381,6 +500,81 @@ io.on('connection', (socket) => {
     });
     broadcastRoles(newRoomId);
     broadcastLobby(newRoomId);
+  });
+
+  // ---------- FRIENDS ----------
+
+  socket.on('friends_request_list', async () => {
+    const p = players[socket.id];
+    if (!p) return;
+    await pushFriendList(p.uuid);
+  });
+
+  socket.on('friend_add', async (data = {}) => {
+    const p = players[socket.id];
+    if (!p) return;
+
+    const target = await lookupByShortId(data.shortId);
+    if (!target) {
+      socket.emit('friend_error', { msg: 'No player with that ID.' });
+      return;
+    }
+    if (target.uuid === p.uuid) {
+      socket.emit('friend_error', { msg: 'You cannot add yourself.' });
+      return;
+    }
+
+    try {
+      await addFriendship(p.uuid, target.uuid);
+    } catch (e) {
+      console.error('[FRIENDS] add failed:', e.message);
+      socket.emit('friend_error', { msg: 'Could not add friend.' });
+      return;
+    }
+
+    socket.emit('friend_added', { name: target.name, shortId: target.shortId });
+    await pushFriendList(p.uuid);
+    await pushFriendList(target.uuid); // so their list updates live too
+  });
+
+  socket.on('friend_remove', async (data = {}) => {
+    const p = players[socket.id];
+    if (!p || !data.uuid) return;
+    try {
+      await removeFriendship(p.uuid, data.uuid);
+    } catch (e) {
+      console.error('[FRIENDS] remove failed:', e.message);
+      return;
+    }
+    await pushFriendList(p.uuid);
+    await pushFriendList(data.uuid);
+  });
+
+  /** Invite a friend straight into the current lobby, by uuid. */
+  socket.on('friend_invite', async (data = {}) => {
+    const p = players[socket.id];
+    if (!p || !p.room) {
+      socket.emit('friend_error', { msg: 'Create a party first.' });
+      return;
+    }
+    const room = rooms[p.room];
+    if (!room) return;
+    if (room.members.length >= MAX_PARTY) {
+      socket.emit('friend_error', { msg: 'Party is full.' });
+      return;
+    }
+
+    const sid = socketIdFor(data.uuid);
+    if (!sid) {
+      socket.emit('friend_error', { msg: 'That friend is offline.' });
+      return;
+    }
+    io.to(sid).emit('invite_received', {
+      fromName: p.name,
+      dungeonId: room.dungeonId,
+      roomId: p.room
+    });
+    socket.emit('friend_error', { msg: 'Invite sent!' });
   });
 
   // Toggle readiness. The host is implicitly always ready.
