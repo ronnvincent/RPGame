@@ -239,47 +239,64 @@ const pairKey = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 async function lookupByShortId(shortId) {
   if (!shortId) return null;
   const id = String(shortId).toUpperCase();
+
   if (hasDB()) {
     try {
       const r = await pool.query('SELECT uuid, username, short_id FROM users WHERE UPPER(short_id) = $1', [id]);
-      if (!r.rows.length) return null;
-      return { uuid: r.rows[0].uuid, name: r.rows[0].username, shortId: r.rows[0].short_id };
+      if (r.rows.length) {
+        return { uuid: r.rows[0].uuid, name: r.rows[0].username, shortId: r.rows[0].short_id };
+      }
     } catch (e) {
-      console.error('[FRIENDS] lookup failed:', e.message);
-      return null;
+      console.error('[FRIENDS] db lookup failed, falling back to live players:', e.message);
     }
   }
+
+  // Fall back to whoever is connected right now. The users table only holds
+  // accounts created through /api/register_guest, so a player who is online but
+  // not in that table would otherwise be unfindable - and a DB hiccup would
+  // take the whole friends feature down rather than degrading it.
   return memUsersByShortId.get(id) || null;
 }
 
 async function addFriendship(a, b) {
   const [low, high] = a < b ? [a, b] : [b, a];
   if (hasDB()) {
-    await pool.query(
-      'INSERT INTO friendships (uuid_low, uuid_high) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-      [low, high]
-    );
-  } else {
-    memFriends.add(pairKey(a, b));
+    try {
+      await pool.query(
+        'INSERT INTO friendships (uuid_low, uuid_high) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+        [low, high]
+      );
+      return;
+    } catch (e) {
+      console.error('[FRIENDS] db insert failed, keeping in memory:', e.message);
+    }
   }
+  memFriends.add(pairKey(a, b));
 }
 
 async function removeFriendship(a, b) {
   const [low, high] = a < b ? [a, b] : [b, a];
   if (hasDB()) {
-    await pool.query('DELETE FROM friendships WHERE uuid_low = $1 AND uuid_high = $2', [low, high]);
-  } else {
-    memFriends.delete(pairKey(a, b));
+    try {
+      await pool.query('DELETE FROM friendships WHERE uuid_low = $1 AND uuid_high = $2', [low, high]);
+    } catch (e) {
+      console.error('[FRIENDS] db delete failed:', e.message);
+    }
   }
+  memFriends.delete(pairKey(a, b));
 }
 
 async function friendUuidsOf(uuid) {
   if (hasDB()) {
-    const r = await pool.query(
-      'SELECT uuid_low, uuid_high FROM friendships WHERE uuid_low = $1 OR uuid_high = $1',
-      [uuid]
-    );
-    return r.rows.map(row => (row.uuid_low === uuid ? row.uuid_high : row.uuid_low));
+    try {
+      const r = await pool.query(
+        'SELECT uuid_low, uuid_high FROM friendships WHERE uuid_low = $1 OR uuid_high = $1',
+        [uuid]
+      );
+      return r.rows.map(row => (row.uuid_low === uuid ? row.uuid_high : row.uuid_low));
+    } catch (e) {
+      console.error('[FRIENDS] db read failed, serving from memory:', e.message);
+    }
   }
   const out = [];
   for (const key of memFriends) {
