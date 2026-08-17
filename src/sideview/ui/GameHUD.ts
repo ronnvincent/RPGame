@@ -1262,13 +1262,13 @@ export class GameHUD {
       <!-- Top Right: Gold, Audio Toggles & Navigation Buttons -->
       <div class="hud-top-right">
         <div class="gold-badge"><img src="/assets/gui/PNG/iconCircle_brown.png" width="16" height="16" style="vertical-align:middle;margin-right:4px;" /> <span id="hud-gold-text">${p.gold}</span></div>
-        <button class="inv-btn inv-btn-quest" id="toggle-music-btn" title="Toggle Music">BGM</button>
-        <button class="inv-btn inv-btn-quest" id="toggle-sfx-btn" title="Toggle Sound SFX">SFX</button>
-        <button class="inv-btn inv-btn-quest" id="toggle-quests-btn">QUESTS</button>
-        <button class="inv-btn inv-btn-quest" id="toggle-map-btn">MAP</button>
-        <button class="inv-btn inv-btn-town" id="return-town-btn" style="display: ${this.engine.isTownMode ? 'none' : 'block'};">TOWN</button>
-        <button class="inv-btn" id="toggle-inv-btn">BAG</button>
-        <button class="inv-btn inv-btn-quest" id="toggle-fullscreen-btn" title="Toggle Fullscreen">FULLSCREEN</button>
+        <button class="inv-btn inv-btn-quest" id="toggle-music-btn" title="Toggle Music">🎵 BGM</button>
+        <button class="inv-btn inv-btn-quest" id="toggle-sfx-btn" title="Toggle Sound SFX">🔊 SFX</button>
+        <button class="inv-btn inv-btn-quest" id="toggle-quests-btn">📜 QUESTS</button>
+        <button class="inv-btn inv-btn-quest" id="toggle-map-btn">🗺️ MAP</button>
+        <button class="inv-btn inv-btn-town" id="return-town-btn" style="display: ${this.engine.isTownMode ? 'none' : 'block'};">⛺ TOWN</button>
+        <button class="inv-btn" id="toggle-inv-btn">🎒 BAG</button>
+        <button class="inv-btn inv-btn-quest" id="toggle-fullscreen-btn" title="Toggle Fullscreen">🖵 FULLSCREEN</button>
       </div>
 
       <!-- Mini Quest Tracker -->
