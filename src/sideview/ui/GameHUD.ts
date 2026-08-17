@@ -749,9 +749,12 @@ export class GameHUD {
         .hud-top-right {
           top: max(6px, env(safe-area-inset-top));
           right: max(6px, env(safe-area-inset-right));
-          gap: 2px;
+          gap: 4px;
           transform: scale(0.85);
           transform-origin: top right;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+          width: 80%; /* Prevent stretching across whole screen */
         }
         .gold-badge {
           padding: 3px 6px;
@@ -1259,13 +1262,13 @@ export class GameHUD {
       <!-- Top Right: Gold, Audio Toggles & Navigation Buttons -->
       <div class="hud-top-right">
         <div class="gold-badge"><img src="/assets/gui/PNG/iconCircle_brown.png" width="16" height="16" style="vertical-align:middle;margin-right:4px;" /> <span id="hud-gold-text">${p.gold}</span></div>
-        <button class="inv-btn inv-btn-fs" id="toggle-music-btn" title="Toggle Music"><span style="font-size: 8px; font-weight: 900; line-height: 1;">BGM</span></button>
-        <button class="inv-btn inv-btn-fs" id="toggle-sfx-btn" title="Toggle Sound SFX"><span style="font-size: 8px; font-weight: 900; line-height: 1;">SFX</span></button>
-        <button class="inv-btn inv-btn-quest" id="toggle-quests-btn">QUESTS [ J ]</button>
-        <button class="inv-btn inv-btn-quest" id="toggle-map-btn">MAP [ M ]</button>
-        <button class="inv-btn inv-btn-town" id="return-town-btn" style="display: ${this.engine.isTownMode ? 'none' : 'block'};">TOWN [ T ]</button>
-        <button class="inv-btn" id="toggle-inv-btn">BAG [ I ]</button>
-        <button class="inv-btn inv-btn-fs" id="toggle-fullscreen-btn" title="Toggle Fullscreen"><span style="font-size: 10px; font-weight: 900; line-height: 1;">FS</span></button>
+        <button class="inv-btn inv-btn-quest" id="toggle-music-btn" title="Toggle Music">BGM</button>
+        <button class="inv-btn inv-btn-quest" id="toggle-sfx-btn" title="Toggle Sound SFX">SFX</button>
+        <button class="inv-btn inv-btn-quest" id="toggle-quests-btn">QUESTS</button>
+        <button class="inv-btn inv-btn-quest" id="toggle-map-btn">MAP</button>
+        <button class="inv-btn inv-btn-town" id="return-town-btn" style="display: ${this.engine.isTownMode ? 'none' : 'block'};">TOWN</button>
+        <button class="inv-btn" id="toggle-inv-btn">BAG</button>
+        <button class="inv-btn inv-btn-quest" id="toggle-fullscreen-btn" title="Toggle Fullscreen">FULLSCREEN</button>
       </div>
 
       <!-- Mini Quest Tracker -->
