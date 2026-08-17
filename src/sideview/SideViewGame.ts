@@ -219,7 +219,11 @@ export class SideViewGame {
             }
           }
         }
-        if (!this.engine?.isTownMode) {
+        // Follow the party to town only when the HOST left the run. Previously
+        // this fired for any sender - including this client's own echo - which
+        // stranded a guest in town while the host stayed in the dungeon.
+        const isSelf = returnData?.socketId === mod.network.socket?.id;
+        if (returnData?.fromHost && !isSelf && !this.engine?.isTownMode) {
           this.loadTownHub(false);
         }
       });
@@ -385,8 +389,14 @@ export class SideViewGame {
     this.lastEnemySyncAt = performance.now();
 
     // A guest receiving dungeon state is, by definition, in the dungeon.
+    // Perform a real dungeon entry rather than just flipping the flag - setting
+    // isTownMode alone left the player standing in town with the dungeon's
+    // enemies loaded, able to hit monsters they could not see.
     if (this.engine.isTownMode) {
-      this.engine.isTownMode = false;
+      const targetIndex = dungeonIndex !== undefined
+        ? dungeonIndex % DUNGEONS.length
+        : this.currentDungeonIndex;
+      this.loadDungeon(targetIndex, false);
     }
 
     if (dungeonIndex !== undefined && dungeonIndex !== this.currentDungeonIndex) {

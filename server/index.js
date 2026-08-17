@@ -482,9 +482,14 @@ io.on('connection', (socket) => {
   socket.on('party_return_town', (data = {}) => {
     const p = players[socket.id];
     if (p && p.room) {
+      const room = rooms[p.room];
       const payload = (data && typeof data === 'object') ? data : {};
       io.to(p.room).emit('party_return_town', {
         socketId: socket.id,
+        // Only the host leaving the dungeon should drag the party back to town.
+        // Without this, any member's town packet - including the sender's own
+        // echo - yanked everyone out of the run.
+        fromHost: !!room && p.uuid === room.hostUuid,
         x: typeof payload.x === 'number' ? payload.x : undefined,
         y: typeof payload.y === 'number' ? payload.y : undefined,
         facing: typeof payload.facing === 'number' ? payload.facing : 1,

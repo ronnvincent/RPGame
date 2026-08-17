@@ -349,6 +349,8 @@ export class NetworkManager {
 
   public listenForPartyReturnTown(onReturn: (data: {
     socketId: string;
+    /** Server-stamped: true when the sender is the room host. */
+    fromHost?: boolean;
     x?: number;
     y?: number;
     facing?: number;
