@@ -4,7 +4,11 @@
 import { io } from 'socket.io-client';
 
 const URL = process.env.COOP_TEST_URL || 'http://localhost:3001';
-const mk = n => ({ uuid: `uuid-lob-${n}`, name: `Player${n}`, shortId: `LOB00${n}`, classId: 'mage', level: 7 + n });
+// A remote deployment adds real round-trip latency; local waits are too tight.
+const SLOW = !!process.env.COOP_TEST_URL;
+const T = ms => (SLOW ? ms * 3 : ms);
+const RUN = Math.random().toString(36).slice(2, 8); // unique per run so a long-lived server cannot leak state between runs
+const mk = n => ({ uuid: `uuid-lob-${RUN}-${n}`, name: `Player${n}`, shortId: `L${RUN}${n}`.toUpperCase(), classId: 'mage', level: 7 + n });
 
 let failures = 0;
 const check = (label, cond) => {
@@ -15,7 +19,7 @@ const connect = () => new Promise(res => {
   const s = io(URL, { forceNew: true, reconnection: false });
   s.on('connect', () => res(s));
 });
-const waitFor = (sock, ev, ms = 2000) => new Promise(resolve => {
+const waitFor = (sock, ev, ms = T(2000)) => new Promise(resolve => {
   const t = setTimeout(() => resolve(null), ms);
   sock.once(ev, d => { clearTimeout(t); resolve(d); });
 });
@@ -40,7 +44,7 @@ const run = async () => {
   b.emit('register_player', B);
   await new Promise(r => setTimeout(r, 120));
   const aSaw = waitFor(a, 'lobby_state');
-  const bStartedTooEarly = waitFor(b, 'dungeon_start', 900);
+  const bStartedTooEarly = waitFor(b, 'dungeon_start', T(900));
   b.emit('accept_invite', { roomId: room, ...B });
   st = await aSaw;
   check('joining updates the lobby to 2 slots', !!st && st.members.length === 2);
@@ -48,7 +52,7 @@ const run = async () => {
   check('guest starts un-ready', !!st && st.members[1].ready === false);
 
   // Host cannot start while someone is not ready.
-  const errEarly = waitFor(a, 'lobby_error', 900);
+  const errEarly = waitFor(a, 'lobby_error', T(900));
   a.emit('lobby_start');
   check('start refused while a member is not ready', !!(await errEarly));
 
@@ -68,7 +72,7 @@ const run = async () => {
   check('third player joins (cap is not 2)', !!st && st.members.length === 3);
 
   // A non-host cannot launch.
-  const guestErr = waitFor(b, 'lobby_error', 900);
+  const guestErr = waitFor(b, 'lobby_error', T(900));
   b.emit('lobby_start');
   check('non-host cannot start the run', !!(await guestErr));
 

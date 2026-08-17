@@ -258,15 +258,18 @@ export class CoopLobbyUI {
       #coop-lobby{position:fixed;inset:0;z-index:99998;display:flex;align-items:center;
         justify-content:center;background:rgba(6,4,12,.86);font-family:'Cinzel',serif;}
       #coop-lobby img{image-rendering:pixelated;}
-      .cl-panel{width:min(920px,94vw);max-height:92vh;overflow:auto;padding:18px 20px 16px;
+      .cl-panel{width:min(920px,94vw);max-height:92dvh;overflow-y:auto;padding:16px 18px 14px;
         background:#241a13;border:3px solid #6b4a24;border-radius:10px;
-        box-shadow:0 0 0 3px #120c08, 0 18px 50px rgba(0,0,0,.7);color:#f5e7c8;}
+        box-shadow:0 0 0 3px #120c08, 0 18px 50px rgba(0,0,0,.7);color:#f5e7c8;
+        /* The game container blocks touchmove globally; the panel is in that
+           allowlist, and these let the gesture actually scroll it. */
+        touch-action:pan-y;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}
       .cl-head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px;}
       .cl-title{font-size:22px;letter-spacing:3px;color:#ffd77a;}
       .cl-sub{font-size:13px;opacity:.75;font-family:'Outfit',sans-serif;}
       .cl-count{font-size:18px;color:#ffd77a;}
-      .cl-slots{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
-      @media (max-width:700px){.cl-slots{grid-template-columns:repeat(2,1fr);}}
+      /* Adapts to whatever width is available instead of guessing breakpoints. */
+      .cl-slots{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:8px;}
       .cl-slot{position:relative;background:#1a1209;border:2px solid #4a3320;
         border-radius:8px;padding:12px 8px 30px;text-align:center;
         border-top:3px solid var(--accent,#6b7280);min-height:150px;}
@@ -287,8 +290,8 @@ export class CoopLobbyUI {
       .cl-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;
         border-style:dashed;opacity:.5;padding-bottom:12px;}
       .cl-plus{font-size:30px;color:#8d7a5c;}
-      .cl-cols{display:grid;grid-template-columns:1fr 1.2fr;gap:14px;margin-top:16px;}
-      @media (max-width:700px){.cl-cols{grid-template-columns:1fr;}}
+      .cl-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+        gap:12px;margin-top:14px;}
       .cl-label{font-size:11px;letter-spacing:2px;color:#c9a961;margin-bottom:6px;}
       .cl-myid{font-size:11px;opacity:.7;margin-top:6px;font-family:'Outfit',sans-serif;}
       .cl-myid b{color:#ffd77a;letter-spacing:2px;}
@@ -322,9 +325,39 @@ export class CoopLobbyUI {
       .cl-ready{background:#1f5c34;border-color:#2e8b4f;color:#d6ffe4;}
       .cl-unready{background:#5c1f1f;border-color:#8b2e2e;color:#ffd6d6;}
       .cl-leave{background:#3a1f1f;border-color:#7a3a3a;color:#ffc9c9;}
-      .cl-foot{display:flex;justify-content:space-between;gap:10px;margin-top:14px;}
+      .cl-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;
+        margin-top:14px;flex-wrap:wrap;}
+      .cl-foot .cl-btn{flex:1 1 auto;min-width:130px;}
       .cl-toast{min-height:16px;margin-top:8px;font-size:12px;color:#ffd77a;opacity:0;
         transition:opacity .25s;font-family:'Outfit',sans-serif;text-align:center;}
+
+      /* Phones in landscape are SHORT, not narrow - height is the constraint the
+         old width-only breakpoint missed entirely. Tighten vertical rhythm and
+         keep the action buttons reachable without scrolling. */
+      @media (max-height:560px){
+        .cl-panel{padding:10px 12px 10px;max-height:96dvh;}
+        .cl-head{margin-bottom:8px;}
+        .cl-title{font-size:17px;}
+        .cl-sub{font-size:11px;}
+        .cl-slots{gap:6px;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));}
+        .cl-slot{min-height:0;padding:8px 6px 24px;}
+        .cl-portrait{width:40px;height:40px;margin-bottom:5px;}
+        .cl-portrait img{width:28px;height:28px;}
+        .cl-name{font-size:12px;}
+        .cl-class{font-size:11px;}
+        .cl-badge{padding:3px 0;font-size:9px;}
+        .cl-cols{margin-top:10px;gap:8px;}
+        .cl-friends{max-height:96px;}
+        .cl-foot{margin-top:10px;}
+        .cl-toast{margin-top:4px;min-height:14px;}
+      }
+
+      /* Fingers need a real target even when everything else shrinks. */
+      @media (pointer:coarse){
+        .cl-btn{min-height:42px;padding:10px 18px;}
+        .cl-mini{min-height:34px;padding:6px 10px;}
+        .cl-id,.cl-fid{min-height:42px;font-size:16px;} /* 16px stops iOS zoom */
+      }
     `;
     document.head.appendChild(st);
   }

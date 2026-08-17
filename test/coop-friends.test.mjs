@@ -7,8 +7,12 @@
 import { io } from 'socket.io-client';
 
 const URL = process.env.COOP_TEST_URL || 'http://localhost:3001';
-const A = { uuid: 'uuid-fr-a', name: 'Aria', shortId: 'FRAAAA', classId: 'mage', level: 12 };
-const B = { uuid: 'uuid-fr-b', name: 'Borin', shortId: 'FRBBBB', classId: 'warrior', level: 9 };
+// A remote deployment adds real round-trip latency; local waits are too tight.
+const SLOW = !!process.env.COOP_TEST_URL;
+const T = ms => (SLOW ? ms * 3 : ms);
+const RUN = Math.random().toString(36).slice(2, 8); // unique per run so a long-lived server cannot leak state between runs
+const A = { uuid: `uuid-fra-${RUN}`, name: 'Aria', shortId: `FA${RUN}`.toUpperCase(), classId: 'mage', level: 12 };
+const B = { uuid: `uuid-frb-${RUN}`, name: 'Borin', shortId: `FB${RUN}`.toUpperCase(), classId: 'warrior', level: 9 };
 
 let failures = 0;
 const check = (l, c) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${l}`); if (!c) failures++; };
@@ -16,7 +20,7 @@ const connect = () => new Promise(r => {
   const s = io(URL, { forceNew: true, reconnection: false });
   s.on('connect', () => r(s));
 });
-const waitFor = (s, ev, ms = 2000) => new Promise(res => {
+const waitFor = (s, ev, ms = T(2000)) => new Promise(res => {
   const t = setTimeout(() => res(null), ms);
   s.once(ev, d => { clearTimeout(t); res(d); });
 });

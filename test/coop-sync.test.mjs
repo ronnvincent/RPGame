@@ -6,8 +6,9 @@ import { io } from 'socket.io-client';
 
 // Defaults to the local dev server; pass COOP_TEST_URL to point at a deployment.
 const URL = process.env.COOP_TEST_URL || 'http://localhost:3001';
-const A = { uuid: 'uuid-host-aaa', name: 'HostPC', shortId: 'HOSTAA' };
-const B = { uuid: 'uuid-guest-bbb', name: 'GuestMobile', shortId: 'GUESTB' };
+const RUN = Math.random().toString(36).slice(2, 8); // unique per run so a long-lived server cannot leak state between runs
+const A = { uuid: `uuid-host-${RUN}`, name: 'HostPC', shortId: `H${RUN}`.toUpperCase() };
+const B = { uuid: `uuid-guest-${RUN}`, name: 'GuestMobile', shortId: `G${RUN}`.toUpperCase() };
 
 let failures = 0;
 function check(label, cond) {

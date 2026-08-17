@@ -71,7 +71,7 @@ export class SideViewGame {
     this.container.addEventListener('touchmove', (e) => {
       // Allow scrolling only inside scrollable modal bodies
       const target = e.target as HTMLElement;
-      if (!target.closest('.dialogue-box-frame, .inventory-modal, .world-map-modal, .quest-log-modal, .details-area')) {
+      if (!target.closest('.dialogue-box-frame, .inventory-modal, .world-map-modal, .quest-log-modal, .details-area, #coop-lobby')) {
         e.preventDefault();
       }
     }, { passive: false });
