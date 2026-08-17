@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "test:production": "node --test test/production-preview.test.mjs"
+    "test:production": "node --test test/production-preview.test.mjs",
+    "test:coop": "node test/coop-sync.test.mjs"
   },
   "keywords": [],
   "author": "",

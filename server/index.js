@@ -135,35 +135,157 @@ const io = new Server(server, {
   }
 });
 
-// State
-const players = {};
-const rooms = {};
+// ----------------- STATE -----------------
+// Player records are keyed by uuid so that they survive a socket reconnect
+// (mobile browsers get a brand new socket.id on screen lock / network switch).
+// `players` is a secondary index from the CURRENT socket id to the same record.
+const players = {};        // socketId -> record
+const playersByUuid = {};  // uuid     -> record (canonical)
+const rooms = {};          // roomId   -> { dungeonId, hostUuid, members: [uuid], started }
+const reconnectTimers = {}; // uuid    -> setTimeout handle
+
+// How long a disconnected player keeps their slot in a room before we evict them.
+const RECONNECT_GRACE_MS = 45000;
+
+function socketIdFor(uuid) {
+  const rec = playersByUuid[uuid];
+  return rec && rec.socketId ? rec.socketId : null;
+}
+
+function memberRecords(roomId) {
+  const room = rooms[roomId];
+  if (!room) return [];
+  return room.members.map(uuid => playersByUuid[uuid]).filter(Boolean);
+}
+
+// Role is server-owned. Every membership change re-broadcasts it so a client
+// can never be left guessing whether it is the host.
+function broadcastRoles(roomId) {
+  const room = rooms[roomId];
+  if (!room) return;
+  room.members.forEach(uuid => {
+    const sid = socketIdFor(uuid);
+    if (sid) {
+      io.to(sid).emit('role_assign', {
+        roomId,
+        isHost: uuid === room.hostUuid,
+        dungeonId: room.dungeonId
+      });
+    }
+  });
+}
+
+function removeMemberFromRoom(uuid, roomId) {
+  const room = rooms[roomId];
+  if (!room) return;
+
+  room.members = room.members.filter(id => id !== uuid);
+
+  const rec = playersByUuid[uuid];
+  if (rec) {
+    io.to(roomId).emit('player_left', { socketId: rec.socketId, uuid, name: rec.name });
+    rec.room = null;
+  }
+
+  if (room.members.length === 0) {
+    delete rooms[roomId];
+    console.log(`[ROOM] ${roomId} destroyed (empty)`);
+    return;
+  }
+
+  // Promote a surviving member if the host is the one who left.
+  if (room.hostUuid === uuid) {
+    room.hostUuid = room.members[0];
+    console.log(`[ROOM] ${roomId} host migrated to ${playersByUuid[room.hostUuid]?.name}`);
+  }
+  broadcastRoles(roomId);
+}
 
 io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`);
 
-  // When a player joins the server with their guest info
+  // When a player joins the server with their guest info.
+  // This doubles as the reconnect path: if we already know this uuid we
+  // re-point the record at the new socket and put it back into its room.
   socket.on('register_player', (data) => {
-    const existingRoom = players[socket.id]?.room || null;
-    players[socket.id] = {
+    if (!data || !data.uuid) return;
+
+    const existing = playersByUuid[data.uuid];
+
+    if (existing) {
+      // Cancel any pending eviction - they made it back in time.
+      if (reconnectTimers[data.uuid]) {
+        clearTimeout(reconnectTimers[data.uuid]);
+        delete reconnectTimers[data.uuid];
+      }
+
+      // Retire the stale socket index entry and adopt the new socket.
+      if (existing.socketId && players[existing.socketId] === existing) {
+        delete players[existing.socketId];
+      }
+      existing.socketId = socket.id;
+      existing.name = data.name || existing.name;
+      existing.shortId = data.shortId || existing.shortId;
+      players[socket.id] = existing;
+
+      const room = existing.room ? rooms[existing.room] : null;
+      if (room) {
+        // The new socket is not in the socket.io room yet - this is the bug that
+        // silently orphaned reconnecting mobile clients from every broadcast.
+        socket.join(existing.room);
+        socket.emit('room_rejoined', {
+          roomId: existing.room,
+          dungeonId: room.dungeonId,
+          isHost: existing.uuid === room.hostUuid
+        });
+        broadcastRoles(existing.room);
+        console.log(`[AUTH] ${existing.name} rejoined room ${existing.room} on socket ${socket.id}`);
+      } else {
+        existing.room = null;
+        console.log(`[AUTH] Re-registered ${existing.name} (${existing.shortId}) on socket ${socket.id}`);
+      }
+      return;
+    }
+
+    const record = {
       uuid: data.uuid,
       name: data.name,
       shortId: data.shortId,
       socketId: socket.id,
-      room: existingRoom
+      room: null
     };
+    players[socket.id] = record;
+    playersByUuid[data.uuid] = record;
     console.log(`[AUTH] Registered ${data.name} (${data.shortId}) on socket ${socket.id}`);
   });
+
+  // Adopts a socket that emitted a lobby packet before (or instead of) register_player.
+  function ensureRegistered(data) {
+    if (players[socket.id]) return players[socket.id];
+    if (!data || !data.uuid || !data.name || !data.shortId) return null;
+
+    const existing = playersByUuid[data.uuid];
+    if (existing) {
+      if (existing.socketId && players[existing.socketId] === existing) {
+        delete players[existing.socketId];
+      }
+      existing.socketId = socket.id;
+      players[socket.id] = existing;
+      console.log(`[AUTH-FALLBACK] Re-adopted ${data.name} via lobby packet`);
+      return existing;
+    }
+
+    const record = { uuid: data.uuid, name: data.name, shortId: data.shortId, socketId: socket.id, room: null };
+    players[socket.id] = record;
+    playersByUuid[data.uuid] = record;
+    console.log(`[AUTH-FALLBACK] Registered ${data.name} via lobby packet`);
+    return record;
+  }
 
   // Create Lobby
   socket.on('create_lobby', (data) => {
     console.log(`[LOBBY] create_lobby requested by socket ${socket.id}`);
-    // Force register if missing
-    if (!players[socket.id] && data.uuid && data.name && data.shortId) {
-       players[socket.id] = { uuid: data.uuid, name: data.name, shortId: data.shortId, socketId: socket.id, room: null };
-       console.log(`[AUTH-FALLBACK] Registered ${data.name} via lobby packet`);
-    }
-    const p = players[socket.id];
+    const p = ensureRegistered(data);
 
     if (!p) {
        console.error(`[LOBBY] ERROR: Player not found for socket ${socket.id} during create_lobby!`);
@@ -173,30 +295,27 @@ io.on('connection', (socket) => {
     const newRoomId = `room_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
     rooms[newRoomId] = {
       dungeonId: data.dungeonId,
-      hostId: socket.id,
-      players: [socket.id],
+      hostUuid: p.uuid,
+      members: [p.uuid],
       started: false
     };
     p.room = newRoomId;
     socket.join(newRoomId);
     console.log(`${p.name} created lobby ${newRoomId}`);
-    
-    socket.emit('lobby_update', { 
-      roomId: newRoomId, 
+
+    socket.emit('lobby_update', {
+      roomId: newRoomId,
       dungeonId: data.dungeonId,
+      isHost: true,
       players: [ { name: p.name, shortId: p.shortId } ]
     });
+    broadcastRoles(newRoomId);
   });
 
   // Send Invite
   socket.on('send_invite', (data, callback) => {
     console.log(`[INVITE] send_invite requested by socket ${socket.id} for target ${data.targetShortId}`);
-    // Force register if missing
-    if (!players[socket.id] && data.uuid && data.name && data.shortId) {
-       players[socket.id] = { uuid: data.uuid, name: data.name, shortId: data.shortId, socketId: socket.id, room: null };
-       console.log(`[AUTH-FALLBACK] Registered ${data.name} via lobby packet`);
-    }
-    const p = players[socket.id];
+    const p = ensureRegistered(data);
 
     if (!p || !p.room) {
        console.error(`[INVITE] ERROR: Player or room not found for socket ${socket.id}`);
@@ -207,23 +326,20 @@ io.on('connection', (socket) => {
     const room = rooms[p.room];
     if (!room) return;
 
-    // Find ALL sockets for target player (in case they have multiple tabs or a ghost connection)
-    const targetSockets = Object.values(players).filter(player => player.shortId === data.targetShortId);
-    
-    if (targetSockets.length === 0) {
+    // Records are keyed by uuid, so each player appears once regardless of
+    // how many stale sockets they left behind.
+    const targets = Object.values(playersByUuid).filter(
+      player => player.shortId === data.targetShortId && player.uuid !== p.uuid && player.socketId
+    );
+
+    if (targets.length === 0) {
       if (callback) callback({ success: false, msg: 'Player not found or offline.' });
       return;
     }
 
-    if (targetSockets.every(target => target.socketId === socket.id)) {
-      if (callback) callback({ success: false, msg: 'You cannot invite yourself.' });
-      return;
-    }
+    const targetName = targets[0].name;
 
-    let targetName = targetSockets[0].name;
-
-    // Send invite to ALL target sockets
-    targetSockets.forEach(target => {
+    targets.forEach(target => {
       io.to(target.socketId).emit('invite_received', {
         fromName: p.name,
         dungeonId: room.dungeonId,
@@ -237,12 +353,7 @@ io.on('connection', (socket) => {
   // Accept Invite
   socket.on('accept_invite', (data) => {
     console.log(`[INVITE] accept_invite requested by socket ${socket.id}`);
-    // Force register if missing
-    if (!players[socket.id] && data.uuid && data.name && data.shortId) {
-       players[socket.id] = { uuid: data.uuid, name: data.name, shortId: data.shortId, socketId: socket.id, room: null };
-       console.log(`[AUTH-FALLBACK] Registered ${data.name} via lobby packet`);
-    }
-    const p = players[socket.id];
+    const p = ensureRegistered(data);
 
     if (!p) return;
 
@@ -252,35 +363,68 @@ io.on('connection', (socket) => {
       return;
     }
 
-    if (room.started || room.players.length >= 2) {
+    const alreadyMember = room.members.includes(p.uuid);
+    if (!alreadyMember && room.members.length >= 2) {
       socket.emit('invite_error', { msg: 'Lobby is full or already started.' });
       return;
     }
 
     // Join room
-    room.players.push(socket.id);
+    if (!alreadyMember) room.members.push(p.uuid);
     p.room = data.roomId;
     socket.join(data.roomId);
-    
+
     console.log(`${p.name} joined room ${data.roomId}`);
-    
+
     // Start the match!
     room.started = true;
-    
-    // Assign isHost
-    const hostId = room.players[0]; // Lobby creator
-    
-    room.players.forEach(id => {
-      const pData = players[id];
-      if (pData) {
-        io.to(id).emit('dungeon_start', {
+
+    const roster = memberRecords(data.roomId).map(r => ({
+      uuid: r.uuid, name: r.name, shortId: r.shortId, socketId: r.socketId
+    }));
+
+    room.members.forEach(uuid => {
+      const sid = socketIdFor(uuid);
+      if (sid) {
+        io.to(sid).emit('dungeon_start', {
           roomId: data.roomId,
           dungeonId: room.dungeonId,
-          players: room.players.map(pid => players[pid]),
-          isHost: id === hostId
+          players: roster,
+          isHost: uuid === room.hostUuid
         });
       }
     });
+  });
+
+  // A client that just (re)joined asks the host for a complete state snapshot.
+  socket.on('request_full_sync', () => {
+    const p = players[socket.id];
+    if (!p || !p.room) return;
+    const room = rooms[p.room];
+    if (!room) return;
+
+    // The host does not need to ask itself.
+    if (p.uuid === room.hostUuid) return;
+
+    const hostSid = socketIdFor(room.hostUuid);
+    if (hostSid) {
+      io.to(hostSid).emit('request_full_sync', { requesterId: socket.id });
+    }
+  });
+
+  // Host's snapshot reply - routed only to the client that asked.
+  socket.on('full_sync', (data = {}) => {
+    const p = players[socket.id];
+    if (!p || !p.room) return;
+    const room = rooms[p.room];
+    if (!room || p.uuid !== room.hostUuid) return;
+
+    const requesterId = data.requesterId;
+    if (requesterId && players[requesterId]) {
+      io.to(requesterId).emit('full_sync', data);
+    } else {
+      socket.to(p.room).emit('full_sync', data);
+    }
   });
 
 
@@ -360,29 +504,13 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Explicit, intentional exit - no grace period.
   socket.on('leave_dungeon_room', () => {
     const p = players[socket.id];
     if (p && p.room) {
-      const room = rooms[p.room];
-      if (room) {
-        room.players = room.players.filter(id => id !== socket.id);
-        socket.to(p.room).emit('player_left', { socketId: socket.id, name: p.name });
-        if (room.players.length === 0) {
-          delete rooms[p.room];
-        }
-      }
-      socket.leave(p.room);
-      p.room = null;
-    }
-  });
-
-  socket.on('player_attack', (data) => {
-    const p = players[socket.id];
-    if (p && p.room) {
-      socket.to(p.room).emit('remote_player_attack', {
-        socketId: socket.id,
-        skillId: data.skillId
-      });
+      const roomId = p.room;
+      socket.leave(roomId);
+      removeMemberFromRoom(p.uuid, roomId);
     }
   });
 
@@ -393,33 +521,36 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('enemy_damaged', (data) => {
-    const p = players[socket.id];
-    if (p && p.room) {
-      io.to(p.room).emit('sync_enemy_hp', {
-        enemyId: data.enemyId,
-        newHp: data.newHp,
-        damage: data.damage
-      });
-    }
-  });
-
+  // Unintentional drop - hold the slot open so a reconnecting mobile client
+  // can reclaim it instead of the party silently falling apart.
   socket.on('disconnect', () => {
     console.log(`[AUTH] User disconnected: ${socket.id}`);
     const p = players[socket.id];
-    if (p) {
-      if (p.room) {
-        const room = rooms[p.room];
-        if (room) {
-          room.players = room.players.filter(id => id !== socket.id);
-          io.to(p.room).emit('player_left', { socketId: socket.id, name: p.name });
-          if (room.players.length === 0) {
-            delete rooms[p.room];
-          }
-        }
-      }
-      delete players[socket.id];
+    if (!p) return;
+
+    delete players[socket.id];
+
+    // A newer socket may already have adopted this record (fast reconnect).
+    if (p.socketId !== socket.id) return;
+    p.socketId = null;
+
+    if (!p.room) {
+      delete playersByUuid[p.uuid];
+      return;
     }
+
+    const roomId = p.room;
+    io.to(roomId).emit('player_disconnected', { uuid: p.uuid, name: p.name });
+    console.log(`[ROOM] ${p.name} dropped from ${roomId}; holding slot for ${RECONNECT_GRACE_MS / 1000}s`);
+
+    reconnectTimers[p.uuid] = setTimeout(() => {
+      delete reconnectTimers[p.uuid];
+      const current = playersByUuid[p.uuid];
+      // They came back on a new socket - nothing to clean up.
+      if (!current || current.socketId) return;
+      removeMemberFromRoom(p.uuid, roomId);
+      delete playersByUuid[p.uuid];
+    }, RECONNECT_GRACE_MS);
   });
 });
 

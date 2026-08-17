@@ -1748,7 +1748,8 @@ export class GameHUD {
         // Join room and wait for dungeon_start
         network.acceptInvite(inviteData.roomId, (roomData) => {
           if (this.game) {
-             this.game.onSelectLocation(roomData.dungeonId, roomData.isHost);
+             // network.isHost was set from this same packet by NetworkManager.
+             this.game.onSelectLocation(roomData.dungeonId, network.isHost);
           }
         });
       };

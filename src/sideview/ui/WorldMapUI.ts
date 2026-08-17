@@ -433,8 +433,10 @@ export class WorldMapUI {
       // Start match!
       document.body.removeChild(overlay);
       this.close();
-      const isHost = roomData && typeof roomData.isHost === 'boolean' ? roomData.isHost : true;
-      this.onSelectLocation(locationId, isHost);
+      // Role comes from the server (NetworkManager already applied it from the
+      // dungeon_start packet). Never assume host here - guessing wrong is what
+      // made both devices simulate their own waves.
+      this.onSelectLocation(locationId, network.isHost);
     });
   }
 

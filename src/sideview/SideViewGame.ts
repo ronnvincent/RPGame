@@ -34,6 +34,9 @@ export class SideViewGame {
   private animationFrameId: number | null = null;
   private keysPressed: { [key: string]: boolean } = {};
   public touchMoveDir: number = 0;
+  /** Guest-side watchdog: timestamp of the last host state packet we saw. */
+  private lastEnemySyncAt: number = 0;
+  private lastResyncRequestAt: number = 0;
 
   constructor(rootElement: HTMLElement) {
     this.container = rootElement;
@@ -156,9 +159,6 @@ export class SideViewGame {
 
         mod.network.remotePlayers[socketId] = remoteP;
 
-        // VISUAL DEBUG: RED TEXT means the NETWORK packet arrived successfully in SideViewGame!
-        this.engine.particles.addFloatingText(x, y + this.engine.groundY - 120, `[NET] GOT SKILL!`, '#ff0000', true, 24);
-
         this.engine.castRemoteSkill(classId, skillIndex, x, y + this.engine.groundY, facing, socketId, skillDamage);
       });
 
@@ -201,9 +201,6 @@ export class SideViewGame {
 
       mod.network.listenForPartyNextDungeon((data) => {
         if (!this.engine) return;
-        if (this.engine.isHost) {
-          this.engine.isHost = false;
-        }
         console.log('[NET] Received party_next_dungeon from host:', data);
         this.dialogue?.close();
         if (this.currentDungeonIndex !== data.dungeonIndex || this.engine.isTownMode) {
@@ -213,11 +210,8 @@ export class SideViewGame {
 
       mod.network.listenForWaveSync((data) => {
         if (!this.engine) return;
-        
-        if (this.engine.isHost) {
-          this.engine.isHost = false;
-        }
 
+        this.lastEnemySyncAt = performance.now();
         this.currentWaveIndex = data.waveIndex;
         this.engine.currentWaveIndex = data.waveIndex;
         if (data.cleared) {
@@ -254,73 +248,34 @@ export class SideViewGame {
       });
 
       mod.network.listenForEnemySync((enemies, waveIndex, dungeonIndex, dungeonId) => {
-        if (!this.engine) return;
-        
-        // If we receive this, we cannot be the host. Force client state.
-        if (this.engine.isHost) {
-          this.engine.isHost = false;
-        }
-        
-        // Ensure client is in dungeon mode
-        if (this.engine.isTownMode) {
-          this.engine.isTownMode = false;
-        }
-
-        // Synchronize dungeon index and theme if needed
-        if (dungeonIndex !== undefined && dungeonIndex !== this.currentDungeonIndex) {
-          this.currentDungeonIndex = dungeonIndex % DUNGEONS.length;
-          this.engine.currentDungeonIndex = this.currentDungeonIndex;
-          this.engine.currentDungeonId = dungeonId || DUNGEONS[this.currentDungeonIndex]?.id || 'goblin_catacombs';
-          const dungeon = DUNGEONS[this.currentDungeonIndex];
-          if (dungeon) {
-            this.engine.setBattleTheme(dungeon.theme);
-            audio.playDungeonBGM(dungeon.theme);
-          }
-        }
-
-        // Sync wave index from host
-        if (waveIndex !== undefined) {
-          this.currentWaveIndex = waveIndex;
-          this.engine.currentWaveIndex = waveIndex;
-        }
-        
-        // Smoothly reconcile enemies by ID
-        const groundY = this.engine.groundY;
-        const incoming = (enemies || []).map((e: any) => ({ ...e, y: e.y + groundY }));
-        
-        const reconciled: any[] = [];
-        for (const inc of incoming) {
-          const existing = this.engine.enemies.find(e => e.id === inc.id);
-          if (existing) {
-            existing.x = inc.x;
-            existing.y = inc.y;
-            existing.vx = inc.vx;
-            existing.vy = inc.vy;
-            existing.hp = inc.hp;
-            existing.maxHp = inc.maxHp;
-            existing.facing = inc.facing;
-            existing.isGrounded = inc.isGrounded;
-            existing.isAttacking = inc.isAttacking;
-            existing.hitStun = inc.hitStun;
-            existing.isDead = inc.isDead;
-            existing.attackTimer = inc.attackTimer;
-            if (inc.lootDrop && !existing.lootDrop) {
-              existing.lootDrop = inc.lootDrop;
-            }
-            reconciled.push(existing);
-          } else {
-            reconciled.push(inc);
-          }
-        }
-        this.engine.enemies = reconciled;
-
-        const dungeon = DUNGEONS[this.currentDungeonIndex];
-        if (dungeon) {
-          const livingCount = this.engine.enemies.filter(e => !e.isDead).length;
-          this.hud?.setWaveInfo(`${dungeon.name} - Wave ${this.currentWaveIndex + 1}/${dungeon.waves.length}`, livingCount);
-        }
+        this.applyEnemySnapshot(enemies, waveIndex, dungeonIndex, dungeonId);
       });
-      
+
+      // Host: a guest joined or reconnected and needs the whole world state.
+      mod.network.onFullSyncRequest((requesterId) => {
+        if (!this.engine || !this.engine.isHost) return;
+        const dungeon = DUNGEONS[this.currentDungeonIndex];
+        mod.network.sendFullSync(requesterId, {
+          waveIndex: this.currentWaveIndex,
+          dungeonIndex: this.currentDungeonIndex,
+          dungeonId: dungeon?.id || this.engine.currentDungeonId,
+          enemies: this.engine.enemies
+        }, this.engine.groundY);
+      });
+
+      // Guest: apply the host's snapshot wholesale.
+      mod.network.onFullSync((snapshot) => {
+        if (!this.engine || this.engine.isHost) return;
+        console.log('[NET] Applying full_sync from host:', snapshot.enemies?.length, 'enemies');
+        this.applyEnemySnapshot(snapshot.enemies, snapshot.waveIndex, snapshot.dungeonIndex, snapshot.dungeonId);
+      });
+
+      // Role changes are server-driven; a fresh guest pulls state immediately.
+      mod.network.onRoleChange((isHost) => {
+        console.log('[NET] Role assigned by server. isHost =', isHost);
+        if (!isHost) mod.network.requestFullSync();
+      });
+
       mod.network.listenForDamageEnemy((enemyId, damage, facing) => {
         if (!this.engine || !this.engine.isHost) return;
         const enemy = this.engine.enemies.find(e => e.id === enemyId) || this.engine.enemies[parseInt(enemyId)];
@@ -331,9 +286,6 @@ export class SideViewGame {
 
       mod.network.listenForEnemyHit((hitData) => {
         if (!this.engine) return;
-        if (this.engine.isHost) {
-          this.engine.isHost = false;
-        }
         const enemy = this.engine.enemies.find(e => e.id === hitData.enemyId) || this.engine.enemies[parseInt(hitData.enemyId)];
         if (enemy) {
           enemy.hp = hitData.newHp;
@@ -395,14 +347,85 @@ export class SideViewGame {
     }
   }
 
+  /**
+   * Applies host-authoritative enemy/wave state on the guest. Used by both the
+   * 10Hz enemy_sync stream and the on-demand full_sync snapshot.
+   *
+   * Enemies are reconciled in place by id rather than by replacing the array,
+   * so guest-side VFX and summoned minions that reference an enemy survive.
+   */
+  private applyEnemySnapshot(enemies: any[], waveIndex: number, dungeonIndex?: number, dungeonId?: string) {
+    if (!this.engine || this.engine.isHost) return;
+
+    this.lastEnemySyncAt = performance.now();
+
+    // A guest receiving dungeon state is, by definition, in the dungeon.
+    if (this.engine.isTownMode) {
+      this.engine.isTownMode = false;
+    }
+
+    if (dungeonIndex !== undefined && dungeonIndex !== this.currentDungeonIndex) {
+      this.currentDungeonIndex = dungeonIndex % DUNGEONS.length;
+      this.engine.currentDungeonIndex = this.currentDungeonIndex;
+      this.engine.currentDungeonId = dungeonId || DUNGEONS[this.currentDungeonIndex]?.id || 'goblin_catacombs';
+      const themed = DUNGEONS[this.currentDungeonIndex];
+      if (themed) {
+        this.engine.setBattleTheme(themed.theme);
+        audio.playDungeonBGM(themed.theme);
+      }
+    }
+
+    if (waveIndex !== undefined) {
+      this.currentWaveIndex = waveIndex;
+      this.engine.currentWaveIndex = waveIndex;
+    }
+
+    const groundY = this.engine.groundY;
+    const incoming = enemies || [];
+    const seen = new Set<string>();
+
+    for (const raw of incoming) {
+      const inc = { ...raw, y: raw.y + groundY };
+      seen.add(inc.id);
+
+      const existing = this.engine.enemies.find(e => e.id === inc.id);
+      if (existing) {
+        existing.x = inc.x;
+        existing.y = inc.y;
+        existing.vx = inc.vx;
+        existing.vy = inc.vy;
+        existing.hp = inc.hp;
+        existing.maxHp = inc.maxHp;
+        existing.facing = inc.facing;
+        existing.isGrounded = inc.isGrounded;
+        existing.isAttacking = inc.isAttacking;
+        existing.hitStun = inc.hitStun;
+        existing.isDead = inc.isDead;
+        existing.attackTimer = inc.attackTimer;
+        if (inc.lootDrop && !existing.lootDrop) {
+          existing.lootDrop = inc.lootDrop;
+        }
+      } else {
+        this.engine.enemies.push(inc);
+      }
+    }
+
+    // Drop anything the host no longer knows about (wave rolled over).
+    if (this.engine.enemies.length !== seen.size) {
+      this.engine.enemies = this.engine.enemies.filter(e => seen.has(e.id));
+    }
+
+    const dungeon = DUNGEONS[this.currentDungeonIndex];
+    if (dungeon) {
+      const livingCount = this.engine.enemies.filter(e => !e.isDead).length;
+      this.hud?.setWaveInfo(`${dungeon.name} - Wave ${this.currentWaveIndex + 1}/${dungeon.waves.length}`, livingCount);
+    }
+  }
+
   public onSelectLocation(locationId: string, isHost: boolean = true) {
     if (locationId === 'town_eldermoor') {
       this.loadTownHub();
       return;
-    }
-
-    if (this.engine) {
-      this.engine.isHost = isHost;
     }
 
     const dungeonIdx = DUNGEONS.findIndex(d => d.id === locationId);
@@ -488,13 +511,13 @@ export class SideViewGame {
     this.hud?.setWaveInfo(`${dungeon.name} - Wave ${this.currentWaveIndex + 1}/${dungeon.waves.length}`, enemies.length);
     this.engine.particles.addImpactBurst(this.engine.player.x, this.engine.groundY, 12, dungeon.ambientParticles, 'spark');
 
-    // Immediately broadcast newly spawned wave to party members
-    import('./network/NetworkManager').then(mod => {
-      mod.network.sendEnemySync(this.engine!.enemies, this.engine!.groundY, this.currentWaveIndex, this.currentDungeonIndex, dungeon.id);
-      mod.network.sendWaveSync({
-        waveIndex: this.currentWaveIndex,
-        cleared: false
-      });
+    // Immediately broadcast newly spawned wave to party members.
+    // This used to be a dynamic import(); when that chunk failed to load the
+    // guest never learned a wave had spawned, so its wave counter froze.
+    network.sendEnemySync(this.engine.enemies, this.engine.groundY, this.currentWaveIndex, this.currentDungeonIndex, dungeon.id);
+    network.sendWaveSync({
+      waveIndex: this.currentWaveIndex,
+      cleared: false
     });
   }
 
@@ -714,6 +737,20 @@ export class SideViewGame {
           const dungeon = DUNGEONS[this.currentDungeonIndex];
           if (dungeon) {
             this.hud?.setWaveInfo(`${dungeon.name} - Wave ${this.currentWaveIndex + 1}/${dungeon.waves.length}`, livingEnemies.length);
+
+            // Guest watchdog: if the host's state stream goes quiet we have
+            // most likely been dropped from the room (mobile reconnect). Ask
+            // for a fresh snapshot instead of sitting in an empty dungeon.
+            if (!this.engine.isHost && network.room) {
+              const now = performance.now();
+              const stale = now - this.lastEnemySyncAt > 2000;
+              const cooledDown = now - this.lastResyncRequestAt > 3000;
+              if (stale && cooledDown) {
+                this.lastResyncRequestAt = now;
+                console.warn('[NET] No host state for >2s - requesting full sync.');
+                network.requestFullSync();
+              }
+            }
 
             // Only Host progresses wave
             if (this.engine.isHost && this.waveActive && livingEnemies.length === 0) {

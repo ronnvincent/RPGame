@@ -140,7 +140,14 @@ export class SideViewEngine {
   public canvasWidth: number = 960;
   public canvasHeight: number = 540;
   public isTownMode: boolean = true;
-  public isHost: boolean = true;
+  /**
+   * Read-only view of the server-assigned role. Never assign to this - the
+   * server owns it via NetworkManager. Solo play reports true, which is correct
+   * since a lone player is authoritative over their own world.
+   */
+  public get isHost(): boolean {
+    return network.isHost;
+  }
   public currentWaveIndex: number = 0;
   public currentDungeonIndex: number = 0;
   public currentDungeonId: string = 'goblin_catacombs';
@@ -511,10 +518,6 @@ export class SideViewEngine {
 
     const attackX = startX + (facing * (skill.range * 0.6));
     const attackY = startY;
-
-    // VISUAL DEBUG: Let's see if the client is receiving this!
-    this.particles.addFloatingText(startX, startY - 80, `[DEBUG] Remote Cast: ${classId} Skill ${skillIndex}`, '#00ff00', true, 16);
-
 
     // Play SFX
     this.playSkillCastSfx(skill);
@@ -1322,21 +1325,20 @@ export class SideViewEngine {
     enemy.vx = knockbackDir * 3.5;
     enemy.vy = -2.5;
 
-    // If we are the client, and this wasn't from a remote packet, send it to the host
-    if (!this.isHost && !fromRemote) {
-      import('../network/NetworkManager').then(mod => {
-        const enemyIdentifier = enemy.id || this.enemies.indexOf(enemy).toString();
-        if (enemyIdentifier !== '-1') {
-          mod.network.sendDamageEnemy(enemyIdentifier, finalDamage, knockbackDir);
+    // Report the hit to the party. These used to be dynamic import() calls,
+    // which silently dropped the packet whenever the split chunk failed to load
+    // on mobile - that is why the guest could never damage anything.
+    if (!fromRemote) {
+      const enemyIdentifier = enemy.id || this.enemies.indexOf(enemy).toString();
+      if (enemyIdentifier !== '-1') {
+        if (this.isHost) {
+          network.sendEnemyHit(enemyIdentifier, finalDamage, isCrit, knockbackDir, enemy.hp);
+        } else {
+          // Guest predicts the hit locally (above) for responsiveness; the host
+          // remains authoritative and the next enemy_sync reconciles real HP.
+          network.sendDamageEnemy(enemyIdentifier, finalDamage, knockbackDir);
         }
-      });
-    } else if (this.isHost && !fromRemote) {
-      import('../network/NetworkManager').then(mod => {
-        const enemyIdentifier = enemy.id || this.enemies.indexOf(enemy).toString();
-        if (enemyIdentifier !== '-1') {
-          mod.network.sendEnemyHit(enemyIdentifier, finalDamage, isCrit, knockbackDir, enemy.hp);
-        }
-      });
+      }
     }
 
     // Hit-stop micro freeze and crunchy screen shake on impact
@@ -1364,19 +1366,17 @@ export class SideViewEngine {
     enemy.hp = 0;
     
     if (this.isHost) {
-      import('../network/NetworkManager').then(mod => {
-        mod.network.sendEnemyDied({
-          id: enemy.id,
-          name: enemy.name,
-          type: enemy.type,
-          x: enemy.x,
-          y: enemy.y,
-          lootDrop: enemy.lootDrop,
-          expReward: enemy.expReward,
-          goldReward: enemy.goldReward,
-          color: enemy.color
-        }, this.groundY);
-      });
+      network.sendEnemyDied({
+        id: enemy.id,
+        name: enemy.name,
+        type: enemy.type,
+        x: enemy.x,
+        y: enemy.y,
+        lootDrop: enemy.lootDrop,
+        expReward: enemy.expReward,
+        goldReward: enemy.goldReward,
+        color: enemy.color
+      }, this.groundY);
     }
 
     // Trigger quest kill tracker
