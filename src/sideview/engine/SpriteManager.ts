@@ -60,6 +60,12 @@ export class SpriteManager {
     return img;
   }
 
+  /**
+   * Look up a preloaded key, or an asset path. Passing a path lazily registers
+   * and loads it, which is what VfxLibrary relies on - do not "simplify" this
+   * to a bare map lookup. A second, shadowing definition of this method used to
+   * exist further down the class and silently broke every path-based lookup.
+   */
   public getImage(keyOrSrc: string): HTMLImageElement | undefined {
     if (this.images[keyOrSrc]) return this.images[keyOrSrc];
     if (keyOrSrc.startsWith('/') || keyOrSrc.startsWith('http') || keyOrSrc.startsWith('data:')) {
@@ -67,6 +73,21 @@ export class SpriteManager {
       return this.images[keyOrSrc];
     }
     return undefined;
+  }
+
+  /**
+   * Warm a set of asset paths in the background. Unlike the boot manifest these
+   * do not count towards `isLoaded`, so VFX sheets can stream in without
+   * holding up the loading screen - but they are usually resident well before
+   * the player reaches a fight.
+   */
+  public warmPaths(paths: string[]) {
+    for (const src of paths) {
+      if (this.images[src]) continue;
+      const img = new Image();
+      img.src = src;
+      this.images[src] = img;
+    }
   }
 
   private addImage(key: string, src: string) {
@@ -925,10 +946,6 @@ export class SpriteManager {
       1,
       3
     );
-  }
-
-  public getImage(key: string): HTMLImageElement | undefined {
-    return this.images[key];
   }
 
   public update(dt: number) {

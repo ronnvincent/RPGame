@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "vite build",
     "test:production": "node --test test/production-preview.test.mjs",
-    "test:coop": "node test/coop-sync.test.mjs"
+    "test:coop": "node test/coop-sync.test.mjs",
+    "test:vfx": "node test/vfx-assets.test.mjs"
   },
   "keywords": [],
   "author": "",

@@ -6,6 +6,22 @@
  */
 
 import { sprites } from './SpriteManager';
+import { SpriteSheet, AnimatedSprite, drawFrame } from './SpriteSheet';
+import { VFX, VfxDef, allVfxImagePaths } from './VfxLibrary';
+
+/** A catalogue effect currently playing at a world position. */
+interface SpriteVfxInstance {
+  anim: AnimatedSprite;
+  def: VfxDef;
+  x: number;
+  y: number;
+  facing: number;
+  scale: number;
+  /** Optional drift so effects are not perfectly static. */
+  vx: number;
+  vy: number;
+  fadeOut: boolean;
+}
 
 export interface Particle {
   x: number;
@@ -831,6 +847,82 @@ export class ParticleSystem {
 
   // --- ANIMATION SHEET HELPERS ---
 
+  // ================= CATALOGUE SPRITE VFX =================
+  // Effects declared in VfxLibrary. Unlike playVfxSprite below, frame layout is
+  // read from verified data instead of guessed from the sprite key.
+
+  private spriteVfx: SpriteVfxInstance[] = [];
+  private sheetCache: Map<string, SpriteSheet> = new Map();
+  private vfxWarmed = false;
+
+  private sheetFor(id: string, def: VfxDef): SpriteSheet {
+    let sheet = this.sheetCache.get(id);
+    if (!sheet) {
+      sheet = new SpriteSheet(def.src, def.layout, (src) => sprites.getImage(src));
+      this.sheetCache.set(id, sheet);
+    }
+    return sheet;
+  }
+
+  /** Loads every catalogue image in the background. Safe to call repeatedly. */
+  public warmVfx() {
+    if (this.vfxWarmed) return;
+    this.vfxWarmed = true;
+    sprites.warmPaths(allVfxImagePaths());
+  }
+
+  /**
+   * Play a catalogue effect at a world position.
+   * Unknown ids are ignored rather than throwing, so a typo degrades to "no
+   * effect" instead of breaking the frame.
+   */
+  public playVfx(
+    id: string,
+    x: number,
+    y: number,
+    opts: { facing?: number; scale?: number; vx?: number; vy?: number; fadeOut?: boolean } = {}
+  ) {
+    const def = VFX[id];
+    if (!def) {
+      console.warn(`[VFX] unknown effect id "${id}"`);
+      return;
+    }
+
+    const sheet = this.sheetFor(id, def);
+    this.spriteVfx.push({
+      anim: new AnimatedSprite(sheet, { fps: def.fps, loop: false }),
+      def,
+      x,
+      y,
+      facing: def.directional ? (opts.facing ?? 1) : 1,
+      scale: def.scale * (opts.scale ?? 1),
+      vx: opts.vx ?? 0,
+      vy: opts.vy ?? 0,
+      fadeOut: opts.fadeOut ?? false
+    });
+  }
+
+  private updateSpriteVfx(dt: number) {
+    for (const v of this.spriteVfx) {
+      v.anim.update(dt);
+      v.x += v.vx * dt;
+      v.y += v.vy * dt;
+    }
+    this.spriteVfx = this.spriteVfx.filter(v => !v.anim.finished);
+  }
+
+  private drawSpriteVfx(ctx: CanvasRenderingContext2D) {
+    for (const v of this.spriteVfx) {
+      v.anim.draw(ctx, v.x, v.y, {
+        scale: v.scale,
+        facing: v.facing,
+        anchor: v.def.anchor ?? 'center',
+        blend: v.def.blend,
+        alpha: v.fadeOut ? Math.max(0, 1 - v.anim.progress) : 1
+      });
+    }
+  }
+
   public playVfxSprite(x: number, y: number, spriteKey: string, facing: number = 1, scale: number = 1.5, tint?: string) {
     let frameW = 100;
     let frameH = 100;
@@ -1279,6 +1371,9 @@ export class ParticleSystem {
       this.screenShakeTime -= dt;
     }
 
+    // 0. Update catalogue sprite VFX
+    this.updateSpriteVfx(dt);
+
     // 1. Update Spell Animations
     this.spellAnimations.forEach(spell => {
       spell.timer += dt;
@@ -1437,6 +1532,9 @@ export class ParticleSystem {
   public draw(ctx: CanvasRenderingContext2D) {
     ctx.save();
     ctx.imageSmoothingEnabled = false;
+
+    // 0. Catalogue sprite VFX sit behind the bespoke ultimate set pieces.
+    this.drawSpriteVfx(ctx);
 
     // 1. Draw Volcanic Fissures (Warrior Ultimate)
     this.volcanicFissures.forEach(f => {

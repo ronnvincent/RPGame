@@ -37,6 +37,11 @@ export class SideViewGame {
   /** Guest-side watchdog: timestamp of the last host state packet we saw. */
   private lastEnemySyncAt: number = 0;
   private lastResyncRequestAt: number = 0;
+  /** Device pixel ratio the canvas backing store is sized for. */
+  private dpr: number = 1;
+  /** Viewport size in CSS pixels - the world's coordinate space. */
+  private viewWidth: number = 960;
+  private viewHeight: number = 540;
 
   constructor(rootElement: HTMLElement) {
     this.container = rootElement;
@@ -91,22 +96,42 @@ export class SideViewGame {
   }
 
   private handleResize() {
-    const width = window.visualViewport ? window.visualViewport.width : window.innerWidth;
-    const height = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-    this.canvas.width = Math.floor(width);
-    this.canvas.height = Math.floor(height);
+    const width = Math.floor(window.visualViewport ? window.visualViewport.width : window.innerWidth);
+    const height = Math.floor(window.visualViewport ? window.visualViewport.height : window.innerHeight);
+
+    // Back the canvas at device resolution so pixel art stays sharp on phones
+    // and retina displays, but keep world coordinates in CSS pixels so layout
+    // and pointer input need no remapping.
+    const dpr = Math.min(window.devicePixelRatio || 1, 3);
+    this.dpr = dpr;
+    this.viewWidth = width;
+    this.viewHeight = height;
+
+    this.canvas.width = Math.floor(width * dpr);
+    this.canvas.height = Math.floor(height * dpr);
+    this.canvas.style.width = `${width}px`;
+    this.canvas.style.height = `${height}px`;
+
+    // Resizing a canvas resets its 2D context, so smoothing has to be disabled
+    // again here. Without this the browser bilinear-filters every sprite and
+    // the whole game looks soft.
+    this.ctx.imageSmoothingEnabled = false;
 
     if (this.engine) {
-      this.engine.canvasWidth = this.canvas.width;
-      this.engine.canvasHeight = this.canvas.height;
+      this.engine.canvasWidth = width;
+      this.engine.canvasHeight = height;
       this.engine.groundY = Math.floor(height - Math.min(100, Math.max(75, height * 0.16)));
-      this.engine.arenaHeight = this.canvas.height;
+      this.engine.arenaHeight = height;
     }
   }
 
   public startGame(selectedClass: CharacterClass, saveData: any = null) {
     this.engine = new SideViewEngine(selectedClass);
-    this.engine.groundY = this.canvas.height - 90;
+    this.engine.groundY = this.viewHeight - 90;
+
+    // Stream the VFX catalogue in the background so the first cast of a fight
+    // already has its frames resident.
+    this.engine.particles.warmVfx();
     
     if (saveData) {
       this.engine.loadSaveData(saveData);
@@ -779,10 +804,13 @@ export class SideViewGame {
         this.hud?.update();
       }
 
-      // Render Canvas
-      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      // Render Canvas. Draw in CSS-pixel space scaled up to the device-pixel
+      // backing store, with smoothing off so pixel art stays crisp.
+      this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+      this.ctx.imageSmoothingEnabled = false;
+      this.ctx.clearRect(0, 0, this.viewWidth, this.viewHeight);
       if (this.engine) {
-        this.engine.render(this.ctx, this.canvas.width, this.canvas.height);
+        this.engine.render(this.ctx, this.viewWidth, this.viewHeight);
       }
     } catch (err) {
       console.error('GameLoop Error:', err);
