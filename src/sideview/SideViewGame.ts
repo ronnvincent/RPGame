@@ -16,6 +16,7 @@ import { TownHub } from './town/TownHub';
 import { DialogueSystem } from './dialogue/DialogueSystem';
 import { WorldMapUI } from './ui/WorldMapUI';
 import { quests } from './quests/QuestManager';
+import { CoopDebugOverlay } from './ui/CoopDebugOverlay';
 
 export class SideViewGame {
   private container: HTMLElement;
@@ -26,6 +27,7 @@ export class SideViewGame {
   private townHub: TownHub | null = null;
   private dialogue: DialogueSystem | null = null;
   private worldMap: WorldMapUI | null = null;
+  private coopDebug: CoopDebugOverlay | null = null;
   private currentDungeonIndex: number = 0;
   private currentWaveIndex: number = 0;
   private waveActive: boolean = false;
@@ -151,6 +153,9 @@ export class SideViewGame {
 
     this.hud = new GameHUD(this.container, this.engine, this);
     this.hud.worldMapUI = this.worldMap;
+
+    // No-op unless ?coopdebug=1 (or the rpg_debug_multiplayer key) is set.
+    this.coopDebug = new CoopDebugOverlay(this.container);
 
     this.setupInputListeners();
     
@@ -812,6 +817,7 @@ export class SideViewGame {
         }
 
         this.hud?.update();
+        this.coopDebug?.update(dt, this.engine, this.currentWaveIndex, this.currentDungeonIndex);
       }
 
       // Render Canvas. Draw in CSS-pixel space scaled up to the device-pixel

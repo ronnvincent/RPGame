@@ -48,6 +48,17 @@ export class NetworkManager {
   private readonly debugKey = 'rpg_debug_multiplayer';
   private handlersRegistered = false;
 
+  /** Lightweight counters read by the co-op debug overlay. */
+  public stats = {
+    lastDamageSent: 0,
+    lastDamageRecv: 0,
+    lastHitRecv: 0,
+    enemySyncCount: 0,
+    skillsSent: 0,
+    skillsRecv: 0,
+    lastRoleSource: 'default'
+  };
+
   public remotePlayers: Record<string, RemotePlayerState> = {};
 
   // Callbacks are stored rather than bound directly to the socket, so a
@@ -84,6 +95,9 @@ export class NetworkManager {
   }
 
   private setRole(isHost: boolean, source: string) {
+    // Record the source even when the value is unchanged - when diagnosing a
+    // desync it matters which packet last spoke, not just when it flipped.
+    this.stats.lastRoleSource = source;
     if (this.isHost === isHost) return;
     this.isHost = isHost;
     this.debug('IN', 'role_change', { isHost, source });
@@ -190,6 +204,7 @@ export class NetworkManager {
 
     this.socket.on('remote_player_skill', (data) => {
       const skillDamage = typeof data.skillDamage === 'number' ? data.skillDamage : 0;
+      this.stats.skillsRecv++;
       this.debug('IN', 'remote_player_skill', data);
       this.onSkillCb?.(
         data.socketId,
@@ -213,6 +228,7 @@ export class NetworkManager {
     });
 
     this.socket.on('enemy_sync', (data) => {
+      this.stats.enemySyncCount++;
       this.onEnemySyncCb?.(data.enemies, data.waveIndex || 0, data.dungeonIndex, data.dungeonId);
     });
 
@@ -225,10 +241,12 @@ export class NetworkManager {
     });
 
     this.socket.on('damage_enemy', (data) => {
+      this.stats.lastDamageRecv = data.damage;
       this.onDamageEnemyCb?.(data.enemyId, data.damage, data.facing);
     });
 
     this.socket.on('enemy_hit', (data) => {
+      this.stats.lastHitRecv = data.damage;
       this.onEnemyHitCb?.(data);
     });
 
@@ -307,6 +325,7 @@ export class NetworkManager {
       skillDamage
     };
 
+    this.stats.skillsSent++;
     this.debug('OUT', 'player_skill', payload);
     this.socket.emit('player_skill', payload);
   }
@@ -460,6 +479,7 @@ export class NetworkManager {
 
   public sendDamageEnemy(enemyId: string, damage: number, facing: number) {
     if (!this.socket || !this.room) return;
+    this.stats.lastDamageSent = damage;
     this.socket.emit('damage_enemy', { enemyId, damage, facing });
   }
 
