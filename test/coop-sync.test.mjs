@@ -4,7 +4,8 @@
  */
 import { io } from 'socket.io-client';
 
-const URL = 'http://localhost:3001';
+// Defaults to the local dev server; pass COOP_TEST_URL to point at a deployment.
+const URL = process.env.COOP_TEST_URL || 'http://localhost:3001';
 const A = { uuid: 'uuid-host-aaa', name: 'HostPC', shortId: 'HOSTAA' };
 const B = { uuid: 'uuid-guest-bbb', name: 'GuestMobile', shortId: 'GUESTB' };
 
