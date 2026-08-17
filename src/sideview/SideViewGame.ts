@@ -156,6 +156,9 @@ export class SideViewGame {
 
         mod.network.remotePlayers[socketId] = remoteP;
 
+        // VISUAL DEBUG: RED TEXT means the NETWORK packet arrived successfully in SideViewGame!
+        this.engine.particles.addFloatingText(x, y + this.engine.groundY - 120, `[NET] GOT SKILL!`, '#ff0000', true, 24);
+
         this.engine.castRemoteSkill(classId, skillIndex, x, y + this.engine.groundY, facing, socketId, skillDamage);
       });
 
