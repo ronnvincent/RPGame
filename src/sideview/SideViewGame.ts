@@ -761,8 +761,11 @@ export class SideViewGame {
           const wasNear = this.engine.isPlayerNearPortal;
           this.engine.isPlayerNearPortal = portalDist < 100;
 
-          // Auto-open WorldMap when player enters portal zone
-          if (this.engine.isPlayerNearPortal && !wasNear && !this.dialogue?.isOpen) {
+          // Auto-open WorldMap when player enters portal zone.
+          // Never while partied: picking a dungeon here calls createLobby, which
+          // used to split the guest into their own room and silently break the
+          // whole run. The host drives where the party goes.
+          if (this.engine.isPlayerNearPortal && !wasNear && !this.dialogue?.isOpen && !network.isPartied) {
             this.worldMap?.open(this.engine?.player.maxDungeonCleared || 0);
           }
           // Auto-close WorldMap when player leaves portal zone

@@ -292,6 +292,23 @@ io.on('connection', (socket) => {
        return;
     }
 
+    // Refuse to split an existing party. The World Map auto-opens near the town
+    // portal, so a partied guest could pick a dungeon there and silently become
+    // host of a brand new room - leaving both devices in separate rooms with
+    // one-way relay. That is the bug this guard exists to prevent.
+    const current = p.room ? rooms[p.room] : null;
+    if (current && current.members.length > 1) {
+      console.log(`[LOBBY] refused: ${p.name} is already partied in ${p.room}`);
+      socket.emit('lobby_error', { msg: 'You are already in a party. Leave the party first.' });
+      return;
+    }
+
+    // Alone in a stale room - tear it down cleanly before opening a new one.
+    if (current) {
+      socket.leave(p.room);
+      removeMemberFromRoom(p.uuid, p.room);
+    }
+
     const newRoomId = `room_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
     rooms[newRoomId] = {
       dungeonId: data.dungeonId,

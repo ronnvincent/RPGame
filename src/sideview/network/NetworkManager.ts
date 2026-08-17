@@ -77,6 +77,7 @@ export class NetworkManager {
   private onFullSyncRequestCb: ((requesterId: string) => void) | null = null;
   private onFullSyncCb: ((snapshot: FullSyncSnapshot) => void) | null = null;
   private onRoleChangeCb: ((isHost: boolean) => void) | null = null;
+  private onLobbyErrorCb: ((msg: string) => void) | null = null;
 
   constructor() {
     NetworkManager.instance = this;
@@ -92,6 +93,17 @@ export class NetworkManager {
    *  different canvas heights agree on vertical position. */
   private toNetworkY(y: number, groundY: number): number {
     return y - groundY;
+  }
+
+  /**
+   * Single place the room id changes. Moving rooms invalidates every remote
+   * player we knew about - without this the old party members linger forever
+   * as ghosts in the overlay and in the renderer.
+   */
+  private setRoom(roomId: string | null) {
+    if (this.room === roomId) return;
+    this.room = roomId;
+    this.remotePlayers = {};
   }
 
   private setRole(isHost: boolean, source: string) {
@@ -145,7 +157,7 @@ export class NetworkManager {
 
     this.socket.on('room_rejoined', (data) => {
       this.debug('IN', 'room_rejoined', data);
-      this.room = data.roomId;
+      this.setRoom(data.roomId);
       this.setRole(Boolean(data.isHost), 'room_rejoined');
       // We may have missed an arbitrary amount of state while away.
       this.socket?.emit('request_full_sync');
@@ -153,7 +165,7 @@ export class NetworkManager {
 
     this.socket.on('role_assign', (data) => {
       this.debug('IN', 'role_assign', data);
-      if (data?.roomId) this.room = data.roomId;
+      if (data?.roomId) this.setRoom(data.roomId);
       this.setRole(Boolean(data?.isHost), 'role_assign');
     });
 
@@ -186,20 +198,26 @@ export class NetworkManager {
     });
 
     this.socket.on('lobby_update', (data) => {
-      this.room = data.roomId;
+      this.setRoom(data.roomId);
       if (typeof data.isHost === 'boolean') this.setRole(data.isHost, 'lobby_update');
       this.onLobbyUpdateCb?.(data);
     });
 
     this.socket.on('dungeon_start', (data) => {
       this.debug('IN', 'dungeon_start', data);
-      this.room = data.roomId;
+      this.setRoom(data.roomId);
       this.setRole(Boolean(data.isHost), 'dungeon_start');
       this.onDungeonStartCb?.(data);
     });
 
     this.socket.on('invite_received', (data) => {
       this.onInviteCb?.(data);
+    });
+
+    // The server refuses to let a partied player open a second lobby.
+    this.socket.on('lobby_error', (data) => {
+      console.warn('[NET] lobby_error:', data?.msg);
+      this.onLobbyErrorCb?.(data?.msg || 'Could not create lobby.');
     });
 
     this.socket.on('remote_player_skill', (data) => {
@@ -396,9 +414,18 @@ export class NetworkManager {
     if (this.socket && this.room) {
       this.socket.emit('leave_dungeon_room');
     }
-    this.room = null;
+    this.setRoom(null);
     this.isHost = true; // Solo play from here on.
-    this.remotePlayers = {};
+  }
+
+  /** True when we are in a room with at least one other player. */
+  public get isPartied(): boolean {
+    return !!this.room && Object.keys(this.remotePlayers).length > 0;
+  }
+
+  public onLobbyError(cb: (msg: string) => void) {
+    if (!this.socket) this.connect();
+    this.onLobbyErrorCb = cb;
   }
 
   // ================= SYNC EVENTS =================

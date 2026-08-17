@@ -1499,7 +1499,7 @@ export class GameHUD {
         tooltipPopup.innerHTML = `
           <div class="tooltip-skill-name">${skill.name}</div>
           <div class="tooltip-badges-row">
-            <span>🔹 ${skill.mpCost} MP</span>
+            <span>🔹 ${skill.manaCost} MP</span>
             <span>⏱️ ${skill.cooldown}s CD</span>
             <span>⚔️ ${Math.round(skill.damageMultiplier * 100)}% DMG</span>
           </div>
