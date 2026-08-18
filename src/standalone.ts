@@ -1,4 +1,5 @@
 import { SideViewGame } from './sideview/SideViewGame';
+import { installMobileStyles } from './sideview/ui/MobileUI';
 
 function generateShortId() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No I, O, 0, 1
@@ -29,18 +30,22 @@ function showLoginScreen(mountPoint: HTMLElement) {
   overlay.style.flexDirection = 'column';
   overlay.style.alignItems = 'center';
   overlay.style.justifyContent = 'center';
+  overlay.style.overflowY = 'auto';
+  overlay.style.padding = '12px';
   overlay.style.zIndex = '99999';
   overlay.style.fontFamily = "'Cinzel', 'Outfit', sans-serif";
 
   const box = document.createElement('div');
   box.style.background = "url('/assets/kenney-rpg-ui/panel_brown.png') repeat";
   box.style.backgroundSize = "100% 100%";
-  box.style.padding = '40px';
+  box.style.padding = 'clamp(18px, 6vw, 40px)';
   box.style.border = '4px solid #4a2c11';
   box.style.borderRadius = '8px';
   box.style.textAlign = 'center';
   box.style.color = '#fef08a';
-  box.style.width = '350px';
+  box.style.width = 'min(350px, 92vw)';
+  box.style.maxHeight = '92dvh';
+  box.style.overflowY = 'auto';
 
   const title = document.createElement('h2');
   title.innerText = 'AETHELGARD LOGIN';
@@ -161,7 +166,7 @@ function showLoginScreen(mountPoint: HTMLElement) {
 
         // Show credentials overlay
         box.innerHTML = '';
-        box.style.width = '400px';
+        box.style.width = 'min(400px, 92vw)';
         const okTitle = document.createElement('h2');
         okTitle.innerText = 'ACCOUNT CREATED!';
         okTitle.style.color = '#4ade80';
@@ -221,6 +226,8 @@ function startGame(mountPoint: HTMLElement) {
 }
 
 function initGame() {
+  // Applies to the login screen as well, not just the game UI.
+  installMobileStyles();
   const mountPoint = document.getElementById('rpg') || document.body;
   if (!mountPoint) return;
   

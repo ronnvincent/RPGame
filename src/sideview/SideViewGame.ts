@@ -18,6 +18,7 @@ import { WorldMapUI } from './ui/WorldMapUI';
 import { quests } from './quests/QuestManager';
 import { CoopDebugOverlay } from './ui/CoopDebugOverlay';
 import { CoopLobbyUI } from './ui/CoopLobbyUI';
+import { installMobileStyles, findScrollable } from './ui/MobileUI';
 
 export class SideViewGame {
   private container: HTMLElement;
@@ -67,13 +68,14 @@ export class SideViewGame {
     this.container.style.touchAction = 'none';
     this.container.appendChild(this.canvas);
 
-    // Completely prevent browser pull-down refresh and bounce scrolling
+    installMobileStyles();
+
+    // Block pull-to-refresh and rubber-banding, but never block a real scroll.
+    // This used to test the target against a hard-coded list of modal class
+    // names, so every new scrollable panel silently lost scrolling until
+    // someone remembered to add it. Ask the DOM instead.
     this.container.addEventListener('touchmove', (e) => {
-      // Allow scrolling only inside scrollable modal bodies
-      const target = e.target as HTMLElement;
-      if (!target.closest('.dialogue-box-frame, .inventory-modal, .world-map-modal, .quest-log-modal, .details-area, #coop-lobby')) {
-        e.preventDefault();
-      }
+      if (!findScrollable(e.target)) e.preventDefault();
     }, { passive: false });
 
     this.handleResize();
