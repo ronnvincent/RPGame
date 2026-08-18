@@ -250,6 +250,26 @@ export class TownHub {
   /**
    * Blacksmith Forge Upgrade Modal
    */
+  /**
+   * What the forge charges next.
+   *
+   * The price was flat and the purchase repeatable without limit, so gold
+   * stopped meaning anything once you had a few thousand: 8,000 gold bought
+   * +320 attack in one sitting, more than any drop in the game. Each purchase
+   * now raises its own price by 40%, so the forge helps early and stops being a
+   * substitute for playing.
+   */
+  private forgePrice(kind: 'atk' | 'def' | 'hp'): number {
+    const base = kind === 'hp' ? 200 : 150;
+    const bought = Number(localStorage.getItem(`forge_${kind}`)) || 0;
+    return Math.round(base * Math.pow(1.4, bought));
+  }
+
+  private recordForgePurchase(kind: 'atk' | 'def' | 'hp') {
+    const bought = Number(localStorage.getItem(`forge_${kind}`)) || 0;
+    localStorage.setItem(`forge_${kind}`, String(bought + 1));
+  }
+
   public openBlacksmithModal(engine: SideViewEngine) {
     audio.playPageTurn();
     const overlay = document.createElement('div');
@@ -281,7 +301,7 @@ export class TownHub {
                 <div style="font-size: 11px; color: #94a3b8;">Current ATK: ${engine.player.totalAtk}</div>
               </div>
             </div>
-            <button id="forge-atk-btn" class="dialogue-btn dialogue-btn-quest" style="padding: 6px 16px;">150G Upgrade</button>
+            <button id="forge-atk-btn" class="dialogue-btn dialogue-btn-quest" style="padding: 6px 16px;">${this.forgePrice('atk')}G Upgrade</button>
           </div>
 
           <div style="background: url('/assets/kenney-rpg-ui/panelInset_brown.png') repeat; background-size: 100% 100%; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; border-radius: 4px;">
@@ -292,7 +312,7 @@ export class TownHub {
                 <div style="font-size: 11px; color: #94a3b8;">Current DEF: ${engine.player.totalDef}</div>
               </div>
             </div>
-            <button id="forge-def-btn" class="dialogue-btn dialogue-btn-quest" style="padding: 6px 16px;">150G Upgrade</button>
+            <button id="forge-def-btn" class="dialogue-btn dialogue-btn-quest" style="padding: 6px 16px;">${this.forgePrice('def')}G Upgrade</button>
           </div>
 
           <div style="background: url('/assets/kenney-rpg-ui/panelInset_brown.png') repeat; background-size: 100% 100%; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; border-radius: 4px;">
@@ -303,7 +323,7 @@ export class TownHub {
                 <div style="font-size: 11px; color: #94a3b8;">Current HP: ${Math.round(engine.player.hp)} / ${engine.player.maxHp}</div>
               </div>
             </div>
-            <button id="forge-hp-btn" class="dialogue-btn dialogue-btn-quest" style="padding: 6px 16px;">200G Upgrade</button>
+            <button id="forge-hp-btn" class="dialogue-btn dialogue-btn-quest" style="padding: 6px 16px;">${this.forgePrice('hp')}G Upgrade</button>
           </div>
         </div>
         <div class="dialogue-actions-row" style="margin-top: 14px;">
@@ -312,8 +332,10 @@ export class TownHub {
       `;
 
       modal.querySelector('#forge-atk-btn')?.addEventListener('click', () => {
-        if (engine.player.gold >= 150) {
-          engine.player.gold -= 150;
+        const cost = this.forgePrice('atk');
+        if (engine.player.gold >= cost) {
+          engine.player.gold -= cost;
+          this.recordForgePurchase('atk');
           engine.player.baseAtk += 6;
           engine.recalculateStats();
           audio.playSlash('heavy');
@@ -325,8 +347,10 @@ export class TownHub {
       });
 
       modal.querySelector('#forge-def-btn')?.addEventListener('click', () => {
-        if (engine.player.gold >= 150) {
-          engine.player.gold -= 150;
+        const cost = this.forgePrice('def');
+        if (engine.player.gold >= cost) {
+          engine.player.gold -= cost;
+          this.recordForgePurchase('def');
           engine.player.baseDef += 4;
           engine.recalculateStats();
           audio.playTone(600, 0.2);
@@ -338,8 +362,10 @@ export class TownHub {
       });
 
       modal.querySelector('#forge-hp-btn')?.addEventListener('click', () => {
-        if (engine.player.gold >= 200) {
-          engine.player.gold -= 200;
+        const cost = this.forgePrice('hp');
+        if (engine.player.gold >= cost) {
+          engine.player.gold -= cost;
+          this.recordForgePurchase('hp');
           engine.player.maxHp += 50;
           engine.player.hp = Math.min(engine.player.maxHp, engine.player.hp + 50);
           engine.recalculateStats();

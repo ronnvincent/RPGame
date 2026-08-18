@@ -97,6 +97,8 @@ export interface DungeonDefinition {
   platformColor: string;
   ambientParticles: string;
   minLevel?: number;
+  /** Waves never run out: past the last defined one they are generated. */
+  endless?: boolean;
   waves: DungeonWave[];
 }
 
@@ -390,6 +392,10 @@ export const DUNGEONS: DungeonDefinition[] = [
   {
     id: 'endless_arena',
     minLevel: 16,
+    // Called Endless, subtitled "infinite", gated behind level 16 - and it held
+    // exactly one wave. The waves below are the seed; everything past them is
+    // generated.
+    endless: true,
     name: 'Endless Celestial Arena',
     subtitle: 'Infinite trial against progressively empowered dimensional waves.',
     theme: 'void',
@@ -407,13 +413,69 @@ export const DUNGEONS: DungeonDefinition[] = [
   }
 ];
 
+/**
+ * Builds wave N of an endless dungeon.
+ *
+ * Seeded from the waves the dungeon does define, so it keeps its own cast
+ * rather than inventing monsters, and scaled by depth. The curve is
+ * deliberately gentle per wave and compounding: wave 40 should be a wall, wave
+ * 5 should not.
+ *
+ * Every fifth wave is a heavier one, and every tenth brings the dungeon's boss
+ * back - a run needs landmarks or it is just a long corridor.
+ */
+function buildEndlessWave(dungeon: DungeonDefinition, waveIndex: number): DungeonWave {
+  const seeds = dungeon.waves.length ? dungeon.waves : [];
+  if (!seeds.length) return { waveNumber: waveIndex + 1, enemies: [] };
+
+  const depth = waveIndex + 1;
+  const beyond = Math.max(1, depth - seeds.length);
+
+  // ~7% per wave, compounding. Wave 10 is roughly double, wave 30 roughly 7x.
+  const power = Math.pow(1.07, beyond);
+  const source = seeds[waveIndex % seeds.length];
+  const isMilestone = depth % 10 === 0;
+  const isHeavy = depth % 5 === 0;
+
+  const enemies = source.enemies.map((template) => ({
+    ...template,
+    maxHp: Math.round(template.maxHp * power),
+    atk: Math.round(template.atk * power),
+    def: Math.round(template.def * Math.pow(1.04, beyond)),
+    expReward: Math.round(template.expReward * Math.pow(1.05, beyond)),
+    goldReward: Math.round(template.goldReward * Math.pow(1.05, beyond)),
+    // Counts creep up, but capped: a screen of forty monsters is a slideshow,
+    // not a challenge.
+    count: Math.min(9, template.count + Math.floor(beyond / 6) + (isHeavy ? 1 : 0)),
+  }));
+
+  if (isMilestone) {
+    // The dungeon's own boss, scaled to the depth it appears at.
+    const bossTemplate = seeds.flatMap((w) => w.enemies).find((e) => e.type === 'boss')
+      || seeds.flatMap((w) => w.enemies).find((e) => e.type === 'elite');
+    if (bossTemplate) {
+      enemies.push({
+        ...bossTemplate,
+        name: `${bossTemplate.name} (Wave ${depth})`,
+        maxHp: Math.round(bossTemplate.maxHp * power),
+        atk: Math.round(bossTemplate.atk * power),
+        expReward: Math.round(bossTemplate.expReward * power),
+        goldReward: Math.round(bossTemplate.goldReward * power),
+        count: 1,
+      });
+    }
+  }
+
+  return { waveNumber: depth, enemies };
+}
+
 export function spawnWaveEnemies(
   dungeon: DungeonDefinition,
   waveIndex: number,
   arenaWidth: number,
   playerX: number = 300
 ): EnemyInstance[] {
-  const wave = dungeon.waves[waveIndex];
+  const wave = dungeon.waves[waveIndex] || (dungeon.endless ? buildEndlessWave(dungeon, waveIndex) : undefined);
   if (!wave) return [];
 
   const instances: EnemyInstance[] = [];

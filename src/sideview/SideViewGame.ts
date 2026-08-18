@@ -33,6 +33,8 @@ export class SideViewGame {
   public coopLobby: CoopLobbyUI | null = null;
   private currentDungeonIndex: number = 0;
   private currentWaveIndex: number = 0;
+  /** Deepest endless wave ever cleared on this device. */
+  private bestEndlessWave: number = Number(localStorage.getItem('bestEndlessWave')) || 0;
   private waveActive: boolean = false;
   private lastTime: number = 0;
   private isRunning: boolean = false;
@@ -273,7 +275,7 @@ export class SideViewGame {
           const dungeon = DUNGEONS[this.currentDungeonIndex];
           if (dungeon) {
             const livingCount = this.engine.enemies.filter(e => !e.isDead).length;
-            this.hud?.setWaveInfo(`${dungeon.name} - Wave ${this.currentWaveIndex + 1}/${dungeon.waves.length}`, livingCount);
+            this.hud?.setWaveInfo(this.waveLabel(dungeon), livingCount);
             audio.playSlash('heavy');
           }
         }
@@ -518,7 +520,7 @@ export class SideViewGame {
     const dungeon = DUNGEONS[this.currentDungeonIndex];
     if (dungeon) {
       const livingCount = this.engine.enemies.filter(e => !e.isDead).length;
-      this.hud?.setWaveInfo(`${dungeon.name} - Wave ${this.currentWaveIndex + 1}/${dungeon.waves.length}`, livingCount);
+      this.hud?.setWaveInfo(this.waveLabel(dungeon), livingCount);
     }
   }
 
@@ -582,11 +584,34 @@ export class SideViewGame {
     }
   }
 
+  /** "Wave 12" in an endless run; "Wave 2/4" everywhere else. */
+  private waveLabel(dungeon: DungeonDefinition): string {
+    const n = this.currentWaveIndex + 1;
+    return dungeon.endless
+      ? `${dungeon.name} - Wave ${n}${this.bestEndlessWave ? `  (best ${this.bestEndlessWave})` : ''}`
+      : `${dungeon.name} - Wave ${n}/${dungeon.waves.length}`;
+  }
+
+  /**
+   * Remembers how deep this account has ever gone.
+   *
+   * An endless mode with no record is just a treadmill - the number is the
+   * whole point of playing it again.
+   */
+  private recordEndlessDepth(wavesCleared: number) {
+    if (wavesCleared <= this.bestEndlessWave) return;
+    this.bestEndlessWave = wavesCleared;
+    localStorage.setItem('bestEndlessWave', String(wavesCleared));
+    this.hud?.showToast(`New record: wave ${wavesCleared}`);
+  }
+
   private spawnNextWave() {
     if (!this.engine) return;
     const dungeon = DUNGEONS[this.currentDungeonIndex];
     if (!dungeon) return;
-    if (this.currentWaveIndex >= dungeon.waves.length) {
+    // An endless dungeon has no end to reach: past its defined waves the next
+    // one is generated, so completion never fires.
+    if (!dungeon.endless && this.currentWaveIndex >= dungeon.waves.length) {
       // Dungeon Cleared!
       this.onDungeonCleared();
       return;
@@ -611,7 +636,7 @@ export class SideViewGame {
       this.dialogue?.showBossBanner(bossEnemy.name, dungeon.subtitle);
     }
 
-    this.hud?.setWaveInfo(`${dungeon.name} - Wave ${this.currentWaveIndex + 1}/${dungeon.waves.length}`, enemies.length);
+    this.hud?.setWaveInfo(this.waveLabel(dungeon), enemies.length);
 
     // Immediately broadcast newly spawned wave to party members.
     // This used to be a dynamic import(); when that chunk failed to load the
@@ -848,7 +873,7 @@ export class SideViewGame {
           const livingEnemies = this.engine.enemies.filter(e => !e.isDead);
           const dungeon = DUNGEONS[this.currentDungeonIndex];
           if (dungeon) {
-            this.hud?.setWaveInfo(`${dungeon.name} - Wave ${this.currentWaveIndex + 1}/${dungeon.waves.length}`, livingEnemies.length);
+            this.hud?.setWaveInfo(this.waveLabel(dungeon), livingEnemies.length);
 
             // Guest watchdog: if the host's state stream goes quiet we have
             // most likely been dropped from the room (mobile reconnect). Ask
@@ -869,7 +894,9 @@ export class SideViewGame {
               this.waveActive = false;
               this.currentWaveIndex++;
               this.engine.currentWaveIndex = this.currentWaveIndex;
-              const isCleared = this.currentWaveIndex >= dungeon.waves.length;
+              const isCleared = !dungeon.endless && this.currentWaveIndex >= dungeon.waves.length;
+
+              if (dungeon.endless) this.recordEndlessDepth(this.currentWaveIndex);
               
               if (isCleared) {
                 this.onDungeonCleared();
