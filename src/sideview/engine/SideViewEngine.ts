@@ -153,6 +153,8 @@ export class SideViewEngine {
   public currentDungeonIndex: number = 0;
   public currentDungeonId: string = 'goblin_catacombs';
   private syncTimer: number = 0;
+  /** Skill slot of the swing in progress, so the attack animation can vary. */
+  private lastSkillIndex: number = 0;
   private playerSyncTimer: number = 0;
   public townHub: TownHub | null = null;
   public readonly portalX: number = 2560;
@@ -669,6 +671,7 @@ export class SideViewEngine {
     // gates the next input.
     p.attackTimer = skill.cooldown === 0 ? 0.22 : Math.min(0.7, 0.3 + skill.castTime * 1.2);
     p.animState = 'attack';
+    this.lastSkillIndex = skillIndex;
 
     const attackX = p.x + (p.facing * (skill.range * 0.6));
     const attackY = p.y;
@@ -2166,7 +2169,8 @@ export class SideViewEngine {
       p.animState,
       p.facing,
       p.attackTimer,
-      p.characterClass.themeColor
+      p.characterClass.themeColor,
+      this.lastSkillIndex
     );
 
     ctx.restore();
@@ -2194,7 +2198,8 @@ export class SideViewEngine {
           rAnimState,
           remoteP.facing,
           remoteP.isAttacking ? 0.2 : 0,
-          '#4fade5'
+          '#4fade5',
+          remoteP.lastSkillIndex ?? 0
         );
         
         // Remote Name

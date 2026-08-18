@@ -198,6 +198,7 @@ export class SideViewGame {
         remoteP.isAttacking = true;
         remoteP.animState = 'attack';
         remoteP.isTownMode = isTownMode;
+        remoteP.lastSkillIndex = skillIndex;
 
         mod.network.remotePlayers[socketId] = remoteP;
 

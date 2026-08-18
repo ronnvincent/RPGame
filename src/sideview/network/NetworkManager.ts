@@ -11,6 +11,8 @@ export interface RemotePlayerState {
   isAttacking: boolean;
   animState: string;
   isTownMode?: boolean;
+  /** Skill slot of their current swing, for attack animation variety. */
+  lastSkillIndex?: number;
 }
 
 export interface LobbyMember {

@@ -19,6 +19,7 @@
  */
 
 import { ITEM_DATABASE } from '../items/ItemDatabase';
+import { HERO_SPRITES, HERO_FPS, heroFrame, attackAnimFor } from './HeroSprites';
 
 type BattleTheme = 'catacombs' | 'crypt' | 'inferno' | 'void' | 'town' | 'swamp' | 'mountain' | 'underwater' | 'caves';
 
@@ -34,6 +35,8 @@ export class SpriteManager {
 
   public isLoaded: boolean = false;
   private animTimer: number = 0;
+  /** Per-class attack playback clock, restarted whenever a new swing begins. */
+  private atkClock: Record<string, { start: number; prev: number }> = {};
   private pendingLoads: number = 0;
 
   constructor() {
@@ -955,6 +958,62 @@ export class SpriteManager {
   /**
    * Draw animated hero character with 100% UNIQUE DEDICATED SPRITE MODELS
    */
+
+  /**
+   * Draws a Chierit Elementals hero. Attack playback is driven by its own clock
+   * rather than by attackTimer directly: attackTimer counts down from a
+   * duration this method never sees, so anchoring on the moment the swing
+   * started is the only way to land on the right frame.
+   */
+  private drawElementalsHero(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    cid: string,
+    state: 'idle' | 'run' | 'attack' | 'jump' | 'dead',
+    facing: number,
+    attackTimer: number,
+    skillIndex: number
+  ) {
+    const set = HERO_SPRITES[cid];
+
+    let anim: string;
+    if (state === 'dead') anim = set.anims.death ? 'death' : 'idle';
+    else if (state === 'attack') anim = attackAnimFor(set, skillIndex);
+    else if (state === 'jump') anim = 'jump_up';
+    else if (state === 'run') anim = 'run';
+    else anim = 'idle';
+
+    const count = set.anims[anim] || set.anims.idle;
+    const fps = HERO_FPS[anim] || 12;
+
+    let frame: number;
+    if (state === 'attack') {
+      const clock = this.atkClock[cid] || (this.atkClock[cid] = { start: this.animTimer, prev: 0 });
+      // attackTimer rising means a fresh swing began this frame.
+      if (attackTimer > clock.prev) clock.start = this.animTimer;
+      clock.prev = attackTimer;
+      frame = Math.min(count - 1, Math.floor((this.animTimer - clock.start) * fps));
+    } else {
+      if (this.atkClock[cid]) this.atkClock[cid].prev = 0;
+      frame = Math.floor(this.animTimer * fps) % count;
+    }
+
+    const img = this.getImage(heroFrame(cid, anim, frame));
+    if (!img || !img.complete || !img.naturalWidth) return;
+
+    const w = set.frameW * set.scale;
+    const h = set.frameH * set.scale;
+
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.translate(Math.round(x), Math.round(y));
+    if (facing < 0) ctx.scale(-1, 1);
+    // Source frames are bottom-anchored on the character's feet.
+    ctx.drawImage(img, Math.round(-w / 2), Math.round(-h), Math.round(w), Math.round(h));
+    ctx.restore();
+  }
+
   public drawHero(
     ctx: CanvasRenderingContext2D,
     x: number,
@@ -963,9 +1022,17 @@ export class SpriteManager {
     state: 'idle' | 'run' | 'attack' | 'jump' | 'dead',
     facing: number,
     attackTimer: number = 0,
-    colorTint?: string
+    colorTint?: string,
+    skillIndex: number = 0
   ) {
     const cid = classId.toLowerCase();
+
+    // Classes with an imported Elementals animation set draw from it; everything
+    // else falls through to its original hand-wired sprite model.
+    if (HERO_SPRITES[cid]) {
+      this.drawElementalsHero(ctx, x, y, cid, state, facing, attackTimer, skillIndex);
+      return;
+    }
 
     ctx.save();
 
