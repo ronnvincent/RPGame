@@ -560,7 +560,11 @@ export class SideViewEngine {
     // matches the skill's element so one sheet serves every damage type.
     const row = FX_COLOUR_ROW[skill.damageType] ?? 5;
 
-    this.playSkillCastSfx(skill);
+    // A catalogue sound if the skill names one, otherwise the old generic
+    // profile. Sixty skills used to share about ten sounds, which is why combat
+    // read as silent.
+    if (skill.sound) audio.playId(skill.sound);
+    else this.playSkillCastSfx(skill);
 
     if (vfx.cast) {
       this.particles.playVfx(vfx.cast, originX, originY - 18, { facing, row });
@@ -588,6 +592,7 @@ export class SideViewEngine {
     if (skill.isUltimate) {
       const cls = CHARACTER_CLASSES.find(c => c.id === classId);
       const line = ULTIMATE_LINES[classId] || skill.name.toUpperCase();
+      audio.playId('ult_charge', 0.9);
       this.ultimate.start(line, cls?.accentColor || '#ffd77a', () => {
         this.playUltimatePayload(skill, originX, originY, facing, row);
       });
@@ -619,6 +624,7 @@ export class SideViewEngine {
     const spread = Math.max(110, skill.aoeRadius);
 
     this.hitStopTimer = 0.06;
+    if (skill.sound) audio.playId(skill.sound, 1.15);
     this.particles.triggerScreenShake(skill.vfx.screen?.shake ?? 26, 0.35);
     if (skill.vfx.screen?.flash) {
       this.particles.addScreenFlash(skill.vfx.screen.flash, 0.7, 0.05);

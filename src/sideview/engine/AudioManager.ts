@@ -3,6 +3,7 @@
  * Uses AudioBuffers for ZERO-LAG sound effects and DynamicsCompressor for safe volumes.
  */
 
+import { SFX } from './SfxLibrary';
 class AudioManager {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
@@ -164,6 +165,16 @@ class AudioManager {
 
   // --- Adjusted SFX to be less "OA", much lower volume, and randomized pitches ---
   
+  /**
+   * Play a catalogue sound by id. Unknown ids are ignored rather than throwing,
+   * so a typo degrades to silence instead of breaking the cast.
+   */
+  public playId(id: string, volumeScale: number = 1) {
+    const def = SFX[id];
+    if (!def) return;
+    this.playSFX(def.src, def.volume * volumeScale, def.rate ?? 1.0, def.maxDuration);
+  }
+
   public playSlash(type: 'light' | 'heavy' | 'dagger' | 'spear' = 'light', tone = 1) {
     // Short maxDuration (0.2s) limits the trailing echo to stop extreme noise when spamming basic attacks
     if (type === 'heavy') this.playSFX('/assets/audio/sfx/RPG Sound Pack/battle/swing2.wav', 0.15, 0.9, 0.2);
