@@ -91,6 +91,12 @@ const run = async () => {
   check('the lobby drops its old listener before repainting',
         /removeStateListener/.test(lobbyUi));
 
+  // Reachable during a fight, not only from the top bar.
+  check('there is a voice dock at the bottom of the screen', /voice-dock/.test(hud));
+  check('with its own mic and speaker buttons', /dock-mic-btn/.test(hud) && /dock-spk-btn/.test(hud));
+  check('hidden when there is no party', /dock\.style\.display = inParty/.test(hud));
+  check('and lifted clear of the skill bar on a short screen', /max-height: 520px/.test(hud));
+
   console.log('');
   console.log(failures === 0 ? 'PARTY VOICE OK' : `PARTY VOICE FAILURES: ${failures}`);
   process.exit(failures === 0 ? 0 : 1);

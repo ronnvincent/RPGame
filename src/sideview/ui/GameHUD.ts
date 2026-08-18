@@ -654,6 +654,50 @@ export class GameHUD {
         pointer-events: auto;
       }
 
+      .voice-dock {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: 108px;
+        display: flex;
+        gap: 8px;
+        z-index: 60;
+        pointer-events: auto;
+      }
+
+      .voice-dock-btn {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        border: 2px solid #6b4a24;
+        background: rgba(59, 42, 22, 0.92);
+        color: #ffe8b0;
+        font-size: 17px;
+        line-height: 1;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        user-select: none;
+        -webkit-user-select: none;
+        touch-action: manipulation;
+      }
+
+      .voice-dock-btn:active { transform: scale(0.9); }
+
+      .voice-dock-count {
+        font-size: 9px;
+        font-weight: 900;
+        margin-top: 1px;
+      }
+
+      /* On a short screen the skill bar sits higher, so lift the dock clear. */
+      @media (max-height: 520px) {
+        .voice-dock { bottom: 92px; }
+        .voice-dock-btn { width: 36px; height: 36px; font-size: 15px; }
+      }
+
       .touch-action-btn {
         border-radius: 50%;
         display: flex;
@@ -1303,6 +1347,15 @@ export class GameHUD {
       </div>
 
       <!-- MULTI-DEVICE VIRTUAL TOUCH CONTROLS (Joystick, Jump, Dash with Real Sprites) -->
+      <!-- Party voice, down at the bottom where it is easy to see and reach
+           during a fight. The top-bar pair is the same controls; both are
+           driven by the same object, so either can be used. Hidden entirely
+           when there is no party to talk to. -->
+      <div class="voice-dock" id="voice-dock" style="display:none">
+        <button class="voice-dock-btn" id="dock-mic-btn" title="Toggle Microphone">🎙️</button>
+        <button class="voice-dock-btn" id="dock-spk-btn" title="Toggle Party Audio">🎧</button>
+      </div>
+
       <div class="mobile-controls-wrapper">
         <!-- Left Side: Touch Joystick -->
         <div class="mobile-joystick-area" id="touch-joystick-zone">
@@ -1464,10 +1517,27 @@ export class GameHUD {
     const micBtn = this.container.querySelector('#toggle-mic-btn') as HTMLElement;
     const voiceBtn = this.container.querySelector('#toggle-voice-btn') as HTMLElement;
 
+    const dock = this.container.querySelector('#voice-dock') as HTMLElement;
+    const dockMic = this.container.querySelector('#dock-mic-btn') as HTMLElement;
+    const dockSpk = this.container.querySelector('#dock-spk-btn') as HTMLElement;
+
     const paintVoice = () => {
       const inParty = Boolean(network.room);
       if (micBtn) micBtn.style.display = inParty ? '' : 'none';
       if (voiceBtn) voiceBtn.style.display = inParty ? '' : 'none';
+      if (dock) dock.style.display = inParty ? 'flex' : 'none';
+
+      if (dockMic) {
+        dockMic.textContent = voice.isMicOn ? '🎙️' : '🔇';
+        dockMic.style.opacity = voice.isMicOn ? '1' : '0.5';
+      }
+      if (dockSpk) {
+        const live = voice.peerCount;
+        dockSpk.innerHTML = !voice.isSpeakerOn
+          ? '🔈'
+          : `🎧${live > 0 ? `<span class="voice-dock-count">${live}</span>` : (voice.attemptedPeers > 0 ? '<span class="voice-dock-count">…</span>' : '')}`;
+        dockSpk.style.opacity = voice.isSpeakerOn ? '1' : '0.5';
+      }
       if (micBtn) {
         micBtn.textContent = voice.isMicOn ? '🎙️ ON' : '🎙️ MUTED';
         micBtn.style.opacity = voice.isMicOn ? '1' : '0.55';
@@ -1493,6 +1563,17 @@ export class GameHUD {
     voice.addStateListener(paintVoice);
     voice.onError = (msg) => this.showToast(msg);
     paintVoice();
+
+    dockMic?.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await voice.ensureJoined(network.socket);
+      voice.toggleMic();
+    });
+    dockSpk?.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await voice.ensureJoined(network.socket);
+      voice.toggleSpeaker();
+    });
 
     micBtn?.addEventListener('click', async (e) => {
       e.stopPropagation();
