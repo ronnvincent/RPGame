@@ -155,6 +155,10 @@ export class SideViewEngine {
   private syncTimer: number = 0;
   /** Skill slot of the swing in progress, so the attack animation can vary. */
   private lastSkillIndex: number = 0;
+  /** Duration the current swing was given, so elapsed time can be derived. */
+  private attackHold: number = 0;
+  /** Short global cooldown between casts, independent of the swing animation. */
+  private castLock: number = 0;
   private playerSyncTimer: number = 0;
   public townHub: TownHub | null = null;
   public readonly portalX: number = 2560;
@@ -652,8 +656,11 @@ export class SideViewEngine {
     const skill: SkillDefinition = p.characterClass.skills[skillIndex];
     if (!skill) return;
 
-    // Prevent attack spam (Anti-Spam / GCD)
-    if (p.attackTimer > 0) {
+    // Anti-spam. This used to test attackTimer, which is the SWING length -
+    // up to 0.7s - so a heavy skill locked out every other skill for its whole
+    // animation. Casting now has its own short lock, letting you keep acting
+    // while a swing plays out.
+    if (this.castLock > 0) {
       return;
     }
 
@@ -672,6 +679,8 @@ export class SideViewEngine {
     p.attackTimer = skill.cooldown === 0 ? 0.22 : Math.min(0.7, 0.3 + skill.castTime * 1.2);
     p.animState = 'attack';
     this.lastSkillIndex = skillIndex;
+    this.attackHold = p.attackTimer;
+    this.castLock = 0.16;
 
     const attackX = p.x + (p.facing * (skill.range * 0.6));
     const attackY = p.y;
@@ -1189,7 +1198,8 @@ export class SideViewEngine {
     // 0. Hit-Stop Micro Freeze check (Crunchy combat impact feeling)
     if (this.hitStopTimer > 0) {
       this.hitStopTimer -= dt;
-      this.particles.update(dt);
+      if (this.castLock > 0) this.castLock -= dt;
+    this.particles.update(dt);
       return;
     }
 
@@ -1275,7 +1285,12 @@ export class SideViewEngine {
       }
     } else if (p.attackTimer > 0) {
       p.attackTimer -= dt;
-      p.animState = 'attack';
+      // Hold the swing long enough to read, then give the animation back to
+      // movement. Without this the hero slid along in an attack pose for the
+      // whole timer, which looks exactly like the walk being interrupted.
+      const elapsed = this.attackHold - p.attackTimer;
+      const moving = p.isGrounded && Math.abs(p.vx) > 0.5;
+      p.animState = (moving && elapsed > 0.18) ? 'run' : 'attack';
     } else if (!p.isGrounded) {
       p.animState = 'jump';
     } else if (Math.abs(p.vx) > 0.5) {
