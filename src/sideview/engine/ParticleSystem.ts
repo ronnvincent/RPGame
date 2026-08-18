@@ -857,6 +857,16 @@ export class ParticleSystem {
   // Effects declared in VfxLibrary. Unlike playVfxSprite below, frame layout is
   // read from verified data instead of guessed from the sprite key.
 
+  /**
+   * Global multiplier on every catalogue effect.
+   *
+   * The preview page (public/vfx-preview.html) renders at def.scale x 2, and
+   * that is the size that was signed off. In-game was drawing at def.scale
+   * alone, i.e. exactly half - which is why the reworked skills still read as
+   * the old ones. Tune here rather than editing 140 catalogue entries.
+   */
+  private static readonly VFX_SCALE = 2.0;
+
   private spriteVfx: SpriteVfxInstance[] = [];
   private sheetCache: Map<string, SpriteSheet> = new Map();
   private vfxWarmed = false;
@@ -910,7 +920,7 @@ export class ParticleSystem {
       x,
       y,
       facing: def.directional ? (opts.facing ?? 1) : 1,
-      scale: def.scale * (opts.scale ?? 1),
+      scale: def.scale * (opts.scale ?? 1) * ParticleSystem.VFX_SCALE,
       vx: opts.vx ?? 0,
       vy: opts.vy ?? 0,
       fadeOut: opts.fadeOut ?? false
