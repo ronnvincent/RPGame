@@ -845,6 +845,15 @@ io.on('connection', (socket) => {
   });
 
   // In-Game Sync Events
+  // Support effects reach the whole party. A heal or a shield that only ever
+  // helped the caster made the support classes pointless in co-op.
+  socket.on('party_support', (data) => {
+    const p = players[socket.id];
+    if (p && p.room) {
+      socket.to(p.room).emit('remote_party_support', { socketId: socket.id, ...data });
+    }
+  });
+
   socket.on('player_skill', (data) => {
     const p = players[socket.id];
     if (p && p.room) {

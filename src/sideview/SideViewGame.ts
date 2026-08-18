@@ -320,6 +320,21 @@ export class SideViewGame {
       });
 
       // Role changes are server-driven; a fresh guest pulls state immediately.
+      // A heal or buff cast by anyone in the party lands on everyone in it.
+      mod.network.onPartySupport((payload: any) => {
+        if (!this.engine || !payload) return;
+        if (payload.kind === 'heal') {
+          this.engine.applyPartyHeal(Number(payload.amount) || 0, payload.casterName);
+        } else if (payload.kind === 'buff') {
+          this.engine.applyPartyBuff(
+            payload.stat,
+            Number(payload.multiplier) || 1,
+            Number(payload.duration) || 0,
+            payload.casterName
+          );
+        }
+      });
+
       mod.network.onRoleChange((isHost) => {
         console.log('[NET] Role assigned by server. isHost =', isHost);
         if (!isHost) mod.network.requestFullSync();

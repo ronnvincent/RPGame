@@ -123,6 +123,7 @@ export class NetworkManager {
 
   /** Class/level of the local player, attached to lobby packets. */
   public profile: LocalProfile = {};
+  private onPartySupportCb: ((payload: any) => void) | null = null;
 
   constructor() {
     NetworkManager.instance = this;
@@ -260,6 +261,10 @@ export class NetworkManager {
     });
 
     // The server refuses to let a partied player open a second lobby.
+    this.socket.on('remote_party_support', (data) => {
+      this.onPartySupportCb?.(data);
+    });
+
     this.socket.on('lobby_error', (data) => {
       console.warn('[NET] lobby_error:', data?.msg);
       this.onLobbyErrorCb?.(data?.msg || 'Could not create lobby.');
@@ -405,6 +410,20 @@ export class NetworkManager {
   public onRoleChange(cb: (isHost: boolean) => void) {
     if (!this.socket) this.connect();
     this.onRoleChangeCb = cb;
+  }
+
+  /**
+   * A heal or buff cast by one player, applied to everyone in the party.
+   *
+   * Support skills only ever touched the caster, so a priest healing in a party
+   * healed nobody who needed it.
+   */
+  public sendPartySupport(payload: { kind: 'heal' | 'buff'; amount?: number; stat?: string; multiplier?: number; duration?: number; casterName?: string }) {
+    this.socket?.emit('party_support', payload);
+  }
+
+  public onPartySupport(cb: (payload: any) => void) {
+    this.onPartySupportCb = cb;
   }
 
   public sendPlayerSkill(

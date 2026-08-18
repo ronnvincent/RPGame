@@ -744,15 +744,17 @@ export class SideViewEngine {
     // effect. Also plays the cast SFX and any cinematic set piece / summon.
     this.playSkillVfx(skill, p.characterClass.id, skillIndex, p.x, p.y, p.facing, damage, network.socket?.id || null);
 
-    // Apply Self Buff if skill provides one
+    // Buffs cover the whole party. A defence or speed buff that only helped the
+    // caster made the support classes worth nothing to play alongside.
     if (skill.buff) {
-      p.activeBuffs.push({
+      this.applyPartyBuff(skill.buff.stat, skill.buff.multiplier, skill.buff.duration);
+      network.sendPartySupport({
+        kind: 'buff',
         stat: skill.buff.stat,
         multiplier: skill.buff.multiplier,
-        timer: skill.buff.duration
+        duration: skill.buff.duration,
+        casterName: p.characterClass.name,
       });
-      this.recomputeStats();
-      this.particles.addFloatingText(p.x, p.y - 30, `BUFF +${Math.round((skill.buff.multiplier - 1) * 100)}% ${skill.buff.stat.toUpperCase()}`, '#ffee58', true, 16);
     }
 
     // Mid-air Plunging Dive Attack for Basic Attack (Skill 0)
@@ -996,6 +998,7 @@ export class SideViewEngine {
     // Apply Direct Heal skills
     if (skill.heals) {
       const healAmount = Math.round(p.maxHp * 0.35 + p.totalAtk * 1.5);
+      network.sendPartySupport({ kind: 'heal', amount: healAmount, casterName: p.characterClass.name });
       p.hp = Math.min(p.maxHp, p.hp + healAmount);
       this.particles.addFloatingText(p.x, p.y - 30, `+${healAmount} HP`, '#66bb6a', true, 20);
       return;
@@ -1107,8 +1110,14 @@ export class SideViewEngine {
 
     enemy.hp -= finalDamage;
     enemy.hitStun = 0.25;
-    enemy.vx = knockbackDir * 3.5;
-    enemy.vy = -2.5;
+    // Knockback used to be a flat 3.5 on every hit, including the basic attack -
+    // and the basic attack is the one you use continuously, so monsters were
+    // shoved out of reach faster than they could walk back in. It now follows
+    // the weight of the blow: a poke barely moves them, an ultimate still
+    // throws them.
+    const knockback = Math.min(3.2, 0.7 + finalDamage / 90);
+    enemy.vx = knockbackDir * knockback;
+    enemy.vy = -Math.min(2.2, 0.4 + knockback * 0.45);
 
     // Report the hit to the party. These used to be dynamic import() calls,
     // which silently dropped the packet whenever the split chunk failed to load
@@ -1998,6 +2007,25 @@ export class SideViewEngine {
 
       this.particles.triggerScreenShake(skill.kind === 'volley' ? 6 : 12, 0.3);
     }, skill.telegraph * 1000);
+  }
+
+  /** Adds a buff to this player and shows it. Used by the caster and by allies. */
+  public applyPartyBuff(stat: any, multiplier: number, duration: number, fromName?: string) {
+    const p = this.player;
+    p.activeBuffs.push({ stat, multiplier, timer: duration });
+    this.recomputeStats();
+    const pct = Math.round((multiplier - 1) * 100);
+    const who = fromName ? `${fromName}: ` : '';
+    this.particles.addFloatingText(p.x, p.y - 30, `${who}+${pct}% ${String(stat).toUpperCase()}`, '#ffee58', true, 16);
+  }
+
+  /** Heal arriving from an ally's support skill. */
+  public applyPartyHeal(amount: number, fromName?: string) {
+    const p = this.player;
+    if (p.hp <= 0) return;
+    p.hp = Math.min(p.maxHp, p.hp + amount);
+    const who = fromName ? `${fromName}: ` : '';
+    this.particles.addFloatingText(p.x, p.y - 30, `${who}+${amount} HP`, '#4ade80', true, 16);
   }
 
   private enemyAttackPlayer(enemy: EnemyInstance, multiplier: number = 1) {

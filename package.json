@@ -20,7 +20,8 @@
     "test:progression": "node test/progression.test.mjs",
     "test:levelgate": "node test/coop-level-gate.test.mjs",
     "test:save": "node test/persistence.test.mjs",
-    "test:boss": "node test/boss-skills.test.mjs"
+    "test:boss": "node test/boss-skills.test.mjs",
+    "test:party": "node test/party-support.test.mjs"
   },
   "keywords": [],
   "author": "",
