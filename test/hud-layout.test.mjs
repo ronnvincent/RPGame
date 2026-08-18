@@ -24,8 +24,15 @@ const tracker = rule('mini-quest-tracker');
 
 // The banner sits on its own line, on the left, where a right-anchored row
 // cannot reach it however it wraps.
-check('the banner is below the top row', /top:\s*5\dpx/.test(banner));
-check('and left-aligned rather than centred', /left:\s*max\(8px/.test(banner) && /transform:\s*none/.test(banner));
+// The banner is stacked under the panel by the layout, not by a fixed offset.
+// A fixed offset is what broke when the panel grew an ID row and the banner
+// landed on the health bars.
+const topLeft = rule('hud-top-left');
+check('the panel and banner share one column', /flex-direction: column/.test(topLeft));
+check('the banner is positioned by that column, not by a magic number',
+      /position: relative/.test(banner) && !/top:\s*\d+px/.test(banner));
+check('so a taller panel pushes the banner down instead of under it',
+      /gap: 6px/.test(topLeft));
 
 // The row wraps instead of growing into the player panel.
 check('the button row wraps', /flex-wrap:\s*wrap/.test(row));

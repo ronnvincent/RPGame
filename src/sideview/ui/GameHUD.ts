@@ -94,10 +94,20 @@ export class GameHUD {
       }
 
       /* Top Left: Player Status with Authentic Kenney Sprite Frame */
-      .player-status-panel {
+      .hud-top-left {
         position: absolute;
         top: max(8px, env(safe-area-inset-top));
         left: max(8px, env(safe-area-inset-left));
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+        z-index: 10;
+        pointer-events: none;
+      }
+
+      .player-status-panel {
+        position: relative;
         background: url('/assets/kenney-rpg-ui/panel_brown.png') repeat;
         background-size: 100% 100%;
         padding: 8px 14px 10px 10px;
@@ -191,16 +201,7 @@ export class GameHUD {
 
       /* Top Center: Wave Banner with Sprite Panel */
       .dungeon-wave-banner {
-        position: absolute;
-        /* Tucked under the player panel, which is what the mobile rules already
-           did. Centred on the viewport it sat level with a right-anchored row
-           of ten buttons - three absolutely positioned elements with no
-           knowledge of each other - so they collided as soon as the row grew,
-           and voice had just added two more buttons to it. Left-aligned it
-           cannot be reached by that row however the row wraps. */
-        top: 52px;
-        left: max(8px, env(safe-area-inset-left));
-        transform: none;
+        position: relative;
         max-width: min(420px, 60vw);
         /* Say it explicitly. The two lines relied on default block stacking and
            ran together into one crowded strip; a column with a gap cannot. */
@@ -827,9 +828,6 @@ export class GameHUD {
           gap: 2px;
         }
         .dungeon-wave-banner {
-          top: 52px; /* Safely tucked under the player health bar */
-          left: 6px;
-          transform: none;
           padding: 3px 12px;
         }
         .wave-title {
@@ -1297,7 +1295,14 @@ export class GameHUD {
     const p = this.engine.player;
 
     this.container.innerHTML = `
-      <!-- Top Left: Player Status with Authentic Sprite Frame -->
+      <!-- Top Left: the player panel with the banner stacked beneath it.
+           These were two separately positioned elements and the banner was
+           held clear of the panel by a fixed 52px. Adding the ID row made the
+           panel taller than that, and the banner landed on top of the health
+           bars. A column cannot get that wrong: the banner is below the panel
+           because it comes after it, at whatever height the panel happens to
+           be. -->
+      <div class="hud-top-left">
       <div class="player-status-panel">
         <div class="player-portrait-box">
           <canvas class="player-portrait-canvas" id="hud-portrait-cvs" width="48" height="48"></canvas>
@@ -1331,10 +1336,11 @@ export class GameHUD {
         </div>
       </div>
 
-      <!-- Top Center: Wave Status -->
+      <!-- Zone and wave, stacked under the player panel -->
       <div class="dungeon-wave-banner" id="dungeon-wave-banner">
         <div class="wave-title" id="wave-title-text">DUNGEON BATTLE</div>
         <div class="wave-mobs-left" id="wave-mobs-text">Enemies remaining: 0</div>
+      </div>
       </div>
 
       <!-- Top Center: Epic Boss Health Bar (MapleStory / Dark Souls Style) -->
