@@ -550,6 +550,26 @@ export class GameHUD {
         overflow: hidden;
       }
 
+      .potion-slot {
+        margin-left: 8px;
+        box-shadow: inset 0 0 0 2px rgba(74, 222, 128, 0.35);
+      }
+
+      .potion-count {
+        position: absolute;
+        right: 2px;
+        bottom: 1px;
+        font-size: 10px;
+        font-weight: 900;
+        color: #4ade80;
+        text-shadow: 1px 1px 2px #000;
+      }
+
+      .potion-slot.empty {
+        filter: grayscale(1);
+        opacity: 0.45;
+      }
+
       .hotbar-slot:active {
         background-image: url('/assets/kenney-rpg-ui/buttonSquare_brown_pressed.png');
         transform: scale(0.95);
@@ -1404,6 +1424,16 @@ export class GameHUD {
             <div class="slot-cooldown-overlay" id="cd-overlay-${s.id}">0</div>
           </div>
         `).join('')}
+        <!-- Potions were reachable only through the inventory screen, which you
+             cannot open while a boss is chasing you - so in the one fight where
+             a potion matters it may as well not exist. Same row as the skills,
+             because that is where your hand already is. -->
+        <div class="hotbar-slot potion-slot" id="potion-slot" title="Drink a healing potion (Q)">
+          <span class="slot-key-badge">Q</span>
+          <img src="/assets/ui_sprites/icons/P_Red01.png" width="24" height="24" class="slot-icon-img" />
+          <span class="slot-skill-name">Potion</span>
+          <div class="potion-count" id="potion-count">0</div>
+        </div>
       </div>
 
       <!-- MULTI-DEVICE VIRTUAL TOUCH CONTROLS (Joystick, Jump, Dash with Real Sprites) -->
@@ -1571,6 +1601,18 @@ export class GameHUD {
       musicBtn.innerHTML = enabled ? `<img src='/assets/gui/PNG/iconCircle_blue.png' width='16' height='16'/>` : `<img src='/assets/gui/PNG/iconCross_blue.png' width='16' height='16'/>`;
       this.showToast(enabled ? 'Music Enabled' : 'Music Muted');
     });
+
+    const potionSlot = this.container.querySelector('#potion-slot') as HTMLElement;
+    const drink = (e?: Event) => {
+      e?.stopPropagation();
+      const result = this.engine.quickHeal();
+      if (result === 'none') this.showToast('No healing potions');
+      else if (result === 'full') this.showToast('Already at full health');
+      this.paintPotionSlot();
+    };
+    potionSlot?.addEventListener('click', drink);
+    potionSlot?.addEventListener('touchstart', drink, { passive: true });
+    this.paintPotionSlot();
 
     // Party voice. The browser will not hand over a microphone without a user
     // gesture, so the first press is what joins the call.
@@ -2023,6 +2065,8 @@ export class GameHUD {
 
     // The ID is assigned when the account is created, which can happen after
     // the HUD has already been built once.
+    this.paintPotionSlot();
+
     const idText = this.container.querySelector('#hud-id-text');
     const shortId = localStorage.getItem('playerShortId');
     if (idText && shortId && idText.textContent !== shortId) idText.textContent = shortId;
@@ -2238,6 +2282,15 @@ export class GameHUD {
       this.selectedItem = null;
       this.renderInspectorPane();
     });
+  }
+
+  private paintPotionSlot() {
+    const slot = this.container.querySelector('#potion-slot') as HTMLElement;
+    const count = this.container.querySelector('#potion-count');
+    if (!slot || !count) return;
+    const n = this.engine.potionCount;
+    count.textContent = String(n);
+    slot.classList.toggle('empty', n === 0);
   }
 
   private renderInventoryItems() {

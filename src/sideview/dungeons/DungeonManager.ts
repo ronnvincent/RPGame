@@ -12,6 +12,15 @@ import { ItemData, getRandomLoot } from '../items/ItemDatabase';
  */
 const ENEMY_HP_SCALE = 2.8;
 
+/**
+ * Chance an ordinary monster spawns as an elite instead.
+ *
+ * A wave of identical monsters is the same fight every time. One in eight being
+ * genuinely dangerous - and worth killing - gives a wave a shape without adding
+ * any new enemy types.
+ */
+const ELITE_SPAWN_CHANCE = 0.12;
+
 /** Chance an ordinary monster leaves an item. */
 const MOB_DROP_CHANCE = 0.16;
 /** Chance an elite leaves one. Bosses always do. */
@@ -37,6 +46,8 @@ export interface EnemyStats {
   // Boss Phase mechanics
   phases?: number;
   currentPhase?: number;
+  /** A promoted rank-and-file monster: tougher, richer, and marked. */
+  isElite?: boolean;
   specialAttackTimer?: number;
 }
 
@@ -414,6 +425,9 @@ export function spawnWaveEnemies(
 
   wave.enemies.forEach((enemyTemplate) => {
     for (let i = 0; i < enemyTemplate.count; i++) {
+      // Bosses and elites are already special; only the rank and file are
+      // promoted, and never the whole wave.
+      const isElite = enemyTemplate.type === 'mob' && Math.random() < ELITE_SPAWN_CHANCE;
       const spawnSide = ((spawnOffsetIndex + i + Math.floor(playerX)) + Math.floor(seededValue)) % 2 === 0 ? 1 : -1;
       const laneIndex = (spawnOffsetIndex + i) % lanes;
       const laneJitter = ((spawnOffsetIndex + i * 17) * 11) % laneWidth;
@@ -443,24 +457,27 @@ export function spawnWaveEnemies(
         ? getRandomLoot('boss')
         : enemyTemplate.type === 'elite'
         ? (Math.random() < ELITE_DROP_CHANCE ? getRandomLoot('mid') : undefined)
+        : isElite
+        ? getRandomLoot('mid')
         : (Math.random() < MOB_DROP_CHANCE ? getRandomLoot('low') : undefined);
 
       instances.push({
         id: `enemy_${waveIndex}_${enemyTemplate.name}_${i}_${Date.now()}`,
-        name: enemyTemplate.name,
+        name: isElite ? `Elite ${enemyTemplate.name}` : enemyTemplate.name,
+        isElite,
         type: enemyTemplate.type,
         icon: enemyTemplate.icon,
         color: enemyTemplate.color,
         // Scaled at spawn rather than by rewriting every table: monsters died
         // to a single mid-tier skill, which is what made a run end in a minute
         // with nothing at stake.
-        maxHp: Math.round(enemyTemplate.maxHp * ENEMY_HP_SCALE),
-        hp: Math.round(enemyTemplate.maxHp * ENEMY_HP_SCALE),
-        atk: enemyTemplate.atk,
-        def: enemyTemplate.def,
+        maxHp: Math.round(enemyTemplate.maxHp * ENEMY_HP_SCALE * (isElite ? 2.4 : 1)),
+        hp: Math.round(enemyTemplate.maxHp * ENEMY_HP_SCALE * (isElite ? 2.4 : 1)),
+        atk: Math.round(enemyTemplate.atk * (isElite ? 1.45 : 1)),
+        def: Math.round(enemyTemplate.def * (isElite ? 1.3 : 1)),
         speed: enemyTemplate.speed,
-        expReward: enemyTemplate.expReward,
-        goldReward: enemyTemplate.goldReward,
+        expReward: Math.round(enemyTemplate.expReward * (isElite ? 2.5 : 1)),
+        goldReward: Math.round(enemyTemplate.goldReward * (isElite ? 3 : 1)),
         width: enemyTemplate.width,
         height: enemyTemplate.height,
         attackRange: enemyTemplate.type === 'boss' ? 90 : 60,

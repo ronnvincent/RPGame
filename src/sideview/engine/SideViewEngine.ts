@@ -2073,6 +2073,43 @@ export class SideViewEngine {
     this.particles.addFloatingText(p.x, p.y - 30, `${who}+${amount} HP`, '#4ade80', true, 16);
   }
 
+  /**
+   * Drinks the best healing item in the bag.
+   *
+   * Potions existed but could only be reached through the inventory screen,
+   * which you cannot open while a boss is chasing you - so in the fight where
+   * a potion would matter, it may as well not have been there. Returns what
+   * happened so the HUD can say why nothing did.
+   */
+  public quickHeal(): 'healed' | 'full' | 'none' {
+    const p = this.player;
+    if (p.hp >= p.maxHp) return 'full';
+
+    // Weakest sufficient potion first: spending a large one on a scratch is a
+    // waste the player would not choose deliberately.
+    const missing = p.maxHp - p.hp;
+    const candidates = p.inventory
+      .map((item, idx) => ({ item, idx }))
+      .filter(({ item }) => item.consumableEffect?.type === 'heal_hp')
+      .sort((a, b) => (a.item.consumableEffect!.value) - (b.item.consumableEffect!.value));
+    if (!candidates.length) return 'none';
+
+    const pick = candidates.find((c) => c.item.consumableEffect!.value >= missing) || candidates[candidates.length - 1];
+    const heal = pick.item.consumableEffect!.value;
+
+    p.inventory.splice(pick.idx, 1);
+    p.hp = Math.min(p.maxHp, p.hp + heal);
+    this.particles.addFloatingText(p.x, p.y - 26, `+${heal} HP`, '#4ade80', true, 17);
+    audio.playClick();
+    this.triggerSave();
+    return 'healed';
+  }
+
+  /** How many healing items are in the bag, for the quick-slot badge. */
+  public get potionCount(): number {
+    return this.player.inventory.filter((i) => i.consumableEffect?.type === 'heal_hp').length;
+  }
+
   private enemyAttackPlayer(enemy: EnemyInstance, multiplier: number = 1) {
     const p = this.player;
     // Committing to an ultimate should never get you punished for it - the
@@ -2351,6 +2388,21 @@ export class SideViewEngine {
       for (const enemy of this.enemies) {
         if (enemy.isDead) continue;
         
+        // An elite is announced before it is fought. A monster that is quietly
+        // three times as strong is not a surprise, it is a misunderstanding.
+        if ((enemy as any).isElite) {
+          const pulse = 0.55 + Math.sin(Date.now() / 220) * 0.18;
+          ctx.save();
+          const aura = ctx.createRadialGradient(enemy.x, enemy.y - 22, 4, enemy.x, enemy.y - 22, 46);
+          aura.addColorStop(0, `rgba(248, 113, 113, ${0.38 * pulse})`);
+          aura.addColorStop(1, 'transparent');
+          ctx.fillStyle = aura;
+          ctx.beginPath();
+          ctx.arc(enemy.x, enemy.y - 22, 46, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+
         // Draw Animated Mob Sprite
         sprites.drawMob(
           ctx,

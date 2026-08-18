@@ -740,6 +740,14 @@ export class SideViewGame {
         this.interactWithActiveNpc();
       }
 
+      // Quick heal. On the keyboard for the same reason it is on the hotbar:
+      // it has to be reachable without leaving the fight.
+      if (e.code === 'KeyQ') {
+        const result = this.engine.quickHeal();
+        if (result === 'none') this.hud?.showToast('No healing potions');
+        else if (result === 'full') this.hud?.showToast('Already at full health');
+      }
+
       // Quest Log toggle: KeyJ
       if (e.code === 'KeyJ') {
         this.hud?.questLogUI?.toggle();
