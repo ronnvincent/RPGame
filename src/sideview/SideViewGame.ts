@@ -338,7 +338,7 @@ export class SideViewGame {
           enemy.vx = hitData.knockbackDir * 3.5;
           enemy.vy = -2.5;
 
-          this.engine.particles.triggerScreenShake(hitData.isCrit ? 10 : 4, 0.2);
+          this.engine.particles.triggerScreenShake(hitData.isCrit ? 7 : 2.5, 0.14);
           audio.playHit(hitData.isCrit);
           this.engine.particles.addFloatingText(
             enemy.x,

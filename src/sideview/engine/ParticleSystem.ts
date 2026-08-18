@@ -311,9 +311,15 @@ export class ParticleSystem {
    * Screen Shake Effect
    */
   public triggerScreenShake(magnitude: number = 6, duration: number = 0.25) {
-    const reducedMagnitude = magnitude * 0.3; // Reduce screen shake by 70% globally
-    this.screenShakeMagnitude = Math.max(this.screenShakeMagnitude, reducedMagnitude);
-    this.screenShakeTime = Math.max(this.screenShakeTime, duration);
+    // Shake is punctuation, not a state. Both values are damped AND capped:
+    // callers ask for up to 26 magnitude over 1.4s, and because both fields
+    // take the max of the incoming and current value, overlapping requests
+    // during a fight used to keep re-arming a long, large shake - so the screen
+    // never settled. Capping the duration is what actually stops the wobble.
+    const mag = Math.min(magnitude * 0.15, 3.5);
+    const dur = Math.min(duration, 0.35);
+    this.screenShakeMagnitude = Math.max(this.screenShakeMagnitude, mag);
+    this.screenShakeTime = Math.max(this.screenShakeTime, dur);
   }
 
   public getScreenShakeOffset(): { x: number; y: number } {

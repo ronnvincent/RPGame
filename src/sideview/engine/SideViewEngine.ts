@@ -1121,8 +1121,8 @@ export class SideViewEngine {
     }
 
     // Hit-stop micro freeze and crunchy screen shake on impact
-    this.hitStopTimer = isCrit ? 0.07 : 0.04;
-    this.particles.triggerScreenShake(isCrit ? 10 : 4, 0.2);
+    this.hitStopTimer = isCrit ? 0.045 : 0.02;
+    this.particles.triggerScreenShake(isCrit ? 7 : 2.5, 0.14);
 
     audio.playHit(isCrit);
     this.particles.addFloatingText(enemy.x, enemy.y - enemy.height / 2, `${finalDamage}`, isCrit ? '#ffd54f' : '#ffffff', isCrit);
