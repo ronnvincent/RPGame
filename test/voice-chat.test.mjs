@@ -82,6 +82,15 @@ const run = async () => {
   check('the peer count reports connected peers, not attempted ones',
         /connectionState === 'connected'/.test(vc));
 
+  // The controls appear in two places and must agree with each other.
+  const lobbyUi = readFileSync('src/sideview/ui/CoopLobbyUI.ts', 'utf8');
+  check('the lobby panel has the same controls', /cl-mic/.test(lobbyUi) && /cl-spk/.test(lobbyUi));
+  check('both screens observe one voice object', /addStateListener/.test(lobbyUi) && /addStateListener/.test(hud));
+  check('several listeners are supported, so neither screen silences the other',
+        /stateListeners = new Set/.test(vc));
+  check('the lobby drops its old listener before repainting',
+        /removeStateListener/.test(lobbyUi));
+
   console.log('');
   console.log(failures === 0 ? 'PARTY VOICE OK' : `PARTY VOICE FAILURES: ${failures}`);
   process.exit(failures === 0 ? 0 : 1);

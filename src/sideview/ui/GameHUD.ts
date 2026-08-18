@@ -1490,15 +1490,14 @@ export class GameHUD {
           : trying > 0 ? 'Connecting to the party…' : 'Party audio';
       }
     };
-    voice.onStateChange = paintVoice;
+    voice.addStateListener(paintVoice);
     voice.onError = (msg) => this.showToast(msg);
     paintVoice();
 
     micBtn?.addEventListener('click', async (e) => {
       e.stopPropagation();
       if (!voice.isJoined) {
-        voice.attach(network.socket);
-        await voice.join();
+        await voice.ensureJoined(network.socket);
         this.showToast('Joined party voice');
       }
       voice.toggleMic();
@@ -1507,10 +1506,7 @@ export class GameHUD {
 
     voiceBtn?.addEventListener('click', async (e) => {
       e.stopPropagation();
-      if (!voice.isJoined) {
-        voice.attach(network.socket);
-        await voice.join();
-      }
+      if (!voice.isJoined) await voice.ensureJoined(network.socket);
       voice.toggleSpeaker();
       this.showToast(voice.isSpeakerOn ? 'Party audio on' : 'Party audio off');
     });

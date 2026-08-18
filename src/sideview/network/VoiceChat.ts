@@ -37,10 +37,34 @@ export class VoiceChat {
   private speakerOn = true;
   private joined = false;
 
-  /** Called whenever mic/speaker/connection state changes, for the UI. */
-  public onStateChange: (() => void) | null = null;
+  /**
+   * State listeners, not a single callback.
+   *
+   * The HUD and the lobby panel both show these controls and both need to
+   * repaint. With one slot the second to attach silently replaced the first,
+   * so whichever screen was opened last would be the only one telling the
+   * truth.
+   */
+  private stateListeners = new Set<() => void>();
   /** Called with a human-readable problem, e.g. a refused microphone. */
   public onError: ((msg: string) => void) | null = null;
+
+  public addStateListener(cb: () => void) { this.stateListeners.add(cb); }
+  public removeStateListener(cb: () => void) { this.stateListeners.delete(cb); }
+  private emitState() { this.stateListeners.forEach((cb) => cb()); }
+
+  /**
+   * Joins the call if needed and returns whether we are in it.
+   *
+   * Shared by every control, so the first press from either the lobby or the
+   * HUD is the user gesture the browser requires before it will hand over a
+   * microphone.
+   */
+  public async ensureJoined(socket: any): Promise<boolean> {
+    if (this.isJoined) return true;
+    this.attach(socket);
+    return this.join();
+  }
 
   public get isMicOn() { return this.micOn; }
   public get isSpeakerOn() { return this.speakerOn; }
@@ -129,7 +153,7 @@ export class VoiceChat {
     this.setMicOn(false);
     this.joined = true;
     this.socket.emit('voice_join');
-    this.onStateChange?.();
+    this.emitState();
     return true;
   }
 
@@ -140,7 +164,7 @@ export class VoiceChat {
     this.stream = null;
     this.joined = false;
     this.micOn = false;
-    this.onStateChange?.();
+    this.emitState();
   }
 
   public setMicOn(on: boolean) {
@@ -149,13 +173,13 @@ export class VoiceChat {
     // what a mute button should do - renegotiating on every toggle would drop
     // audio for a moment each time.
     this.stream?.getAudioTracks().forEach((t) => { t.enabled = this.micOn; });
-    this.onStateChange?.();
+    this.emitState();
   }
 
   public setSpeakerOn(on: boolean) {
     this.speakerOn = on;
     this.peers.forEach((p) => { p.audio.muted = !on; });
-    this.onStateChange?.();
+    this.emitState();
   }
 
   public toggleMic() { this.setMicOn(!this.micOn); }
@@ -193,7 +217,7 @@ export class VoiceChat {
     pc.ontrack = (ev) => {
       audio.srcObject = ev.streams[0];
       audio.play().catch(() => { /* blocked until a gesture; the toggle provides one */ });
-      this.onStateChange?.();
+      this.emitState();
     };
 
     pc.onicecandidate = (ev) => {
@@ -202,7 +226,7 @@ export class VoiceChat {
 
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'failed' || pc.connectionState === 'closed') this.dropPeer(socketId);
-      this.onStateChange?.();
+      this.emitState();
     };
 
     if (initiator) {
@@ -221,7 +245,7 @@ export class VoiceChat {
     peer.audio.srcObject = null;
     peer.audio.remove();
     this.peers.delete(socketId);
-    this.onStateChange?.();
+    this.emitState();
   }
 }
 

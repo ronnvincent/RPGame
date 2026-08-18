@@ -9,6 +9,7 @@
  */
 
 import { network, LobbyState, LobbyMember, FriendEntry } from '../network/NetworkManager';
+import { voice } from '../network/VoiceChat';
 import { CHARACTER_CLASSES } from '../classes/ClassDefinitions';
 import { DUNGEONS } from '../dungeons/DungeonManager';
 
@@ -25,6 +26,7 @@ function classIcon(classId: string | null): string | null {
 }
 
 export class CoopLobbyUI {
+  private voiceRepaint: (() => void) | null = null;
   private root: HTMLDivElement | null = null;
   private state: LobbyState | null = null;
   private parent: HTMLElement;
@@ -144,6 +146,11 @@ export class CoopLobbyUI {
         <div class="cl-toast"></div>
 
         <div class="cl-foot">
+          <!-- Same voice controls as the HUD, driven by the same object, so the
+               state matches wherever you look and joining from either place is
+               the one user gesture the browser needs for the microphone. -->
+          <button class="cl-btn cl-mic" title="Toggle Microphone">MIC</button>
+          <button class="cl-btn cl-spk" title="Toggle Party Audio">SPEAKER</button>
           <button class="cl-btn cl-leave">LEAVE PARTY</button>
           ${actionBtn}
         </div>
@@ -207,6 +214,39 @@ export class CoopLobbyUI {
     if (!this.root) return;
 
     const q = <T extends HTMLElement>(sel: string) => this.root!.querySelector(sel) as T | null;
+
+    const micBtn = q<HTMLButtonElement>('.cl-mic');
+    const spkBtn = q<HTMLButtonElement>('.cl-spk');
+
+    const paintVoice = () => {
+      if (micBtn) {
+        micBtn.textContent = voice.isMicOn ? '🎙️ ON' : '🎙️ MUTED';
+        micBtn.style.opacity = voice.isMicOn ? '1' : '0.55';
+      }
+      if (spkBtn) {
+        const live = voice.peerCount;
+        spkBtn.textContent = !voice.isSpeakerOn ? '🎧 OFF'
+          : live > 0 ? `🎧 ${live}`
+          : voice.attemptedPeers > 0 ? '🎧 …'
+          : '🎧 ON';
+        spkBtn.style.opacity = voice.isSpeakerOn ? '1' : '0.55';
+      }
+    };
+    // Re-rendering replaces these buttons, so the old listener is dropped
+    // before a new one is added or they accumulate on every repaint.
+    if (this.voiceRepaint) voice.removeStateListener(this.voiceRepaint);
+    this.voiceRepaint = paintVoice;
+    voice.addStateListener(paintVoice);
+    paintVoice();
+
+    micBtn?.addEventListener('click', async () => {
+      await voice.ensureJoined(network.socket);
+      voice.toggleMic();
+    });
+    spkBtn?.addEventListener('click', async () => {
+      await voice.ensureJoined(network.socket);
+      voice.toggleSpeaker();
+    });
 
     q<HTMLButtonElement>('.cl-leave')?.addEventListener('click', () => {
       network.leaveLobby();
