@@ -1,0 +1,1878 @@
+{
+ "VFX": {
+  "fx_swirl_a": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 1 Free/Free/03.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 13,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_swirl_b": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 1 Free/Free/04.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 14,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_swirl_c": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 1 Free/Free/05.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 14,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_swirl_d": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 1 Free/Free/06.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 15,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_ring_a": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 1 Free/Free/13.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 13,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_ring_b": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 1 Free/Free/14.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 14,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_ring_c": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 1 Free/Free/15.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 14,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_ring_d": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 1 Free/Free/16.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 14,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_burst_a": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 1 Free/Free/23.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 14,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_burst_b": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 1 Free/Free/24.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 14,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_burst_c": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 1 Free/Free/25.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 14,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_burst_d": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 1 Free/Free/26.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 14,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_swipe_a": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 8 Free/Free/375.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 8,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_swipe_b": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 8 Free/Free/376.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 8,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_swipe_c": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 8 Free/Free/377.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 8,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_swipe_d": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 8 Free/Free/378.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 8,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_arc_a": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 8 Free/Free/385.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 8,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_arc_b": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 8 Free/Free/386.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 9,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_arc_c": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 8 Free/Free/387.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 8,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_arc_d": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 8 Free/Free/388.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 9,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_cleave_a": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 8 Free/Free/395.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 9,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_cleave_b": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 8 Free/Free/396.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 8,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_cleave_c": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 8 Free/Free/397.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 9,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_cleave_d": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 8 Free/Free/398.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 9,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_pulse_a": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 10 Free/Free/464.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 11,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_pulse_b": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 10 Free/Free/465.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 12,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_pulse_c": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 10 Free/Free/466.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 11,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_pulse_d": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 10 Free/Free/467.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 11,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_wave_a": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 10 Free/Free/474.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 11,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_wave_b": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 10 Free/Free/475.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 12,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_wave_c": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 10 Free/Free/476.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 12,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_wave_d": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 10 Free/Free/477.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 12,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_spiral_a": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 10 Free/Free/484.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 12,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_spiral_b": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 10 Free/Free/485.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 12,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_spiral_c": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 10 Free/Free/486.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 12,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_spiral_d": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 10 Free/Free/487.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 11,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_star_a": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 12 Free/Effect and FX Pixel Part 12 Free/566.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 13,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_star_b": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 12 Free/Effect and FX Pixel Part 12 Free/567.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 13,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_star_c": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 12 Free/Effect and FX Pixel Part 12 Free/568.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 14,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_star_d": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 12 Free/Effect and FX Pixel Part 12 Free/569.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 13,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_bloom_a": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 12 Free/Effect and FX Pixel Part 12 Free/576.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 14,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_bloom_b": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 12 Free/Effect and FX Pixel Part 12 Free/577.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 14,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_bloom_c": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 12 Free/Effect and FX Pixel Part 12 Free/578.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 11,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_bloom_d": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 12 Free/Effect and FX Pixel Part 12 Free/579.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 14,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_flare_a": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 12 Free/Effect and FX Pixel Part 12 Free/586.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 14,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_flare_b": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 12 Free/Effect and FX Pixel Part 12 Free/587.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 13,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_flare_c": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 12 Free/Effect and FX Pixel Part 12 Free/588.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 14,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_flare_d": {
+   "src": "/assets/fxpack/Effect and FX Pixel Part 12 Free/Effect and FX Pixel Part 12 Free/589.png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 64,
+    "frameH": 64,
+    "cols": 14,
+    "rows": 9
+   },
+   "fps": 20,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_thunder": {
+   "src": "/assets/fxpack/Animation Pack/Animation Pack/Thunder.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 256,
+    "frameH": 256,
+    "count": 2
+   },
+   "fps": 12,
+   "scale": 1.4,
+   "blend": "lighter"
+  },
+  "fx_hit_big": {
+   "src": "/assets/fxpack/Animation Pack/Animation Pack/Hit Effect.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "v",
+    "frameW": 128,
+    "frameH": 128,
+    "count": 5
+   },
+   "fps": 18,
+   "scale": 1.2,
+   "blend": "lighter"
+  },
+  "fx_magic_mirror": {
+   "src": "/assets/fxpack/Animation Pack/Animation Pack/Magic Mirror.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "v",
+    "frameW": 128,
+    "frameH": 128,
+    "count": 5
+   },
+   "fps": 14,
+   "scale": 1.3,
+   "blend": "lighter"
+  },
+  "fx_explosion_big": {
+   "src": "/assets/fxpack/Animation Pack/Animation Pack/explosioneffect.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "v",
+    "frameW": 128,
+    "frameH": 128,
+    "count": 8
+   },
+   "fps": 18,
+   "scale": 1.5
+  },
+  "fx_energy_ball": {
+   "src": "/assets/fxpack/Animation Pack/Animation Pack/Energy ball/EnergyBall.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 128,
+    "frameH": 128,
+    "count": 9
+   },
+   "fps": 18,
+   "scale": 1.1,
+   "blend": "lighter",
+   "directional": true
+  },
+  "fx_energy_impact": {
+   "src": "/assets/fxpack/Animation Pack/Animation Pack/Energy ball/energyBallImpact.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "v",
+    "frameW": 128,
+    "frameH": 128,
+    "count": 8
+   },
+   "fps": 20,
+   "scale": 1.2,
+   "blend": "lighter"
+  },
+  "fx_burn": {
+   "src": "/assets/fxpack/Animation Pack/Animation Pack/Fire/Burn.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "v",
+    "frameW": 128,
+    "frameH": 128,
+    "count": 10
+   },
+   "fps": 16,
+   "scale": 1.3,
+   "anchor": "bottom"
+  },
+  "fx_shine": {
+   "src": "/assets/fxpack/Animation Pack/Animation Pack/Fire/Shine.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 64,
+    "frameH": 64,
+    "count": 6
+   },
+   "fps": 16,
+   "scale": 1.6,
+   "blend": "lighter"
+  },
+  "fx_ice_ball": {
+   "src": "/assets/fxpack/Animation Pack/Animation Pack/Ice/Ball of ice.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "v",
+    "frameW": 128,
+    "frameH": 128,
+    "count": 4
+   },
+   "fps": 14,
+   "scale": 1.1,
+   "blend": "lighter",
+   "directional": true
+  },
+  "fx_ice_burst": {
+   "src": "/assets/fxpack/Animation Pack/Animation Pack/Ice/Burst of ice.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "v",
+    "frameW": 128,
+    "frameH": 128,
+    "count": 7
+   },
+   "fps": 18,
+   "scale": 1.3,
+   "blend": "lighter"
+  },
+  "fx_firebolt": {
+   "src": "/assets/fxpack/Fire Effect 1/Fire Effect 1/Firebolt SpriteSheet.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 48,
+    "frameH": 48,
+    "count": 10
+   },
+   "fps": 18,
+   "scale": 1.8,
+   "blend": "lighter",
+   "directional": true
+  },
+  "fx_slash_big": {
+   "src": "/assets/fxpack/ATTACK FREE/BigSlashV.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 64,
+    "frameH": 48,
+    "count": 5
+   },
+   "fps": 22,
+   "scale": 2,
+   "directional": true
+  },
+  "fx_slash_h": {
+   "src": "/assets/fxpack/ATTACK FREE/Hslash1.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 64,
+    "frameH": 32,
+    "count": 5
+   },
+   "fps": 22,
+   "scale": 2,
+   "directional": true
+  },
+  "fx_punch": {
+   "src": "/assets/fxpack/ATTACK FREE/PunchImp1.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 48,
+    "frameH": 32,
+    "count": 5
+   },
+   "fps": 22,
+   "scale": 1.9,
+   "directional": true
+  },
+  "fx_slash_small": {
+   "src": "/assets/fxpack/ATTACK FREE/VslashSmall1.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 32,
+    "frameH": 48,
+    "count": 4
+   },
+   "fps": 22,
+   "scale": 1.9,
+   "directional": true
+  },
+  "fx_slash_v": {
+   "src": "/assets/fxpack/ATTACK FREE/vSlash1.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 64,
+    "frameH": 48,
+    "count": 4
+   },
+   "fps": 22,
+   "scale": 2,
+   "directional": true
+  },
+  "fx_thrust_a": {
+   "src": "/assets/fxpack/Thrust/Thrusts 1 SpriteSheet.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "v",
+    "frameW": 64,
+    "frameH": 32,
+    "count": 5
+   },
+   "fps": 20,
+   "scale": 2,
+   "directional": true
+  },
+  "fx_thrust_b": {
+   "src": "/assets/fxpack/Thrust/Thrust 2 SpriteSheet.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "v",
+    "frameW": 64,
+    "frameH": 32,
+    "count": 5
+   },
+   "fps": 20,
+   "scale": 2,
+   "directional": true
+  },
+  "fx_spark_a": {
+   "src": "/assets/fxpack/Effects/Effect 1 - Sprite Sheet.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "v",
+    "frameW": 64,
+    "frameH": 32,
+    "count": 4
+   },
+   "fps": 18,
+   "scale": 2,
+   "blend": "lighter"
+  },
+  "fx_spark_b": {
+   "src": "/assets/fxpack/Effects/Effect 2 - Sprite Sheet.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "v",
+    "frameW": 64,
+    "frameH": 32,
+    "count": 4
+   },
+   "fps": 18,
+   "scale": 2,
+   "blend": "lighter"
+  },
+  "fx_spark_c": {
+   "src": "/assets/fxpack/Effects/Effect 3 - Sprite Sheet.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "v",
+    "frameW": 32,
+    "frameH": 32,
+    "count": 4
+   },
+   "fps": 18,
+   "scale": 2.2,
+   "blend": "lighter"
+  },
+  "fx_spark_d": {
+   "src": "/assets/fxpack/Effects/Effect 4 - Sprite Sheet.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "v",
+    "frameW": 32,
+    "frameH": 32,
+    "count": 4
+   },
+   "fps": 18,
+   "scale": 2.2,
+   "blend": "lighter"
+  },
+  "fx_magic_a": {
+   "src": "/assets/fxpack/free-pixel-magic-sprite-effects-pack/1 Magic/1.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 72,
+    "frameH": 72,
+    "count": 8
+   },
+   "fps": 18,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_magic_b": {
+   "src": "/assets/fxpack/free-pixel-magic-sprite-effects-pack/1 Magic/2.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 72,
+    "frameH": 72,
+    "count": 8
+   },
+   "fps": 18,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_magic_c": {
+   "src": "/assets/fxpack/free-pixel-magic-sprite-effects-pack/1 Magic/3.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 72,
+    "frameH": 72,
+    "count": 8
+   },
+   "fps": 18,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_magic_d": {
+   "src": "/assets/fxpack/free-pixel-magic-sprite-effects-pack/1 Magic/5.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 72,
+    "frameH": 72,
+    "count": 8
+   },
+   "fps": 18,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_magic_e": {
+   "src": "/assets/fxpack/free-pixel-magic-sprite-effects-pack/1 Magic/7.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 72,
+    "frameH": 72,
+    "count": 8
+   },
+   "fps": 18,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_magic_f": {
+   "src": "/assets/fxpack/free-pixel-magic-sprite-effects-pack/1 Magic/8.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 72,
+    "frameH": 72,
+    "count": 8
+   },
+   "fps": 18,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_magic_g": {
+   "src": "/assets/fxpack/free-pixel-magic-sprite-effects-pack/1 Magic/9.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 72,
+    "frameH": 72,
+    "count": 8
+   },
+   "fps": 18,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_magic_h": {
+   "src": "/assets/fxpack/free-pixel-magic-sprite-effects-pack/1 Magic/10.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 72,
+    "frameH": 72,
+    "count": 6
+   },
+   "fps": 18,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_magic_i": {
+   "src": "/assets/fxpack/free-pixel-magic-sprite-effects-pack/1 Magic/6_2.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 72,
+    "frameH": 72,
+    "count": 4
+   },
+   "fps": 16,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_magic_j": {
+   "src": "/assets/fxpack/free-pixel-magic-sprite-effects-pack/1 Magic/4_1.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 72,
+    "frameH": 72,
+    "count": 4
+   },
+   "fps": 16,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_magic_k": {
+   "src": "/assets/fxpack/free-pixel-magic-sprite-effects-pack/1 Magic/4_2.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 72,
+    "frameH": 72,
+    "count": 4
+   },
+   "fps": 16,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_magic_l": {
+   "src": "/assets/fxpack/free-pixel-magic-sprite-effects-pack/1 Magic/3_2.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 72,
+    "frameH": 72,
+    "count": 8
+   },
+   "fps": 18,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "fx_magic_m": {
+   "src": "/assets/fxpack/free-pixel-magic-sprite-effects-pack/1 Magic/1_2.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 72,
+    "frameH": 72,
+    "count": 8
+   },
+   "fps": 18,
+   "scale": 1.5,
+   "blend": "lighter"
+  },
+  "slash_horizontal": {
+   "src": "",
+   "layout": {
+    "kind": "frames",
+    "paths": [
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/slash-horizontal/_0000_Layer-1.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/slash-horizontal/_0001_Layer-2.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/slash-horizontal/_0002_Layer-3.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/slash-horizontal/_0003_Layer-4.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/slash-horizontal/_0004_Layer-5.png"
+    ]
+   },
+   "fps": 24,
+   "scale": 1.6,
+   "directional": true
+  },
+  "slash_upward": {
+   "src": "",
+   "layout": {
+    "kind": "frames",
+    "paths": [
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/slash-upward/_0000_Layer-1.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/slash-upward/_0001_Layer-2.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/slash-upward/_0002_Layer-3.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/slash-upward/_0003_Layer-4.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/slash-upward/_0004_Layer-5.png"
+    ]
+   },
+   "fps": 24,
+   "scale": 1.6,
+   "directional": true
+  },
+  "slash_circular": {
+   "src": "",
+   "layout": {
+    "kind": "frames",
+    "paths": [
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/slash-circular/_0000_Layer-1.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/slash-circular/_0001_Layer-2.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/slash-circular/_0002_Layer-3.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/slash-circular/_0003_Layer-4.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/slash-circular/_0004_Layer-5.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/slash-circular/_0005_Layer-6.png"
+    ]
+   },
+   "fps": 22,
+   "scale": 1.9
+  },
+  "hit_small": {
+   "src": "/assets/vfx/ansimuz/Hit/hit.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 31,
+    "frameH": 32,
+    "count": 3
+   },
+   "fps": 20,
+   "scale": 1.8,
+   "blend": "lighter"
+  },
+  "hit_spark": {
+   "src": "/assets/vfx/ansimuz/Warped shooting fx/hits/hits-1/spritesheet.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 32,
+    "frameH": 32,
+    "count": 5
+   },
+   "fps": 22,
+   "scale": 1.8,
+   "blend": "lighter"
+  },
+  "hit_burst": {
+   "src": "/assets/vfx/ansimuz/Warped shooting fx/hits/Hits-2/spritesheet.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 32,
+    "frameH": 32,
+    "count": 7
+   },
+   "fps": 22,
+   "scale": 2,
+   "blend": "lighter"
+  },
+  "hit_ring": {
+   "src": "/assets/vfx/ansimuz/Warped shooting fx/hits/Hits-3/spritesheet.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 32,
+    "frameH": 32,
+    "count": 5
+   },
+   "fps": 22,
+   "scale": 2,
+   "blend": "lighter"
+  },
+  "hit_heavy": {
+   "src": "/assets/vfx/ansimuz/Warped shooting fx/hits/hits-4/spritesheet.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 32,
+    "frameH": 32,
+    "count": 7
+   },
+   "fps": 20,
+   "scale": 2.4,
+   "blend": "lighter"
+  },
+  "hit_dark": {
+   "src": "/assets/vfx/ansimuz/Warped shooting fx/hits/Hits-5/spritesheet.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 32,
+    "frameH": 32,
+    "count": 7
+   },
+   "fps": 22,
+   "scale": 2.1,
+   "blend": "lighter"
+  },
+  "hit_holy": {
+   "src": "/assets/vfx/ansimuz/Warped shooting fx/hits/Hits-6/spritesheet.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 32,
+    "frameH": 32,
+    "count": 7
+   },
+   "fps": 22,
+   "scale": 2.1,
+   "blend": "lighter"
+  },
+  "energy_smack": {
+   "src": "",
+   "layout": {
+    "kind": "frames",
+    "paths": [
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/energy-smack/_0000_Layer-1.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/energy-smack/_0001_Layer-2.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/energy-smack/_0002_Layer-3.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/energy-smack/_0003_Layer-4.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/energy-smack/_0004_Layer-5.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/energy-smack/_0005_Layer-6.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/energy-smack/_0006_Layer-7.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/energy-smack/_0007_Layer-8.png"
+    ]
+   },
+   "fps": 22,
+   "scale": 1.3,
+   "blend": "lighter",
+   "directional": true
+  },
+  "explosion_tiny": {
+   "src": "/assets/vfx/ansimuz/Explosions pack/explosion-1-a/spritesheet.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 32,
+    "frameH": 32,
+    "count": 8
+   },
+   "fps": 20,
+   "scale": 2
+  },
+  "explosion_small": {
+   "src": "/assets/vfx/ansimuz/Explosions pack/explosion-1-b/spritesheet.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 64,
+    "frameH": 64,
+    "count": 8
+   },
+   "fps": 20,
+   "scale": 1.6
+  },
+  "explosion_wide": {
+   "src": "/assets/vfx/ansimuz/Explosions pack/explosion-1-c/spritesheet.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 128,
+    "frameH": 80,
+    "count": 10
+   },
+   "fps": 20,
+   "scale": 1.5
+  },
+  "explosion_big": {
+   "src": "/assets/vfx/ansimuz/Explosions pack/explosion-1-d/spritsheet.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 128,
+    "frameH": 128,
+    "count": 12
+   },
+   "fps": 22,
+   "scale": 1.6
+  },
+  "explosion_huge": {
+   "src": "/assets/vfx/ansimuz/Explosions pack/explosion-1-e/explosion-5.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 192,
+    "frameH": 192,
+    "count": 22
+   },
+   "fps": 24,
+   "scale": 1.8
+  },
+  "explosion_puff": {
+   "src": "/assets/vfx/ansimuz/Explosions pack/explosion-1-f/Sprites.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 48,
+    "frameH": 48,
+    "count": 8
+   },
+   "fps": 20,
+   "scale": 1.8
+  },
+  "explosion_smoke": {
+   "src": "/assets/vfx/ansimuz/Explosions pack/explosion-1-g/spritesheet.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 48,
+    "frameH": 48,
+    "count": 7
+   },
+   "fps": 18,
+   "scale": 2
+  },
+  "ground_explosion": {
+   "src": "/assets/vfx/ansimuz/Ground Explosion/spritesheet/explosion-animation.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 112,
+    "frameH": 128,
+    "count": 9
+   },
+   "fps": 20,
+   "scale": 1.8,
+   "anchor": "bottom"
+  },
+  "enemy_death": {
+   "src": "/assets/vfx/ansimuz/EnemyDeath/spritesheet.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 48,
+    "frameH": 48,
+    "count": 8
+   },
+   "fps": 18,
+   "scale": 1.8
+  },
+  "proj_fireball": {
+   "src": "/assets/aaa_spells/pixel/Pixelart Spells/PNG Files/Fireball.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 16,
+    "frameH": 16,
+    "count": 6
+   },
+   "fps": 16,
+   "scale": 2.4,
+   "blend": "lighter",
+   "directional": true
+  },
+  "proj_firebomb": {
+   "src": "/assets/aaa_spells/pixel/Pixelart Spells/PNG Files/Firebomb.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 16,
+    "frameH": 16,
+    "count": 6
+   },
+   "fps": 16,
+   "scale": 2.4,
+   "blend": "lighter",
+   "directional": true
+  },
+  "proj_ice_lance": {
+   "src": "/assets/aaa_spells/pixel/Pixelart Spells/PNG Files/Ice Lance.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 16,
+    "frameH": 16,
+    "count": 4
+   },
+   "fps": 16,
+   "scale": 2.4,
+   "blend": "lighter",
+   "directional": true
+  },
+  "proj_arcane": {
+   "src": "/assets/aaa_spells/pixel/Pixelart Spells/PNG Files/Arcane Bolt.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 16,
+    "frameH": 16,
+    "count": 6
+   },
+   "fps": 16,
+   "scale": 2.4,
+   "blend": "lighter",
+   "directional": true
+  },
+  "proj_darkness": {
+   "src": "/assets/aaa_spells/pixel/Pixelart Spells/PNG Files/Darkness Bolt.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 16,
+    "frameH": 16,
+    "count": 6
+   },
+   "fps": 16,
+   "scale": 2.4,
+   "blend": "lighter",
+   "directional": true
+  },
+  "proj_dark_orb": {
+   "src": "/assets/aaa_spells/pixel/Pixelart Spells/PNG Files/Darkness Orb.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 16,
+    "frameH": 16,
+    "count": 6
+   },
+   "fps": 16,
+   "scale": 2.6,
+   "blend": "lighter",
+   "directional": true
+  },
+  "proj_light": {
+   "src": "/assets/aaa_spells/pixel/Pixelart Spells/PNG Files/Light Bolt.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 16,
+    "frameH": 16,
+    "count": 6
+   },
+   "fps": 16,
+   "scale": 2.4,
+   "blend": "lighter",
+   "directional": true
+  },
+  "proj_purity": {
+   "src": "/assets/aaa_spells/pixel/Pixelart Spells/PNG Files/Bolt Of Purity.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 16,
+    "frameH": 16,
+    "count": 6
+   },
+   "fps": 16,
+   "scale": 2.4,
+   "blend": "lighter",
+   "directional": true
+  },
+  "proj_magic_orb": {
+   "src": "/assets/aaa_spells/pixel/Pixelart Spells/PNG Files/Magic Orb.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 16,
+    "frameH": 16,
+    "count": 6
+   },
+   "fps": 16,
+   "scale": 2.4,
+   "blend": "lighter",
+   "directional": true
+  },
+  "proj_wind": {
+   "src": "/assets/aaa_spells/pixel/Pixelart Spells/PNG Files/Wind Bolt.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 16,
+    "frameH": 16,
+    "count": 6
+   },
+   "fps": 16,
+   "scale": 2.4,
+   "blend": "lighter",
+   "directional": true
+  },
+  "proj_plant": {
+   "src": "/assets/aaa_spells/pixel/Pixelart Spells/PNG Files/Plant Missle.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 16,
+    "frameH": 16,
+    "count": 6
+   },
+   "fps": 16,
+   "scale": 2.4,
+   "blend": "lighter",
+   "directional": true
+  },
+  "proj_water": {
+   "src": "/assets/aaa_spells/pixel/Pixelart Spells/PNG Files/Water Bolt.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 16,
+    "frameH": 16,
+    "count": 6
+   },
+   "fps": 16,
+   "scale": 2.4,
+   "blend": "lighter",
+   "directional": true
+  },
+  "proj_rock": {
+   "src": "/assets/aaa_spells/pixel/Pixelart Spells/PNG Files/Rock Sling.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 16,
+    "frameH": 16,
+    "count": 1
+   },
+   "fps": 12,
+   "scale": 2.4,
+   "directional": true
+  },
+  "ray_magic": {
+   "src": "/assets/aaa_spells/pixel/Pixelart Spells/PNG Files/Magic Ray.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 16,
+    "frameH": 16,
+    "count": 8
+   },
+   "fps": 18,
+   "scale": 2.6,
+   "blend": "lighter",
+   "directional": true
+  },
+  "ray_mono": {
+   "src": "/assets/aaa_spells/pixel/Pixelart Spells/PNG Files/Black And White Ray.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 16,
+    "frameH": 16,
+    "count": 8
+   },
+   "fps": 18,
+   "scale": 2.6,
+   "blend": "lighter",
+   "directional": true
+  },
+  "sparks_magic": {
+   "src": "/assets/aaa_spells/pixel/Pixelart Spells/PNG Files/Magic Sparks.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 16,
+    "frameH": 16,
+    "count": 6
+   },
+   "fps": 18,
+   "scale": 2.6,
+   "blend": "lighter"
+  },
+  "sparks_mono": {
+   "src": "/assets/aaa_spells/pixel/Pixelart Spells/PNG Files/Black And White Sparks.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 16,
+    "frameH": 16,
+    "count": 6
+   },
+   "fps": 18,
+   "scale": 2.6,
+   "blend": "lighter"
+  },
+  "splash": {
+   "src": "/assets/aaa_spells/pixel/Pixelart Spells/PNG Files/Splash.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 32,
+    "frameH": 32,
+    "count": 6
+   },
+   "fps": 18,
+   "scale": 2,
+   "blend": "lighter"
+  },
+  "water_blast": {
+   "src": "/assets/aaa_spells/pixel/Pixelart Spells/PNG Files/Water Blast.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 16,
+    "frameH": 16,
+    "count": 6
+   },
+   "fps": 18,
+   "scale": 2.6,
+   "blend": "lighter",
+   "directional": true
+  },
+  "shield_bubble": {
+   "src": "/assets/aaa_spells/pixel/Pixelart Spells/PNG Files/Pixelart Shield.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 48,
+    "frameH": 48,
+    "count": 6
+   },
+   "fps": 14,
+   "scale": 1.8,
+   "blend": "lighter"
+  },
+  "bolt_energy": {
+   "src": "/assets/vfx/ansimuz/Warped shooting fx/Bolt/spritesheet.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 48,
+    "frameH": 32,
+    "count": 4
+   },
+   "fps": 18,
+   "scale": 1.8,
+   "blend": "lighter",
+   "directional": true
+  },
+  "pulse_energy": {
+   "src": "/assets/vfx/ansimuz/Warped shooting fx/Pulse/spritesheet.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 63,
+    "frameH": 32,
+    "count": 4
+   },
+   "fps": 18,
+   "scale": 1.8,
+   "blend": "lighter"
+  },
+  "charged_energy": {
+   "src": "/assets/vfx/ansimuz/Warped shooting fx/charged/spritesheet.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 63,
+    "frameH": 48,
+    "count": 6
+   },
+   "fps": 18,
+   "scale": 1.8,
+   "blend": "lighter"
+  },
+  "crossed_energy": {
+   "src": "/assets/vfx/ansimuz/Warped shooting fx/crossed/spritesheet.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 32,
+    "frameH": 32,
+    "count": 6
+   },
+   "fps": 20,
+   "scale": 2,
+   "blend": "lighter"
+  },
+  "spark_trail": {
+   "src": "/assets/vfx/ansimuz/Warped shooting fx/spark/spritesheet.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 63,
+    "frameH": 32,
+    "count": 5
+   },
+   "fps": 20,
+   "scale": 1.7,
+   "blend": "lighter",
+   "directional": true
+  },
+  "waveform": {
+   "src": "/assets/vfx/ansimuz/Warped shooting fx/waveform/spritesheet.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 95,
+    "frameH": 32,
+    "count": 4
+   },
+   "fps": 18,
+   "scale": 1.8,
+   "blend": "lighter",
+   "directional": true
+  },
+  "electro_shock": {
+   "src": "",
+   "layout": {
+    "kind": "frames",
+    "paths": [
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/electro-shock/_0000_Layer-1.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/electro-shock/_0001_Layer-2.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/electro-shock/_0002_Layer-3.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/electro-shock/_0003_Layer-4.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/electro-shock/_0004_Layer-5.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/electro-shock/_0005_Layer-6.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/electro-shock/_0006_Layer-7.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/electro-shock/_0007_Layer-8.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/electro-shock/_0008_Layer-9.png"
+    ]
+   },
+   "fps": 22,
+   "scale": 1.4,
+   "blend": "lighter"
+  },
+  "energy_field": {
+   "src": "",
+   "layout": {
+    "kind": "frames",
+    "paths": [
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/energy-field/_0000_Layer-1.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/energy-field/_0001_Layer-2.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/energy-field/_0002_Layer-3.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/energy-field/_0003_Layer-4.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/energy-field/_0004_Layer-5.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/energy-field/_0005_Layer-6.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/energy-field/_0006_Layer-7.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/energy-field/_0007_Layer-8.png"
+    ]
+   },
+   "fps": 16,
+   "scale": 2.2,
+   "blend": "lighter"
+  },
+  "fire_ball_small": {
+   "src": "",
+   "layout": {
+    "kind": "frames",
+    "paths": [
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/fire-ball/_0000_Layer-1.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/fire-ball/_0001_Layer-2.png",
+     "/assets/vfx/ansimuz/Grotto-escape-2-FX/sprites/fire-ball/_0002_Layer-3.png"
+    ]
+   },
+   "fps": 14,
+   "scale": 1.8,
+   "blend": "lighter",
+   "directional": true
+  },
+  "dark_swirl": {
+   "src": "/assets/vfx/dark_vfx/Dark VFX 1/Dark VFX 1 (40x32).png",
+   "layout": {
+    "kind": "grid",
+    "frameW": 40,
+    "frameH": 32,
+    "cols": 10,
+    "rows": 2,
+    "count": 17
+   },
+   "fps": 20,
+   "scale": 2.2,
+   "blend": "lighter"
+  },
+  "dark_column": {
+   "src": "/assets/vfx/dark_vfx/Dark VFX 2/Dark VFX 2 (48x64).png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 48,
+    "frameH": 64,
+    "count": 16
+   },
+   "fps": 20,
+   "scale": 2,
+   "blend": "lighter",
+   "anchor": "bottom"
+  },
+  "aura_green": {
+   "src": "/assets/sanju_vfx/special2d/green_effect.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "v",
+    "frameW": 32,
+    "frameH": 32,
+    "count": 10
+   },
+   "fps": 14,
+   "scale": 2,
+   "blend": "lighter"
+  },
+  "aura_glow": {
+   "src": "/assets/sanju_vfx/special2d/light_glow_effect.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "v",
+    "frameW": 64,
+    "frameH": 64,
+    "count": 10
+   },
+   "fps": 14,
+   "scale": 1.6,
+   "blend": "lighter"
+  },
+  "aura_magic": {
+   "src": "/assets/sanju_vfx/special2d/magic_effect.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "v",
+    "frameW": 32,
+    "frameH": 32,
+    "count": 10
+   },
+   "fps": 14,
+   "scale": 2,
+   "blend": "lighter"
+  },
+  "aura_magic2": {
+   "src": "/assets/sanju_vfx/special2d/magic_effect_2.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "v",
+    "frameW": 32,
+    "frameH": 32,
+    "count": 10
+   },
+   "fps": 14,
+   "scale": 2,
+   "blend": "lighter"
+  },
+  "aura_sparks": {
+   "src": "/assets/sanju_vfx/special2d/sparks_effect.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "v",
+    "frameW": 64,
+    "frameH": 64,
+    "count": 12
+   },
+   "fps": 16,
+   "scale": 1.6,
+   "blend": "lighter"
+  },
+  "water_splash": {
+   "src": "/assets/vfx/ansimuz/Water splash/spritesheet.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 26,
+    "frameH": 32,
+    "count": 3
+   },
+   "fps": 16,
+   "scale": 2,
+   "anchor": "bottom"
+  }
+ },
+ "FX_COLOUR_ROW": {
+  "fire": 7,
+  "holy": 0,
+  "dark": 1,
+  "ice": 2,
+  "lightning": 2,
+  "physical": 5,
+  "magical": 1
+ }
+}

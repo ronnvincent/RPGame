@@ -1,0 +1,90 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>VFX Preview</title>
+<style>
+  body{background:#12100e;color:#f5e7c8;font:13px ui-monospace,Consolas,monospace;margin:0;padding:14px}
+  h1{font-size:16px;margin:0 0 4px}
+  .sub{opacity:.65;margin-bottom:14px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+  .cell{background:#1b1610;border:1px solid #3a2a18;border-radius:6px;padding:6px;text-align:center}
+  .cell canvas{background:#0a0806;image-rendering:pixelated;display:block;margin:0 auto 4px;border-radius:3px}
+  .name{font-size:11px;color:#ffd77a;word-break:break-all}
+  .meta{font-size:10px;opacity:.55}
+  .bad{border-color:#a33;background:#2a1414}
+  .bad .name{color:#ff9a9a}
+  #err{color:#ff9a9a;white-space:pre-wrap;margin-bottom:10px}
+  label{font-size:12px;opacity:.8;margin-right:12px}
+</style>
+<h1>VFX Preview</h1>
+<div class="sub">Every effect in the catalogue, played live. Red = image failed to load.</div>
+<div>
+  <label>colour row <input id="row" type="range" min="0" max="8" value="5"> <span id="rowv">5</span></label>
+  <label>scale <input id="sc" type="range" min="1" max="6" step="0.5" value="2"> <span id="scv">2</span></label>
+</div>
+<div id="err"></div>
+<div class="grid" id="grid"></div>
+<script>
+const S = 128; // preview box size
+let ROW = 5, SCALE = 2;
+const imgs = new Map();
+function img(src){
+  if(imgs.has(src)) return imgs.get(src);
+  const i = new Image(); i.dataset.ok='0';
+  i.onload = ()=>{ i.dataset.ok='1'; };
+  i.onerror = ()=>{ i.dataset.ok='x'; };
+  i.src = src; imgs.set(src,i); return i;
+}
+function frameRect(def,index,row){
+  const L = def.layout;
+  if(L.kind==='frames'){ const im=img(L.paths[index%L.paths.length]); return im.naturalWidth?{im,sx:0,sy:0,sw:im.naturalWidth,sh:im.naturalHeight}:null; }
+  const im = img(def.src); if(!im.naturalWidth) return null;
+  if(L.kind==='strip'){
+    const n=L.count, i=index%n;
+    return {im,sx:L.dir==='h'?i*L.frameW:0,sy:L.dir==='v'?i*L.frameH:0,sw:L.frameW,sh:L.frameH};
+  }
+  const usesRow = L.rows>1;
+  const n = usesRow ? L.cols : (L.count||L.cols*L.rows), i=index%n;
+  const c = usesRow ? i : i%L.cols, r = usesRow ? Math.min(row,L.rows-1) : Math.floor(i/L.cols);
+  return {im,sx:c*L.frameW,sy:r*L.frameH,sw:L.frameW,sh:L.frameH};
+}
+function frameCount(def){
+  const L=def.layout;
+  if(L.kind==='frames') return L.paths.length;
+  if(L.kind==='strip') return L.count;
+  return L.rows>1 ? L.cols : (L.count||L.cols*L.rows);
+}
+fetch('/vfx-catalogue.json').then(r=>r.json()).then(({VFX})=>{
+  const grid=document.getElementById('grid'); const cells=[];
+  for(const [id,def] of Object.entries(VFX)){
+    const d=document.createElement('div'); d.className='cell';
+    const cv=document.createElement('canvas'); cv.width=S; cv.height=S;
+    const nm=document.createElement('div'); nm.className='name'; nm.textContent=id;
+    const mt=document.createElement('div'); mt.className='meta';
+    mt.textContent=(def.layout.kind)+' '+frameCount(def)+'f @'+def.fps+'fps';
+    d.append(cv,nm,mt); grid.appendChild(d);
+    cells.push({id,def,cv,ctx:cv.getContext('2d'),el:d,t:0,i:0});
+  }
+  let last=performance.now();
+  (function loop(now){
+    const dt=(now-last)/1000; last=now;
+    for(const c of cells){
+      c.t+=dt; const step=1/c.def.fps;
+      while(c.t>=step){ c.t-=step; c.i=(c.i+1)%frameCount(c.def); }
+      const ctx=c.ctx; ctx.clearRect(0,0,S,S); ctx.imageSmoothingEnabled=false;
+      const f=frameRect(c.def,c.i,ROW);
+      const src = c.def.layout.kind==='frames' ? c.def.layout.paths[0] : c.def.src;
+      const im = imgs.get(src);
+      if(im && im.dataset.ok==='x'){ c.el.classList.add('bad'); continue; }
+      if(!f) continue;
+      c.el.classList.remove('bad');
+      const s=(c.def.scale||1)*SCALE, w=f.sw*s, h=f.sh*s;
+      if(c.def.blend==='lighter') ctx.globalCompositeOperation='lighter';
+      ctx.drawImage(f.im,f.sx,f.sy,f.sw,f.sh,Math.round(S/2-w/2),Math.round(S/2-h/2),Math.round(w),Math.round(h));
+      ctx.globalCompositeOperation='source-over';
+    }
+    requestAnimationFrame(loop);
+  })(performance.now());
+}).catch(e=>{document.getElementById('err').textContent='Failed to load catalogue: '+e.message;});
+document.getElementById('row').oninput=e=>{ROW=+e.target.value;document.getElementById('rowv').textContent=ROW;};
+document.getElementById('sc').oninput=e=>{SCALE=+e.target.value;document.getElementById('scv').textContent=SCALE;};
+</script>
