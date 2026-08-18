@@ -1391,6 +1391,16 @@ export class GameHUD {
     const closeBtn = this.container.querySelector('#close-inv-btn');
     const invModal = this.container.querySelector('#inventory-modal') as HTMLElement;
 
+    // render() rebuilds the whole HUD from a template string, so the modal that
+    // comes back is a brand new element with the stylesheet's own display -
+    // hidden. The open flag survived but nothing reapplied it, so equipping an
+    // item, which calls render(), made the bag vanish and looked like being
+    // thrown back to the game.
+    if (invModal && this.inventoryOpen) {
+      invModal.style.display = 'flex';
+      this.renderInventoryItems();
+    }
+
     const openInv = (e: Event) => {
       e.stopPropagation();
       this.inventoryOpen = !this.inventoryOpen;
