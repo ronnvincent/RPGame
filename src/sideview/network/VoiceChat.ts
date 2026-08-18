@@ -49,6 +49,18 @@ export class VoiceChat {
   /** Called with a human-readable problem, e.g. a refused microphone. */
   public onError: ((msg: string) => void) | null = null;
 
+  /** Last problem worth showing, for the button tooltip. */
+  public lastError = '';
+
+  /** One line describing what voice is doing, for the UI and for diagnosis. */
+  public get status(): string {
+    if (!this.joined) return 'not joined';
+    const states: string[] = [];
+    this.peers.forEach((p) => states.push(p.pc.connectionState));
+    if (!states.length) return 'waiting for the party';
+    return `${states.filter((x) => x === 'connected').length}/${states.length} connected (${states.join(', ')})`;
+  }
+
   public addStateListener(cb: () => void) { this.stateListeners.add(cb); }
   public removeStateListener(cb: () => void) { this.stateListeners.delete(cb); }
   private emitState() { this.stateListeners.forEach((cb) => cb()); }
@@ -88,6 +100,7 @@ export class VoiceChat {
   public get attemptedPeers() { return this.peers.size; }
 
   public attach(socket: any) {
+    if (!socket) return;
     if (this.socket === socket) return;
     this.socket = socket;
 
@@ -207,16 +220,33 @@ export class VoiceChat {
 
     if (this.stream) {
       this.stream.getTracks().forEach((track) => pc.addTrack(track, this.stream!));
-    } else {
-      // No microphone: ask for a receive-only audio line explicitly. Without
-      // this the connection carries no audio section at all and the promise
-      // that you can still listen would be empty.
+    } else if (initiator) {
+      // No microphone and we are the one offering: ask for a receive-only line,
+      // or the offer carries no audio section at all and there is nothing for
+      // the other side to answer with.
+      //
+      // Only when offering. Adding a transceiver before answering created a
+      // SECOND audio line that did not match the one in their offer, and a
+      // mismatched answer is refused - which is precisely the case of a PC with
+      // no microphone trying to listen to a phone.
       pc.addTransceiver('audio', { direction: 'recvonly' });
     }
 
     pc.ontrack = (ev) => {
-      audio.srcObject = ev.streams[0];
-      audio.play().catch(() => { /* blocked until a gesture; the toggle provides one */ });
+      // ev.streams can be empty when the sender added a bare track. Falling
+      // back to a stream built from the track itself avoids assigning undefined
+      // to srcObject, which plays nothing and reports nothing.
+      const remote = ev.streams[0] || new MediaStream([ev.track]);
+      audio.srcObject = remote;
+      audio.muted = !this.speakerOn;
+      audio.play().catch(() => {
+        // Desktop browsers block playback that did not follow a click. The
+        // speaker button is a click, so this is recoverable - but silently
+        // swallowing it is why "speaker is on and I hear nothing" had no
+        // explanation.
+        this.lastError = 'Click the speaker button once to allow audio.';
+        this.onError?.(this.lastError);
+      });
       this.emitState();
     };
 

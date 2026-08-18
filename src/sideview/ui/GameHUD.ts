@@ -1532,6 +1532,9 @@ export class GameHUD {
         dockMic.style.opacity = voice.isMicOn ? '1' : '0.5';
       }
       if (dockSpk) {
+        // The tooltip carries the real state, so a silent call can be diagnosed
+        // rather than guessed at.
+        dockSpk.title = voice.lastError || voice.status;
         const live = voice.peerCount;
         dockSpk.innerHTML = !voice.isSpeakerOn
           ? '🔈'
@@ -1573,6 +1576,10 @@ export class GameHUD {
       e.stopPropagation();
       await voice.ensureJoined(network.socket);
       voice.toggleSpeaker();
+      // Tapping it reports what the call is actually doing. Without this, a
+      // call that connects but carries no sound looks the same as one that
+      // never connected.
+      this.showToast(voice.isSpeakerOn ? `Party audio: ${voice.status}` : 'Party audio off');
     });
 
     micBtn?.addEventListener('click', async (e) => {

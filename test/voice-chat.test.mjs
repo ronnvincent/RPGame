@@ -97,6 +97,15 @@ const run = async () => {
   check('hidden when there is no party', /dock\.style\.display = inParty/.test(hud));
   check('and lifted clear of the skill bar on a short screen', /max-height: 520px/.test(hud));
 
+  // A listener with no microphone is the case that failed in practice.
+  check('a receive-only line is asked for only when offering',
+        /\} else if \(initiator\) \{/.test(vc));
+  check('a track arriving without a stream still plays',
+        /new MediaStream\(\[ev\.track\]\)/.test(vc));
+  check('blocked autoplay is reported instead of swallowed',
+        /Click the speaker button once/.test(vc));
+  check('the call can describe its own state', /public get status/.test(vc));
+
   console.log('');
   console.log(failures === 0 ? 'PARTY VOICE OK' : `PARTY VOICE FAILURES: ${failures}`);
   process.exit(failures === 0 ? 0 : 1);
