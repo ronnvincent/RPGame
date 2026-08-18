@@ -6,6 +6,7 @@
 
 import { CharacterClass, SkillDefinition, CHARACTER_CLASSES } from '../classes/ClassDefinitions';
 import { POLY_SHEETS, POLY_PROPS, POLY_HOUSES, POLY_NATURE } from './MapLibrary';
+import { bossSkillsFor, BossSkill } from '../dungeons/BossSkills';
 import { BattleTheme, EnemyInstance } from '../dungeons/DungeonManager';
 import { ItemData, RARITY_CONFIGS } from '../items/ItemDatabase';
 import { ParticleSystem } from './ParticleSystem';
@@ -1909,6 +1910,8 @@ export class SideViewEngine {
           // after a swing starts, which is how long the animation runs.
           enemy.isAttacking = enemy.attackTimer > enemy.attackCooldown - ENEMY_ATTACK_ANIM;
         }
+
+        if (enemy.type === 'boss' && this.isHost) this.updateBossSkills(enemy, dt);
       }
 
       // Physics
@@ -1929,13 +1932,81 @@ export class SideViewEngine {
     }
   }
 
-  private enemyAttackPlayer(enemy: EnemyInstance) {
+  /**
+   * Boss abilities.
+   *
+   * specialAttackTimer and currentPhase were already on the enemy record and
+   * nothing read either, so every boss fight was the same walk-up-and-swing as
+   * an ordinary monster. Each boss now alternates between its two skills, and
+   * each one announces itself before it lands - a boss that hits the instant it
+   * decides to is a coin toss, not a fight.
+   */
+  private updateBossSkills(enemy: EnemyInstance, dt: number) {
+    const skills = bossSkillsFor(enemy.name);
+    if (!skills.length || enemy.isDead) return;
+
+    enemy.specialAttackTimer = (enemy.specialAttackTimer || 0) - dt;
+    if (enemy.specialAttackTimer > 0) return;
+
+    // Alternate, so both are seen rather than one winning every roll.
+    const index = (enemy.currentPhase || 1) % skills.length;
+    const skill = skills[index];
+    enemy.currentPhase = (enemy.currentPhase || 1) + 1;
+    enemy.specialAttackTimer = skill.cooldown;
+
+    this.castBossSkill(enemy, skill);
+  }
+
+  private castBossSkill(enemy: EnemyInstance, skill: BossSkill) {
+    const p = this.player;
+
+    // The wind-up: name it and mark the ground, then land it.
+    this.particles.addFloatingText(enemy.x, enemy.y - 90, skill.name.toUpperCase(), skill.colour, true, 18);
+    audio.playId('ult_charge', 0.7);
+
+    const targetX = skill.kind === 'slam' ? p.x : enemy.x;
+    const facing = enemy.facing;
+
+    window.setTimeout(() => {
+      if (enemy.isDead) return;
+      const dmg = skill.damage;
+
+      if (skill.kind === 'volley') {
+        // Fanned across the arena, so standing still is the wrong answer.
+        for (let i = 0; i < 4; i++) {
+          const ox = enemy.x + facing * (70 + i * 90);
+          window.setTimeout(() => {
+            this.particles.playVfx(skill.vfx, ox, this.groundY - 30, { facing, scale: 0.9 });
+            if (Math.abs(p.x - ox) < 70) this.enemyAttackPlayer(enemy, dmg);
+          }, i * 110);
+        }
+      } else if (skill.kind === 'beam') {
+        for (let i = 0; i < 5; i++) {
+          const ox = enemy.x + facing * (60 + i * 80);
+          this.particles.playVfx(skill.vfx, ox, this.groundY - 40, { facing, scale: 1.0 });
+        }
+        const inLine = (facing > 0 ? p.x > enemy.x : p.x < enemy.x) && Math.abs(p.x - enemy.x) < 460;
+        if (inLine) this.enemyAttackPlayer(enemy, dmg);
+      } else if (skill.kind === 'nova') {
+        this.particles.playVfx(skill.vfx, enemy.x, this.groundY - 50, { facing, scale: 1.6 });
+        if (Math.abs(p.x - enemy.x) < 190) this.enemyAttackPlayer(enemy, dmg);
+      } else {
+        // slam - lands where the player was standing when it started.
+        this.particles.playVfx(skill.vfx, targetX, this.groundY - 40, { facing, scale: 1.5 });
+        if (Math.abs(p.x - targetX) < 120) this.enemyAttackPlayer(enemy, dmg);
+      }
+
+      this.particles.triggerScreenShake(skill.kind === 'volley' ? 6 : 12, 0.3);
+    }, skill.telegraph * 1000);
+  }
+
+  private enemyAttackPlayer(enemy: EnemyInstance, multiplier: number = 1) {
     const p = this.player;
     // Committing to an ultimate should never get you punished for it - the
     // caster is untouchable for the length of the cinematic.
     if (p.iframeTimer > 0 || p.stealthTimer > 0 || this.ultimate.invulnerable) return;
 
-    const rawDamage = enemy.atk * BALANCE.enemyAtk * (1 + (Math.random() * 0.2 - 0.1));
+    const rawDamage = enemy.atk * BALANCE.enemyAtk * multiplier * (1 + (Math.random() * 0.2 - 0.1));
     const finalDamage = Math.max(1, Math.round(afterDefence(rawDamage, p.totalDef)));
 
     p.hp = Math.max(0, p.hp - finalDamage);
