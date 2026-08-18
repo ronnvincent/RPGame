@@ -28,6 +28,15 @@ check('  and equipment rarity on top of its stats', /rarityValue/.test(engine));
 check('power travels with the save', /power,\s*\n\s*className/.test(saveMgr) || /power,/.test(saveMgr));
 check('and is recomputed on every save', /this\.computePower\(\)\)/.test(engine));
 
+// An account that existed before the power column defaults to zero and is
+// filtered off the board. A returning player used to only load, never save, so
+// they stayed invisible - which makes a played-in game look like an empty
+// leaderboard.
+const gameSrc = readFileSync('src/sideview/SideViewGame.ts', 'utf8');
+check('opening the game registers power once', /this\.engine\.triggerSave\(\);/.test(gameSrc));
+check('for returning players too, not only new ones',
+      !/else \{[\s\S]{0,200}SaveManager\.saveGame/.test(gameSrc));
+
 // --- The display --------------------------------------------------------
 check('it is on the player panel', /hud-power/.test(hud));
 check('kept live rather than only at render', /computePower\(\)\.toLocaleString\(\)/.test(hud));

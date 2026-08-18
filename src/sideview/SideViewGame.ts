@@ -146,10 +146,17 @@ export class SideViewGame {
     
     if (saveData) {
       this.engine.loadSaveData(saveData);
-    } else {
-      // Auto-save initial character creation
-      SaveManager.saveGame(this.engine.player, this.engine.player.inventory, this.engine.player.maxDungeonCleared);
     }
+
+    // Register once at startup, whether returning or brand new.
+    //
+    // Power is a column that did not exist until recently, so every account
+    // created before it defaults to zero and is filtered off the rankings. A
+    // returning player only loaded and never saved, so they stayed invisible
+    // until they happened to pick something up - which made a populated game
+    // look like an empty leaderboard. triggerSave carries the computed power,
+    // which saveGame was being called without here.
+    this.engine.triggerSave();
     this.engine.arenaHeight = this.canvas.height;
 
     this.townHub = new TownHub();
