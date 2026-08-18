@@ -24,6 +24,67 @@ import { MAPS, MapLayer, MapGround, MapFloor, LEGACY_FLOORS, POLY_SHEETS, POLY_P
 
 type BattleTheme = 'catacombs' | 'crypt' | 'inferno' | 'void' | 'town' | 'swamp' | 'mountain' | 'underwater' | 'caves';
 
+/**
+ * Monster sheets, measured by tools/measure-mob-frames.mjs.
+ *
+ * The renderer used to hardcode 4 or 8 frames for every animation of every
+ * monster and a single magic offset of 85 for the feet. Attack sheets existed
+ * for all four but were never referenced, so no monster ever played an attack.
+ *
+ * feetGap is the empty space under the creature inside its 150px frame. One
+ * shared offset cannot suit creatures of different sizes, which is why the
+ * small monsters sank into the floor while the bosses - drawn from the same
+ * number at double scale - hovered above it.
+ */
+const MOB_FRAMES: Record<string, {
+  feetGap: number;
+  centreOff: number;
+  anims: Record<string, { key: string; frames: number; fps: number }>;
+}> = {
+  skel: {
+    feetGap: 49, centreOff: 7.5,
+    anims: {
+      idle:   { key: 'skel_idle',  frames: 4, fps: 8 },
+      move:   { key: 'skel_walk',  frames: 4, fps: 9 },
+      attack: { key: 'skel_atk',   frames: 8, fps: 12 },
+      hit:    { key: 'skel_hit',   frames: 4, fps: 10 },
+      death:  { key: 'skel_death', frames: 4, fps: 5 },
+    }
+  },
+  gob: {
+    feetGap: 49, centreOff: -0.5,
+    anims: {
+      idle:   { key: 'gob_idle',  frames: 4, fps: 8 },
+      move:   { key: 'gob_run',   frames: 8, fps: 12 },
+      attack: { key: 'gob_atk',   frames: 8, fps: 13 },
+      hit:    { key: 'gob_hit',   frames: 4, fps: 10 },
+      death:  { key: 'gob_death', frames: 4, fps: 5 },
+    }
+  },
+  eye: {
+    // A flier: its gap is larger because it is drawn hovering, which is correct
+    // for this one and only this one.
+    feetGap: 58, centreOff: 2.5,
+    anims: {
+      idle:   { key: 'eye_flight', frames: 8, fps: 10 },
+      move:   { key: 'eye_flight', frames: 8, fps: 12 },
+      attack: { key: 'eye_atk',    frames: 8, fps: 12 },
+      hit:    { key: 'eye_hit',    frames: 4, fps: 10 },
+      death:  { key: 'eye_death',  frames: 4, fps: 5 },
+    }
+  },
+  mush: {
+    feetGap: 49, centreOff: 0.5,
+    anims: {
+      idle:   { key: 'mush_idle',  frames: 4, fps: 8 },
+      move:   { key: 'mush_run',   frames: 8, fps: 11 },
+      attack: { key: 'mush_atk',   frames: 8, fps: 12 },
+      hit:    { key: 'mush_hit',   frames: 4, fps: 10 },
+      death:  { key: 'mush_death', frames: 4, fps: 5 },
+    }
+  },
+};
+
 export class SpriteManager {
   private images: { [key: string]: HTMLImageElement } = {};
   private priestessIdleImgs: HTMLImageElement[] = [];
@@ -1886,7 +1947,7 @@ export class SpriteManager {
     x: number,
     y: number,
     mobType: string,
-    state: 'idle' | 'walk' | 'run' | 'hit' | 'dead',
+    state: 'idle' | 'walk' | 'run' | 'attack' | 'hit' | 'dead',
     facing: number,
     isBoss: boolean = false,
     hitStun: number = 0
@@ -2025,7 +2086,7 @@ export class SpriteManager {
     ctx: CanvasRenderingContext2D,
     x: number,
     y: number,
-    state: 'idle' | 'walk' | 'run' | 'hit' | 'dead',
+    state: 'idle' | 'walk' | 'run' | 'attack' | 'hit' | 'dead',
     facing: number,
     hitStun: number
   ) {
@@ -2092,7 +2153,7 @@ export class SpriteManager {
     ctx: CanvasRenderingContext2D,
     x: number,
     y: number,
-    state: 'idle' | 'walk' | 'run' | 'hit' | 'dead',
+    state: 'idle' | 'walk' | 'run' | 'attack' | 'hit' | 'dead',
     facing: number,
     hitStun: number
   ) {
@@ -2158,79 +2219,72 @@ export class SpriteManager {
     ctx.restore();
   }
 
+
   private drawFantasyMob(
     ctx: CanvasRenderingContext2D,
     x: number,
     y: number,
     prefix: 'skel' | 'gob' | 'eye' | 'mush',
-    state: 'idle' | 'walk' | 'run' | 'hit' | 'dead',
+    state: 'idle' | 'walk' | 'run' | 'attack' | 'hit' | 'dead',
     facing: number,
     isBoss: boolean,
     hitStun: number
   ) {
-    let imgKey = `${prefix}_idle`;
-    let frameCount = 4;
-    let fps = 8;
+    const set = MOB_FRAMES[prefix];
+    if (!set) return;
 
-    if (state === 'hit' || hitStun > 0) {
-      imgKey = `${prefix}_hit`;
-      frameCount = 4;
-      fps = 8;
-    } else if (state === 'dead') {
-      imgKey = `${prefix}_death`;
-      frameCount = 4;
-      fps = 5;
-    } else if (state === 'run' || state === 'walk') {
-      imgKey = prefix === 'skel' ? 'skel_walk' : (prefix === 'eye' ? 'eye_flight' : `${prefix}_run`);
-      frameCount = prefix === 'skel' ? 4 : 8;
-      fps = 9;
-    }
+    let name: string;
+    if (state === 'dead') name = 'death';
+    else if (state === 'hit' || hitStun > 0) name = 'hit';
+    else if (state === 'attack') name = 'attack';
+    else if (state === 'run' || state === 'walk') name = 'move';
+    else name = 'idle';
 
-    const img = this.images[imgKey] || this.images[`${prefix}_idle`];
-    if (!img) return;
+    const anim = set.anims[name] || set.anims.idle;
+    const img = this.images[anim.key] || this.images[set.anims.idle.key];
+    if (!img || !img.complete || !img.naturalWidth) return;
 
     const frameW = 150;
     const frameH = 150;
-    const currentFrame = Math.floor(this.animTimer * fps) % frameCount;
+    // A death animation holds on its last frame instead of looping back to a
+    // standing corpse.
+    const raw = Math.floor(this.animTimer * anim.fps);
+    const frame = name === 'death'
+      ? Math.min(anim.frames - 1, raw % (anim.frames * 3))
+      : raw % anim.frames;
+
     const scale = isBoss ? 2.0 : 1.15;
     const destW = frameW * scale;
     const destH = frameH * scale;
 
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    ctx.translate(x, y);
+    ctx.translate(Math.round(x), Math.round(y));
 
-    if (facing > 0) {
-      ctx.scale(-1, 1);
-    }
+    // Source art faces right, the same convention the heroes use. This was
+    // inverted here, so every monster walked backwards.
+    if (facing < 0) ctx.scale(-1, 1);
 
-    if (hitStun > 0) {
-      ctx.filter = 'brightness(2.2) contrast(1.5)';
-    }
+    if (hitStun > 0) ctx.filter = 'brightness(2.2) contrast(1.5)';
+
+    // Feet land on y: drop the empty part of the frame, and centre on the
+    // creature rather than on the frame.
+    const dx = -destW / 2 - set.centreOff * scale;
+    const dy = -(frameH - set.feetGap) * scale;
 
     ctx.drawImage(
-      img,
-      currentFrame * frameW,
-      0,
-      frameW,
-      frameH,
-      -destW / 2,
-      -(destH - 85),
-      destW,
-      destH
+      img, frame * frameW, 0, frameW, frameH,
+      Math.round(dx), Math.round(dy), Math.round(destW), Math.round(destH)
     );
 
     ctx.restore();
   }
 
-  /**
-   * Draw Tiny RPG Orc 100x100 Sprite
-   */
   private drawOrcMob(
     ctx: CanvasRenderingContext2D,
     x: number,
     y: number,
-    state: 'idle' | 'walk' | 'run' | 'hit' | 'dead',
+    state: 'idle' | 'walk' | 'run' | 'attack' | 'hit' | 'dead',
     facing: number,
     isBoss: boolean,
     hitStun: number

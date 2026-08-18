@@ -129,6 +129,45 @@ type SkillCastProcProfile =
   | 'dash'
   | 'heal';
 
+/** How long a monster's attack animation is shown after a swing begins. */
+const ENEMY_ATTACK_ANIM = 0.55;
+
+/**
+ * Combat balance.
+ *
+ * The fight was one-sided in both directions at once. Skill multipliers run
+ * from 0.75 up to 7.8 and were applied to the full attack stat, so a mid skill
+ * killed most monsters outright, while defence was subtracted as a FLAT number
+ * on both sides - a slime with 12 attack against 22 defence dealt exactly the
+ * minimum of 1, every time.
+ *
+ * Flat subtraction is the root of it: it makes weak attackers useless and
+ * strong ones barely dented. Both sides now mitigate by a fraction that rises
+ * with defence but never reaches immunity, so a slime stays a slime and a boss
+ * still hurts. The scalars then set the pace of a fight.
+ */
+const BALANCE = {
+  /** Monster health, against the values written in the dungeon tables. */
+  enemyHp: 2.8,
+  /** Monster damage. */
+  enemyAtk: 1.6,
+  /** Player skill damage - the single biggest cause of one-hit clears. */
+  playerDamage: 0.55,
+  /** Crit was 1.8x on top of everything else. */
+  critMultiplier: 1.55,
+  /**
+   * Softening constant for defence. mitigation = def / (def + K), so K is the
+   * defence at which half of incoming damage is absorbed.
+   */
+  defenceK: 90,
+};
+
+/** Fraction of damage that gets through against a given defence. */
+function afterDefence(raw: number, def: number): number {
+  const mitigation = Math.max(0, def) / (Math.max(0, def) + BALANCE.defenceK);
+  return raw * (1 - mitigation);
+}
+
 export class SideViewEngine {
   public player: PlayerState;
   public enemies: EnemyInstance[] = [];
@@ -1051,7 +1090,7 @@ export class SideViewEngine {
 
   private calculateDamage(skill: SkillDefinition): number {
     const p = this.player;
-    const base = p.totalAtk * skill.damageMultiplier;
+    const base = p.totalAtk * skill.damageMultiplier * BALANCE.playerDamage;
     const variation = (Math.random() * 0.2 - 0.1) * base;
     return Math.max(1, Math.round(base + variation));
   }
@@ -1060,7 +1099,7 @@ export class SideViewEngine {
     const p = this.player;
     const isCrit = Math.random() < p.totalCrit;
     let baseDmg = Math.round(this.calculateDamage(skill) * multiplier);
-    if (isCrit) baseDmg = Math.round(baseDmg * 1.8);
+    if (isCrit) baseDmg = Math.round(baseDmg * BALANCE.critMultiplier);
 
     if (skill.isUltimate) {
       this.particles.triggerScreenShake(18, 0.65);
@@ -1105,8 +1144,9 @@ export class SideViewEngine {
   }
 
   public applyDamageToEnemy(enemy: EnemyInstance, rawDamage: number, isCrit: boolean, knockbackDir: number, fromRemote: boolean = false) {
-    const defenseReduction = enemy.def * 0.6;
-    const finalDamage = fromRemote ? Math.max(1, Math.round(rawDamage)) : Math.max(1, Math.round(rawDamage - defenseReduction));
+    const finalDamage = fromRemote
+      ? Math.max(1, Math.round(rawDamage))
+      : Math.max(1, Math.round(afterDefence(rawDamage, enemy.def)));
 
     enemy.hp -= finalDamage;
     enemy.hitStun = 0.25;
@@ -1888,16 +1928,20 @@ export class SideViewEngine {
 
         if (dist > enemy.attackRange) {
           enemy.vx = enemy.facing * enemy.speed;
+          enemy.isAttacking = false;
         } else {
           enemy.vx = 0;
-          // Attack player
-          if (this.isHost) {
-             enemy.attackTimer -= dt;
-             if (enemy.attackTimer <= 0) {
-               enemy.attackTimer = enemy.attackCooldown;
-               this.enemyAttackPlayer(enemy);
-             }
+          // The swing timer runs on every client so guests see the animation
+          // too; only the host resolves the damage.
+          enemy.attackTimer -= dt;
+          if (enemy.attackTimer <= 0) {
+            enemy.attackTimer = enemy.attackCooldown;
+            if (this.isHost) this.enemyAttackPlayer(enemy);
           }
+          // isAttacking existed on the enemy but nothing ever set it, so the
+          // attack sheets could never be reached. The flag is the window just
+          // after a swing starts, which is how long the animation runs.
+          enemy.isAttacking = enemy.attackTimer > enemy.attackCooldown - ENEMY_ATTACK_ANIM;
         }
       }
 
@@ -1925,9 +1969,8 @@ export class SideViewEngine {
     // caster is untouchable for the length of the cinematic.
     if (p.iframeTimer > 0 || p.stealthTimer > 0 || this.ultimate.invulnerable) return;
 
-    const rawDamage = enemy.atk * (1 + (Math.random() * 0.2 - 0.1));
-    const defReduction = p.totalDef * 0.5;
-    const finalDamage = Math.max(1, Math.round(rawDamage - defReduction));
+    const rawDamage = enemy.atk * BALANCE.enemyAtk * (1 + (Math.random() * 0.2 - 0.1));
+    const finalDamage = Math.max(1, Math.round(afterDefence(rawDamage, p.totalDef)));
 
     p.hp = Math.max(0, p.hp - finalDamage);
     p.iframeTimer = 0.4;
@@ -2204,7 +2247,11 @@ export class SideViewEngine {
           enemy.x,
           enemy.y,
           enemy.name,
-          enemy.hitStun > 0 ? 'hit' : (Math.abs(enemy.vx) > 0.1 ? 'run' : 'idle'),
+          // The attack sheets were never asked for: only hit, run and idle were
+          // ever passed, so no monster in the game had ever played an attack.
+          enemy.hitStun > 0 ? 'hit'
+            : enemy.isAttacking ? 'attack'
+            : (Math.abs(enemy.vx) > 0.1 ? 'run' : 'idle'),
           enemy.facing,
           enemy.type === 'boss',
           enemy.hitStun

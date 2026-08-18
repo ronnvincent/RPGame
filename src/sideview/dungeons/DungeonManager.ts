@@ -4,6 +4,19 @@
 
 import { ItemData, getRandomLoot } from '../items/ItemDatabase';
 
+/**
+ * Monster health multiplier applied at spawn.
+ *
+ * Paired with the damage scaling in SideViewEngine's BALANCE block - changing
+ * one without the other just moves the imbalance rather than removing it.
+ */
+const ENEMY_HP_SCALE = 2.8;
+
+/** Chance an ordinary monster leaves an item. */
+const MOB_DROP_CHANCE = 0.16;
+/** Chance an elite leaves one. Bosses always do. */
+const ELITE_DROP_CHANCE = 0.55;
+
 export interface EnemyStats {
   name: string;
   type: 'mob' | 'elite' | 'boss';
@@ -413,11 +426,15 @@ export function spawnWaveEnemies(
       const delayJitter = ((spawnOffsetIndex + i + enemyTemplate.name.length) % 8) * 0.06;
       const spawnDelay = Number((baseDelay + delayJitter).toFixed(2));
 
+      // Every elite and boss dropped, and ordinary monsters dropped 60% of the
+      // time, so loot arrived faster than it could mean anything. A boss still
+      // always drops - that is the reward for the fight - but everything below
+      // is now uncommon enough to be worth picking up.
       const loot = enemyTemplate.type === 'boss'
         ? getRandomLoot('boss')
         : enemyTemplate.type === 'elite'
-        ? getRandomLoot('mid')
-        : (Math.random() > 0.4 ? getRandomLoot('low') : undefined);
+        ? (Math.random() < ELITE_DROP_CHANCE ? getRandomLoot('mid') : undefined)
+        : (Math.random() < MOB_DROP_CHANCE ? getRandomLoot('low') : undefined);
 
       instances.push({
         id: `enemy_${waveIndex}_${enemyTemplate.name}_${i}_${Date.now()}`,
@@ -425,8 +442,11 @@ export function spawnWaveEnemies(
         type: enemyTemplate.type,
         icon: enemyTemplate.icon,
         color: enemyTemplate.color,
-        maxHp: enemyTemplate.maxHp,
-        hp: enemyTemplate.maxHp,
+        // Scaled at spawn rather than by rewriting every table: monsters died
+        // to a single mid-tier skill, which is what made a run end in a minute
+        // with nothing at stake.
+        maxHp: Math.round(enemyTemplate.maxHp * ENEMY_HP_SCALE),
+        hp: Math.round(enemyTemplate.maxHp * ENEMY_HP_SCALE),
         atk: enemyTemplate.atk,
         def: enemyTemplate.def,
         speed: enemyTemplate.speed,

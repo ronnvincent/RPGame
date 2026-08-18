@@ -13,7 +13,8 @@
     "test:friends": "node test/coop-friends.test.mjs",
     "test:assets": "node test/asset-paths.test.mjs",
     "test:maps": "node test/map-completeness.test.mjs",
-    "test:paths": "node tools/check-generated-paths.mjs"
+    "test:paths": "node tools/check-generated-paths.mjs",
+    "test:balance": "node test/combat-balance.test.mjs"
   },
   "keywords": [],
   "author": "",
