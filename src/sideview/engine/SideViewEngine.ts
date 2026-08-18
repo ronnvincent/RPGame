@@ -2355,10 +2355,15 @@ export class SideViewEngine {
         }
       }
 
-      // Vertical beacon of light for Epic and Legendary items
-      if (rConfig.beaconColor) {
+      // Vertical beacon of light for Epic and Legendary items.
+      //
+      // The property is beamColor; this asked for beaconColor, which is always
+      // undefined - so the condition was never true and the beacon that marks a
+      // legendary drop has never once been drawn. TypeScript reported it the
+      // whole time as one of the errors being carried.
+      if (rConfig.beamColor) {
         const beaconGrad = ctx.createLinearGradient(loot.x, bobY, loot.x, bobY - 260);
-        beaconGrad.addColorStop(0, rConfig.beaconColor);
+        beaconGrad.addColorStop(0, rConfig.beamColor);
         beaconGrad.addColorStop(1, 'transparent');
         ctx.fillStyle = beaconGrad;
         ctx.fillRect(loot.x - 4, bobY - 260, 8, 260);
@@ -2377,7 +2382,9 @@ export class SideViewEngine {
       // Glow halo
       ctx.shadowColor = glowColor;
       ctx.shadowBlur = 12;
-      ctx.fillStyle = rConfig.bg || 'rgba(255, 255, 255, 0.15)';
+      // bgColor, not bg: the fallback was doing all the work, so every rarity
+      // drew the same white halo.
+      ctx.fillStyle = rConfig.bgColor || 'rgba(255, 255, 255, 0.15)';
       ctx.beginPath();
       ctx.arc(loot.x, bobY, 16, 0, Math.PI * 2);
       ctx.fill();

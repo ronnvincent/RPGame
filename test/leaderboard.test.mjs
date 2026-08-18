@@ -82,6 +82,16 @@ try {
   check('the stored power is what comes back', entries[iStrong]?.power === 9100);
   check('with the class and level shown', entries[iStrong]?.className === 'Warrior' && entries[iStrong]?.level === 20);
   check('ranks are numbered from one', entries[0]?.rank === 1);
+
+  // The level board is the same rows in a different order, so the thing worth
+  // checking is that the order actually changes.
+  const byLevel = await fetch(`${URL}/api/leaderboard?limit=25&sort=level`).then((r) => r.json());
+  const lvlEntries = byLevel.entries || [];
+  const lvlStrong = lvlEntries.findIndex((e) => e.shortId === strong.shortId);
+  const lvlWeak = lvlEntries.findIndex((e) => e.shortId === weak.shortId);
+  check('there is a level board', Array.isArray(lvlEntries) && lvlEntries.length > 0);
+  check('the higher level ranks first on it', lvlStrong >= 0 && lvlWeak >= 0 && lvlStrong < lvlWeak);
+  check('and it is ordered by level, not power', lvlEntries.every((e, i, a) => i === 0 || a[i - 1].level >= e.level));
 } catch (err) {
   check(`the round trip completes (${err.message})`, false);
 }

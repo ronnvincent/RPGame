@@ -28,7 +28,8 @@
     "test:stakes": "node test/stakes.test.mjs",
     "test:encounters": "node test/encounters.test.mjs",
     "test:endgame": "node test/endgame.test.mjs",
-    "test:leaderboard": "node test/leaderboard.test.mjs"
+    "test:leaderboard": "node test/leaderboard.test.mjs",
+    "test:types": "node test/typecheck.test.mjs"
   },
   "keywords": [],
   "author": "",

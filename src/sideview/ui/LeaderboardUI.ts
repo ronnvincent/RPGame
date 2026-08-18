@@ -25,11 +25,16 @@ const API_URL = (() => {
 export class LeaderboardUI {
   private root: HTMLElement | null = null;
   private styled = false;
+  private sort: 'power' | 'level' = 'power';
+  private myPower = 0;
+  private myLevel = 1;
 
   constructor(private parent: HTMLElement) {}
 
-  public async open(myPower: number) {
+  public async open(myPower: number, myLevel: number = 1) {
     if (this.root) return;
+    this.myPower = myPower;
+    this.myLevel = myLevel;
     this.injectStyle();
 
     const root = document.createElement('div');
@@ -43,9 +48,13 @@ export class LeaderboardUI {
           </div>
           <button class="lb-close">✕</button>
         </div>
+        <div class="lb-tabs">
+          <button class="lb-tab lb-tab-on" data-sort="power">⚡ POWER</button>
+          <button class="lb-tab" data-sort="level">★ LEVEL</button>
+        </div>
         <div class="lb-mine">
-          <span class="lb-mine-label">YOUR POWER</span>
-          <span class="lb-mine-value">${myPower.toLocaleString()}</span>
+          <span class="lb-mine-label" id="lb-mine-label">YOUR POWER</span>
+          <span class="lb-mine-value" id="lb-mine-value">${myPower.toLocaleString()}</span>
         </div>
         <div class="lb-list" id="lb-list"><div class="lb-empty">Loading…</div></div>
       </div>`;
@@ -53,13 +62,35 @@ export class LeaderboardUI {
     this.root = root;
 
     root.querySelector('.lb-close')?.addEventListener('click', () => this.close());
+
+    root.querySelectorAll('.lb-tab').forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const sort = (tab as HTMLElement).dataset.sort as 'power' | 'level';
+        if (sort === this.sort) return;
+        this.sort = sort;
+        root.querySelectorAll('.lb-tab').forEach((t) => t.classList.toggle('lb-tab-on', t === tab));
+        const label = root.querySelector('#lb-mine-label');
+        const value = root.querySelector('#lb-mine-value');
+        if (label) label.textContent = sort === 'level' ? 'YOUR LEVEL' : 'YOUR POWER';
+        if (value) value.textContent = sort === 'level' ? String(this.myLevel) : this.myPower.toLocaleString();
+        audio.playClick();
+        this.load();
+      });
+    });
     root.addEventListener('click', (e) => { if (e.target === root) this.close(); });
 
+    this.load();
+  }
+
+  private async load() {
+    const root = this.root;
+    if (!root) return;
     const list = root.querySelector('#lb-list') as HTMLElement;
     const myId = localStorage.getItem('playerShortId');
+    list.innerHTML = `<div class="lb-empty">Loading…</div>`;
 
     try {
-      const res = await fetch(`${API_URL}/leaderboard?limit=25`);
+      const res = await fetch(`${API_URL}/leaderboard?limit=25&sort=${this.sort}`);
       const body = await res.json();
       const entries: Entry[] = body?.entries || [];
 
@@ -73,14 +104,18 @@ export class LeaderboardUI {
       list.innerHTML = entries.map((e) => {
         const mine = e.shortId === myId;
         const medal = e.rank === 1 ? '🥇' : e.rank === 2 ? '🥈' : e.rank === 3 ? '🥉' : '';
+        const figure = this.sort === 'level' ? `Lv. ${e.level}` : Number(e.power).toLocaleString();
+        const meta = this.sort === 'level'
+          ? `${e.className || 'Adventurer'} · ⚡ ${Number(e.power).toLocaleString()}`
+          : `${e.className || 'Adventurer'} · Lv. ${e.level}`;
         return `
           <div class="lb-row${mine ? ' lb-row-me' : ''}${e.rank <= 3 ? ' lb-row-top' : ''}">
             <span class="lb-rank">${medal || e.rank}</span>
             <span class="lb-name">
               ${e.name}${mine ? ' <span class="lb-you">YOU</span>' : ''}
-              <span class="lb-meta">${e.className || 'Adventurer'} · Lv. ${e.level}</span>
+              <span class="lb-meta">${meta}</span>
             </span>
-            <span class="lb-power">${Number(e.power).toLocaleString()}</span>
+            <span class="lb-power">${figure}</span>
           </div>`;
       }).join('');
     } catch {
@@ -138,6 +173,15 @@ export class LeaderboardUI {
         font-family: 'Cinzel', serif; font-size: 26px; font-weight: 900;
         color: #ffd700; text-shadow: 0 0 14px rgba(255, 215, 0, 0.45);
       }
+      .lb-tabs { display: flex; gap: 6px; padding: 10px 16px 0 16px; }
+      .lb-tab {
+        flex: 1; padding: 7px 10px; cursor: pointer;
+        background: rgba(0,0,0,0.3); border: 1px solid #6b4a24;
+        color: #cbb894; font-family: 'Cinzel', serif; font-weight: 900;
+        font-size: 11px; letter-spacing: 1px;
+      }
+      .lb-tab-on { background: rgba(255, 215, 0, 0.16); color: #ffd700; border-color: #ffd700; }
+
       .lb-list { overflow-y: auto; padding: 6px 12px 14px 12px; }
       .lb-row {
         display: grid; grid-template-columns: 38px 1fr auto;

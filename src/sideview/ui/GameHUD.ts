@@ -1615,7 +1615,7 @@ export class GameHUD {
     this.container.querySelector('#toggle-rank-btn')?.addEventListener('click', (e) => {
       e.stopPropagation();
       audio.playClick();
-      this.leaderboard.open(this.engine.computePower());
+      this.leaderboard.open(this.engine.computePower(), this.engine.player.level);
     });
 
     const potionSlot = this.container.querySelector('#potion-slot') as HTMLElement;

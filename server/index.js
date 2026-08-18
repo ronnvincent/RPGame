@@ -184,19 +184,28 @@ app.post('/api/save', async (req, res) => {
  */
 app.get('/api/leaderboard', async (req, res) => {
   const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 25));
+  // Two boards, one endpoint: the rows are identical and only the ordering
+  // differs, so splitting them would duplicate everything for one ORDER BY.
+  const byLevel = req.query.sort === 'level';
 
   if (!HAS_DB) {
     const rows = [...memUsers.values()]
-      .filter((u) => (u.power || 0) > 0)
-      .sort((a, b) => (b.power || 0) - (a.power || 0))
+      .filter((u) => (byLevel ? (u.power_level || 0) > 0 : (u.power || 0) > 0))
+      .sort((a, b) => byLevel
+        ? (b.power_level || 0) - (a.power_level || 0) || (b.power || 0) - (a.power || 0)
+        : (b.power || 0) - (a.power || 0))
       .slice(0, limit)
       .map((u, i) => ({ rank: i + 1, name: u.username, shortId: u.short_id, power: u.power || 0, className: u.power_class || null, level: u.power_level || 1 }));
     return res.json({ success: true, entries: rows });
   }
 
   try {
+    // Ties on level fall back to power, so the board has a stable order rather
+    // than shuffling between requests.
     const result = await pool.query(
-      'SELECT username, short_id, power, power_class, power_level FROM users WHERE power > 0 ORDER BY power DESC LIMIT $1',
+      byLevel
+        ? 'SELECT username, short_id, power, power_class, power_level FROM users WHERE power_level > 0 ORDER BY power_level DESC, power DESC LIMIT $1'
+        : 'SELECT username, short_id, power, power_class, power_level FROM users WHERE power > 0 ORDER BY power DESC LIMIT $1',
       [limit]
     );
     res.json({
