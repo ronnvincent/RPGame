@@ -690,7 +690,6 @@ export class SideViewEngine {
         timer: skill.buff.duration
       });
       this.recomputeStats();
-      this.particles.addHolyPillar(p.x, p.y);
       this.particles.addFloatingText(p.x, p.y - 30, `BUFF +${Math.round((skill.buff.multiplier - 1) * 100)}% ${skill.buff.stat.toUpperCase()}`, '#ffee58', true, 16);
     }
 
@@ -699,8 +698,6 @@ export class SideViewEngine {
       p.vy = 14;
       p.attackTimer = 0.4;
       p.animState = 'attack';
-      this.particles.addSpellSlash(p.x, p.y + 10, p.facing, 1.8, '#ffd700');
-      this.particles.addImpactBurst(p.x, p.y, 14, '#ff9800', 'spark');
       return;
     }
 
@@ -718,15 +715,12 @@ export class SideViewEngine {
         // Step 2: Uppercut spin slash (lifts targets slightly)
         p.comboStep = 2;
         p.attackTimer = 0.25;
-        this.particles.addSpellSlash(attackX, attackY - 20, p.facing, 1.6, p.characterClass.accentColor);
         this.executeAreaDamage(attackX, attackY, skill, 1.35);
       } else {
         // Step 3: Heavy ground smash finisher with screen shake
         p.comboStep = 0;
         p.attackTimer = 0.35;
         this.particles.triggerScreenShake(10, 0.3);
-        this.particles.addGroundExplosion(attackX, this.groundY - 30, 1.7);
-        this.particles.addImpactBurst(attackX, attackY, 20, '#ff9800', 'spark');
         this.executeAreaDamage(attackX, attackY, skill, 1.9);
       }
       return;
@@ -742,15 +736,12 @@ export class SideViewEngine {
       return;
     }
     if (skill.id === 'ni_3') {
-      this.particles.addImpactBurst(p.x, p.y - 15, 20, '#94a3b8', 'smoke');
       p.x = Math.max(60, Math.min(this.arenaWidth - 60, p.x + p.facing * 200));
       p.iframeTimer = 0.4;
-      this.particles.addSpellSlash(p.x, p.y - 15, p.facing, 1.4, '#4ade80');
       this.executeAreaDamage(p.x, p.y, skill);
       return;
     }
     if (skill.id === 'ni_4') {
-      this.particles.addFlameLash(p.x + p.facing * 50, p.y - 20, p.facing, 1.8);
       this.executeAreaDamage(p.x + p.facing * 70, p.y, skill);
       return;
     }
@@ -773,13 +764,10 @@ export class SideViewEngine {
     if (skill.id === 'n_5') {
       if (this.recentCorpsePositions.length > 0) {
         this.recentCorpsePositions.forEach(pos => {
-          this.particles.addDarkPillar(pos.x, pos.y);
-          this.particles.addGroundExplosion(pos.x, pos.y - 20, 1.6);
           this.executeAreaDamage(pos.x, pos.y, skill);
         });
         this.recentCorpsePositions = [];
       } else {
-        this.particles.addDarkPillar(attackX, this.groundY);
         this.executeAreaDamage(attackX, attackY, skill);
       }
       return;
@@ -794,22 +782,16 @@ export class SideViewEngine {
     if (skill.id === 'as_3') {
       p.stealthTimer = 4.0;
       p.iframeTimer = 0.5;
-      this.particles.addDarkPillar(p.x, p.y);
-      this.particles.addImpactBurst(p.x, p.y - 20, 25, '#7e22ce', 'smoke');
       return;
     }
     if (skill.id === 'as_4') {
-      this.particles.addFanOfKnives(p.x, p.y, damage, p.totalCrit);
       return;
     }
     if (skill.id === 'as_5') {
       const closest = this.getClosestEnemy(350);
       if (closest) {
-        this.particles.addImpactBurst(p.x, p.y - 15, 12, '#9333ea', 'smoke');
         p.x = closest.x + (closest.facing * -40);
         p.facing = closest.facing;
-        this.particles.addSpellSlash(closest.x, closest.y - 15, p.facing, 1.8, '#ef4444');
-        this.particles.addImpactBurst(closest.x, closest.y - 15, 20, '#ef4444', 'spark');
         this.applyDamageToEnemy(closest, Math.round(damage * 1.5), true, p.facing);
       } else {
         p.x += p.facing * 180;
@@ -830,7 +812,6 @@ export class SideViewEngine {
 
     // 4. ARCHER: RAIN OF ARROWS, POISON TRAP, ASTRAL DRAGON PIERCER
     if (skill.id === 'ar_2') {
-      this.particles.addImpactBurst(attackX, this.groundY - 10, 15, '#22c55e', 'spark');
       for (let i = 0; i < 12; i++) {
         setTimeout(() => {
           this.particles.addProjectile(
@@ -864,7 +845,6 @@ export class SideViewEngine {
     if (skill.id === 'm_3') {
       const nearby = this.getClosestEnemies(p.x, p.y, 4, 380);
       const points = [{ x: p.x, y: p.y - 20 }, ...nearby.map(e => ({ x: e.x, y: e.y - 15 }))];
-      this.particles.addChainLightning(points);
       nearby.forEach(e => {
         this.applyDamageToEnemy(e, damage, isCrit, p.facing);
       });
@@ -898,13 +878,11 @@ export class SideViewEngine {
         p.x = attackX;
         p.vy = 18;
         this.particles.triggerScreenShake(14, 0.5);
-        this.particles.addGroundExplosion(attackX, this.groundY - 20, 1.8);
         this.executeAreaDamage(attackX, attackY, skill);
       }, 250);
       return;
     }
     if (skill.id === 'd_3') {
-      this.particles.addFlameLash(p.x + p.facing * 50, p.y - 15, p.facing, 1.8);
       this.executeAreaDamage(p.x + p.facing * 60, p.y, skill);
       return;
     }
@@ -916,7 +894,6 @@ export class SideViewEngine {
 
     // 8. WARRIOR: WHIRLWIND, BLADE DASH, TITAN CATACLYSM EARTH SHATTER
     if (skill.id === 'w_2') {
-      this.particles.addFireSpin(p.x, p.y - 20, 1.8);
       this.executeAreaDamage(p.x, p.y, skill);
       setTimeout(() => this.executeAreaDamage(p.x, p.y, skill), 150);
       setTimeout(() => this.executeAreaDamage(p.x, p.y, skill), 300);
@@ -924,8 +901,6 @@ export class SideViewEngine {
     }
     if (skill.id === 'w_5') {
       p.x = Math.max(60, Math.min(this.arenaWidth - 60, p.x + p.facing * 220));
-      this.particles.addSpellSlash(p.x, p.y - 15, p.facing, 1.8, '#ffffff');
-      this.particles.addImpactBurst(p.x, p.y - 15, 15, '#e53935', 'trail');
       this.executeAreaDamage(p.x, p.y, skill);
       return;
     }
@@ -961,7 +936,6 @@ export class SideViewEngine {
       const healAmount = Math.round(p.maxHp * 0.35 + p.totalAtk * 1.5);
       p.hp = Math.min(p.maxHp, p.hp + healAmount);
       this.particles.addFloatingText(p.x, p.y - 30, `+${healAmount} HP`, '#66bb6a', true, 20);
-      this.particles.addHolyPillar(p.x, p.y);
       return;
     }
 
