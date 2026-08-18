@@ -371,3 +371,19 @@ export function allVfxImagePaths(): string[] {
   }
   return [...set];
 }
+
+/**
+ * Seconds one play of an effect lasts.
+ *
+ * Needed so a sequence can stop spawning in time for the last effect to finish
+ * exactly when it should, instead of leaving one hanging past the end.
+ */
+export function vfxDuration(id: string): number {
+  const def = VFX[id];
+  if (!def) return 0;
+  const l = def.layout;
+  const frames = l.kind === 'frames' ? l.paths.length
+               : l.kind === 'strip' ? l.count
+               : (l.count ?? l.cols * l.rows);
+  return def.fps > 0 ? frames / def.fps : 0;
+}

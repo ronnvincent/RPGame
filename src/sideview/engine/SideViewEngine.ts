@@ -6,11 +6,13 @@
 
 import { CharacterClass, SkillDefinition, CHARACTER_CLASSES } from '../classes/ClassDefinitions';
 import { POLY_SHEETS, POLY_PROPS, POLY_HOUSES, POLY_NATURE } from './MapLibrary';
+import { ULTIMATE_VOICES } from './SfxLibrary';
+import { vfxDuration } from './VfxLibrary';
 import { BattleTheme, EnemyInstance } from '../dungeons/DungeonManager';
 import { ItemData, RARITY_CONFIGS } from '../items/ItemDatabase';
 import { ParticleSystem } from './ParticleSystem';
 import { FX_COLOUR_ROW } from './VfxLibrary';
-import { UltimateDirector, ULTIMATE_LINES } from './UltimateDirector';
+import { UltimateDirector, ULTIMATE_LINES, ULT_LEAD_IN } from './UltimateDirector';
 import { audio } from './AudioManager';
 import { sprites } from './SpriteManager';
 import { quests } from '../quests/QuestManager';
@@ -161,6 +163,7 @@ export class SideViewEngine {
   private attackHold: number = 0;
   /** Short global cooldown between casts, independent of the swing animation. */
   private castLock: number = 0;
+  private ultWaveTimers: number[] = [];
   private playerSyncTimer: number = 0;
   public townHub: TownHub | null = null;
   public readonly portalX: number = 2560;
@@ -298,6 +301,7 @@ export class SideViewEngine {
   }
 
   public buildMapPlatforms(theme: BattleTheme) {
+    this.clearUltimateWaves();
     this.platforms = [];
     const gy = this.groundY;
 
@@ -587,10 +591,20 @@ export class SideViewEngine {
     if (skill.isUltimate) {
       const cls = CHARACTER_CLASSES.find(c => c.id === classId);
       const line = ULTIMATE_LINES[classId] || skill.name.toUpperCase();
-      audio.playId('ult_charge', 0.9);
+
+      // A class with a recorded voice line is timed to it: the clip starts with
+      // the cinematic, and the effects are spread so the last one finishes as
+      // the clip does. Classes without one keep the short charge sting.
+      const voice = ULTIMATE_VOICES[classId];
+      if (voice) audio.playId(voice.id, 1.0);
+      else audio.playId('ult_charge', 0.9);
+
       this.ultimate.start(line, cls?.accentColor || '#ffd77a', () => {
-        this.playUltimatePayload(skill, originX, originY, facing, row);
-      });
+        this.playUltimatePayload(
+          skill, originX, originY, facing, row,
+          voice ? Math.max(0, voice.duration - ULT_LEAD_IN) : 0
+        );
+      }, voice?.duration ?? 0);
     }
 
     if (vfx.screen) {
@@ -613,29 +627,57 @@ export class SideViewEngine {
     x: number,
     y: number,
     facing: number,
-    row: number
+    row: number,
+    holdFor = 0
   ) {
     const big = skill.vfx.ultimate || 'ult_epic_explosion_002';
     const spread = Math.max(110, skill.aoeRadius);
 
+    this.clearUltimateWaves();
     this.hitStopTimer = 0.06;
-    if (skill.sound) audio.playId(skill.sound, 1.15);
+
+    // Only the opening beat shakes and flashes. Repeating either for the length
+    // of a voice line would be unwatchable, and the screen shake was already
+    // reported as too violent.
+    if (!holdFor && skill.sound) audio.playId(skill.sound, 1.15);
     this.particles.triggerScreenShake(skill.vfx.screen?.shake ?? 26, 0.35);
     if (skill.vfx.screen?.flash) {
       this.particles.addScreenFlash(skill.vfx.screen.flash, 0.7, 0.05);
     }
 
-    // A centred hero blast, then a staggered ring around it so the AoE reads
-    // as an area rather than a single puff.
+    // The hero blast lands first, centred and largest.
     this.particles.playVfx(big, x + facing * 40, y - 40, { facing, row, scale: 1.35 });
-    for (let i = 0; i < 3; i++) {
+
+    // Then the effect is sustained for exactly as long as there is left to fill.
+    // Waves are paced so the final one *finishes* on the last frame of the clip
+    // rather than starting there and outliving it. Without a voice line this
+    // falls back to the original three quick echoes.
+    const effectLen = vfxDuration(big) || 0.5;
+    const window_ = holdFor > 0 ? Math.max(0, holdFor - effectLen) : 0.3;
+    const spacing = holdFor > 0 ? 0.42 : 0.09;
+
+    for (let t = holdFor > 0 ? spacing : 0.12, i = 0; t <= window_ + 1e-6; t += spacing, i++) {
       const ox = x + facing * 40 + (Math.random() * 2 - 1) * spread;
       const oy = y - 20 - Math.random() * 70;
-      window.setTimeout(
-        () => this.particles.playVfx(big, ox, oy, { facing, row, scale: 0.8 + Math.random() * 0.6 }),
-        120 + i * 90
-      );
+      const scale = 0.8 + Math.random() * 0.6;
+      this.ultWaveTimers.push(window.setTimeout(
+        () => this.particles.playVfx(big, ox, oy, { facing, row, scale }),
+        t * 1000
+      ));
+      if (i > 60) break;
     }
+  }
+
+  /**
+   * Cancels pending ultimate waves.
+   *
+   * They run on wall-clock timers - deliberately, since they are matched to an
+   * audio clip that does not slow down with the world - so leaving a dungeon
+   * mid-ultimate would otherwise spawn effects into the next scene.
+   */
+  private clearUltimateWaves() {
+    for (const id of this.ultWaveTimers) window.clearTimeout(id);
+    this.ultWaveTimers = [];
   }
 
   private playSkillSetPiece(

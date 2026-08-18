@@ -27,6 +27,7 @@ const BATTLE = '/assets/audio/sfx/RPG Sound Pack/battle';
 const SPELL = '/assets/audio/spell-sfx';
 const CC0 = '/assets/audio/cc0-sfx';
 const RPGG = '/assets/audio/rpgg-sfx';
+const ULTVOICE = '/assets/audio/ultimates';
 
 const s = (src: string, volume: number, rate = 1.0, maxDuration?: number): SfxDef =>
   ({ src, volume, rate, maxDuration });
@@ -102,5 +103,44 @@ export type SfxId = keyof typeof SFX;
 
 /** Every distinct file, for warming and validation. */
 export function allSfxPaths(): string[] {
-  return [...new Set(Object.values(SFX).map(d => d.src))];
+  // Voice lines are deliberately excluded. They are two orders of magnitude
+  // larger than the foley - a full set is comparable to the entire rest of the
+  // catalogue - and only one of them can ever play, since a player has one
+  // class. Warming all ten at startup is the same mistake that made casting
+  // lag before; warmUltimateVoice fetches just the one that matters.
+  const voices = new Set(Object.values(ULTIMATE_VOICES).map((v) => v.id));
+  return [...new Set(
+    Object.entries(SFX).filter(([id]) => !voices.has(id)).map(([, d]) => d.src)
+  )];
+}
+
+/**
+ * The voice line each class gets on its ultimate, with the clip's exact length.
+ *
+ * Measured at build time rather than read from an Audio element: by the time a
+ * browser reports duration the cinematic has already begun, and a clip still
+ * buffering reports NaN.
+ */
+export interface UltimateVoice {
+  /** Key registered into SFX below. */
+  id: string;
+  src: string;
+  /** Seconds, measured from the file. */
+  duration: number;
+}
+
+// BEGIN GENERATED ultimate voices
+// Regenerate with: node tools/sync-ultimate-voices.mjs
+// Durations are measured from the files, never estimated - the director has to
+// know how long to hold before it draws its first frame.
+export const ULTIMATE_VOICES: Record<string, UltimateVoice> = {
+  archer: { id: 'ult_voice_archer', src: `${ULTVOICE}/archer-ultimate.ogg`, duration: 6.526 },
+  warrior: { id: 'ult_voice_warrior', src: `${ULTVOICE}/warrior-ultimate.ogg`, duration: 6.973 },
+};
+// END GENERATED ultimate voices
+
+// Voice clips play in full, so no maxDuration: the cinematic is timed to the
+// clip, not the clip cut to fit the cinematic.
+for (const voice of Object.values(ULTIMATE_VOICES)) {
+  SFX[voice.id] = { src: voice.src, volume: 0.9, rate: 1.0 };
 }

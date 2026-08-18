@@ -3,7 +3,7 @@
  * Uses AudioBuffers for ZERO-LAG sound effects and DynamicsCompressor for safe volumes.
  */
 
-import { SFX, allSfxPaths } from './SfxLibrary';
+import { SFX, allSfxPaths, ULTIMATE_VOICES } from './SfxLibrary';
 class AudioManager {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
@@ -189,6 +189,19 @@ class AudioManager {
     paths.forEach((src, i) => {
       window.setTimeout(() => { this.getAudioBuffer(src).catch(() => {}); }, i * 60);
     });
+  }
+
+  /**
+   * Decode the one ultimate voice line this player can actually trigger.
+   *
+   * Kept separate from warmSounds because these clips are large: decoding the
+   * whole set would cost more than every other sound combined, to play at most
+   * one of them.
+   */
+  public warmUltimateVoice(classId: string) {
+    const voice = ULTIMATE_VOICES[classId];
+    if (!voice) return;
+    this.getAudioBuffer(voice.src).catch(() => {});
   }
 
   public playSlash(type: 'light' | 'heavy' | 'dagger' | 'spear' = 'light', tone = 1) {

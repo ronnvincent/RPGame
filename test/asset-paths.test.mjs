@@ -34,37 +34,43 @@ for (const f of SOURCES) {
   }
 }
 
-// 2. Sound catalogue paths are built from template literals, so resolve the
-//    two base constants rather than regexing the raw string.
-const sfxSrc = readFileSync('src/sideview/engine/SfxLibrary.ts', 'utf8');
-const BASES = {
-  BATTLE: '/assets/audio/sfx/RPG Sound Pack/battle',
-  SPELL: '/assets/audio/spell-sfx',
-};
-for (const m of sfxSrc.matchAll(/\$\{(BATTLE|SPELL)\}\/([^`]+)`/g)) {
-  const rel = BASES[m[1]] + '/' + m[2];
-  need(rel, 'SfxLibrary.ts');
+// 2 & 3. Sound and map paths are built from template literals. Read the base
+//    constants out of each file rather than listing them here: the old version
+//    hardcoded BATTLE and SPELL, so entries under CC0, RPGG and any newly added
+//    base were silently skipped - a guard that quietly checks nothing is worse
+//    than no guard, because it reads as a pass.
+const BASE_RE = /const (\w+)\s*=\s*'(\/assets\/[^']*)'/g;
+const TEMPLATE_RE = /\$\{(\w+)\}([^`]*)`/g;
+const ASSET_EXT = /\.(png|wav|ogg|mp3|jpg)$/;
+
+function basesOf(src) {
+  const bases = {};
+  for (const m of src.matchAll(BASE_RE)) bases[m[1]] = m[2];
+  return bases;
 }
 
-// 3. Map layer paths, also built from template literals.
-const mapSrc = readFileSync('src/sideview/engine/MapLibrary.ts', 'utf8');
-const MAP_BASES = {
-  POLY: '/assets/maps/PolyStyle',
-  FOREST: '/assets/maps/parallax_forest/parallax_forest',
-  CITY: '/assets/maps/Futuristic City Parallax',
-  DUSK: '/assets/mountain-dusk/MountainsLayers',
-  SEA: '/assets/underwater/PNG/layers',
-  BOG: '/assets/swamp/Evironment',
-  GROTTO: '/assets/warped-files/warped-files/Assets/PNG/environment/layers',
-  GOTHIC: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/environment/layers',
-};
-let mapLayers = 0;
-for (const m of mapSrc.matchAll(/\$\{(POLY|FOREST|CITY|DUSK|SEA|BOG|GROTTO|GOTHIC)\}\/([^`]+)`/g)) {
-  mapLayers++;
-  const rel = MAP_BASES[m[1]] + '/' + m[2];
-  need(rel, 'MapLibrary.ts');
+function checkTemplates(file, label) {
+  const src = readFileSync(file, 'utf8');
+  const bases = basesOf(src);
+  let count = 0;
+  for (const m of src.matchAll(TEMPLATE_RE)) {
+    const base = bases[m[1]];
+    if (!base) continue;
+    const rel = base + m[2];
+    if (!ASSET_EXT.test(rel)) continue;
+    need(rel, label);
+    count++;
+  }
+  return { count, names: Object.keys(bases) };
 }
-console.log(`map layers: ${mapLayers} referenced`);
+
+const sfxFile = 'src/sideview/engine/SfxLibrary.ts';
+const sfxSrc = readFileSync(sfxFile, 'utf8');
+const sfx = checkTemplates(sfxFile, 'SfxLibrary.ts');
+console.log(`sound files referenced: ${sfx.count}  (bases: ${sfx.names.join(', ')})`);
+
+const map = checkTemplates('src/sideview/engine/MapLibrary.ts', 'MapLibrary.ts');
+console.log(`map layers: ${map.count} referenced  (bases: ${map.names.join(', ')})`);
 
 // 4. Every skill's sound id must exist in the catalogue.
 const catalogueIds = new Set(

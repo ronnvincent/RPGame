@@ -11,7 +11,8 @@
     "test:lobby": "node test/coop-lobby.test.mjs",
     "test:rooms": "node test/coop-room-integrity.test.mjs",
     "test:friends": "node test/coop-friends.test.mjs",
-    "test:assets": "node test/asset-paths.test.mjs"
+    "test:assets": "node test/asset-paths.test.mjs",
+    "test:ulti": "node test/ultimate-timing.test.mjs"
   },
   "keywords": [],
   "author": "",
