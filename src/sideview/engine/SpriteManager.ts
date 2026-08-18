@@ -20,6 +20,7 @@
 
 import { ITEM_DATABASE } from '../items/ItemDatabase';
 import { HERO_SPRITES, HERO_FPS, heroFrame, attackAnimFor } from './HeroSprites';
+import { MAPS, MapLayer } from './MapLibrary';
 
 type BattleTheme = 'catacombs' | 'crypt' | 'inferno' | 'void' | 'town' | 'swamp' | 'mountain' | 'underwater' | 'caves';
 
@@ -2429,6 +2430,78 @@ export class SpriteManager {
    * Draw Clean, High-Contrast Parallax Backgrounds, Themed Grounds, and Atmosphere
    * Uses 100% Authentic GothicVania Environment Layers & Tilesets
    */
+
+  /**
+   * Generic parallax renderer. A layer is tiled horizontally so it never runs
+   * out, offset by the camera times its scroll factor.
+   *
+   * Returns false when the theme has no data-driven map, so drawEnvironment can
+   * fall through to its original hand-written branch for themes whose art has
+   * not been replaced yet.
+   */
+  private drawParallaxTheme(
+    ctx: CanvasRenderingContext2D,
+    theme: string,
+    camX: number,
+    width: number,
+    height: number
+  ): boolean {
+    const map = MAPS[theme];
+    if (!map) return false;
+
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = map.sky;
+    ctx.fillRect(0, 0, width, height);
+
+    const now = Date.now() / 1000;
+    for (const layer of map.layers) {
+      const img = this.getImage(layer.src);
+      if (!img || !img.complete || !img.naturalWidth) continue;
+      this.drawParallaxLayer(ctx, layer, img, camX, width, height, now);
+    }
+    ctx.restore();
+    return true;
+  }
+
+  private drawParallaxLayer(
+    ctx: CanvasRenderingContext2D,
+    layer: MapLayer,
+    img: HTMLImageElement,
+    camX: number,
+    width: number,
+    height: number,
+    now: number
+  ) {
+    const sx = layer.rect?.sx ?? 0;
+    const sy = layer.rect?.sy ?? 0;
+    const sw = layer.rect?.sw ?? img.naturalWidth;
+    const sh = layer.rect?.sh ?? img.naturalHeight;
+    if (sw <= 0 || sh <= 0) return;
+
+    const destH = layer.heightFrac ? height * layer.heightFrac
+                : layer.anchor === 'fill' ? height
+                : height;
+    const destW = Math.max(1, Math.round(sw * (destH / sh)));
+
+    let destY = 0;
+    if (layer.anchor === 'bottom') destY = height - destH;
+    destY += layer.offsetY ?? 0;
+
+    // Camera scroll plus any independent drift, wrapped into one tile width.
+    const shift = camX * layer.scroll + (layer.drift ? now * layer.drift : 0);
+    let startX = -(((shift % destW) + destW) % destW) - destW;
+
+    ctx.save();
+    if (layer.alpha !== undefined) ctx.globalAlpha = layer.alpha;
+    if (layer.blend) ctx.globalCompositeOperation = layer.blend;
+
+    for (let x = startX; x < width + destW; x += destW) {
+      ctx.drawImage(img, sx, sy, sw, sh, Math.round(x), Math.round(destY), destW, Math.ceil(destH));
+    }
+    ctx.restore();
+  }
+
   public drawEnvironment(
     ctx: CanvasRenderingContext2D,
     camX: number,
@@ -2441,6 +2514,12 @@ export class SpriteManager {
     const time = Date.now() / 1000;
     const safeCamX = Math.max(0, camX);
     const safeTheme = theme || 'catacombs';
+
+    // Data-driven maps take priority; themes without one fall through to the
+    // original hand-written branches below.
+    if (this.drawParallaxTheme(ctx, safeTheme, safeCamX, canvasWidth, canvasHeight)) {
+      return;
+    }
 
     ctx.save();
     ctx.imageSmoothingEnabled = false;

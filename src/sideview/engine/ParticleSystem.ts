@@ -8,6 +8,7 @@
 import { sprites } from './SpriteManager';
 import { SpriteSheet, AnimatedSprite, drawFrame } from './SpriteSheet';
 import { VFX, VfxDef, allVfxImagePaths } from './VfxLibrary';
+import { allMapImagePaths } from './MapLibrary';
 
 /** A catalogue effect currently playing at a world position. */
 interface SpriteVfxInstance {
@@ -893,7 +894,7 @@ export class ParticleSystem {
   public warmVfx() {
     if (this.vfxWarmed) return;
     this.vfxWarmed = true;
-    sprites.warmPaths(allVfxImagePaths());
+    sprites.warmPaths([...allVfxImagePaths(), ...allMapImagePaths()]);
   }
 
   /**

@@ -39,7 +39,22 @@ for (const m of sfxSrc.matchAll(/\$\{(BATTLE|SPELL)\}\/([^`]+)`/g)) {
   if (!existsSync('public' + rel)) missing.set(rel, 'SfxLibrary.ts');
 }
 
-// 3. Every skill's sound id must exist in the catalogue.
+// 3. Map layer paths, also built from template literals.
+const mapSrc = readFileSync('src/sideview/engine/MapLibrary.ts', 'utf8');
+const MAP_BASES = {
+  POLY: '/assets/maps/PolyStyle',
+  FOREST: '/assets/maps/parallax_forest/parallax_forest',
+  CITY: '/assets/maps/Futuristic City Parallax',
+};
+let mapLayers = 0;
+for (const m of mapSrc.matchAll(/\$\{(POLY|FOREST|CITY)\}\/([^`]+)`/g)) {
+  mapLayers++;
+  const rel = MAP_BASES[m[1]] + '/' + m[2];
+  if (!existsSync('public' + rel)) missing.set(rel, 'MapLibrary.ts');
+}
+console.log(`map layers: ${mapLayers} referenced`);
+
+// 4. Every skill's sound id must exist in the catalogue.
 const catalogueIds = new Set(
   [...sfxSrc.matchAll(/^  ([a-z_0-9]+):\s*s\(/gm)].map(m => m[1])
 );
