@@ -12,6 +12,7 @@
 import { readdirSync, copyFileSync, mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, basename, extname } from 'node:path';
 import { audioDuration } from './audio-duration.mjs';
+import { ULTIMATE_LINES } from '../src/sideview/engine/UltimateDirector.ts';
 
 const SOURCE = 'character-ulti-sound effects';
 const DEST = 'public/assets/audio/ultimates';
@@ -59,3 +60,17 @@ writeFileSync(CATALOGUE, updated);
 
 for (const v of voices) console.log(v.duration.toFixed(3).padStart(7) + ' s  ' + v.cls);
 console.log(voices.length + ' voice clip(s) synced to ' + DEST);
+
+// Classes without a clip are not broken - they fall back to the short charge
+// sting - so say which are still waiting rather than leaving it to memory.
+const have = new Set(voices.map((v) => v.cls));
+const missing = Object.keys(ULTIMATE_LINES).filter((c) => !have.has(c));
+console.log('');
+if (missing.length) {
+  console.log('still without a voice line (' + missing.length + '):');
+  for (const c of missing) console.log('  ' + c.padEnd(12) + '  ' + ULTIMATE_LINES[c]);
+  console.log('');
+  console.log('drop <class>-ultimate.ogg into "' + SOURCE + '" and run this again');
+} else {
+  console.log('every class has a voice line');
+}
