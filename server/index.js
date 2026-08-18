@@ -529,6 +529,10 @@ io.on('connection', (socket) => {
     const newRoomId = `room_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
     rooms[newRoomId] = {
       dungeonId: data.dungeonId,
+      // Sent by the host's client from the dungeon definition, so there is one
+      // source of truth for the requirement rather than a copy here that can
+      // fall behind.
+      minLevel: Number(data.minLevel) || 1,
       hostUuid: p.uuid,
       members: [p.uuid],
       ready: {},
@@ -704,6 +708,23 @@ io.on('connection', (socket) => {
 
     const targetName = targets[0].name;
 
+    // A friend who cannot enter the dungeon must not be invited into it. Both
+    // sides are told, because from the invitee's side an invite that silently
+    // never arrives is indistinguishable from a broken connection.
+    const required = room.minLevel || 1;
+    const targetLevel = targets[0].level || 1;
+    if (targetLevel < required) {
+      const msg = `${targetName} is Lv. ${targetLevel} - this dungeon needs Lv. ${required}.`;
+      targets.forEach(target => {
+        io.to(target.socketId).emit('invite_blocked', {
+          fromName: p.name,
+          msg: `${p.name} tried to invite you, but you are Lv. ${targetLevel} and this dungeon needs Lv. ${required}.`
+        });
+      });
+      if (callback) callback({ success: false, msg });
+      return;
+    }
+
     targets.forEach(target => {
       io.to(target.socketId).emit('invite_received', {
         fromName: p.name,
@@ -735,6 +756,16 @@ io.on('connection', (socket) => {
     }
     if (!alreadyMember && room.members.length >= MAX_PARTY) {
       socket.emit('invite_error', { msg: 'Party is full.' });
+      return;
+    }
+
+    // Checked again on the join itself: send_invite guards the common path, but
+    // the join is the moment that actually puts someone in the dungeon.
+    const joinLevel = (data.level || p.level || 1);
+    if (joinLevel < (room.minLevel || 1)) {
+      socket.emit('invite_error', {
+        msg: `You are Lv. ${joinLevel} - this dungeon needs Lv. ${room.minLevel}.`
+      });
       return;
     }
 

@@ -339,7 +339,8 @@ export class WorldMapUI {
    * leaving it with no listeners. Both are gone - CoopLobbyUI owns this now.
    */
   private showMatchmakingOverlay(locationId: string) {
-    network.createLobby(locationId, () => {}, () => {
+    const hostDungeon = DUNGEONS.find((d) => d.id === locationId);
+    network.createLobby(locationId, hostDungeon?.minLevel ?? 1, () => {}, () => {
       // dungeon_start: the host launched the run.
       this.close();
       this.onSelectLocation(locationId, network.isHost);

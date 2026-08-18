@@ -265,6 +265,19 @@ export class NetworkManager {
       this.onLobbyErrorCb?.(data?.msg || 'Could not create lobby.');
     });
 
+    // The host is told through the send_invite callback; this is the other half,
+    // so the person who was refused learns why instead of simply never being
+    // invited.
+    this.socket.on('invite_blocked', (data) => {
+      console.warn('[NET] invite_blocked:', data?.msg);
+      this.onLobbyErrorCb?.(data?.msg || 'You do not meet the level requirement for that dungeon.');
+    });
+
+    this.socket.on('invite_error', (data) => {
+      console.warn('[NET] invite_error:', data?.msg);
+      this.onLobbyErrorCb?.(data?.msg || 'Could not join that party.');
+    });
+
     this.socket.on('lobby_state', (state: LobbyState) => {
       this.debug('IN', 'lobby_state', { members: state?.members?.length });
       if (state?.roomId) this.setRoom(state.roomId);
@@ -349,7 +362,7 @@ export class NetworkManager {
     });
   }
 
-  public createLobby(dungeonId: string, onUpdate: (lobbyData: any) => void, onStart: (roomData: any) => void) {
+  public createLobby(dungeonId: string, minLevel: number, onUpdate: (lobbyData: any) => void, onStart: (roomData: any) => void) {
     if (!this.socket) this.connect();
 
     this.onLobbyUpdateCb = onUpdate;
@@ -358,7 +371,9 @@ export class NetworkManager {
     const uuid = localStorage.getItem('playerUUID');
     const name = localStorage.getItem('playerName');
     const shortId = localStorage.getItem('playerShortId');
-    this.socket?.emit('create_lobby', { dungeonId, uuid, name, shortId, ...this.profile });
+    // The requirement travels with the lobby rather than being duplicated in a
+    // second table on the server, which could then drift from the dungeons.
+    this.socket?.emit('create_lobby', { dungeonId, minLevel, uuid, name, shortId, ...this.profile });
   }
 
   public invitePlayer(targetShortId: string, onResponse: (msg: string, success: boolean) => void) {
