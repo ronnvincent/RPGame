@@ -20,45 +20,69 @@ export interface HeroSpriteSet {
    * time using frameW/frameH.
    */
   strips?: Record<string, string>;
+  /**
+   * Where the character actually sits inside its frame, measured by
+   * tools/measure-hero-anchors.mjs.
+   *
+   * The packs do not agree on framing. Chierit's put the character centred and
+   * standing on the bottom edge, so the draw code assumed that for everyone -
+   * but the necromancer sits 36px right of centre, and the dragoon and ninja
+   * leave 98px and 78px of empty space under their feet. That is why those
+   * three stood beside the platform or floated above it.
+   */
+  content?: {
+    /** Pixels the character's centre sits right of the frame's centre. */
+    centreOff: number;
+    /** Empty pixels between the feet and the bottom of the frame. */
+    feetGap: number;
+  };
 }
 
 export const HERO_SPRITES: Record<string, HeroSpriteSet> = {
   archer: {
     frameW: 288, frameH: 128, scale: 1.148,
-    anims: { air_atk: 10, atk1: 10, atk2: 15, atk3: 12, death: 19, defend: 19, hurt: 6, idle: 12, jump_down: 3, jump_up: 3, roll: 8, run: 10, sp_atk: 17 }
+    anims: { air_atk: 10, atk1: 10, atk2: 15, atk3: 12, death: 19, defend: 19, hurt: 6, idle: 12, jump_down: 3, jump_up: 3, roll: 8, run: 10, sp_atk: 17 },
+    content: { centreOff: -1.5, feetGap: 1 }
   },
   assassin: {
     frameW: 288, frameH: 128, scale: 1.148,
-    anims: { air_atk: 7, atk1: 8, atk2: 18, atk3: 26, death: 19, defend: 8, hurt: 6, idle: 8, jump_down: 3, jump_up: 3, roll: 6, run: 8, sp_atk: 30 }
+    anims: { air_atk: 7, atk1: 8, atk2: 18, atk3: 26, death: 19, defend: 8, hurt: 6, idle: 8, jump_down: 3, jump_up: 3, roll: 6, run: 8, sp_atk: 30 },
+    content: { centreOff: 5.0, feetGap: 1 }
   },
   berserker: {
     frameW: 288, frameH: 128, scale: 1.148,
-    anims: { air_atk: 7, atk1: 6, atk2: 12, atk3: 23, death: 18, defend: 13, hurt: 6, idle: 6, jump_down: 3, jump_up: 3, roll: 6, run: 8, sp_atk: 25 }
+    anims: { air_atk: 7, atk1: 6, atk2: 12, atk3: 23, death: 18, defend: 13, hurt: 6, idle: 6, jump_down: 3, jump_up: 3, roll: 6, run: 8, sp_atk: 25 },
+    content: { centreOff: 1.0, feetGap: 7 }
   },
   dragoon: {
-    frameW: 725, frameH: 445, scale: 0.33,
-    anims: { atk1: 40, idle: 40, run: 40 }
+    frameW: 725, frameH: 445, scale: 0.158,
+    anims: { atk1: 40, idle: 40, run: 40 },
+    content: { centreOff: 62.5, feetGap: 98 }
   },
   mage: {
     frameW: 288, frameH: 128, scale: 1.148,
-    anims: { air_atk: 8, atk1: 7, atk2: 7, atk3: 17, death: 15, defend: 9, hurt: 6, idle: 8, jump_down: 3, jump_up: 3, roll: 8, run: 8, sp_atk: 15 }
+    anims: { air_atk: 8, atk1: 7, atk2: 7, atk3: 17, death: 15, defend: 9, hurt: 6, idle: 8, jump_down: 3, jump_up: 3, roll: 8, run: 8, sp_atk: 15 },
+    content: { centreOff: 5.5, feetGap: 1 }
   },
   necromancer: {
-    frameW: 140, frameH: 93, scale: 1.581,
-    anims: { atk1: 10, death: 10, hurt: 3, idle: 8, run: 8, sp_atk: 9 }
+    frameW: 140, frameH: 93, scale: 0.855,
+    anims: { atk1: 10, death: 10, hurt: 3, idle: 8, run: 8, sp_atk: 9 },
+    content: { centreOff: 36.0, feetGap: 1 }
   },
   paladin: {
     frameW: 288, frameH: 128, scale: 1.148,
-    anims: { air_atk: 8, atk1: 11, atk2: 19, atk3: 28, death: 13, defend: 10, hurt: 6, idle: 8, jump_down: 3, jump_up: 3, roll: 8, run: 8, sp_atk: 18 }
+    anims: { air_atk: 8, atk1: 11, atk2: 19, atk3: 28, death: 13, defend: 10, hurt: 6, idle: 8, jump_down: 3, jump_up: 3, roll: 8, run: 8, sp_atk: 18 },
+    content: { centreOff: -14.0, feetGap: 1 }
   },
   priest: {
     frameW: 288, frameH: 128, scale: 1.148,
-    anims: { air_atk: 8, atk1: 7, atk2: 21, atk3: 27, idle: 8, jump_down: 3, jump_up: 3, roll: 6, run: 10 }
+    anims: { air_atk: 8, atk1: 7, atk2: 21, atk3: 27, idle: 8, jump_down: 3, jump_up: 3, roll: 6, run: 10 },
+    content: { centreOff: 2.0, feetGap: 1 }
   },
   ninja: {
     // LuizMelo Martial Hero - one horizontal strip per animation, 200x200
     // frames, measured with tools/analyze-spritesheet.mjs.
-    frameW: 200, frameH: 200, scale: 0.735,
+    frameW: 200, frameH: 200, scale: 0.890,
     anims: { idle: 8, run: 8, jump_up: 2, jump_down: 2, atk1: 6, atk2: 6, atk3: 6, hurt: 4, death: 6 },
     strips: {
       idle: '/assets/martial-hero/Sprites/Idle.png',
@@ -70,11 +94,13 @@ export const HERO_SPRITES: Record<string, HeroSpriteSet> = {
       atk3: '/assets/martial-hero/Sprites/Attack1.png',
       hurt: '/assets/martial-hero/Sprites/Take Hit.png',
       death: '/assets/martial-hero/Sprites/Death.png'
-    }
+    },
+    content: { centreOff: -5.5, feetGap: 78 }
   },
   warrior: {
     frameW: 288, frameH: 128, scale: 1.148,
-    anims: { air_atk: 8, atk1: 6, atk2: 8, atk3: 18, idle: 8, jump_down: 3, jump_up: 3, roll: 7, run: 8 }
+    anims: { air_atk: 8, atk1: 6, atk2: 8, atk3: 18, idle: 8, jump_down: 3, jump_up: 3, roll: 7, run: 8 },
+    content: { centreOff: 2.5, feetGap: 1 }
   }
 };
 

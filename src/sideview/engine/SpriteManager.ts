@@ -1005,14 +1005,22 @@ export class SpriteManager {
     const w = set.frameW * set.scale;
     const h = set.frameH * set.scale;
 
+    // Correct for how the pack framed the character, rather than assuming it
+    // is centred and standing on the bottom edge. Those assumptions hold for
+    // the Chierit sets and fail badly elsewhere: the necromancer sits 36px
+    // right of centre, and the dragoon and ninja leave 98px and 78px of empty
+    // frame below their feet, so they stood beside the platform or above it.
+    const centreOff = (set.content?.centreOff ?? 0) * set.scale;
+    const feetGap = (set.content?.feetGap ?? 0) * set.scale;
+
     ctx.save();
     ctx.imageSmoothingEnabled = false;
     ctx.translate(Math.round(x), Math.round(y));
     if (facing < 0) ctx.scale(-1, 1);
-    // Source frames are bottom-anchored on the character's feet.
     ctx.drawImage(
       img, sx, 0, set.frameW, set.frameH,
-      Math.round(-w / 2), Math.round(-h), Math.round(w), Math.round(h)
+      Math.round(-w / 2 - centreOff), Math.round(-h + feetGap),
+      Math.round(w), Math.round(h)
     );
     ctx.restore();
   }
