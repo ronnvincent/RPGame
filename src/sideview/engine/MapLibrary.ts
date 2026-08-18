@@ -82,6 +82,18 @@ export interface MapTheme {
    * the scenery rather than a hole behind it.
    */
   floor?: MapFloor;
+  /**
+   * Where the walkable surface sits inside this theme's layer art, as a
+   * fraction of image height, measured by tools/measure-ground-line.mjs.
+   *
+   * Packs that bake the ground into a full-scene layer put the surface at a
+   * fraction only the artist knows. Given it, the renderer scales and offsets
+   * the whole scene so that line falls exactly on the play line - which is what
+   * makes a character stand on the grass rather than in the dirt or above it.
+   * All layers of such a pack share one registration, so this belongs to the
+   * theme rather than to any single layer.
+   */
+  groundLine?: number;
 }
 
 export interface MapFloor {
@@ -103,6 +115,8 @@ export interface MapGround {
 
 const POLY = '/assets/maps/PolyStyle';
 const FOREST = '/assets/maps/forest-blue';
+const ANCIENT = '/assets/maps/ancient-forest';
+const EDER = '/assets/maps/eder-forest';
 
 // Five more layered sets were already sitting unused in public/assets - the
 // same story as the character packs. No download needed for these.
@@ -242,45 +256,59 @@ export const MAPS: Record<string, MapTheme> = {
     }
   },
 
-  // ---- Goblin Catacombs: the forest approach ----
-  // ---- Goblin Catacombs: the misty forest approach ----
+  // ---- Goblin Catacombs: the Ancient Forest pack ----
   //
-  // Digital Moons' pack, chosen over the two pixel-art alternatives for one
-  // technical reason: it is seamless and exactly 16:9, so at this viewport one
-  // tile is one screen. The previous forest was 3.75:1 and repeated three times
-  // across the view, which is what made the horizon look stamped out.
+  // The first pack here that brings its own ground rather than a backdrop alone,
+  // which is why the theme needs groundLine: every layer is one 16:9 scene with
+  // the walkable surface baked in at 0.8444 of the image height, measured with
+  // tools/measure-ground-line.mjs. The renderer scales the scene so that line
+  // falls on the play line, so the characters stand on the grass instead of a
+  // flat colour band standing in for earth.
   //
-  // Layer order and the note about lowering the mist are the artist's own, from
-  // the Read Me - the numbers run 01 nearest to 10 furthest, so this list is
-  // their order reversed.
+  // ForeGround and FrontBushes are drawn behind the characters despite their
+  // names - the environment is one pass, before any entity - so they read as
+  // undergrowth rather than as an overlay.
   catacombs: {
-    sky: '#0d1a24',
+    sky: '#121c14',
+    groundLine: 0.8444,
     layers: [
-      { src: `${FOREST}/10_Sky.png`, scroll: 0.02, anchor: 'bottom' },
-      { src: `${FOREST}/09_Forest.png`, scroll: 0.10, anchor: 'bottom' },
-      { src: `${FOREST}/08_Forest.png`, scroll: 0.18, anchor: 'bottom' },
-      { src: `${FOREST}/07_Forest.png`, scroll: 0.27, anchor: 'bottom' },
-      { src: `${FOREST}/06_Forest.png`, scroll: 0.37, anchor: 'bottom' },
-      { src: `${FOREST}/05_Particles.png`, scroll: 0.44, anchor: 'bottom', alpha: 0.8, drift: -5 },
-      { src: `${FOREST}/04_Forest.png`, scroll: 0.52, anchor: 'bottom' },
-      { src: `${FOREST}/03_Particles.png`, scroll: 0.63, anchor: 'bottom', alpha: 0.9, drift: -9 },
-      { src: `${FOREST}/02_Bushes.png`, scroll: 0.76, anchor: 'bottom' },
-      // The artist recommends dropping the mist's opacity rather than using it
-      // at full strength.
-      { src: `${FOREST}/01_Mist.png`, scroll: 0.58, anchor: 'bottom', alpha: 0.3, drift: -3 },
+      { src: `${ANCIENT}/BackGround.png`, scroll: 0.04 },
+      { src: `${ANCIENT}/Background Forest.png`, scroll: 0.12 },
+      { src: `${ANCIENT}/FarTrees.png`, scroll: 0.24 },
+      { src: `${ANCIENT}/MiddleTrees.png`, scroll: 0.42 },
+      { src: `${ANCIENT}/NearTrees.png`, scroll: 0.62 },
+      { src: `${ANCIENT}/Ground.png`, scroll: 1.0 },
+      { src: `${ANCIENT}/FrontBushes.png`, scroll: 1.0 },
+      { src: `${ANCIENT}/ForeGround.png`, scroll: 1.0 },
     ],
-    floor: { top: '#2b3f3a', body: '#0b1412' }
+    floor: { top: '#3d5a2e', body: '#1a1410' }
   },
+
 
 
 
   // ---- Void Nexus: the futuristic city reads as an astral rift ----
-  // ---- Void Nexus: awaiting new art ----
+  // ---- Void Nexus: the seamless blue forest ----
+  // Also not what the name suggests, for the same reason. Seamless and 16:9, so
+  // one tile is one screen.
   void: {
-    sky: '#120a1e',
-    layers: [],
-    floor: { top: '#3d2c58', body: '#0c0715' }
+    sky: '#0a1420',
+    groundLine: 0.8898,
+    layers: [
+      { src: `${FOREST}/10_Sky.png`, scroll: 0.02 },
+      { src: `${FOREST}/09_Forest.png`, scroll: 0.10 },
+      { src: `${FOREST}/08_Forest.png`, scroll: 0.18 },
+      { src: `${FOREST}/07_Forest.png`, scroll: 0.27 },
+      { src: `${FOREST}/06_Forest.png`, scroll: 0.37 },
+      { src: `${FOREST}/05_Particles.png`, scroll: 0.44, alpha: 0.8, drift: -5 },
+      { src: `${FOREST}/04_Forest.png`, scroll: 0.52 },
+      { src: `${FOREST}/03_Particles.png`, scroll: 0.63, alpha: 0.9, drift: -9 },
+      { src: `${FOREST}/02_Bushes.png`, scroll: 1.0 },
+      { src: `${FOREST}/01_Mist.png`, scroll: 0.58, alpha: 0.3, drift: -3 },
+    ],
+    floor: { top: '#26403a', body: '#0a1412' }
   },
+
 
 
   // ---- Twilight Peaks: the mountain-dusk layer set ----
@@ -334,14 +362,30 @@ export const MAPS: Record<string, MapTheme> = {
   },
 
   // ---- Crypt of the Damned: GothicVania ----
+  // ---- Crypt: Eder Muniz's forest ----
+  // Named for a crypt, dressed as a deep wood - the priority was that every
+  // dungeon have real ground, decoration and depth rather than a matching name.
+  // Twelve layers, two of them light shafts, ground line measured at 0.9319.
   crypt: {
-    sky: '#0d0b14',
+    sky: '#0c140d',
+    groundLine: 0.9319,
     layers: [
-      { src: `${GOTHIC}/background.png`, scroll: 0.05, anchor: 'fill' },
-      { src: `${GOTHIC}/middleground.png`, scroll: 0.30, anchor: 'bottom' },
+      { src: `${EDER}/Layer_0011_0.png`, scroll: 0.03 },
+      { src: `${EDER}/Layer_0010_1.png`, scroll: 0.08 },
+      { src: `${EDER}/Layer_0009_2.png`, scroll: 0.14 },
+      { src: `${EDER}/Layer_0008_3.png`, scroll: 0.21 },
+      { src: `${EDER}/Layer_0007_Lights.png`, scroll: 0.26, alpha: 0.55 },
+      { src: `${EDER}/Layer_0006_4.png`, scroll: 0.32 },
+      { src: `${EDER}/Layer_0005_5.png`, scroll: 0.42 },
+      { src: `${EDER}/Layer_0004_Lights.png`, scroll: 0.5, alpha: 0.45 },
+      { src: `${EDER}/Layer_0003_6.png`, scroll: 0.58 },
+      { src: `${EDER}/Layer_0002_7.png`, scroll: 0.7 },
+      { src: `${EDER}/Layer_0001_8.png`, scroll: 0.85 },
+      { src: `${EDER}/Layer_0000_9.png`, scroll: 1.0 },
     ],
-    floor: { top: '#2e2839', body: '#07060d' }
+    floor: { top: '#2f4a2a', body: '#10180f' }
   },
+
 };
 
 /** Themes still on the old hand-written renderer. */

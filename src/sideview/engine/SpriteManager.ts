@@ -2474,6 +2474,10 @@ export class SpriteManager {
     ctx.fillStyle = map.sky;
     ctx.fillRect(0, 0, width, height);
 
+    if (map.groundLine && map.floor) {
+      this.drawFloorBand(ctx, map.floor, width, height, horizonY);
+    }
+
     const now = Date.now() / 1000;
     for (const layer of map.layers) {
       const img = this.getImage(layer.src);
@@ -2481,14 +2485,25 @@ export class SpriteManager {
       if (layer.scatter && layer.scatter.length) {
         this.drawScatterLayer(ctx, layer, img, camX, width, height, horizonY, now);
       } else {
-        this.drawParallaxLayer(ctx, layer, img, camX, width, height, horizonY, now);
+        this.drawParallaxLayer(ctx, layer, img, camX, width, height, horizonY, now, map.groundLine);
       }
     }
 
-    // The earth goes on last, in front of the scenery. It is the surface the
-    // player stands on, not part of the backdrop - painted behind the layers it
-    // disappeared under any art that reached the bottom of the view, and the
-    // characters read as floating again with no ground line anywhere.
+    // Where the pack brings no ground of its own, the earth goes on last, in
+    // front of the scenery: it IS the surface being stood on, and painted
+    // behind it vanished under any art reaching the bottom of the view.
+    //
+    // A pack that bakes its own ground is the opposite case - there the band is
+    // only a backstop for the sliver below where the art ends, so it is painted
+    // first and the real ground covers it.
+    // return true, not return: this function reports whether it handled the
+    // theme. Bare `return` gave undefined, drawEnvironment read that as "not
+    // handled" and painted a legacy hand-written branch straight over the art
+    // that had just been drawn.
+    if (map.groundLine) {
+      ctx.restore();
+      return true;
+    }
     if (map.ground) this.drawGroundBand(ctx, map.ground, camX, width, height, horizonY);
     else if (map.floor) this.drawFloorBand(ctx, map.floor, width, height, horizonY);
 
@@ -2504,7 +2519,8 @@ export class SpriteManager {
     width: number,
     height: number,
     horizonY: number,
-    now: number
+    now: number,
+    groundLine?: number
   ) {
     const sx = layer.rect?.sx ?? 0;
     const sy = layer.rect?.sy ?? 0;
@@ -2512,9 +2528,12 @@ export class SpriteManager {
     const sh = layer.rect?.sh ?? img.naturalHeight;
     if (sw <= 0 || sh <= 0) return;
 
-    const destH = layer.heightFrac ? height * layer.heightFrac
-                : layer.anchor === 'fill' ? height
-                : height;
+    // A pack with a baked ground is scaled so its surface lands on the play
+    // line, and large enough that doing so still covers the view.
+    const destH = groundLine
+      ? Math.max(height, horizonY / groundLine)
+      : layer.heightFrac ? height * layer.heightFrac
+      : height;
     const destW = Math.max(1, Math.round(sw * (destH / sh)));
 
     // Anchor to the horizon, not the canvas floor. The ground platform sits at
@@ -2522,7 +2541,8 @@ export class SpriteManager {
     // canvas ran off the bottom of the screen - which is why the village strip
     // rendered half cut off.
     let destY = 0;
-    if (layer.anchor === 'bottom') destY = height - destH;
+    if (groundLine) destY = horizonY - destH * groundLine;
+    else if (layer.anchor === 'bottom') destY = height - destH;
     else if (layer.anchor === 'horizon') destY = horizonY - destH;
     destY += layer.offsetY ?? 0;
 
