@@ -94,7 +94,9 @@ export const HERO_FPS: Record<string, number> = {
  * the same swing. Falls back to atk1 when a set lacks the richer animations.
  */
 export function attackAnimFor(set: HeroSpriteSet, skillIndex: number): string {
-  const order = ['atk1', 'atk2', 'atk3', 'sp_atk', 'air_atk', 'atk3'];
+  // sp_atk is the artist's signature move for each character, so it belongs to
+  // the ultimate (slot 5) rather than a mid-list skill.
+  const order = ['atk1', 'atk2', 'atk3', 'atk1', 'atk2', 'sp_atk'];
   const want = order[Math.max(0, Math.min(order.length - 1, skillIndex))];
   return set.anims[want] ? want : 'atk1';
 }

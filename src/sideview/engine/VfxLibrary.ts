@@ -57,6 +57,7 @@ function vstrip(frameW: number, frameH: number, count: number): SheetLayout {
 // ---------------------------------------------------------------------------
 
 const FXP = '/assets/fxpack';
+const ULT = '/assets/ults';
 const ANIMPACK = `${FXP}/Animation Pack/Animation Pack`;
 const MAGIC = `${FXP}/free-pixel-magic-sprite-effects-pack/1 Magic`;
 const ATTACK = `${FXP}/ATTACK FREE`;
@@ -322,7 +323,37 @@ export const VFX: Record<string, VfxDef> = {
   water_splash: {
     src: `${ANSIMUZ}/Water splash/spritesheet.png`, layout: hstrip(26, 32, 3),
     fps: 16, scale: 2.0, anchor: 'bottom'
-  }
+  },
+
+  // ---------- ULTIMATES ----------
+  // Imported from the Gigapack using its own asset_list.txt for frame sizes,
+  // plus CraftPix 256px explosions and the FX Bundle. All play at the 15 FPS
+  // the Gigapack guide specifies. Scale 1.0 here because these are already
+  // large; the global VFX_SCALE still applies on top.
+  ult_epic_explosion_001: { src: `${ULT}/ult_epic_explosion_001.png`, layout: hstrip(128, 128, 13), fps: 15, scale: 1.0, blend: 'lighter' },
+  ult_epic_explosion_002: { src: `${ULT}/ult_epic_explosion_002.png`, layout: hstrip(192, 192, 15), fps: 15, scale: 1.0, blend: 'lighter' },
+  ult_stylized_explosion_003: { src: `${ULT}/ult_stylized_explosion_003.png`, layout: hstrip(128, 96, 14), fps: 15, scale: 1.0, blend: 'lighter' },
+  ult_symmetrical_explosion_004: { src: `${ULT}/ult_symmetrical_explosion_004.png`, layout: hstrip(96, 96, 12), fps: 15, scale: 1.0, blend: 'lighter' },
+  ult_symmetrical_impact_006: { src: `${ULT}/ult_symmetrical_impact_006.png`, layout: hstrip(160, 160, 8), fps: 15, scale: 1.0, blend: 'lighter' },
+  ult_directional_impact_003: { src: `${ULT}/ult_directional_impact_003.png`, layout: hstrip(80, 80, 6), fps: 15, scale: 1.0, blend: 'lighter' },
+  ult_round_light_burst_001: { src: `${ULT}/ult_round_light_burst_001.png`, layout: hstrip(256, 144, 9), fps: 15, scale: 1.0, blend: 'lighter' },
+  ult_lightning_strike_001: { src: `${ULT}/ult_lightning_strike_001.png`, layout: hstrip(128, 128, 7), fps: 15, scale: 1.0, blend: 'lighter' },
+  ult_lightning_burst_003: { src: `${ULT}/ult_lightning_burst_003.png`, layout: hstrip(96, 96, 10), fps: 15, scale: 1.0, blend: 'lighter' },
+  ult_spell_death_001: { src: `${ULT}/ult_spell_death_001.png`, layout: hstrip(64, 64, 50), fps: 15, scale: 1.0, blend: 'lighter' },
+  ult_spell_heal_001: { src: `${ULT}/ult_spell_heal_001.png`, layout: hstrip(128, 128, 16), fps: 15, scale: 1.0, blend: 'lighter' },
+  ult_spell_absorb_001: { src: `${ULT}/ult_spell_absorb_001.png`, layout: hstrip(128, 128, 31), fps: 15, scale: 1.0, blend: 'lighter' },
+  ult_spell_haste_001: { src: `${ULT}/ult_spell_haste_001.png`, layout: hstrip(128, 128, 29), fps: 15, scale: 1.0, blend: 'lighter' },
+  ult_scifi_warp_001: { src: `${ULT}/ult_scifi_warp_001.png`, layout: hstrip(128, 128, 10), fps: 15, scale: 1.0, blend: 'lighter' },
+  ult_scifi_charge_up_001: { src: `${ULT}/ult_scifi_charge_up_001.png`, layout: hstrip(96, 96, 12), fps: 15, scale: 1.0, blend: 'lighter' },
+  ult_scifi_spark_burst_001: { src: `${ULT}/ult_scifi_spark_burst_001.png`, layout: hstrip(128, 128, 12), fps: 15, scale: 1.0, blend: 'lighter' },
+  ult_stylized_skull_smoke_burst_001: { src: `${ULT}/ult_stylized_skull_smoke_burst_001.png`, layout: hstrip(64, 64, 12), fps: 15, scale: 1.0, blend: 'lighter' },
+  ult_nuclear: { src: '', layout: { kind: 'frames', paths: Array.from({ length: 10 }, (_, i) => `${ULT}/ult_nuclear/${i}.png`) }, fps: 15, scale: 1.0, blend: 'lighter' },
+  ult_circle_blast: { src: '', layout: { kind: 'frames', paths: Array.from({ length: 10 }, (_, i) => `${ULT}/ult_circle_blast/${i}.png`) }, fps: 15, scale: 1.0, blend: 'lighter' },
+  ult_lightning_storm: { src: '', layout: { kind: 'frames', paths: Array.from({ length: 21 }, (_, i) => `${ULT}/ult_lightning_storm/${i}.png`) }, fps: 15, scale: 1.0, blend: 'lighter' },
+  ult_twin_blast: { src: '', layout: { kind: 'frames', paths: Array.from({ length: 10 }, (_, i) => `${ULT}/ult_twin_blast/${i}.png`) }, fps: 15, scale: 1.0, blend: 'lighter' },
+  ult_pillar: { src: '', layout: { kind: 'frames', paths: Array.from({ length: 9 }, (_, i) => `${ULT}/ult_pillar/${i}.png`) }, fps: 15, scale: 1.0, blend: 'lighter' },
+  ult_portal: { src: '', layout: { kind: 'frames', paths: Array.from({ length: 4 }, (_, i) => `${ULT}/ult_portal/${i}.png`) }, fps: 15, scale: 1.0, blend: 'lighter' },
+  ult_splosion: { src: '', layout: { kind: 'frames', paths: Array.from({ length: 4 }, (_, i) => `${ULT}/ult_splosion/${i}.png`) }, fps: 15, scale: 1.0, blend: 'lighter' },
 };
 
 export type VfxId = keyof typeof VFX;

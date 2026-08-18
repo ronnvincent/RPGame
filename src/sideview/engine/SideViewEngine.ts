@@ -9,6 +9,7 @@ import { BattleTheme, EnemyInstance } from '../dungeons/DungeonManager';
 import { ItemData, RARITY_CONFIGS } from '../items/ItemDatabase';
 import { ParticleSystem } from './ParticleSystem';
 import { FX_COLOUR_ROW } from './VfxLibrary';
+import { UltimateDirector, ULTIMATE_LINES } from './UltimateDirector';
 import { audio } from './AudioManager';
 import { sprites } from './SpriteManager';
 import { quests } from '../quests/QuestManager';
@@ -164,6 +165,8 @@ export class SideViewEngine {
   public readonly portalX: number = 2560;
   public isPlayerNearPortal: boolean = false;
   public hitStopTimer: number = 0;
+  /** Runs the slow-motion / freeze / declaration sequence for ultimates. */
+  public readonly ultimate = new UltimateDirector();
   public battleTheme: BattleTheme = 'catacombs';
   private readonly cameraFollowSpeed = 10;
   private readonly cameraLookAheadPx = 140;
@@ -580,6 +583,16 @@ export class SideViewEngine {
       else fire();
     }
 
+    // Ultimates get the cinematic treatment: the declaration and slow-motion
+    // land first, and the payload only fires when the world unfreezes.
+    if (skill.isUltimate) {
+      const cls = CHARACTER_CLASSES.find(c => c.id === classId);
+      const line = ULTIMATE_LINES[classId] || skill.name.toUpperCase();
+      this.ultimate.start(line, cls?.accentColor || '#ffd77a', () => {
+        this.playUltimatePayload(skill, originX, originY, facing, row);
+      });
+    }
+
     if (vfx.screen) {
       if (vfx.screen.shake) this.particles.triggerScreenShake(vfx.screen.shake, 0.4);
       if (vfx.screen.flash) this.particles.addScreenFlash(vfx.screen.flash, 0.55, 0.05);
@@ -589,6 +602,41 @@ export class SideViewEngine {
   }
 
   /** Cinematic ultimates and summons - see SKILL_SET_PIECES. */
+
+  /**
+   * The blast half of an ultimate, fired by the director once the freeze ends.
+   * Split out so the anticipation beat is not competing with the explosion for
+   * the player's attention.
+   */
+  private playUltimatePayload(
+    skill: SkillDefinition,
+    x: number,
+    y: number,
+    facing: number,
+    row: number
+  ) {
+    const big = skill.vfx.ultimate || 'ult_epic_explosion_002';
+    const spread = Math.max(110, skill.aoeRadius);
+
+    this.hitStopTimer = 0.06;
+    this.particles.triggerScreenShake(skill.vfx.screen?.shake ?? 26, 0.35);
+    if (skill.vfx.screen?.flash) {
+      this.particles.addScreenFlash(skill.vfx.screen.flash, 0.7, 0.05);
+    }
+
+    // A centred hero blast, then a staggered ring around it so the AoE reads
+    // as an area rather than a single puff.
+    this.particles.playVfx(big, x + facing * 40, y - 40, { facing, row, scale: 1.6 });
+    for (let i = 0; i < 5; i++) {
+      const ox = x + facing * 40 + (Math.random() * 2 - 1) * spread;
+      const oy = y - 20 - Math.random() * 70;
+      window.setTimeout(
+        () => this.particles.playVfx(big, ox, oy, { facing, row, scale: 0.8 + Math.random() * 0.6 }),
+        110 + i * 70
+      );
+    }
+  }
+
   private playSkillSetPiece(
     classId: string,
     skillIndex: number,
@@ -1195,11 +1243,22 @@ export class SideViewEngine {
   }
 
   public update(dt: number) {
+    // The director runs on unscaled time - it must not slow itself down.
+    this.ultimate.update(dt);
+
     // 0. Hit-Stop Micro Freeze check (Crunchy combat impact feeling)
     if (this.hitStopTimer > 0) {
       this.hitStopTimer -= dt;
       if (this.castLock > 0) this.castLock -= dt;
-    this.particles.update(dt);
+      this.particles.update(dt);
+      return;
+    }
+
+    // Slow the world during an ultimate. Every system downstream just sees a
+    // smaller dt, so none of them need to know a cinematic is running.
+    dt *= this.ultimate.timeScale;
+    if (dt <= 0) {
+      this.particles.update(0.0005); // let effects breathe during the freeze
       return;
     }
 
@@ -1843,7 +1902,9 @@ export class SideViewEngine {
 
   private enemyAttackPlayer(enemy: EnemyInstance) {
     const p = this.player;
-    if (p.iframeTimer > 0 || p.stealthTimer > 0) return;
+    // Committing to an ultimate should never get you punished for it - the
+    // caster is untouchable for the length of the cinematic.
+    if (p.iframeTimer > 0 || p.stealthTimer > 0 || this.ultimate.invulnerable) return;
 
     const rawDamage = enemy.atk * (1 + (Math.random() * 0.2 - 0.1));
     const defReduction = p.totalDef * 0.5;
@@ -2189,6 +2250,9 @@ export class SideViewEngine {
     );
 
     ctx.restore();
+    // Cinematic overlay for ultimates: dim + declaration, over the world.
+    this.ultimate.draw(ctx, width, height);
+
 
     // Render Remote Multiplayer Players
     if (network.room) {

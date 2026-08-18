@@ -1864,6 +1864,372 @@
    "fps": 16,
    "scale": 2,
    "anchor": "bottom"
+  },
+  "ult_epic_explosion_001": {
+   "src": "/assets/ults/ult_epic_explosion_001.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 128,
+    "frameH": 128,
+    "count": 13
+   },
+   "fps": 15,
+   "scale": 1,
+   "blend": "lighter"
+  },
+  "ult_epic_explosion_002": {
+   "src": "/assets/ults/ult_epic_explosion_002.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 192,
+    "frameH": 192,
+    "count": 15
+   },
+   "fps": 15,
+   "scale": 1,
+   "blend": "lighter"
+  },
+  "ult_stylized_explosion_003": {
+   "src": "/assets/ults/ult_stylized_explosion_003.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 128,
+    "frameH": 96,
+    "count": 14
+   },
+   "fps": 15,
+   "scale": 1,
+   "blend": "lighter"
+  },
+  "ult_symmetrical_explosion_004": {
+   "src": "/assets/ults/ult_symmetrical_explosion_004.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 96,
+    "frameH": 96,
+    "count": 12
+   },
+   "fps": 15,
+   "scale": 1,
+   "blend": "lighter"
+  },
+  "ult_symmetrical_impact_006": {
+   "src": "/assets/ults/ult_symmetrical_impact_006.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 160,
+    "frameH": 160,
+    "count": 8
+   },
+   "fps": 15,
+   "scale": 1,
+   "blend": "lighter"
+  },
+  "ult_directional_impact_003": {
+   "src": "/assets/ults/ult_directional_impact_003.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 80,
+    "frameH": 80,
+    "count": 6
+   },
+   "fps": 15,
+   "scale": 1,
+   "blend": "lighter"
+  },
+  "ult_round_light_burst_001": {
+   "src": "/assets/ults/ult_round_light_burst_001.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 256,
+    "frameH": 144,
+    "count": 9
+   },
+   "fps": 15,
+   "scale": 1,
+   "blend": "lighter"
+  },
+  "ult_lightning_strike_001": {
+   "src": "/assets/ults/ult_lightning_strike_001.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 128,
+    "frameH": 128,
+    "count": 7
+   },
+   "fps": 15,
+   "scale": 1,
+   "blend": "lighter"
+  },
+  "ult_lightning_burst_003": {
+   "src": "/assets/ults/ult_lightning_burst_003.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 96,
+    "frameH": 96,
+    "count": 10
+   },
+   "fps": 15,
+   "scale": 1,
+   "blend": "lighter"
+  },
+  "ult_spell_death_001": {
+   "src": "/assets/ults/ult_spell_death_001.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 64,
+    "frameH": 64,
+    "count": 50
+   },
+   "fps": 15,
+   "scale": 1,
+   "blend": "lighter"
+  },
+  "ult_spell_heal_001": {
+   "src": "/assets/ults/ult_spell_heal_001.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 128,
+    "frameH": 128,
+    "count": 16
+   },
+   "fps": 15,
+   "scale": 1,
+   "blend": "lighter"
+  },
+  "ult_spell_absorb_001": {
+   "src": "/assets/ults/ult_spell_absorb_001.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 128,
+    "frameH": 128,
+    "count": 31
+   },
+   "fps": 15,
+   "scale": 1,
+   "blend": "lighter"
+  },
+  "ult_spell_haste_001": {
+   "src": "/assets/ults/ult_spell_haste_001.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 128,
+    "frameH": 128,
+    "count": 29
+   },
+   "fps": 15,
+   "scale": 1,
+   "blend": "lighter"
+  },
+  "ult_scifi_warp_001": {
+   "src": "/assets/ults/ult_scifi_warp_001.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 128,
+    "frameH": 128,
+    "count": 10
+   },
+   "fps": 15,
+   "scale": 1,
+   "blend": "lighter"
+  },
+  "ult_scifi_charge_up_001": {
+   "src": "/assets/ults/ult_scifi_charge_up_001.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 96,
+    "frameH": 96,
+    "count": 12
+   },
+   "fps": 15,
+   "scale": 1,
+   "blend": "lighter"
+  },
+  "ult_scifi_spark_burst_001": {
+   "src": "/assets/ults/ult_scifi_spark_burst_001.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 128,
+    "frameH": 128,
+    "count": 12
+   },
+   "fps": 15,
+   "scale": 1,
+   "blend": "lighter"
+  },
+  "ult_stylized_skull_smoke_burst_001": {
+   "src": "/assets/ults/ult_stylized_skull_smoke_burst_001.png",
+   "layout": {
+    "kind": "strip",
+    "dir": "h",
+    "frameW": 64,
+    "frameH": 64,
+    "count": 12
+   },
+   "fps": 15,
+   "scale": 1,
+   "blend": "lighter"
+  },
+  "ult_nuclear": {
+   "src": "",
+   "layout": {
+    "kind": "frames",
+    "paths": [
+     "/assets/ults/ult_nuclear/0.png",
+     "/assets/ults/ult_nuclear/1.png",
+     "/assets/ults/ult_nuclear/2.png",
+     "/assets/ults/ult_nuclear/3.png",
+     "/assets/ults/ult_nuclear/4.png",
+     "/assets/ults/ult_nuclear/5.png",
+     "/assets/ults/ult_nuclear/6.png",
+     "/assets/ults/ult_nuclear/7.png",
+     "/assets/ults/ult_nuclear/8.png",
+     "/assets/ults/ult_nuclear/9.png"
+    ]
+   },
+   "fps": 15,
+   "scale": 1,
+   "blend": "lighter"
+  },
+  "ult_circle_blast": {
+   "src": "",
+   "layout": {
+    "kind": "frames",
+    "paths": [
+     "/assets/ults/ult_circle_blast/0.png",
+     "/assets/ults/ult_circle_blast/1.png",
+     "/assets/ults/ult_circle_blast/2.png",
+     "/assets/ults/ult_circle_blast/3.png",
+     "/assets/ults/ult_circle_blast/4.png",
+     "/assets/ults/ult_circle_blast/5.png",
+     "/assets/ults/ult_circle_blast/6.png",
+     "/assets/ults/ult_circle_blast/7.png",
+     "/assets/ults/ult_circle_blast/8.png",
+     "/assets/ults/ult_circle_blast/9.png"
+    ]
+   },
+   "fps": 15,
+   "scale": 1,
+   "blend": "lighter"
+  },
+  "ult_lightning_storm": {
+   "src": "",
+   "layout": {
+    "kind": "frames",
+    "paths": [
+     "/assets/ults/ult_lightning_storm/0.png",
+     "/assets/ults/ult_lightning_storm/1.png",
+     "/assets/ults/ult_lightning_storm/2.png",
+     "/assets/ults/ult_lightning_storm/3.png",
+     "/assets/ults/ult_lightning_storm/4.png",
+     "/assets/ults/ult_lightning_storm/5.png",
+     "/assets/ults/ult_lightning_storm/6.png",
+     "/assets/ults/ult_lightning_storm/7.png",
+     "/assets/ults/ult_lightning_storm/8.png",
+     "/assets/ults/ult_lightning_storm/9.png",
+     "/assets/ults/ult_lightning_storm/10.png",
+     "/assets/ults/ult_lightning_storm/11.png",
+     "/assets/ults/ult_lightning_storm/12.png",
+     "/assets/ults/ult_lightning_storm/13.png",
+     "/assets/ults/ult_lightning_storm/14.png",
+     "/assets/ults/ult_lightning_storm/15.png",
+     "/assets/ults/ult_lightning_storm/16.png",
+     "/assets/ults/ult_lightning_storm/17.png",
+     "/assets/ults/ult_lightning_storm/18.png",
+     "/assets/ults/ult_lightning_storm/19.png",
+     "/assets/ults/ult_lightning_storm/20.png"
+    ]
+   },
+   "fps": 15,
+   "scale": 1,
+   "blend": "lighter"
+  },
+  "ult_twin_blast": {
+   "src": "",
+   "layout": {
+    "kind": "frames",
+    "paths": [
+     "/assets/ults/ult_twin_blast/0.png",
+     "/assets/ults/ult_twin_blast/1.png",
+     "/assets/ults/ult_twin_blast/2.png",
+     "/assets/ults/ult_twin_blast/3.png",
+     "/assets/ults/ult_twin_blast/4.png",
+     "/assets/ults/ult_twin_blast/5.png",
+     "/assets/ults/ult_twin_blast/6.png",
+     "/assets/ults/ult_twin_blast/7.png",
+     "/assets/ults/ult_twin_blast/8.png",
+     "/assets/ults/ult_twin_blast/9.png"
+    ]
+   },
+   "fps": 15,
+   "scale": 1,
+   "blend": "lighter"
+  },
+  "ult_pillar": {
+   "src": "",
+   "layout": {
+    "kind": "frames",
+    "paths": [
+     "/assets/ults/ult_pillar/0.png",
+     "/assets/ults/ult_pillar/1.png",
+     "/assets/ults/ult_pillar/2.png",
+     "/assets/ults/ult_pillar/3.png",
+     "/assets/ults/ult_pillar/4.png",
+     "/assets/ults/ult_pillar/5.png",
+     "/assets/ults/ult_pillar/6.png",
+     "/assets/ults/ult_pillar/7.png",
+     "/assets/ults/ult_pillar/8.png"
+    ]
+   },
+   "fps": 15,
+   "scale": 1,
+   "blend": "lighter"
+  },
+  "ult_portal": {
+   "src": "",
+   "layout": {
+    "kind": "frames",
+    "paths": [
+     "/assets/ults/ult_portal/0.png",
+     "/assets/ults/ult_portal/1.png",
+     "/assets/ults/ult_portal/2.png",
+     "/assets/ults/ult_portal/3.png"
+    ]
+   },
+   "fps": 15,
+   "scale": 1,
+   "blend": "lighter"
+  },
+  "ult_splosion": {
+   "src": "",
+   "layout": {
+    "kind": "frames",
+    "paths": [
+     "/assets/ults/ult_splosion/0.png",
+     "/assets/ults/ult_splosion/1.png",
+     "/assets/ults/ult_splosion/2.png",
+     "/assets/ults/ult_splosion/3.png"
+    ]
+   },
+   "fps": 15,
+   "scale": 1,
+   "blend": "lighter"
   }
  },
  "FX_COLOUR_ROW": {
