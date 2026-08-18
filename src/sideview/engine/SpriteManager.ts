@@ -310,7 +310,7 @@ export class SpriteManager {
 
       // 18c. Real Animated Dragon Boss, Grim Reaper & Holy Spell Packs
       reaper_sheet: '/assets/reaper/SpriteSheet/Bringer-of-Death-SpritSheet.png',
-      nightborne: '/assets/nightborne/nightborne.png',
+      nightborne: '/assets/nightborne/NightBorne.png',
       holy_spell_00: '/assets/vfx/holy_pack/00.png',
       holy_spell_01: '/assets/vfx/holy_pack/01.png',
 

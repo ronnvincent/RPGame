@@ -8,6 +8,7 @@
  * console.
  */
 import { readFileSync, existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 
 const SOURCES = [
   'src/sideview/engine/SpriteManager.ts', 'src/sideview/engine/AudioManager.ts',
@@ -17,13 +18,19 @@ const SOURCES = [
 ];
 
 const missing = new Map();
+const referenced = new Set();
+
+function need(rel, from) {
+  referenced.add(rel);
+  if (!existsSync('public' + rel) && !missing.has(rel)) missing.set(rel, from);
+}
 
 // 1. Literal /assets/... paths.
 for (const f of SOURCES) {
   if (!existsSync(f)) continue;
   const src = readFileSync(f, 'utf8');
   for (const m of src.matchAll(/['"`](\/assets\/[^'"`$]+?\.(png|wav|ogg|mp3|jpg))['"`]/g)) {
-    if (!existsSync('public' + m[1]) && !missing.has(m[1])) missing.set(m[1], f);
+    need(m[1], f);
   }
 }
 
@@ -36,7 +43,7 @@ const BASES = {
 };
 for (const m of sfxSrc.matchAll(/\$\{(BATTLE|SPELL)\}\/([^`]+)`/g)) {
   const rel = BASES[m[1]] + '/' + m[2];
-  if (!existsSync('public' + rel)) missing.set(rel, 'SfxLibrary.ts');
+  need(rel, 'SfxLibrary.ts');
 }
 
 // 3. Map layer paths, also built from template literals.
@@ -55,7 +62,7 @@ let mapLayers = 0;
 for (const m of mapSrc.matchAll(/\$\{(POLY|FOREST|CITY|DUSK|SEA|BOG|GROTTO|GOTHIC)\}\/([^`]+)`/g)) {
   mapLayers++;
   const rel = MAP_BASES[m[1]] + '/' + m[2];
-  if (!existsSync('public' + rel)) missing.set(rel, 'MapLibrary.ts');
+  need(rel, 'MapLibrary.ts');
 }
 console.log(`map layers: ${mapLayers} referenced`);
 
@@ -73,7 +80,36 @@ for (const m of classes.matchAll(/sound: '([a-z_0-9]+)'/g)) {
 
 console.log(`sound catalogue: ${catalogueIds.size} ids`);
 console.log(`skills with a sound: ${withSound}/60${badIds ? `  (${badIds} unknown)` : '  (all resolve)'}`);
+
+// 5. Present on disk is not enough. An asset git ignores never reaches Vercel,
+// and nothing else in the pipeline notices: the file opens locally, the build
+// succeeds, the test passes. An unanchored `maps/` rule hid all 39 map layers
+// exactly this way, and the deployed town rendered as a bare blue sky.
+const tracked = new Set(
+  execFileSync('git', ['ls-files', '-z', 'public/assets'], { encoding: 'utf8', maxBuffer: 1 << 26 })
+    .split('\0')
+    .filter(Boolean)
+    .map((f) => f.replace(/^public/, '').replaceAll(String.fromCharCode(92), '/'))
+);
+// Case matters too. Windows resolves paths case-insensitively, so a wrongly
+// cased reference opens fine here and 404s on Vercel's Linux hosts; git records
+// the real name, which makes it the only local source of truth for spelling.
+const byLower = new Map([...tracked].map((t) => [t.toLowerCase(), t]));
+let unshipped = 0;
+for (const r of referenced) {
+  if (!existsSync('public' + r) || tracked.has(r)) continue;
+  const real = byLower.get(r.toLowerCase());
+  if (real) {
+    console.log('  WRONG CASE ' + r);
+    console.log('          -> ' + real + '   (404s on Linux)');
+  } else {
+    console.log('  NOT IN GIT ' + r + '   (exists locally, will 404 in production)');
+  }
+  unshipped++;
+}
+console.log(`referenced assets that would 404 in production: ${unshipped}`);
+
 for (const [p, f] of missing) console.log('  MISSING ' + p + '   <- ' + f.split('/').pop());
 console.log(`missing referenced assets: ${missing.size}`);
 
-process.exit(missing.size === 0 && badIds === 0 ? 0 : 1);
+process.exit(missing.size === 0 && badIds === 0 && unshipped === 0 ? 0 : 1);
