@@ -20,7 +20,7 @@
 
 import { ITEM_DATABASE } from '../items/ItemDatabase';
 import { HERO_SPRITES, HERO_FPS, heroFrame, attackAnimFor } from './HeroSprites';
-import { MAPS, MapLayer, MapGround, POLY_SHEETS, POLY_PROPS } from './MapLibrary';
+import { MAPS, MapLayer, MapGround, MapFloor, LEGACY_FLOORS, POLY_SHEETS, POLY_PROPS } from './MapLibrary';
 
 type BattleTheme = 'catacombs' | 'crypt' | 'inferno' | 'void' | 'town' | 'swamp' | 'mountain' | 'underwater' | 'caves';
 
@@ -709,7 +709,9 @@ export class SpriteManager {
       'th_barrel_set_idle',
       (i) => `/assets/treasure-hunters/Merchant Ship/Sprites/Barrel/Idle/${i}.png`,
       1,
-      5
+      // The pack ships a single idle frame for this prop; asking for five
+      // fetched four 404s every load.
+      1
     );
     this.addToGroup(
       'th_barrel_set_hit',
@@ -727,7 +729,9 @@ export class SpriteManager {
       'th_box_set_idle',
       (i) => `/assets/treasure-hunters/Merchant Ship/Sprites/Box/Idle/${i}.png`,
       1,
-      5
+      // The pack ships a single idle frame for this prop; asking for five
+      // fetched four 404s every load.
+      1
     );
     this.addToGroup(
       'th_box_set_hit',
@@ -745,7 +749,9 @@ export class SpriteManager {
       'th_chest_idle_set',
       (i) => `/assets/treasure-hunters/Merchant Ship/Sprites/Chest/Idle/${i}.png`,
       1,
-      5
+      // The pack ships a single idle frame for this prop; asking for five
+      // fetched four 404s every load.
+      1
     );
     this.addToGroup(
       'th_chest_unlocked_set',
@@ -815,7 +821,7 @@ export class SpriteManager {
     );
     this.addToGroup(
       'ms_ship_destroyed_set',
-      (i) => `/assets/treasure-hunters/Merchant Ship/Sprites/Ship/Ship/Destroyed/${i}.png`,
+      (i) => `/assets/treasure-hunters/Merchant Ship/Sprites/Ship/Destroyed/${i}.png`,
       1,
       3
     );
@@ -859,7 +865,7 @@ export class SpriteManager {
       'ph_window_light_set',
       (i) => `/assets/treasure-hunters/Pirate Ship/Sprites/Decorations/Window/Window Light/${String(i).padStart(2, '0')}.png`,
       1,
-      4
+      1
     );
     this.addToGroup(
       'ph_door_open_set',
@@ -2466,7 +2472,13 @@ export class SpriteManager {
       }
     }
 
+    // The earth goes on last, in front of the scenery. It is the surface the
+    // player stands on, not part of the backdrop - painted behind the layers it
+    // disappeared under any art that reached the bottom of the view, and the
+    // characters read as floating again with no ground line anywhere.
     if (map.ground) this.drawGroundBand(ctx, map.ground, camX, width, height, horizonY);
+    else if (map.floor) this.drawFloorBand(ctx, map.floor, width, height, horizonY);
+
     ctx.restore();
     return true;
   }
@@ -2513,6 +2525,40 @@ export class SpriteManager {
     for (let x = startX; x < width + destW; x += destW) {
       ctx.drawImage(img, sx, sy, sw, sh, Math.round(x), Math.round(destY), destW + 1, Math.ceil(destH));
     }
+    ctx.restore();
+  }
+
+  /**
+   * Plain earth from the horizon down, for themes with no ground tiles.
+   *
+   * Nothing in this renderer ever filled below groundY - every branch painted
+   * (0, 0, width, groundY) and stopped - so the band under the play line was
+   * whatever the sky colour happened to be. The platform support legs used to
+   * run down through it and disguised the gap; with those gone every dungeon
+   * showed the character standing over a void.
+   */
+  private drawFloorBand(
+    ctx: CanvasRenderingContext2D,
+    floor: MapFloor,
+    width: number,
+    height: number,
+    horizonY: number
+  ) {
+    if (horizonY >= height) return;
+    const y = Math.round(horizonY);
+    const h = Math.ceil(height - y);
+
+    ctx.save();
+    const grad = ctx.createLinearGradient(0, y, 0, y + h);
+    grad.addColorStop(0, floor.top);
+    grad.addColorStop(0.14, floor.body);
+    grad.addColorStop(1, floor.body);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, y, width, h);
+
+    // A brighter lip catches the light and gives the play line a clear edge.
+    ctx.fillStyle = floor.top;
+    ctx.fillRect(0, y, width, 2);
     ctx.restore();
   }
 
@@ -3093,12 +3139,10 @@ export class SpriteManager {
     ctx.lineTo(canvasWidth, groundY);
     ctx.stroke();
 
+    this.drawLegacyFloor(ctx, safeTheme, canvasWidth, canvasHeight, groundY);
     ctx.restore();
   }
 
-  /**
-   * Draw Themed Multi-Level Platforms using Authentic Gothic Wooden Beams
-   */
   /**
    * Jump-through ledges.
    *
@@ -3109,6 +3153,18 @@ export class SpriteManager {
    * only decoration, so they are gone and the surface is a stone slab that
    * suits a catacomb or a crypt rather than a scaffold.
    */
+  /** Floor for a theme still on the legacy branch. */
+  public drawLegacyFloor(
+    ctx: CanvasRenderingContext2D,
+    theme: string,
+    width: number,
+    height: number,
+    horizonY: number
+  ) {
+    const floor = LEGACY_FLOORS[theme];
+    if (floor) this.drawFloorBand(ctx, floor, width, height, horizonY);
+  }
+
   public drawPlatforms(
     ctx: CanvasRenderingContext2D,
     platforms: { x: number; y: number; width: number; height: number; type: string }[],
@@ -3116,39 +3172,34 @@ export class SpriteManager {
   ) {
     if (!platforms || platforms.length === 0) return;
 
-    const slabSrc = POLY_SHEETS.props;
-    const slab = POLY_PROPS.slab;
-    const img = this.getImage(slabSrc);
-    const haveSlab = Boolean(img && img.complete && img.naturalWidth);
+    // Cut from the same earth as the floor, so a ledge looks like part of the
+    // map. A stretched rock sprite read as a pale lens hanging in mid-air, and
+    // one sprite could never suit a swamp, a crypt and a neon skyline at once.
+    const floor = MAPS[theme]?.floor ?? LEGACY_FLOORS[theme]
+      ?? { top: '#6b7280', body: '#1f2937' };
 
     ctx.save();
     ctx.imageSmoothingEnabled = false;
 
     for (const plat of platforms) {
-      if (haveSlab && img) {
-        // One stretched slab per ledge, not a row of them. Tiling this rock
-        // repeated its rounded silhouette and read as a line of boulders
-        // rather than something you could stand on.
-        ctx.drawImage(
-          img,
-          slab.sx, slab.sy, slab.sw, slab.sh,
-          Math.round(plat.x), Math.round(plat.y), plat.width, plat.height
-        );
-      } else {
-        const grad = ctx.createLinearGradient(plat.x, plat.y, plat.x, plat.y + plat.height);
-        grad.addColorStop(0, '#6b7280');
-        grad.addColorStop(1, '#374151');
-        ctx.fillStyle = grad;
-        ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
-      }
+      const grad = ctx.createLinearGradient(0, plat.y, 0, plat.y + plat.height);
+      grad.addColorStop(0, floor.top);
+      grad.addColorStop(0.35, floor.body);
+      grad.addColorStop(1, floor.body);
+      ctx.fillStyle = grad;
+      ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
 
-      // A soft shadow under the lip is what sells it as standable now that
-      // there are no legs holding it up.
-      const shadow = ctx.createLinearGradient(0, plat.y + plat.height, 0, plat.y + plat.height + 10);
-      shadow.addColorStop(0, 'rgba(0,0,0,0.35)');
+      // Lit lip on top, matching the floor's, so it reads as standable.
+      ctx.fillStyle = floor.top;
+      ctx.fillRect(plat.x, plat.y, plat.width, 2);
+
+      // A short shadow under the lip is what sells it now that there are no
+      // legs holding it up.
+      const shadow = ctx.createLinearGradient(0, plat.y + plat.height, 0, plat.y + plat.height + 9);
+      shadow.addColorStop(0, 'rgba(0,0,0,0.4)');
       shadow.addColorStop(1, 'transparent');
       ctx.fillStyle = shadow;
-      ctx.fillRect(plat.x, plat.y + plat.height, plat.width, 10);
+      ctx.fillRect(plat.x, plat.y + plat.height, plat.width, 9);
     }
 
     ctx.restore();

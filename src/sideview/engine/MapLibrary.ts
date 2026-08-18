@@ -72,6 +72,23 @@ export interface MapTheme {
    * ground tileset for exactly this.
    */
   ground?: MapGround;
+  /**
+   * Colour band under the horizon, for themes with no ground tiles.
+   *
+   * Every dungeon needed one and none had it. Backdrop art is transparent below
+   * its silhouette - under a treeline, under a skyline - so with nothing behind
+   * it the sky colour showed through and the character appeared to stand in a
+   * void. The band is drawn after the layers, so it reads as ground in front of
+   * the scenery rather than a hole behind it.
+   */
+  floor?: MapFloor;
+}
+
+export interface MapFloor {
+  /** Lit edge along the horizon line. */
+  top: string;
+  /** Body of the earth below it. */
+  body: string;
 }
 
 export interface MapGround {
@@ -238,7 +255,8 @@ export const MAPS: Record<string, MapTheme> = {
       { src: `${FOREST}/Trees_Plan_2.png`, scroll: 0.62, anchor: 'bottom',
         rect: { sx: 0, sy: 0, sw: 1800, sh: 240 } },
       { src: `${FOREST}/Fog.png`, scroll: 0.55, anchor: 'bottom', alpha: 0.45, drift: -8 },
-    ]
+    ],
+    floor: { top: '#33452f', body: '#101a13' }
   },
 
   // ---- Void Nexus: the futuristic city reads as an astral rift ----
@@ -253,7 +271,8 @@ export const MAPS: Record<string, MapTheme> = {
       { src: `${CITY}/smog2.png`, scroll: 0.36, anchor: 'bottom', alpha: 0.5, drift: -10 },
       { src: `${CITY}/light.png`, scroll: 0.20, anchor: 'top', alpha: 0.35,
         blend: 'lighter', rect: { sx: 0, sy: 0, sw: 630, sh: 60 } },
-    ]
+    ],
+    floor: { top: '#3d2c58', body: '#0c0715' }
   },
 
   // ---- Twilight Peaks: the mountain-dusk layer set ----
@@ -266,7 +285,8 @@ export const MAPS: Record<string, MapTheme> = {
       { src: `${DUSK}/mountains.png`, scroll: 0.30, anchor: 'bottom' },
       { src: `${DUSK}/near-clouds.png`, scroll: 0.22, anchor: 'bottom', alpha: 0.75, drift: 7 },
       { src: `${DUSK}/trees.png`, scroll: 0.58, anchor: 'bottom' },
-    ]
+    ],
+    floor: { top: '#40334f', body: '#150f1e' }
   },
 
   // ---- Sunken Abyss ----
@@ -277,7 +297,8 @@ export const MAPS: Record<string, MapTheme> = {
       { src: `${SEA}/foreground-2.png`, scroll: 0.24, anchor: 'bottom' },
       { src: `${SEA}/foreground-1.png`, scroll: 0.48, anchor: 'bottom' },
       { src: `${SEA}/sand.png`, scroll: 0.75, anchor: 'bottom', heightFrac: 0.45 },
-    ]
+    ],
+    floor: { top: '#c4aa7a', body: '#7d6640' }
   },
 
   // ---- Venomous Swamp ----
@@ -288,7 +309,8 @@ export const MAPS: Record<string, MapTheme> = {
       { src: `${BOG}/mid-layer-01.png`, scroll: 0.20, anchor: 'bottom' },
       { src: `${BOG}/mid-layer-02.png`, scroll: 0.38, anchor: 'bottom' },
       { src: `${BOG}/trees.png`, scroll: 0.62, anchor: 'bottom', heightFrac: 0.78 },
-    ]
+    ],
+    floor: { top: '#2d3d26', body: '#09110b' }
   },
 
   // ---- Gallet Depths: the Warped grotto set ----
@@ -299,7 +321,8 @@ export const MAPS: Record<string, MapTheme> = {
       { src: `${GROTTO}/middleground.png`, scroll: 0.26, anchor: 'bottom' },
       { src: `${GROTTO}/walls.png`, scroll: 0.45, anchor: 'bottom', heightFrac: 0.70 },
       { src: `${GROTTO}/props.png`, scroll: 0.66, anchor: 'bottom', heightFrac: 0.60 },
-    ]
+    ],
+    floor: { top: '#332839', body: '#0a0710' }
   },
 
   // ---- Crypt of the Damned: GothicVania ----
@@ -308,12 +331,23 @@ export const MAPS: Record<string, MapTheme> = {
     layers: [
       { src: `${GOTHIC}/background.png`, scroll: 0.05, anchor: 'fill' },
       { src: `${GOTHIC}/middleground.png`, scroll: 0.30, anchor: 'bottom' },
-    ]
+    ],
+    floor: { top: '#2e2839', body: '#07060d' }
   },
 };
 
 /** Themes still on the old hand-written renderer. */
 export const THEMES_WITHOUT_ART = ['inferno'];
+
+/**
+ * Floors for themes still drawn by the legacy hand-written branch.
+ *
+ * inferno keeps its bespoke magma sky and embers until lava parallax art
+ * exists, but it needs ground under the player just as much as the rest.
+ */
+export const LEGACY_FLOORS: Record<string, MapFloor> = {
+  inferno: { top: '#7a2a14', body: '#180705' },
+};
 
 export function allMapImagePaths(): string[] {
   const out = new Set<string>();
