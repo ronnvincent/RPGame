@@ -35,6 +35,20 @@ check('and is capped clear of the player panel', /max-width:\s*calc\(100vw - 300
 check('the quest tracker clears a wrapped row', /top:\s*78px/.test(tracker));
 
 // Worth stating: the row is what grew.
+// The banner is two lines, said explicitly rather than left to default
+// stacking, which is how the title and the enemy count ran together.
+check('the banner stacks its two lines deliberately',
+      /flex-direction: column/.test(banner) && /gap: 3px/.test(banner));
+check('a long dungeon name wraps instead of overflowing its panel',
+      /white-space: normal/.test(rule('wave-title')));
+
+// The player ID belongs where it can be read out without opening two menus.
+check('the player ID is on the HUD', /player-id-row/.test(hud) && /hud-id-text/.test(hud));
+check('and is refreshed if the account is created later',
+      /idText.*shortId|shortId.*idText/s.test(hud));
+check('with a size of its own on small screens',
+      /\.player-id-row \{\s*font-size: 7\.5px/.test(hud));
+
 const buttons = (hud.match(/class="inv-btn[^"]*"/g) || []).length;
 console.log(`\n  buttons in the top row: ${buttons}`);
 check('the row is still a manageable size', buttons <= 12);

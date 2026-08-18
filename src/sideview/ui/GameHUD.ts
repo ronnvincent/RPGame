@@ -202,6 +202,13 @@ export class GameHUD {
         left: max(8px, env(safe-area-inset-left));
         transform: none;
         max-width: min(420px, 60vw);
+        /* Say it explicitly. The two lines relied on default block stacking and
+           ran together into one crowded strip; a column with a gap cannot. */
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 3px;
+        padding: 6px 14px;
         background: url('/assets/kenney-rpg-ui/panel_brown.png') repeat;
         background-size: 100% 100%;
         padding: 6px 24px;
@@ -211,6 +218,22 @@ export class GameHUD {
         z-index: 10;
       }
 
+      .player-id-row {
+        font-size: 8.5px;
+        font-weight: 700;
+        letter-spacing: 0.6px;
+        color: #cbb894;
+        font-family: 'Outfit', sans-serif;
+        text-shadow: 1px 1px 2px #000;
+        margin-top: 1px;
+      }
+
+      .player-id-row span {
+        color: #ffe8b0;
+        font-weight: 900;
+        letter-spacing: 1px;
+      }
+
       .wave-title {
         font-size: 11px;
         font-weight: 900;
@@ -218,7 +241,9 @@ export class GameHUD {
         letter-spacing: 1px;
         text-transform: uppercase;
         text-shadow: 1px 1px 2px #000;
-        white-space: nowrap;
+        /* Wrapping is better than a name that runs out of its own panel. */
+        white-space: normal;
+        line-height: 1.25;
       }
 
       .wave-mobs-left {
@@ -793,6 +818,14 @@ export class GameHUD {
         .player-name-row {
           font-size: 9.5px;
         }
+        .player-id-row {
+          font-size: 7.5px;
+          letter-spacing: 0.4px;
+        }
+        .dungeon-wave-banner {
+          padding: 3px 10px;
+          gap: 2px;
+        }
         .dungeon-wave-banner {
           top: 52px; /* Safely tucked under the player health bar */
           left: 6px;
@@ -1273,6 +1306,13 @@ export class GameHUD {
           <div class="player-name-row">
             <span style="color: ${p.characterClass.accentColor}">${p.characterClass.name}</span>
             <span style="color: #ffd700" id="hud-level-text">Lv. ${p.level}</span>
+          </div>
+          <!-- The ID a friend needs to invite you. It lived only in the party
+               panel, so sharing it meant opening the world map and the lobby
+               first - and it is a short string you read out to someone, which
+               is exactly the kind of thing that should be on screen already. -->
+          <div class="player-id-row" id="hud-id-row" title="Your Player ID - give this to a friend to be invited">
+            ID <span id="hud-id-text">${localStorage.getItem('playerShortId') || '—'}</span>
           </div>
           <!-- HP Bar Sprite Frame with Delayed Hit Lag Bar -->
           <div class="sprite-bar-frame" title="Health (HP)">
@@ -1974,6 +2014,12 @@ export class GameHUD {
     // rebuilt the HUD. It updates with everything else now.
     const levelText = this.container.querySelector('#hud-level-text');
     if (levelText) levelText.textContent = `Lv. ${p.level}`;
+
+    // The ID is assigned when the account is created, which can happen after
+    // the HUD has already been built once.
+    const idText = this.container.querySelector('#hud-id-text');
+    const shortId = localStorage.getItem('playerShortId');
+    if (idText && shortId && idText.textContent !== shortId) idText.textContent = shortId;
 
     // Town Return button
     const townBtn = this.container.querySelector('#return-town-btn') as HTMLElement;
