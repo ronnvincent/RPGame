@@ -21,7 +21,8 @@
     "test:levelgate": "node test/coop-level-gate.test.mjs",
     "test:save": "node test/persistence.test.mjs",
     "test:boss": "node test/boss-skills.test.mjs",
-    "test:party": "node test/party-support.test.mjs"
+    "test:party": "node test/party-support.test.mjs",
+    "test:voice": "node test/voice-chat.test.mjs"
   },
   "keywords": [],
   "author": "",

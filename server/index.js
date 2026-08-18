@@ -845,6 +845,40 @@ io.on('connection', (socket) => {
   });
 
   // In-Game Sync Events
+  // ---- Voice chat signalling ----
+  //
+  // The audio itself is peer to peer; the server only introduces the peers and
+  // passes the WebRTC handshake between them. Nothing here touches the media,
+  // so voice costs the server no bandwidth and keeps working in a dungeon
+  // exactly as it does in the lobby - it is tied to the room, not the scene.
+  socket.on('voice_join', () => {
+    const p = players[socket.id];
+    if (!p || !p.room) return;
+    p.voice = true;
+
+    // Tell the newcomer who is already talking, so it can offer to each.
+    const peers = (rooms[p.room]?.members || [])
+      .map(uuid => playersByUuid[uuid])
+      .filter(m => m && m.voice && m.socketId && m.socketId !== socket.id)
+      .map(m => ({ socketId: m.socketId, name: m.name }));
+    socket.emit('voice_peers', { peers });
+
+    socket.to(p.room).emit('voice_peer_joined', { socketId: socket.id, name: p.name });
+    console.log(`[VOICE] ${p.name} joined voice in ${p.room} (${peers.length} already there)`);
+  });
+
+  socket.on('voice_signal', (data = {}) => {
+    if (!data.to) return;
+    io.to(data.to).emit('voice_signal', { from: socket.id, signal: data.signal });
+  });
+
+  socket.on('voice_leave', () => {
+    const p = players[socket.id];
+    if (!p) return;
+    p.voice = false;
+    if (p.room) socket.to(p.room).emit('voice_peer_left', { socketId: socket.id });
+  });
+
   // Support effects reach the whole party. A heal or a shield that only ever
   // helped the caster made the support classes pointless in co-op.
   socket.on('party_support', (data) => {
@@ -926,6 +960,11 @@ io.on('connection', (socket) => {
   // can reclaim it instead of the party silently falling apart.
   socket.on('disconnect', () => {
     console.log(`[AUTH] User disconnected: ${socket.id}`);
+    const voiceRec = players[socket.id];
+    if (voiceRec && voiceRec.room) {
+      voiceRec.voice = false;
+      socket.to(voiceRec.room).emit('voice_peer_left', { socketId: socket.id });
+    }
     const p = players[socket.id];
     if (!p) return;
 

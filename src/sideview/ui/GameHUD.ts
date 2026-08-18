@@ -10,6 +10,7 @@
  */
 
 import { SideViewEngine } from '../engine/SideViewEngine';
+import { voice } from '../network/VoiceChat';
 import { ItemData, RARITY_CONFIGS } from '../items/ItemDatabase';
 import { audio } from '../engine/AudioManager';
 import { sprites } from '../engine/SpriteManager';
@@ -1264,6 +1265,11 @@ export class GameHUD {
         <div class="gold-badge"><img src="/assets/gui/PNG/iconCircle_brown.png" width="16" height="16" style="vertical-align:middle;margin-right:4px;" /> <span id="hud-gold-text">${p.gold}</span></div>
         <button class="inv-btn inv-btn-quest" id="toggle-music-btn" title="Toggle Music">🎵 BGM</button>
         <button class="inv-btn inv-btn-quest" id="toggle-sfx-btn" title="Toggle Sound SFX">🔊 SFX</button>
+        <!-- Party voice. Lives in the HUD rather than the lobby panel so it is
+             still here inside a dungeon, which is where you actually need to
+             talk. Hidden until there is a party to talk to. -->
+        <button class="inv-btn inv-btn-quest" id="toggle-mic-btn" title="Toggle Microphone" style="display:none">🎙️ MIC</button>
+        <button class="inv-btn inv-btn-quest" id="toggle-voice-btn" title="Toggle Party Audio" style="display:none">🎧 VOICE</button>
         <button class="inv-btn inv-btn-quest" id="toggle-quests-btn">📜 QUESTS</button>
         <button class="inv-btn inv-btn-quest" id="toggle-map-btn">🗺️ MAP</button>
         <button class="inv-btn inv-btn-town" id="return-town-btn" style="display: ${this.engine.isTownMode ? 'none' : 'block'};">⛺ TOWN</button>
@@ -1451,6 +1457,49 @@ export class GameHUD {
       const enabled = audio.toggleMusic();
       musicBtn.innerHTML = enabled ? `<img src='/assets/gui/PNG/iconCircle_blue.png' width='16' height='16'/>` : `<img src='/assets/gui/PNG/iconCross_blue.png' width='16' height='16'/>`;
       this.showToast(enabled ? 'Music Enabled' : 'Music Muted');
+    });
+
+    // Party voice. The browser will not hand over a microphone without a user
+    // gesture, so the first press is what joins the call.
+    const micBtn = this.container.querySelector('#toggle-mic-btn') as HTMLElement;
+    const voiceBtn = this.container.querySelector('#toggle-voice-btn') as HTMLElement;
+
+    const paintVoice = () => {
+      const inParty = Boolean(network.room);
+      if (micBtn) micBtn.style.display = inParty ? '' : 'none';
+      if (voiceBtn) voiceBtn.style.display = inParty ? '' : 'none';
+      if (micBtn) {
+        micBtn.textContent = voice.isMicOn ? '🎙️ ON' : '🎙️ MUTED';
+        micBtn.style.opacity = voice.isMicOn ? '1' : '0.55';
+      }
+      if (voiceBtn) {
+        voiceBtn.textContent = voice.isSpeakerOn ? `🎧 ${voice.peerCount}` : '🎧 OFF';
+        voiceBtn.style.opacity = voice.isSpeakerOn ? '1' : '0.55';
+      }
+    };
+    voice.onStateChange = paintVoice;
+    voice.onError = (msg) => this.showToast(msg);
+    paintVoice();
+
+    micBtn?.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!voice.isJoined) {
+        voice.attach(network.socket);
+        await voice.join();
+        this.showToast('Joined party voice');
+      }
+      voice.toggleMic();
+      this.showToast(voice.isMicOn ? 'Mic on' : 'Mic muted');
+    });
+
+    voiceBtn?.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!voice.isJoined) {
+        voice.attach(network.socket);
+        await voice.join();
+      }
+      voice.toggleSpeaker();
+      this.showToast(voice.isSpeakerOn ? 'Party audio on' : 'Party audio off');
     });
 
     // Sound SFX toggle

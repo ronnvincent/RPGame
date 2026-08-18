@@ -339,6 +339,15 @@ export class WorldMapUI {
    * leaving it with no listeners. Both are gone - CoopLobbyUI owns this now.
    */
   private showMatchmakingOverlay(locationId: string) {
+    // Already in a party? Then show it. This used to create a lobby every time
+    // the CO-OP button was pressed, so leaving the panel and coming back tore
+    // down the room you were in and opened a fresh one - the party you had
+    // assembled simply disappeared.
+    if (network.room) {
+      this.onOpenLobby?.();
+      return;
+    }
+
     const hostDungeon = DUNGEONS.find((d) => d.id === locationId);
     network.createLobby(locationId, hostDungeon?.minLevel ?? 1, () => {}, () => {
       // dungeon_start: the host launched the run.
