@@ -139,7 +139,6 @@ export class SideViewGame {
     // already has its frames resident.
     this.engine.particles.warmVfx();
     audio.warmSounds();
-    audio.warmUltimateVoice(selectedClass.id);
     
     if (saveData) {
       this.engine.loadSaveData(saveData);

@@ -14,35 +14,15 @@
  * is directing is slowed.
  */
 
-export type UltPhase = 'idle' | 'anticipation' | 'impact' | 'recovery' | 'linger';
+export type UltPhase = 'idle' | 'anticipation' | 'impact' | 'recovery';
 
 const ANTICIPATION = 0.55;
 const IMPACT_FREEZE = 0.14;
 const RECOVERY = 0.45;
-/**
- * Real seconds between the cinematic starting and the payload firing.
- *
- * The voice line starts with the cinematic but the blast only lands after the
- * freeze, so anything timing effects against the clip has to subtract this.
- */
-export const ULT_LEAD_IN = ANTICIPATION + IMPACT_FREEZE;
-
-/** How long the declaration takes to fade once the voice line is done. */
-const LINGER_FADE = 0.7;
 
 export class UltimateDirector {
   private phase: UltPhase = 'idle';
   private t = 0;
-  /** Real seconds since start, across all phases. */
-  private total = 0;
-  /**
-   * How long the declaration stays up, normally the voice clip's length.
-   *
-   * The slow-motion beats stay short - seven seconds of dimmed, crawling world
-   * would be unplayable - but the line should not vanish while the character is
-   * still saying it, so it holds at full speed until the clip ends.
-   */
-  private holdFor = 0;
   private line = '';
   private accent = '#ffd77a';
   /** Fired once when anticipation ends, so the caller can spawn the payload. */
@@ -72,18 +52,14 @@ export class UltimateDirector {
         const k = Math.min(1, this.t / RECOVERY);
         return 0.28 + 0.72 * k;
       }
-      case 'linger':
-        return 1;
       default:
         return 1;
     }
   }
 
-  public start(line: string, accent: string, onImpact: () => void, holdFor = 0) {
+  public start(line: string, accent: string, onImpact: () => void) {
     this.phase = 'anticipation';
     this.t = 0;
-    this.total = 0;
-    this.holdFor = holdFor;
     this.line = line;
     this.accent = accent;
     this.onImpact = onImpact;
@@ -93,7 +69,6 @@ export class UltimateDirector {
   public update(realDt: number) {
     if (this.phase === 'idle') return;
     this.t += realDt;
-    this.total += realDt;
 
     if (this.phase === 'anticipation' && this.t >= ANTICIPATION) {
       this.phase = 'impact';
@@ -105,19 +80,8 @@ export class UltimateDirector {
       this.phase = 'recovery';
       this.t = 0;
     } else if (this.phase === 'recovery' && this.t >= RECOVERY) {
-      // Hold the line at normal speed for whatever is left of the voice clip.
-      if (this.total < this.holdFor) {
-        this.phase = 'linger';
-        this.t = 0;
-      } else {
-        this.phase = 'idle';
-        this.t = 0;
-        this.line = '';
-      }
-    } else if (this.phase === 'linger' && this.total >= this.holdFor) {
       this.phase = 'idle';
       this.t = 0;
-      this.total = 0;
       this.line = '';
     }
   }
@@ -128,7 +92,6 @@ export class UltimateDirector {
       case 'anticipation': return 0.66 * Math.min(1, this.t / (ANTICIPATION * 0.6));
       case 'impact': return 0.66;
       case 'recovery': return 0.66 * Math.max(0, 1 - this.t / (RECOVERY * 0.7));
-      case 'linger': return 0;
       default: return 0;
     }
   }
@@ -155,12 +118,7 @@ export class UltimateDirector {
       slide = (1 - k) * 40;
       scale = 1.25 - 0.25 * k;
     } else if (this.phase === 'recovery') {
-      // With a voice line still playing the line stays up; without one it fades
-      // out with the dim as before.
-      alpha = this.holdFor > 0 ? 1 : Math.max(0, 1 - this.t / (RECOVERY * 0.8));
-    } else if (this.phase === 'linger') {
-      const remaining = this.holdFor - this.total;
-      alpha = remaining < LINGER_FADE ? Math.max(0, remaining / LINGER_FADE) : 1;
+      alpha = Math.max(0, 1 - this.t / (RECOVERY * 0.8));
     }
     if (alpha <= 0) return;
 
