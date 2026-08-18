@@ -40,6 +40,11 @@ export class SaveManager {
         exp: playerState.exp,
         maxExp: playerState.maxExp,
         gold: playerState.gold,
+        // Equipment was never saved. Equipping moves an item OUT of the
+        // inventory and into a slot, and only the inventory was persisted - so
+        // the moment you equipped something and reloaded, it was gone from both
+        // places at once. That is the whole of the reported loss.
+        equipment: playerState.equipment,
       };
 
       const saveData = {

@@ -18,7 +18,8 @@
     "test:ground": "node tools/check-map-ground.mjs",
     "test:sprites": "node test/sprite-api.test.mjs",
     "test:progression": "node test/progression.test.mjs",
-    "test:levelgate": "node test/coop-level-gate.test.mjs"
+    "test:levelgate": "node test/coop-level-gate.test.mjs",
+    "test:save": "node test/persistence.test.mjs"
   },
   "keywords": [],
   "author": "",

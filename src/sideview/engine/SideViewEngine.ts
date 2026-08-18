@@ -1238,7 +1238,17 @@ export class SideViewEngine {
     if (ps.gold) this.player.gold = ps.gold;
     if (data.maxDungeonCleared) this.player.maxDungeonCleared = data.maxDungeonCleared;
     if (data.inventory) this.player.inventory = data.inventory;
-    
+
+    // Restored slot by slot rather than by replacing the object, so a save
+    // written before equipment was persisted still loads and simply leaves the
+    // empty slots empty.
+    if (ps.equipment) {
+      for (const slot of Object.keys(this.player.equipment) as Array<keyof typeof this.player.equipment>) {
+        const item = ps.equipment[slot];
+        if (item) this.player.equipment[slot] = item;
+      }
+    }
+
     this.recomputeStats();
     this.player.hp = this.player.maxHp;
     this.player.mp = this.player.maxMp;
