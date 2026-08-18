@@ -1,5 +1,6 @@
 import { SideViewGame } from './sideview/SideViewGame';
 import { installMobileStyles } from './sideview/ui/MobileUI';
+import { installAutoFullscreen } from './sideview/ui/Fullscreen';
 
 function generateShortId() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No I, O, 0, 1
@@ -247,3 +248,8 @@ if (document.readyState === 'loading') {
 } else {
   initGame();
 }
+
+// Phones reach fullscreen on the player's first tap, whatever that tap was for.
+// A page cannot ask for it on load - every browser refuses a request that did
+// not come from a gesture.
+installAutoFullscreen();

@@ -23,7 +23,8 @@
     "test:boss": "node test/boss-skills.test.mjs",
     "test:party": "node test/party-support.test.mjs",
     "test:voice": "node test/voice-chat.test.mjs",
-    "test:hud": "node test/hud-layout.test.mjs"
+    "test:hud": "node test/hud-layout.test.mjs",
+    "test:fullscreen": "node test/fullscreen.test.mjs"
   },
   "keywords": [],
   "author": "",
