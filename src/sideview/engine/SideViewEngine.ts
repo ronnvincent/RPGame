@@ -367,7 +367,6 @@ export class SideViewEngine {
       p.vy = 3.5;
       p.isGrounded = false;
       audio.playJump();
-      this.particles.addImpactBurst(p.x, p.y, 8, '#94a3b8', 'smoke');
       return;
     }
 
@@ -376,13 +375,11 @@ export class SideViewEngine {
       p.isGrounded = false;
       p.hasJumpedOnce = true;
       audio.playJump();
-      this.particles.addImpactBurst(p.x, p.y + p.height / 2, 8, '#cfd8dc', 'smoke');
     } else if (p.hasJumpedOnce && (p.equipment.wings || p.characterClass.id === 'ninja' || p.characterClass.id === 'dragoon')) {
       // Double jump
       p.vy = -p.characterClass.stats.jumpPower * 0.9;
       p.hasJumpedOnce = false;
       audio.playJump();
-      this.particles.addImpactBurst(p.x, p.y, 12, '#90caf9', 'spark');
     }
   }
 
@@ -395,7 +392,6 @@ export class SideViewEngine {
     p.iframeTimer = 0.35;
     p.vx = p.facing * (p.totalSpeed * 2.6);
     audio.playDash();
-    this.particles.addImpactBurst(p.x, p.y, 10, p.characterClass.themeColor, 'trail');
     this.particles.addGhostTrail(p.x, p.y, p.facing, p.characterClass.id, 'run', 0, p.characterClass.accentColor);
   }
 
@@ -1130,7 +1126,7 @@ export class SideViewEngine {
 
     audio.playHit(isCrit);
     this.particles.addFloatingText(enemy.x, enemy.y - enemy.height / 2, `${finalDamage}`, isCrit ? '#ffd54f' : '#ffffff', isCrit);
-    this.particles.addImpactBurst(enemy.x, enemy.y, isCrit ? 18 : 8, '#e53935', 'spark');
+    this.particles.playVfx(isCrit ? 'fx_hit_big' : 'fx_spark_a', enemy.x, enemy.y - 12, { scale: isCrit ? 1.4 : 1 });
 
     // Custom Hit VFX for Warrior
     if (this.player && this.player.characterClass.id === 'warrior') {
@@ -1185,10 +1181,8 @@ export class SideViewEngine {
     if (enemy.type === 'boss') {
       audio.playBossRoar();
       this.particles.triggerScreenShake(14, 0.6);
-      this.particles.addHolyPillar(enemy.x, enemy.y);
       this.particles.addFloatingText(enemy.x, enemy.y - 50, 'BOSS DEFEATED!', '#ffd54f', true, 26);
     } else {
-      this.particles.addImpactBurst(enemy.x, enemy.y, 20, enemy.color, 'smoke');
     }
   }
 
@@ -1222,9 +1216,7 @@ export class SideViewEngine {
       p.mp = p.maxMp;
 
       audio.playLevelUp();
-      this.particles.addHolyPillar(p.x, this.groundY);
       this.particles.addFloatingText(p.x, p.y - 60, '★ LEVEL UP! ★', '#ffd700', true, 24);
-      this.particles.addImpactBurst(p.x, p.y, 40, '#ffd700', 'spark');
     }
   }
 
@@ -1333,7 +1325,6 @@ export class SideViewEngine {
         p.iframeTimer = 2.5;
         p.animState = 'idle';
         audio.playLevelUp();
-        this.particles.addHolyPillar(p.x, this.groundY);
         this.particles.addFloatingText(p.x, p.y - 40, '✨ PHOENIX FEATHER RESURRECTION! ✨', '#ffd700', true, 20);
         this.triggerSave();
       } else {
@@ -1908,7 +1899,6 @@ export class SideViewEngine {
     audio.playHit(false);
     this.particles.triggerScreenShake(6, 0.2);
     this.particles.addFloatingText(p.x, p.y - p.height / 2, `-${finalDamage}`, '#ef5350', false, 18);
-    this.particles.addImpactBurst(p.x, p.y, 8, '#d32f2f', 'spark');
   }
 
   private updateLoot(dt: number) {
@@ -1922,7 +1912,6 @@ export class SideViewEngine {
 
       // Despawn on 30s timeout with smoke puff
       if (loot.despawnTimer <= 0) {
-        this.particles.addImpactBurst(loot.x, loot.y - 10, 10, '#94a3b8', 'smoke');
         this.droppedLoots.splice(i, 1);
         continue;
       }
@@ -1948,7 +1937,6 @@ export class SideViewEngine {
         audio.playLoot(loot.item.rarity);
         const rConfig = RARITY_CONFIGS[loot.item.rarity] || RARITY_CONFIGS.common;
         this.particles.addFloatingText(p.x, p.y - 25, `+ ${loot.item.name} (${rConfig.name})`, rConfig.color, true, 16);
-        this.particles.addImpactBurst(loot.x, loot.y - 10, 12, rConfig.color, 'spark');
         this.droppedLoots.splice(i, 1);
       }
     }

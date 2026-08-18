@@ -269,7 +269,6 @@ export class SideViewGame {
             const livingCount = this.engine.enemies.filter(e => !e.isDead).length;
             this.hud?.setWaveInfo(`${dungeon.name} - Wave ${this.currentWaveIndex + 1}/${dungeon.waves.length}`, livingCount);
             audio.playSlash('heavy');
-            this.engine.particles.addImpactBurst(this.engine.player.x, this.engine.groundY, 12, dungeon.ambientParticles, 'spark');
           }
         }
       });
@@ -348,7 +347,7 @@ export class SideViewGame {
             hitData.isCrit ? '#ffd54f' : '#ffffff',
             hitData.isCrit
           );
-          this.engine.particles.addImpactBurst(enemy.x, enemy.y, hitData.isCrit ? 18 : 8, '#e53935', 'spark');
+          this.engine.particles.playVfx(hitData.isCrit ? 'fx_hit_big' : 'fx_spark_a', enemy.x, enemy.y - 12, { scale: hitData.isCrit ? 1.4 : 1 });
         }
       });
     });
@@ -564,7 +563,6 @@ export class SideViewGame {
     }
 
     this.hud?.setWaveInfo(`${dungeon.name} - Wave ${this.currentWaveIndex + 1}/${dungeon.waves.length}`, enemies.length);
-    this.engine.particles.addImpactBurst(this.engine.player.x, this.engine.groundY, 12, dungeon.ambientParticles, 'spark');
 
     // Immediately broadcast newly spawned wave to party members.
     // This used to be a dynamic import(); when that chunk failed to load the
@@ -588,7 +586,6 @@ export class SideViewGame {
     
     const dungeon = DUNGEONS[this.currentDungeonIndex];
     audio.playFanfare();
-    this.engine.particles.addHolyPillar(this.engine.player.x, this.engine.player.y);
     this.engine.particles.addFloatingText(this.engine.player.x, this.engine.player.y - 60, '🏆 DUNGEON CLEARED! 🏆', '#ffd700', true, 28);
 
     // If final Void Nexus dungeon cleared

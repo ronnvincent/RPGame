@@ -318,7 +318,6 @@ export class TownHub {
           engine.recalculateStats();
           audio.playSlash('heavy');
           audio.playCoin();
-          engine.particles.addImpactBurst(engine.player.x, engine.player.y, 16, '#f87171', 'spark');
           renderContent();
         } else {
           audio.playTone(200, 0.15);
@@ -332,7 +331,6 @@ export class TownHub {
           engine.recalculateStats();
           audio.playTone(600, 0.2);
           audio.playCoin();
-          engine.particles.addHolyPillar(engine.player.x, engine.player.y);
           renderContent();
         } else {
           audio.playTone(200, 0.15);
@@ -347,7 +345,6 @@ export class TownHub {
           engine.recalculateStats();
           audio.playHeal();
           audio.playCoin();
-          engine.particles.addHolyPillar(engine.player.x, engine.player.y);
           renderContent();
         } else {
           audio.playTone(200, 0.15);
