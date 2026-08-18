@@ -67,7 +67,11 @@ check('and an unreachable one does too', /Could not reach the rankings/.test(boa
 // --- The server ---------------------------------------------------------
 check('the server stores power with the save', /UPDATE users SET save_data = \$1, power = \$2/.test(server));
 check('it works without a database too', /if \(!HAS_DB\)[\s\S]{0,400}rec\.power = score/.test(server));
-check('it ranks by the stored figure', /ORDER BY COALESCE\(power, 0\) DESC/.test(server));
+// The point is that the ordering uses a stored figure, whichever column or
+// JSON field it came from - not that the SQL is spelled a particular way.
+check('it ranks by the stored figure', /ORDER BY power DESC/.test(server));
+check('and the figure falls back to the save when the column is empty',
+      /NULLIF\(save_data->'playerState'->>'power', ''\)::int/.test(server));
 check('and never recomputes it', !/computePower/.test(server));
 
 // --- Live, against the running server ------------------------------------

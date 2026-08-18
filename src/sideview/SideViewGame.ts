@@ -178,10 +178,7 @@ export class SideViewGame {
     this.worldMap.onOpenLobby = () => this.coopLobby?.open();
 
     // Class and level travel with lobby packets so party cards can show them.
-    network.profile = {
-      classId: this.engine.player.characterClass.id,
-      level: this.engine.player.level
-    };
+    this.refreshNetworkProfile();
 
     this.setupInputListeners();
     
@@ -612,6 +609,21 @@ export class SideViewGame {
     this.hud?.showToast(`New record: wave ${wavesCleared}`);
   }
 
+  /**
+   * Keeps the level the party sees in step with the real one.
+   *
+   * This was set once at startup, so every level gained afterwards was invisible
+   * to the lobby - a level 11 player showed to their party as whatever they were
+   * when the game opened.
+   */
+  private refreshNetworkProfile() {
+    if (!this.engine) return;
+    const level = this.engine.player.level;
+    const classId = this.engine.player.characterClass.id;
+    if (network.profile.level === level && network.profile.classId === classId) return;
+    network.profile = { classId, level };
+  }
+
   private spawnNextWave() {
     if (!this.engine) return;
     const dungeon = DUNGEONS[this.currentDungeonIndex];
@@ -923,6 +935,7 @@ export class SideViewGame {
         }
 
         this.hud?.update();
+        this.refreshNetworkProfile();
         this.coopDebug?.update(dt, this.engine, this.currentWaveIndex, this.currentDungeonIndex);
       }
 

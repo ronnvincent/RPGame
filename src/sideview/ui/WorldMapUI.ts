@@ -217,7 +217,12 @@ export class WorldMapUI {
       // eight levels above you.
       const dungeon = dungeonIdx !== -1 ? DUNGEONS[dungeonIdx] : undefined;
       const requiredLevel = dungeon?.minLevel ?? loc.recommendedLevel;
-      const cleared = dungeonIdx !== -1 && dungeonIdx <= maxDungeonCleared;
+      // Story order applies to the four acts only. The bonus zones and the
+      // arena are side content: they open on level alone, because ranking them
+      // by array position put the level 3 swamp behind the level 14 void and
+      // left a high level character looking at locked low level maps.
+      const sideContent = Boolean(dungeon?.sideContent);
+      const cleared = sideContent || (dungeonIdx !== -1 && dungeonIdx <= maxDungeonCleared);
       const levelMet = playerLevel >= requiredLevel;
       const isUnlocked = isTown || (cleared && levelMet);
       const lockReason = isTown || isUnlocked ? ''

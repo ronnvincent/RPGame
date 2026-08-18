@@ -47,6 +47,11 @@ export class SaveManager {
         equipment: playerState.equipment,
         skillLevels: playerState.skillLevels,
         skillPoints: playerState.skillPoints,
+        // Written into the save as well as into its own column. The column can
+        // only ever hold what the newest client sent; the save is what every
+        // client has always written, so a figure kept here can be read back for
+        // anyone, including accounts that predate the column.
+        power,
       };
 
       const saveData = {

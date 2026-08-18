@@ -99,6 +99,15 @@ export interface DungeonDefinition {
   minLevel?: number;
   /** Waves never run out: past the last defined one they are generated. */
   endless?: boolean;
+  /**
+   * Optional content, reached by level alone rather than by story order.
+   *
+   * The main path is four acts and is meant to be played in order. The bonus
+   * zones are not part of it, and gating them on story order put a level 3
+   * swamp behind a level 14 dungeon - so a high level character stared at
+   * locked low level maps.
+   */
+  sideContent?: boolean;
   waves: DungeonWave[];
 }
 
@@ -260,6 +269,7 @@ export const DUNGEONS: DungeonDefinition[] = [
   // --- 5. VENOMOUS SWAMP (Gothicvania Swamp) ---
   {
     id: 'venomous_swamp',
+    sideContent: true,
     minLevel: 3,
     name: 'Venomous Swamp',
     subtitle: 'Murky poison marsh draped in moss, ancient deadwood, and toxic creatures.',
@@ -293,6 +303,7 @@ export const DUNGEONS: DungeonDefinition[] = [
   // --- 6. TWILIGHT PEAKS (Mountain Dusk) ---
   {
     id: 'twilight_peaks',
+    sideContent: true,
     minLevel: 6,
     name: 'Twilight Peaks',
     subtitle: 'High alpine crags bathed in the crimson radiance of the blood moon.',
@@ -326,6 +337,7 @@ export const DUNGEONS: DungeonDefinition[] = [
   // --- 7. SUNKEN ABYSS (Underwater Fantasy) ---
   {
     id: 'sunken_abyss',
+    sideContent: true,
     minLevel: 10,
     name: 'Sunken Abyss',
     subtitle: 'Submerged ancient temple ruins inhabited by abyssal horrors and sirens.',
@@ -359,6 +371,7 @@ export const DUNGEONS: DungeonDefinition[] = [
   // --- 8. GALLET DEPTHS (Caves of Gallet) ---
   {
     id: 'gallet_depths',
+    sideContent: true,
     minLevel: 12,
     name: 'Gallet Depths',
     subtitle: 'Subterranean lava forge carved with stone channels and cascading waterfalls.',
@@ -391,6 +404,7 @@ export const DUNGEONS: DungeonDefinition[] = [
   // --- 9. ENDLESS CELESTIAL ARENA ---
   {
     id: 'endless_arena',
+    sideContent: true,
     minLevel: 16,
     // Called Endless, subtitled "infinite", gated behind level 16 - and it held
     // exactly one wave. The waves below are the seed; everything past them is
