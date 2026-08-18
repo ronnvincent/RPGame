@@ -150,7 +150,7 @@ export class WorldMapUI {
     this.onSelectLocation = onSelectLocation;
   }
 
-  public open(maxDungeonCleared: number = 0) {
+  public open(maxDungeonCleared: number = 0, playerLevel: number = 1) {
     this.close();
     audio.playPageTurn();
 
@@ -211,7 +211,18 @@ export class WorldMapUI {
     WorldMapUI.LOCATIONS.forEach((loc) => {
       const isTown = loc.id === 'town_eldermoor';
       const dungeonIdx = DUNGEONS.findIndex(d => d.id === loc.id);
-      const isUnlocked = isTown || (dungeonIdx !== -1 && dungeonIdx <= maxDungeonCleared);
+      // Two separate requirements, and the map only ever checked one. Clearing
+      // a dungeon unlocked the next card regardless of level, so the level
+      // shown on it was decoration - you could walk straight into a dungeon
+      // eight levels above you.
+      const dungeon = dungeonIdx !== -1 ? DUNGEONS[dungeonIdx] : undefined;
+      const requiredLevel = dungeon?.minLevel ?? loc.recommendedLevel;
+      const cleared = dungeonIdx !== -1 && dungeonIdx <= maxDungeonCleared;
+      const levelMet = playerLevel >= requiredLevel;
+      const isUnlocked = isTown || (cleared && levelMet);
+      const lockReason = isTown || isUnlocked ? ''
+        : !cleared ? 'CLEAR THE PREVIOUS DUNGEON'
+        : `REACH Lv. ${requiredLevel}`;
 
       const card = document.createElement('div');
       card.style.cssText = `
@@ -256,7 +267,7 @@ export class WorldMapUI {
             </div>
           </div>
           <div style="font-size: 11px; background: rgba(0,0,0,0.6); padding: 3px 8px; border-radius: 4px; color: ${isTown ? '#93c5fd' : '#fef08a'}; font-weight: 800; border: 1px solid ${isTown ? '#3b82f6' : 'rgba(254, 240, 138, 0.3)'};">
-            ${isTown ? 'SAFE' : `Lv. ${loc.recommendedLevel}+`}
+            ${isTown ? 'SAFE' : `Lv. ${requiredLevel}+`}
           </div>
         </div>
 
@@ -271,12 +282,12 @@ export class WorldMapUI {
           </div>
           ${isTown ? `
             <button class="travel-btn dialogue-btn ${isUnlocked ? 'dialogue-btn-quest' : ''}" style="padding: 6px 14px; font-size: 12px; font-weight: 800; white-space: nowrap;" ${!isUnlocked ? 'disabled' : ''}>
-              ${!isUnlocked ? '🔒 LOCKED' : 'VISIT ➔'}
+              ${!isUnlocked ? '🔒 ' + lockReason : 'VISIT ➔'}
             </button>
           ` : `
             <div style="display: flex; gap: 6px;">
               <button class="travel-btn dialogue-btn ${isUnlocked ? 'dialogue-btn-quest' : ''}" style="padding: 6px 10px; font-size: 11px; font-weight: 800; white-space: nowrap;" ${!isUnlocked ? 'disabled' : ''}>
-                ${!isUnlocked ? '🔒 LOCKED' : 'SOLO'}
+                ${!isUnlocked ? '🔒 ' + lockReason : 'SOLO'}
               </button>
               <button class="coop-btn dialogue-btn" style="padding: 6px 10px; font-size: 11px; font-weight: 800; white-space: nowrap;" ${!isUnlocked ? 'disabled' : ''}>
                 ${!isUnlocked ? '🔒' : 'CO-OP 🌐'}

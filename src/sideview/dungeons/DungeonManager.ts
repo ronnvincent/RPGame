@@ -95,6 +95,7 @@ export const DUNGEONS: DungeonDefinition[] = [
   // --- 1. GOBLIN CATACOMBS ---
   {
     id: 'goblin_catacombs',
+    minLevel: 1,
     name: 'Goblin Catacombs',
     subtitle: 'Underground tunnels infested with goblin thieves and shamans.',
     theme: 'catacombs',
@@ -134,6 +135,7 @@ export const DUNGEONS: DungeonDefinition[] = [
   // --- 2. CRYPT OF THE DAMNED ---
   {
     id: 'undead_crypt',
+    minLevel: 5,
     name: 'Crypt of the Damned',
     subtitle: 'Ancient resting place of undead skeletons and spectral wraiths.',
     theme: 'crypt',
@@ -173,6 +175,7 @@ export const DUNGEONS: DungeonDefinition[] = [
   // --- 3. INFERNO DRAGON'S LAIR ---
   {
     id: 'dragon_lair',
+    minLevel: 9,
     name: "Inferno Dragon's Lair",
     subtitle: 'Volcanic magma caldera erupting with fire drakes and molten beasts.',
     theme: 'inferno',
@@ -211,6 +214,7 @@ export const DUNGEONS: DungeonDefinition[] = [
   // --- 4. THE VOID NEXUS ---
   {
     id: 'void_nexus',
+    minLevel: 14,
     name: 'The Void Nexus',
     subtitle: 'Cosmic rift where NightBorne commands the void shadows.',
     theme: 'void',
@@ -243,6 +247,7 @@ export const DUNGEONS: DungeonDefinition[] = [
   // --- 5. VENOMOUS SWAMP (Gothicvania Swamp) ---
   {
     id: 'venomous_swamp',
+    minLevel: 3,
     name: 'Venomous Swamp',
     subtitle: 'Murky poison marsh draped in moss, ancient deadwood, and toxic creatures.',
     theme: 'swamp',
@@ -275,6 +280,7 @@ export const DUNGEONS: DungeonDefinition[] = [
   // --- 6. TWILIGHT PEAKS (Mountain Dusk) ---
   {
     id: 'twilight_peaks',
+    minLevel: 6,
     name: 'Twilight Peaks',
     subtitle: 'High alpine crags bathed in the crimson radiance of the blood moon.',
     theme: 'mountain',
@@ -307,6 +313,7 @@ export const DUNGEONS: DungeonDefinition[] = [
   // --- 7. SUNKEN ABYSS (Underwater Fantasy) ---
   {
     id: 'sunken_abyss',
+    minLevel: 10,
     name: 'Sunken Abyss',
     subtitle: 'Submerged ancient temple ruins inhabited by abyssal horrors and sirens.',
     theme: 'underwater',
@@ -339,6 +346,7 @@ export const DUNGEONS: DungeonDefinition[] = [
   // --- 8. GALLET DEPTHS (Caves of Gallet) ---
   {
     id: 'gallet_depths',
+    minLevel: 12,
     name: 'Gallet Depths',
     subtitle: 'Subterranean lava forge carved with stone channels and cascading waterfalls.',
     theme: 'caves',
@@ -370,6 +378,7 @@ export const DUNGEONS: DungeonDefinition[] = [
   // --- 9. ENDLESS CELESTIAL ARENA ---
   {
     id: 'endless_arena',
+    minLevel: 16,
     name: 'Endless Celestial Arena',
     subtitle: 'Infinite trial against progressively empowered dimensional waves.',
     theme: 'void',

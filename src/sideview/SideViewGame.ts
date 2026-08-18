@@ -671,7 +671,7 @@ export class SideViewGame {
     const activeNpc = this.townHub.getActiveNpc();
     if (activeNpc) {
       this.townHub.interactWithNpc(activeNpc, this.engine, this.dialogue, () => {
-        this.worldMap?.open(this.engine?.player.maxDungeonCleared || 0);
+        this.worldMap?.open(this.engine?.player.maxDungeonCleared || 0, this.engine?.player.level || 1);
       });
     }
   }
@@ -702,7 +702,7 @@ export class SideViewGame {
 
       // World Map toggle: KeyM
       if (e.code === 'KeyM') {
-        this.worldMap?.open(this.engine?.player.maxDungeonCleared || 0);
+        this.worldMap?.open(this.engine?.player.maxDungeonCleared || 0, this.engine?.player.level || 1);
       }
 
       // Return to Town: KeyT
@@ -782,7 +782,7 @@ export class SideViewGame {
           // used to split the guest into their own room and silently break the
           // whole run. The host drives where the party goes.
           if (this.engine.isPlayerNearPortal && !wasNear && !this.dialogue?.isOpen && !network.isPartied) {
-            this.worldMap?.open(this.engine?.player.maxDungeonCleared || 0);
+            this.worldMap?.open(this.engine?.player.maxDungeonCleared || 0, this.engine?.player.level || 1);
           }
           // Auto-close WorldMap when player leaves portal zone
           if (!this.engine.isPlayerNearPortal && wasNear) {

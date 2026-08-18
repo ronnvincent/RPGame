@@ -1213,7 +1213,7 @@ export class GameHUD {
         <div class="player-bars">
           <div class="player-name-row">
             <span style="color: ${p.characterClass.accentColor}">${p.characterClass.name}</span>
-            <span style="color: #ffd700">Lv. ${p.level}</span>
+            <span style="color: #ffd700" id="hud-level-text">Lv. ${p.level}</span>
           </div>
           <!-- HP Bar Sprite Frame with Delayed Hit Lag Bar -->
           <div class="sprite-bar-frame" title="Health (HP)">
@@ -1807,6 +1807,13 @@ export class GameHUD {
     if (mpLag) mpLag.style.width = `${mpPct}%`;
     if (expBar) expBar.style.width = `${expPct}%`;
     if (goldText) goldText.textContent = `${p.gold}`;
+
+    // The level number only ever existed in the render() template, and nothing
+    // calls render() during a fight - so levelling up mid-dungeon showed the
+    // bars reset while the number stayed on the old level until something else
+    // rebuilt the HUD. It updates with everything else now.
+    const levelText = this.container.querySelector('#hud-level-text');
+    if (levelText) levelText.textContent = `Lv. ${p.level}`;
 
     // Town Return button
     const townBtn = this.container.querySelector('#return-town-btn') as HTMLElement;
