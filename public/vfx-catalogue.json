@@ -1875,7 +1875,7 @@
     "count": 13
    },
    "fps": 15,
-   "scale": 1,
+   "scale": 0.55,
    "blend": "lighter"
   },
   "ult_epic_explosion_002": {
@@ -1888,7 +1888,7 @@
     "count": 15
    },
    "fps": 15,
-   "scale": 1,
+   "scale": 0.55,
    "blend": "lighter"
   },
   "ult_stylized_explosion_003": {
@@ -1901,7 +1901,7 @@
     "count": 14
    },
    "fps": 15,
-   "scale": 1,
+   "scale": 0.55,
    "blend": "lighter"
   },
   "ult_symmetrical_explosion_004": {
@@ -1914,7 +1914,7 @@
     "count": 12
    },
    "fps": 15,
-   "scale": 1,
+   "scale": 0.55,
    "blend": "lighter"
   },
   "ult_symmetrical_impact_006": {
@@ -1927,7 +1927,7 @@
     "count": 8
    },
    "fps": 15,
-   "scale": 1,
+   "scale": 0.55,
    "blend": "lighter"
   },
   "ult_directional_impact_003": {
@@ -1940,7 +1940,7 @@
     "count": 6
    },
    "fps": 15,
-   "scale": 1,
+   "scale": 0.55,
    "blend": "lighter"
   },
   "ult_round_light_burst_001": {
@@ -1953,7 +1953,7 @@
     "count": 9
    },
    "fps": 15,
-   "scale": 1,
+   "scale": 0.55,
    "blend": "lighter"
   },
   "ult_lightning_strike_001": {
@@ -1966,7 +1966,7 @@
     "count": 7
    },
    "fps": 15,
-   "scale": 1,
+   "scale": 0.55,
    "blend": "lighter"
   },
   "ult_lightning_burst_003": {
@@ -1979,7 +1979,7 @@
     "count": 10
    },
    "fps": 15,
-   "scale": 1,
+   "scale": 0.55,
    "blend": "lighter"
   },
   "ult_spell_death_001": {
@@ -1992,7 +1992,7 @@
     "count": 50
    },
    "fps": 15,
-   "scale": 1,
+   "scale": 0.55,
    "blend": "lighter"
   },
   "ult_spell_heal_001": {
@@ -2005,7 +2005,7 @@
     "count": 16
    },
    "fps": 15,
-   "scale": 1,
+   "scale": 0.55,
    "blend": "lighter"
   },
   "ult_spell_absorb_001": {
@@ -2018,7 +2018,7 @@
     "count": 31
    },
    "fps": 15,
-   "scale": 1,
+   "scale": 0.55,
    "blend": "lighter"
   },
   "ult_spell_haste_001": {
@@ -2031,7 +2031,7 @@
     "count": 29
    },
    "fps": 15,
-   "scale": 1,
+   "scale": 0.55,
    "blend": "lighter"
   },
   "ult_scifi_warp_001": {
@@ -2044,7 +2044,7 @@
     "count": 10
    },
    "fps": 15,
-   "scale": 1,
+   "scale": 0.55,
    "blend": "lighter"
   },
   "ult_scifi_charge_up_001": {
@@ -2057,7 +2057,7 @@
     "count": 12
    },
    "fps": 15,
-   "scale": 1,
+   "scale": 0.55,
    "blend": "lighter"
   },
   "ult_scifi_spark_burst_001": {
@@ -2070,7 +2070,7 @@
     "count": 12
    },
    "fps": 15,
-   "scale": 1,
+   "scale": 0.55,
    "blend": "lighter"
   },
   "ult_stylized_skull_smoke_burst_001": {
@@ -2083,7 +2083,7 @@
     "count": 12
    },
    "fps": 15,
-   "scale": 1,
+   "scale": 0.55,
    "blend": "lighter"
   },
   "ult_nuclear": {
@@ -2104,7 +2104,7 @@
     ]
    },
    "fps": 15,
-   "scale": 1,
+   "scale": 0.55,
    "blend": "lighter"
   },
   "ult_circle_blast": {
@@ -2125,7 +2125,7 @@
     ]
    },
    "fps": 15,
-   "scale": 1,
+   "scale": 0.55,
    "blend": "lighter"
   },
   "ult_lightning_storm": {
@@ -2157,7 +2157,7 @@
     ]
    },
    "fps": 15,
-   "scale": 1,
+   "scale": 0.55,
    "blend": "lighter"
   },
   "ult_twin_blast": {
@@ -2178,7 +2178,7 @@
     ]
    },
    "fps": 15,
-   "scale": 1,
+   "scale": 0.55,
    "blend": "lighter"
   },
   "ult_pillar": {
@@ -2198,7 +2198,7 @@
     ]
    },
    "fps": 15,
-   "scale": 1,
+   "scale": 0.55,
    "blend": "lighter"
   },
   "ult_portal": {
@@ -2213,7 +2213,7 @@
     ]
    },
    "fps": 15,
-   "scale": 1,
+   "scale": 0.55,
    "blend": "lighter"
   },
   "ult_splosion": {
@@ -2228,7 +2228,7 @@
     ]
    },
    "fps": 15,
-   "scale": 1,
+   "scale": 0.55,
    "blend": "lighter"
   }
  },

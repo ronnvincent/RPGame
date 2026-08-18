@@ -913,6 +913,14 @@ export class ParticleSystem {
       return;
     }
 
+    // Hard ceiling on concurrent effects. Each one is a large additive blit,
+    // and an ultimate can queue several at once - without a cap a slow frame
+    // lets them pile up and the next frame is slower still.
+    const MAX_SPRITE_VFX = 14;
+    if (this.spriteVfx.length >= MAX_SPRITE_VFX) {
+      this.spriteVfx.shift(); // drop the oldest, keep the newest readable
+    }
+
     const sheet = this.sheetFor(id, def, opts.row);
     this.spriteVfx.push({
       anim: new AnimatedSprite(sheet, { fps: def.fps, loop: false }),

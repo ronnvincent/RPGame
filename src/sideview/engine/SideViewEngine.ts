@@ -626,13 +626,13 @@ export class SideViewEngine {
 
     // A centred hero blast, then a staggered ring around it so the AoE reads
     // as an area rather than a single puff.
-    this.particles.playVfx(big, x + facing * 40, y - 40, { facing, row, scale: 1.6 });
-    for (let i = 0; i < 5; i++) {
+    this.particles.playVfx(big, x + facing * 40, y - 40, { facing, row, scale: 1.35 });
+    for (let i = 0; i < 3; i++) {
       const ox = x + facing * 40 + (Math.random() * 2 - 1) * spread;
       const oy = y - 20 - Math.random() * 70;
       window.setTimeout(
         () => this.particles.playVfx(big, ox, oy, { facing, row, scale: 0.8 + Math.random() * 0.6 }),
-        110 + i * 70
+        120 + i * 90
       );
     }
   }
@@ -649,7 +649,12 @@ export class SideViewEngine {
     const entry = SideViewEngine.SKILL_SET_PIECES[`${classId}:${skillIndex}`];
     if (!entry) return;
 
-    switch (entry.signature) {
+    // Ultimates are driven by the cinematic payload now. Running the legacy
+    // set piece as well meant both fired at once, doubling the load on the
+    // heaviest frame in the game. Summons still spawn - they are gameplay.
+    const isUlt = skillIndex === 5;
+
+    switch (isUlt ? '' : entry.signature) {
       case 'titan_earth_shatter':
         this.particles.spawnTitanEarthShatter(x, this.groundY, facing); break;
       case 'shadow_tempest':
@@ -1261,9 +1266,17 @@ export class SideViewEngine {
 
     // Slow the world during an ultimate. Every system downstream just sees a
     // smaller dt, so none of them need to know a cinematic is running.
-    dt *= this.ultimate.timeScale;
+    //
+    // Effects are deliberately NOT slowed to the same degree. At 0.28x they
+    // stayed on screen ~3.5x longer while more kept spawning, so the heaviest
+    // moment in the game also became the longest - which is what made the
+    // ultimate hang. They run at a floor of 0.75x: still visibly slower, but
+    // they clear.
+    const worldScale = this.ultimate.timeScale;
+    const fxDt = dt * Math.max(0.75, worldScale);
+    dt *= worldScale;
     if (dt <= 0) {
-      this.particles.update(0.0005); // let effects breathe during the freeze
+      this.particles.update(fxDt);
       return;
     }
 
