@@ -286,9 +286,12 @@ export const MAPS: Record<string, MapTheme> = {
       { src: `${ANCIENT}/FarTrees.png`, scroll: 0.24 },
       { src: `${ANCIENT}/MiddleTrees.png`, scroll: 0.42 },
       { src: `${ANCIENT}/NearTrees.png`, scroll: 0.62 },
+      { src: `${ANCIENT}/FrontBushes.png`, scroll: 0.85 },
+      { src: `${ANCIENT}/ForeGround.png`, scroll: 0.92 },
+      // The ground goes last so the undergrowth sits behind the surface rather
+      // than on top of it. Put in front of the characters instead, these two
+      // layers buried the player and the boss completely.
       { src: `${ANCIENT}/Ground.png`, scroll: 1.0 },
-      { src: `${ANCIENT}/FrontBushes.png`, scroll: 1.0, front: true },
-      { src: `${ANCIENT}/ForeGround.png`, scroll: 1.0, front: true },
     ],
     floor: { top: '#3d5a2e', body: '#1a1410' }
   },
@@ -312,7 +315,7 @@ export const MAPS: Record<string, MapTheme> = {
       { src: `${FOREST}/05_Particles.png`, scroll: 0.44, alpha: 0.8, drift: -5 },
       { src: `${FOREST}/04_Forest.png`, scroll: 0.52 },
       { src: `${FOREST}/03_Particles.png`, scroll: 0.63, alpha: 0.9, drift: -9 },
-      { src: `${FOREST}/02_Bushes.png`, scroll: 1.0, front: true },
+      { src: `${FOREST}/02_Bushes.png`, scroll: 1.0 },
       { src: `${FOREST}/01_Mist.png`, scroll: 0.58, alpha: 0.3, drift: -3 },
     ],
     floor: { top: '#26403a', body: '#0a1412' }
@@ -390,7 +393,7 @@ export const MAPS: Record<string, MapTheme> = {
       { src: `${EDER}/Layer_0003_6.png`, scroll: 0.58 },
       { src: `${EDER}/Layer_0002_7.png`, scroll: 0.7 },
       { src: `${EDER}/Layer_0001_8.png`, scroll: 0.85 },
-      { src: `${EDER}/Layer_0000_9.png`, scroll: 1.0, front: true },
+      { src: `${EDER}/Layer_0000_9.png`, scroll: 1.0 },
     ],
     floor: { top: '#2f4a2a', body: '#10180f' }
   },
