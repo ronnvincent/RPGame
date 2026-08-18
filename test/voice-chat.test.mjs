@@ -72,7 +72,7 @@ const run = async () => {
   const vc = readFileSync('src/sideview/network/VoiceChat.ts', 'utf8');
   check('the controls live in the HUD, so they survive entering a dungeon', /toggle-mic-btn/.test(hud) && /toggle-voice-btn/.test(hud));
   check('muting disables the track rather than dropping the connection', /t\.enabled = this\.micOn/.test(vc));
-  check('the speaker mutes locally, per peer', /p\.audio\.muted = !on/.test(vc));
+  check('the speaker mutes locally, per peer', /peer\.audio\.muted = !on/.test(vc));
 
   // The three things that decide whether audio actually goes both ways.
   check('a signal arriving before joining is ignored, so the call cannot end up one-way',
@@ -105,6 +105,15 @@ const run = async () => {
   check('blocked autoplay is reported instead of swallowed',
         /Click the speaker button once/.test(vc));
   check('the call can describe its own state', /public get status/.test(vc));
+
+  // Nothing is live until it is asked for, and asking retries the playback the
+  // browser refused.
+  check('the microphone starts off', /private micOn = false/.test(vc));
+  check('the speaker starts off too', /private speakerOn = false/.test(vc));
+  check('turning the speaker on retries blocked playback',
+        /peer\.audio\.play\(\)\.then/.test(vc));
+  check('a track arriving with the speaker off is left alone',
+        /if \(!this\.speakerOn\) \{ this\.emitState\(\); return; \}/.test(vc));
 
   console.log('');
   console.log(failures === 0 ? 'PARTY VOICE OK' : `PARTY VOICE FAILURES: ${failures}`);

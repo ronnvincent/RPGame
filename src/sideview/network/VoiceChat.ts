@@ -34,7 +34,16 @@ export class VoiceChat {
   private peers = new Map<string, Peer>();
 
   private micOn = false;
-  private speakerOn = true;
+  /**
+   * Off until asked for, like the microphone.
+   *
+   * Starting on was worse than useless: browsers refuse audio that did not
+   * follow a click, so the speaker reported itself as ON while playing nothing,
+   * and the only way through was to toggle it off and back on - the toggle
+   * being the click the browser was waiting for. Starting off makes the first
+   * press the permission, which is the thing that was missing.
+   */
+  private speakerOn = false;
   private joined = false;
 
   /**
@@ -191,7 +200,18 @@ export class VoiceChat {
 
   public setSpeakerOn(on: boolean) {
     this.speakerOn = on;
-    this.peers.forEach((p) => { p.audio.muted = !on; });
+    this.peers.forEach((peer) => {
+      peer.audio.muted = !on;
+      if (!on) return;
+      // Retry playback here, not only when the track arrives. If the browser
+      // refused it the first time there was nothing to start it again, which
+      // is exactly why turning the speaker off and on appeared to be the fix:
+      // the click was the permission, and the element only resumed by luck.
+      peer.audio.play().then(() => { this.lastError = ''; }).catch(() => {
+        this.lastError = 'Audio is blocked by the browser. Tap the speaker again.';
+        this.onError?.(this.lastError);
+      });
+    });
     this.emitState();
   }
 
@@ -239,6 +259,9 @@ export class VoiceChat {
       const remote = ev.streams[0] || new MediaStream([ev.track]);
       audio.srcObject = remote;
       audio.muted = !this.speakerOn;
+      // With the speaker off there is nothing to start; it will be started by
+      // the button, which carries the permission with it.
+      if (!this.speakerOn) { this.emitState(); return; }
       audio.play().catch(() => {
         // Desktop browsers block playback that did not follow a click. The
         // speaker button is a click, so this is recoverable - but silently
