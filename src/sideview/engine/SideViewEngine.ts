@@ -336,60 +336,16 @@ export class SideViewEngine {
     this.buildMapPlatforms(theme);
   }
 
-  public buildMapPlatforms(theme: BattleTheme) {
+  public buildMapPlatforms(_theme: BattleTheme) {
+    // No floating ledges anywhere.
+    //
+    // They were wooden planks on legs that ran to a hardcoded y of 600; with
+    // the legs gone they became bars hanging in mid air, and once the maps had
+    // real ground there was nothing for them to connect to. Nothing in the
+    // dungeons requires the height, so the levels read as ground you walk on.
     this.platforms = [];
-    const gy = this.groundY;
-
-    if (this.isTownMode) {
-      // No ledges in the village. There is nothing to fight or reach up here,
-      // so they only ever hung over the street on tall wooden legs.
-    } else if (theme === 'catacombs') {
-      // Goblin Catacombs Platforms (multi-tier stone ledges)
-      this.platforms.push(
-        { x: 240, y: gy - 115, width: 280, height: 16, type: 'one-way' },
-        { x: 600, y: gy - 205, width: 240, height: 16, type: 'one-way' },
-        { x: 920, y: gy - 115, width: 320, height: 16, type: 'one-way' },
-        { x: 1380, y: gy - 195, width: 260, height: 16, type: 'one-way' },
-        { x: 1750, y: gy - 120, width: 340, height: 16, type: 'one-way' },
-        { x: 2200, y: gy - 210, width: 280, height: 16, type: 'one-way' },
-        { x: 2600, y: gy - 125, width: 350, height: 16, type: 'one-way' },
-        { x: 3050, y: gy - 200, width: 300, height: 16, type: 'one-way' }
-      );
-    } else if (theme === 'crypt') {
-      // Crypt Mausoleum Platforms
-      this.platforms.push(
-        { x: 280, y: gy - 130, width: 300, height: 16, type: 'one-way' },
-        { x: 700, y: gy - 220, width: 260, height: 16, type: 'one-way' },
-        { x: 1100, y: gy - 135, width: 320, height: 16, type: 'one-way' },
-        { x: 1550, y: gy - 230, width: 300, height: 16, type: 'one-way' },
-        { x: 2000, y: gy - 130, width: 340, height: 16, type: 'one-way' },
-        { x: 2450, y: gy - 225, width: 280, height: 16, type: 'one-way' },
-        { x: 2850, y: gy - 135, width: 350, height: 16, type: 'one-way' }
-      );
-    } else if (theme === 'inferno') {
-      // Inferno Dragon's Lair (Molten Crags & Floating Basalt Pillars)
-      this.platforms.push(
-        { x: 260, y: gy - 120, width: 280, height: 16, type: 'one-way' },
-        { x: 620, y: gy - 215, width: 260, height: 16, type: 'one-way' },
-        { x: 1000, y: gy - 130, width: 350, height: 16, type: 'one-way' },
-        { x: 1450, y: gy - 225, width: 300, height: 16, type: 'one-way' },
-        { x: 1900, y: gy - 125, width: 320, height: 16, type: 'one-way' },
-        { x: 2350, y: gy - 220, width: 290, height: 16, type: 'one-way' },
-        { x: 2750, y: gy - 135, width: 360, height: 16, type: 'one-way' }
-      );
-    } else {
-      // Void Nexus (Void Monoliths)
-      this.platforms.push(
-        { x: 300, y: gy - 135, width: 300, height: 16, type: 'one-way' },
-        { x: 720, y: gy - 235, width: 280, height: 16, type: 'one-way' },
-        { x: 1150, y: gy - 140, width: 340, height: 16, type: 'one-way' },
-        { x: 1600, y: gy - 240, width: 300, height: 16, type: 'one-way' },
-        { x: 2050, y: gy - 135, width: 350, height: 16, type: 'one-way' },
-        { x: 2500, y: gy - 235, width: 280, height: 16, type: 'one-way' },
-        { x: 2900, y: gy - 140, width: 360, height: 16, type: 'one-way' }
-      );
-    }
   }
+
 
   // --- PLAYER ACTIONS ---
 
@@ -2366,6 +2322,11 @@ export class SideViewEngine {
 
     // 5. Render Particle System (VFX, Projectiles, Minions, Clones, Zones, Floating Text)
     this.particles.draw(ctx);
+
+    // 6. Undergrowth and canopy the pack means to pass in front of everything.
+    sprites.drawEnvironmentForeground(
+      ctx, camX, virtualWidth, virtualHeight, this.groundY, currentTheme
+    );
 
     ctx.restore();
     ctx.restore();

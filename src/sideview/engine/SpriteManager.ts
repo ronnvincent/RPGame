@@ -2534,6 +2534,7 @@ export class SpriteManager {
 
     const now = Date.now() / 1000;
     for (const layer of map.layers) {
+      if (layer.front) continue;
       const img = this.getImage(layer.src);
       if (!img || !img.complete || !img.naturalWidth) continue;
       if (layer.scatter && layer.scatter.length) {
@@ -2788,6 +2789,37 @@ export class SpriteManager {
       }
     }
 
+    ctx.restore();
+  }
+
+  /**
+   * The layers a pack intends to pass in front of the characters.
+   *
+   * Called after the entities are drawn. Without this pass they were painted
+   * with the rest of the backdrop and covered the ground, the loot and the
+   * player standing on it.
+   */
+  public drawEnvironmentForeground(
+    ctx: CanvasRenderingContext2D,
+    camX: number,
+    width: number,
+    height: number,
+    groundY: number,
+    theme: string
+  ) {
+    const map = MAPS[theme];
+    if (!map) return;
+    const front = map.layers.filter((l) => l.front);
+    if (!front.length) return;
+
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    const now = Date.now() / 1000;
+    for (const layer of front) {
+      const img = this.getImage(layer.src);
+      if (!img || !img.complete || !img.naturalWidth) continue;
+      this.drawParallaxLayer(ctx, layer, img, camX, width, height, groundY, now, map.groundLine);
+    }
     ctx.restore();
   }
 
