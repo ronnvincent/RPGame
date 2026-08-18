@@ -1228,6 +1228,38 @@ export class GameHUD {
         border-radius: 4px;
       }
 
+      .cmp-row {
+        margin-top: 8px;
+        padding: 7px 9px;
+        background: rgba(0, 0, 0, 0.3);
+        border-left: 3px solid #6b4a24;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+      }
+
+      .cmp-head {
+        width: 100%;
+        font-size: 9.5px;
+        font-weight: 900;
+        letter-spacing: 1px;
+        color: #cbb894;
+        margin-bottom: 2px;
+      }
+
+      .cmp-up { color: #4ade80; }
+      .cmp-down { color: #f87171; }
+      .cmp-side { color: #fbbf24; }
+
+      .cmp-chip {
+        font-size: 10px;
+        font-weight: 800;
+        background: rgba(0, 0, 0, 0.35);
+        padding: 2px 7px;
+        border-radius: 3px;
+      }
+
       .stat-chip {
         color: #065f46;
       }
@@ -2223,6 +2255,54 @@ export class GameHUD {
     this.renderInspectorPane();
   }
 
+  /**
+   * The difference this item would make, slot by slot.
+   *
+   * Only the stats that actually change are listed - a wall of "+0" is noise,
+   * and the one line that matters gets lost in it.
+   */
+  private compareWithEquipped(item: ItemData): string {
+    const equipped = (this.engine.player.equipment as any)[item.type] as ItemData | undefined;
+
+    const rows: string[] = [];
+    const stats: Array<[string, string, number]> = [
+      ['⚔️', 'ATK', 1], ['🛡️', 'DEF', 1], ['❤️', 'HP', 1],
+      ['🔷', 'MP', 1], ['⚡', 'CRIT', 100], ['💨', 'SPD', 1],
+    ];
+    const keys = ['atk', 'def', 'hp', 'mp', 'crit', 'speed'];
+
+    let better = 0;
+    let worse = 0;
+
+    keys.forEach((key, i) => {
+      const [icon, label, scale] = stats[i];
+      const mine = ((item.stats as any)?.[key] || 0) * scale;
+      const theirs = ((equipped?.stats as any)?.[key] || 0) * scale;
+      const delta = Math.round((mine - theirs) * 10) / 10;
+      if (delta === 0) return;
+      if (delta > 0) better++; else worse++;
+      const colour = delta > 0 ? '#4ade80' : '#f87171';
+      const arrow = delta > 0 ? '▲' : '▼';
+      rows.push(`<span class="cmp-chip" style="color:${colour}">${icon} ${arrow} ${delta > 0 ? '+' : ''}${delta}${label === 'CRIT' ? '%' : ''} ${label}</span>`);
+    });
+
+    if (!equipped) {
+      return `<div class="cmp-row"><span class="cmp-head cmp-up">EMPTY SLOT — pure gain</span>${rows.join('')}</div>`;
+    }
+    if (!rows.length) {
+      return `<div class="cmp-row"><span class="cmp-head">Identical to your ${equipped.name}</span></div>`;
+    }
+
+    const verdict = better && !worse ? ['UPGRADE', 'cmp-up']
+      : worse && !better ? ['DOWNGRADE', 'cmp-down']
+      : ['SIDEGRADE', 'cmp-side'];
+
+    return `<div class="cmp-row">
+      <span class="cmp-head ${verdict[1]}">${verdict[0]} vs ${equipped.name}</span>
+      ${rows.join('')}
+    </div>`;
+  }
+
   private renderInspectorPane() {
     const pane = this.container.querySelector('#item-inspector-pane');
     if (!pane) return;
@@ -2245,6 +2325,16 @@ export class GameHUD {
       if (item.stats.crit) statChips.push(`<span class="stat-chip">⚡ +${Math.round(item.stats.crit * 100)}% CRIT</span>`);
       if (item.stats.speed) statChips.push(`<span class="stat-chip">💨 +${item.stats.speed} SPD</span>`);
     }
+    // Against what you are already wearing.
+    //
+    // The core loop is kill, loot, equip, and deciding whether a drop is an
+    // upgrade meant opening the bag, reading one item's numbers, opening
+    // another and comparing them from memory. The numbers were all there; the
+    // subtraction was left to the player.
+    const comparison = !isEquipped && item.type !== 'consumable'
+      ? this.compareWithEquipped(item)
+      : '';
+
     if (item.consumableEffect) {
       if (item.consumableEffect.type === 'heal_hp') statChips.push(`<span class="stat-chip">❤️ Heals +${item.consumableEffect.value} HP</span>`);
       if (item.consumableEffect.type === 'heal_mp') statChips.push(`<span class="stat-chip">🔷 Restores +${item.consumableEffect.value} MP</span>`);
@@ -2267,6 +2357,7 @@ export class GameHUD {
         </div>
       </div>
       ${statChips.length > 0 ? `<div class="inspector-stats-grid">${statChips.join('')}</div>` : ''}
+      ${comparison}
       <div class="inspector-desc">${item.description}</div>
       <div class="inspector-actions">
         ${isEquipped

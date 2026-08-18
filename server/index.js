@@ -189,23 +189,47 @@ app.get('/api/leaderboard', async (req, res) => {
   const byLevel = req.query.sort === 'level';
 
   if (!HAS_DB) {
+    // Same rule as the SQL: the save is the source of truth for level and class.
+    const levelOf = (u) => Number(u.save_data?.playerState?.level) || u.power_level || 1;
+    const classOf = (u) => u.save_data?.playerState?.characterClass?.name || u.power_class || null;
+
     const rows = [...memUsers.values()]
-      .filter((u) => (byLevel ? (u.power_level || 0) > 0 : (u.power || 0) > 0))
+      .filter((u) => Boolean(u.save_data))
       .sort((a, b) => byLevel
-        ? (b.power_level || 0) - (a.power_level || 0) || (b.power || 0) - (a.power || 0)
-        : (b.power || 0) - (a.power || 0))
+        ? levelOf(b) - levelOf(a) || (b.power || 0) - (a.power || 0)
+        : (b.power || 0) - (a.power || 0) || levelOf(b) - levelOf(a))
       .slice(0, limit)
-      .map((u, i) => ({ rank: i + 1, name: u.username, shortId: u.short_id, power: u.power || 0, className: u.power_class || null, level: u.power_level || 1 }));
+      .map((u, i) => ({ rank: i + 1, name: u.username, shortId: u.short_id, power: u.power || 0, className: classOf(u), level: levelOf(u) }));
     return res.json({ success: true, entries: rows });
   }
 
   try {
-    // Ties on level fall back to power, so the board has a stable order rather
-    // than shuffling between requests.
+    // Level and class come out of save_data, not out of the columns.
+    //
+    // power_level was added recently and defaults to 1, so every account made
+    // before it read as level 1 - which is what put a board full of level 1
+    // players in front of someone who knew they were not. The real figures have
+    // been in save_data the whole time; nothing was reading them.
+    //
+    // Ties on level fall back to power so the order is stable between requests.
+    const columns = `
+      username,
+      short_id,
+      COALESCE(power, 0) AS power,
+      COALESCE(save_data->'playerState'->'characterClass'->>'name', power_class) AS power_class,
+      COALESCE(NULLIF(save_data->'playerState'->>'level', '')::int, NULLIF(power_level, 0), 1) AS power_level
+    `;
+
     const result = await pool.query(
       byLevel
-        ? 'SELECT username, short_id, power, power_class, power_level FROM users WHERE power_level > 0 ORDER BY power_level DESC, power DESC LIMIT $1'
-        : 'SELECT username, short_id, power, power_class, power_level FROM users WHERE power > 0 ORDER BY power DESC LIMIT $1',
+        // Anyone with a save has a level worth ranking, whether or not they
+        // have opened the game since power existed.
+        ? `SELECT ${columns} FROM users WHERE save_data IS NOT NULL ORDER BY power_level DESC, power DESC LIMIT $1`
+        // Everyone with a save appears, ranked by power, with those who have
+        // not opened the game since power existed sorted last. Filtering them
+        // out entirely is what made a populated game look empty - showing them
+        // with no figure at least says what is actually true about them.
+        : `SELECT ${columns} FROM users WHERE save_data IS NOT NULL ORDER BY COALESCE(power, 0) DESC, power_level DESC LIMIT $1`,
       [limit]
     );
     res.json({

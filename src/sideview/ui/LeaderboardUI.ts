@@ -104,12 +104,16 @@ export class LeaderboardUI {
       list.innerHTML = entries.map((e) => {
         const mine = e.shortId === myId;
         const medal = e.rank === 1 ? '🥇' : e.rank === 2 ? '🥈' : e.rank === 3 ? '🥉' : '';
-        const figure = this.sort === 'level' ? `Lv. ${e.level}` : Number(e.power).toLocaleString();
+        // A player who has not opened the game since power was added has no
+        // figure yet. A dash says that; a zero would claim they are weak.
+        const unranked = !e.power;
+        const powerText = unranked ? '—' : Number(e.power).toLocaleString();
+        const figure = this.sort === 'level' ? `Lv. ${e.level}` : powerText;
         const meta = this.sort === 'level'
-          ? `${e.className || 'Adventurer'} · ⚡ ${Number(e.power).toLocaleString()}`
+          ? `${e.className || 'Adventurer'} · ⚡ ${powerText}`
           : `${e.className || 'Adventurer'} · Lv. ${e.level}`;
         return `
-          <div class="lb-row${mine ? ' lb-row-me' : ''}${e.rank <= 3 ? ' lb-row-top' : ''}">
+          <div class="lb-row${mine ? ' lb-row-me' : ''}${e.rank <= 3 && !unranked ? ' lb-row-top' : ''}${unranked ? ' lb-row-unranked' : ''}">
             <span class="lb-rank">${medal || e.rank}</span>
             <span class="lb-name">
               ${e.name}${mine ? ' <span class="lb-you">YOU</span>' : ''}
@@ -193,6 +197,9 @@ export class LeaderboardUI {
       /* The top three and your own row are the two things anyone actually
          looks for, so they are the two that are marked. */
       .lb-row-top { background: rgba(255, 215, 0, 0.09); border-left-color: #ffd700; }
+      /* No power recorded yet - shown, but not dressed up as a ranking. */
+      .lb-row-unranked { opacity: 0.62; }
+
       .lb-row-me { background: rgba(74, 222, 128, 0.13); border-left-color: #4ade80; }
       .lb-rank {
         font-family: 'Cinzel', serif; font-weight: 900; font-size: 15px;

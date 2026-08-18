@@ -97,6 +97,10 @@ export interface PlayerState {
   }[];
   // Skill Cooldowns
   skillCooldowns: { [skillId: string]: number };
+  /** Unspent points, one per level. */
+  skillPoints?: number;
+  /** Points sunk into each skill, by skill id. */
+  skillLevels?: { [skillId: string]: number };
   equipment: PlayerEquipment;
   inventory: ItemData[];
   comboCount: number;
@@ -316,7 +320,12 @@ export class SideViewEngine {
 
     // Level scaling (+8% per level)
     const lvlMultiplier = 1 + (p.level - 1) * 0.08;
-    p.maxHp = Math.round((p.characterClass.stats.maxHp + bonusHp) * lvlMultiplier);
+    // The forge adds to maxHp directly, and this recomputes maxHp from the class
+    // and equipment - so every purchased +50 was silently erased on the next
+    // recompute, which happens on equipping anything. The purchase count is the
+    // durable record of it.
+    const forgedHp = 50 * (Number(localStorage.getItem('forge_hp')) || 0);
+    p.maxHp = Math.round((p.characterClass.stats.maxHp + bonusHp) * lvlMultiplier) + forgedHp;
     p.maxMp = Math.round((p.characterClass.stats.maxMp + bonusMp) * lvlMultiplier);
     
     let atk = (p.baseAtk + bonusAtk) * lvlMultiplier;
@@ -1069,7 +1078,10 @@ export class SideViewEngine {
 
   private calculateDamage(skill: SkillDefinition): number {
     const p = this.player;
-    const base = p.totalAtk * skill.damageMultiplier * BALANCE.playerDamage;
+    // +12% per point, so five points is a skill worth building around without
+    // being a different skill.
+    const invested = 1 + 0.12 * this.skillLevel(skill.id);
+    const base = p.totalAtk * skill.damageMultiplier * BALANCE.playerDamage * invested;
     const variation = (Math.random() * 0.2 - 0.1) * base;
     return Math.max(1, Math.round(base + variation));
   }
@@ -1240,6 +1252,9 @@ export class SideViewEngine {
     while (p.exp >= p.maxExp) {
       p.exp -= p.maxExp;
       p.level++;
+      // A level was a number going up and nothing to decide. One point per
+      // level makes it a choice, and makes two level-20 mages different.
+      p.skillPoints = (p.skillPoints || 0) + 1;
       p.maxExp = Math.round(p.maxExp * 1.5);
       this.triggerSave();
       this.recomputeStats();
@@ -1271,6 +1286,9 @@ export class SideViewEngine {
     // Restored slot by slot rather than by replacing the object, so a save
     // written before equipment was persisted still loads and simply leaves the
     // empty slots empty.
+    if (ps.skillLevels) this.player.skillLevels = ps.skillLevels;
+    if (typeof ps.skillPoints === 'number') this.player.skillPoints = ps.skillPoints;
+
     if (ps.equipment) {
       for (const slot of Object.keys(this.player.equipment) as Array<keyof typeof this.player.equipment>) {
         const item = ps.equipment[slot];
@@ -2122,29 +2140,76 @@ export class SideViewEngine {
    * offence and survivability are worth roughly the same at typical values, and
    * the percentage stats are scaled to be comparable to the flat ones.
    */
+  /** How many points have been sunk into a skill. */
+  public skillLevel(skillId: string): number {
+    return this.player.skillLevels?.[skillId] || 0;
+  }
+
+  /**
+   * Spends a point on a skill.
+   *
+   * Capped, so one skill cannot become the only one worth pressing - the mana
+   * costs exist to make the rotation a decision, and an uncapped skill undoes
+   * that.
+   */
+  public upgradeSkill(skillId: string): boolean {
+    const p = this.player;
+    if ((p.skillPoints || 0) <= 0) return false;
+    if (this.skillLevel(skillId) >= 5) return false;
+
+    p.skillLevels = p.skillLevels || {};
+    p.skillLevels[skillId] = this.skillLevel(skillId) + 1;
+    p.skillPoints = (p.skillPoints || 0) - 1;
+    this.triggerSave();
+    audio.playLevelUp();
+    return true;
+  }
+
   public computePower(): number {
     const p = this.player;
 
-    const offence = p.totalAtk * 10;
-    const defence = p.totalDef * 8;
-    const health = p.maxHp * 0.6;
-    const mana = p.maxMp * 0.3;
-    const crit = p.totalCrit * 100 * 6;     // totalCrit is a fraction
-    const speed = p.totalSpeed * 12;
-    // Levels count on their own as well: two characters with the same stats but
-    // different levels did not arrive at the same place.
-    const levels = p.level * 40;
-
-    // Equipment counts twice over - once through the stats it already grants
-    // above, and once for its rarity, so a legendary reads as an achievement
-    // rather than only as its numbers.
+    // Level, items and upgrades - and nothing else.
+    //
+    // This used to read totalAtk and the other totals, which include active
+    // buffs, so casting a buff skill made your Power jump and drinking a potion
+    // moved it again. Power is meant to describe what you have built, not what
+    // you are doing this second, so it is rebuilt here from the permanent parts:
+    // base stats (which is where forge upgrades live), equipment, and level.
+    let gearAtk = 0, gearDef = 0, gearHp = 0, gearMp = 0, gearCrit = 0, gearSpeed = 0;
     const rarityValue: Record<string, number> = { common: 15, rare: 45, epic: 110, legendary: 260 };
-    let gear = 0;
+    let rarity = 0;
+
     for (const slot of Object.values(p.equipment)) {
-      if (slot) gear += rarityValue[slot.rarity] ?? 15;
+      if (!slot) continue;
+      gearAtk += slot.stats?.atk || 0;
+      gearDef += slot.stats?.def || 0;
+      gearHp += slot.stats?.hp || 0;
+      gearMp += slot.stats?.mp || 0;
+      gearCrit += slot.stats?.crit || 0;
+      gearSpeed += slot.stats?.speed || 0;
+      rarity += rarityValue[slot.rarity] ?? 15;
     }
 
-    return Math.round(offence + defence + health + mana + crit + speed + levels + gear);
+    const lvlMultiplier = 1 + (p.level - 1) * 0.08;
+    const forgedHp = 50 * (Number(localStorage.getItem('forge_hp')) || 0);
+
+    const atk = (p.baseAtk + gearAtk) * lvlMultiplier;
+    const def = (p.baseDef + gearDef) * lvlMultiplier;
+    const hp = (p.characterClass.stats.maxHp + gearHp) * lvlMultiplier + forgedHp;
+    const mp = (p.characterClass.stats.maxMp + gearMp) * lvlMultiplier;
+    const crit = p.baseCrit + gearCrit;
+    const speed = p.baseSpeed + gearSpeed;
+
+    return Math.round(
+      atk * 10 +
+      def * 8 +
+      hp * 0.6 +
+      mp * 0.3 +
+      crit * 100 * 6 +
+      speed * 12 +
+      p.level * 40 +
+      rarity
+    );
   }
 
   private enemyAttackPlayer(enemy: EnemyInstance, multiplier: number = 1) {

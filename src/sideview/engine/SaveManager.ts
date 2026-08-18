@@ -45,6 +45,8 @@ export class SaveManager {
         // the moment you equipped something and reloaded, it was gone from both
         // places at once. That is the whole of the reported loss.
         equipment: playerState.equipment,
+        skillLevels: playerState.skillLevels,
+        skillPoints: playerState.skillPoints,
       };
 
       const saveData = {
