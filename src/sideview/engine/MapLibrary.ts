@@ -102,6 +102,7 @@ export interface MapGround {
 }
 
 const POLY = '/assets/maps/PolyStyle';
+const FOREST = '/assets/maps/forest-blue';
 
 // Five more layered sets were already sitting unused in public/assets - the
 // same story as the character packs. No download needed for these.
@@ -242,14 +243,35 @@ export const MAPS: Record<string, MapTheme> = {
   },
 
   // ---- Goblin Catacombs: the forest approach ----
-  // ---- Goblin Catacombs: awaiting new art ----
-  // The forest pack was removed; until its replacement lands this renders as a
-  // clean sky over solid ground rather than a broken or empty scene.
+  // ---- Goblin Catacombs: the misty forest approach ----
+  //
+  // Digital Moons' pack, chosen over the two pixel-art alternatives for one
+  // technical reason: it is seamless and exactly 16:9, so at this viewport one
+  // tile is one screen. The previous forest was 3.75:1 and repeated three times
+  // across the view, which is what made the horizon look stamped out.
+  //
+  // Layer order and the note about lowering the mist are the artist's own, from
+  // the Read Me - the numbers run 01 nearest to 10 furthest, so this list is
+  // their order reversed.
   catacombs: {
-    sky: '#1b2733',
-    layers: [],
-    floor: { top: '#33452f', body: '#101a13' }
+    sky: '#0d1a24',
+    layers: [
+      { src: `${FOREST}/10_Sky.png`, scroll: 0.02, anchor: 'bottom' },
+      { src: `${FOREST}/09_Forest.png`, scroll: 0.10, anchor: 'bottom' },
+      { src: `${FOREST}/08_Forest.png`, scroll: 0.18, anchor: 'bottom' },
+      { src: `${FOREST}/07_Forest.png`, scroll: 0.27, anchor: 'bottom' },
+      { src: `${FOREST}/06_Forest.png`, scroll: 0.37, anchor: 'bottom' },
+      { src: `${FOREST}/05_Particles.png`, scroll: 0.44, anchor: 'bottom', alpha: 0.8, drift: -5 },
+      { src: `${FOREST}/04_Forest.png`, scroll: 0.52, anchor: 'bottom' },
+      { src: `${FOREST}/03_Particles.png`, scroll: 0.63, anchor: 'bottom', alpha: 0.9, drift: -9 },
+      { src: `${FOREST}/02_Bushes.png`, scroll: 0.76, anchor: 'bottom' },
+      // The artist recommends dropping the mist's opacity rather than using it
+      // at full strength.
+      { src: `${FOREST}/01_Mist.png`, scroll: 0.58, anchor: 'bottom', alpha: 0.3, drift: -3 },
+    ],
+    floor: { top: '#2b3f3a', body: '#0b1412' }
   },
+
 
 
   // ---- Void Nexus: the futuristic city reads as an astral rift ----
