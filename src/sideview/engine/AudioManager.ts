@@ -213,7 +213,7 @@ class AudioManager {
   }
 
   public playClick() {
-    this.playSFX('/assets/audio/sfx/RPG Sound Pack/inventory/cursor.wav', 0.3);
+    this.playSFX('/assets/audio/sfx/RPG Sound Pack/interface/interface1.wav', 0.3);
   }
 
   public playQuestAccept() {
@@ -235,11 +235,11 @@ class AudioManager {
   }
 
   public playDialogueBlip(char?: string | number) {
-    this.playSFX('/assets/audio/sfx/RPG Sound Pack/inventory/cursor.wav', 0.15);
+    this.playSFX('/assets/audio/sfx/RPG Sound Pack/interface/interface1.wav', 0.15);
   }
 
   public playPageTurn() {
-    this.playSFX('/assets/audio/sfx/RPG Sound Pack/inventory/cursor.wav', 0.2);
+    this.playSFX('/assets/audio/sfx/RPG Sound Pack/interface/interface1.wav', 0.2);
   }
 
   public playHeal() {

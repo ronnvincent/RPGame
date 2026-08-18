@@ -1246,10 +1246,15 @@ export class SideViewEngine {
     // The director runs on unscaled time - it must not slow itself down.
     this.ultimate.update(dt);
 
+    // Input gates tick on real time, ABOVE every early return. This lived
+    // inside the hit-stop block, so it only counted down during a freeze -
+    // meaning after one cast it never reached zero and every skill button went
+    // dead for the rest of the run.
+    if (this.castLock > 0) this.castLock = Math.max(0, this.castLock - dt);
+
     // 0. Hit-Stop Micro Freeze check (Crunchy combat impact feeling)
     if (this.hitStopTimer > 0) {
       this.hitStopTimer -= dt;
-      if (this.castLock > 0) this.castLock -= dt;
       this.particles.update(dt);
       return;
     }

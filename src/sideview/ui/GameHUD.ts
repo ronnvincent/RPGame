@@ -178,7 +178,7 @@ export class GameHUD {
       }
 
       .sprite-bar-mp {
-        background: url('/assets/kenney-rpg-ui/barBlue_horizontalMid.png') repeat-x;
+        background: url('/assets/kenney-rpg-ui/barBlue_horizontalBlue.png') repeat-x;
         background-size: auto 100%;
       }
 

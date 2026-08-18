@@ -288,16 +288,6 @@ export class SpriteManager {
       fx_projectile: '/assets/spells/projetilNew.png',
 
       // 18. Magic Shaders for Ultimates & Boss Attacks (Magic Shader All)
-      shader_01: '/assets/shaders/01.png',
-      shader_02: '/assets/shaders/02.png',
-      shader_04: '/assets/shaders/04.png',
-      shader_06: '/assets/shaders/06.png',
-      shader_07: '/assets/shaders/07.png',
-      shader_08: '/assets/shaders/08.png',
-      shader_09: '/assets/shaders/09.png',
-      shader_11: '/assets/shaders/11.png',
-      shader_14: '/assets/shaders/14.png',
-      shader_20: '/assets/shaders/20.png',
 
       // 18b. Newly Integrated Pixel Effects, Dark VFX, and Ansimuz Slashes
       vfx_magicspell: '/assets/vfx/pixel_effects/1_magicspell_spritesheet.png',
@@ -430,7 +420,6 @@ export class SpriteManager {
       st_tent_head1_destroyed: '/assets/treasure-hunters/Shooter Traps/Sprites/Totems/Head 1/Destroyed/1.png',
       st_tent_head2_destroyed: '/assets/treasure-hunters/Shooter Traps/Sprites/Totems/Head 2/Destroyed/1.png',
       st_tent_head3_destroyed: '/assets/treasure-hunters/Shooter Traps/Sprites/Totems/Head 3/Destroyed/1.png',
-      st_cannon_ball_idle_2: '/assets/treasure-hunters/Shooter Traps/Sprites/Cannon/Cannon Ball Idle/2.png',
       st_cannon_ball_explosion_1: '/assets/treasure-hunters/Shooter Traps/Sprites/Cannon/Cannon Ball Explosion/1.png',
       st_seashell_bite_1: '/assets/treasure-hunters/Shooter Traps/Sprites/Seashell/Seashell Bite/1.png',
       st_seashell_fire_1: '/assets/treasure-hunters/Shooter Traps/Sprites/Seashell/Seashell Fire/1.png',
