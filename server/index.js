@@ -15,6 +15,20 @@ const pool = new Pool({
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false // Railway requires SSL for DB
 });
 
+/**
+ * With no DATABASE_URL the server used to answer every auth request with
+ * "Database error", so the game could not be opened locally at all - which
+ * meant visual changes could only ever be checked against production. This
+ * keeps guests in memory instead. Railway always sets DATABASE_URL, so this
+ * path cannot be reached there.
+ */
+const HAS_DB = Boolean(process.env.DATABASE_URL);
+const memUsers = new Map(); // uuid -> { username, password, short_id, uuid, save_data }
+
+if (!HAS_DB) {
+  console.warn('Running without a database: guest accounts live in memory for this process only.');
+}
+
 // Initialize Database Table
 async function initDB() {
   try {
@@ -73,7 +87,16 @@ app.post('/api/register_guest', async (req, res) => {
 
   try {
     const password = generateRandomPassword();
-    
+
+    if (!HAS_DB) {
+      const existing = memUsers.get(uuid);
+      if (existing) {
+        return res.json({ success: true, username: existing.username, password: existing.password });
+      }
+      memUsers.set(uuid, { username, password, short_id: shortId, uuid, save_data: null });
+      return res.json({ success: true, username, password });
+    }
+
     // Check if user exists (fallback if they re-click guest)
     const existing = await pool.query('SELECT * FROM users WHERE uuid = $1', [uuid]);
     if (existing.rows.length > 0) {
@@ -99,6 +122,12 @@ app.post('/api/register_guest', async (req, res) => {
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
   try {
+    if (!HAS_DB) {
+      const user = [...memUsers.values()].find((u) => u.username === username && u.password === password);
+      if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+      return res.json({ success: true, uuid: user.uuid, shortId: user.short_id, name: user.username });
+    }
+
     const result = await pool.query('SELECT * FROM users WHERE username = $1 AND password = $2', [username, password]);
     if (result.rows.length > 0) {
       const user = result.rows[0];

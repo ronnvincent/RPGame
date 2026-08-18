@@ -9,6 +9,7 @@
  * Usage:  node tools/analyze-spritesheet.mjs <file-or-directory> [--json]
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import { inflateSync } from 'node:zlib';
 import { join, extname, basename } from 'node:path';
 
@@ -154,6 +155,13 @@ function analyze(file) {
   };
 }
 
+export { decodePng };
+
+// Importing this module must not run the CLI.
+const isEntryPoint = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isEntryPoint) runCli();
+
+function runCli() {
 const target = process.argv[2];
 const asJson = process.argv.includes('--json');
 if (!target) { console.error('usage: analyze-spritesheet.mjs <file|dir> [--json]'); process.exit(2); }
@@ -186,4 +194,5 @@ if (asJson) {
       `${String(r.used).padStart(3)}/${String(r.cells).padEnd(3)} ${r.kind.padEnd(7)} ${basename(r.file)}`
     );
   }
+}
 }

@@ -20,7 +20,7 @@
 
 import { ITEM_DATABASE } from '../items/ItemDatabase';
 import { HERO_SPRITES, HERO_FPS, heroFrame, attackAnimFor } from './HeroSprites';
-import { MAPS, MapLayer } from './MapLibrary';
+import { MAPS, MapLayer, MapGround, POLY_SHEETS, POLY_PROPS } from './MapLibrary';
 
 type BattleTheme = 'catacombs' | 'crypt' | 'inferno' | 'void' | 'town' | 'swamp' | 'mountain' | 'underwater' | 'caves';
 
@@ -2444,7 +2444,8 @@ export class SpriteManager {
     theme: string,
     camX: number,
     width: number,
-    height: number
+    height: number,
+    horizonY: number
   ): boolean {
     const map = MAPS[theme];
     if (!map) return false;
@@ -2458,8 +2459,14 @@ export class SpriteManager {
     for (const layer of map.layers) {
       const img = this.getImage(layer.src);
       if (!img || !img.complete || !img.naturalWidth) continue;
-      this.drawParallaxLayer(ctx, layer, img, camX, width, height, now);
+      if (layer.scatter && layer.scatter.length) {
+        this.drawScatterLayer(ctx, layer, img, camX, width, height, horizonY, now);
+      } else {
+        this.drawParallaxLayer(ctx, layer, img, camX, width, height, horizonY, now);
+      }
     }
+
+    if (map.ground) this.drawGroundBand(ctx, map.ground, camX, width, height, horizonY);
     ctx.restore();
     return true;
   }
@@ -2471,6 +2478,7 @@ export class SpriteManager {
     camX: number,
     width: number,
     height: number,
+    horizonY: number,
     now: number
   ) {
     const sx = layer.rect?.sx ?? 0;
@@ -2484,8 +2492,13 @@ export class SpriteManager {
                 : height;
     const destW = Math.max(1, Math.round(sw * (destH / sh)));
 
+    // Anchor to the horizon, not the canvas floor. The ground platform sits at
+    // groundY with the HUD area below it, so bottom-anchored art aligned to the
+    // canvas ran off the bottom of the screen - which is why the village strip
+    // rendered half cut off.
     let destY = 0;
     if (layer.anchor === 'bottom') destY = height - destH;
+    else if (layer.anchor === 'horizon') destY = horizonY - destH;
     destY += layer.offsetY ?? 0;
 
     // Camera scroll plus any independent drift, wrapped into one tile width.
@@ -2496,9 +2509,152 @@ export class SpriteManager {
     if (layer.alpha !== undefined) ctx.globalAlpha = layer.alpha;
     if (layer.blend) ctx.globalCompositeOperation = layer.blend;
 
+    // Same hairline-gap reason as the ground band: overlap each tile by a pixel.
     for (let x = startX; x < width + destW; x += destW) {
-      ctx.drawImage(img, sx, sy, sw, sh, Math.round(x), Math.round(destY), destW, Math.ceil(destH));
+      ctx.drawImage(img, sx, sy, sw, sh, Math.round(x), Math.round(destY), destW + 1, Math.ceil(destH));
     }
+    ctx.restore();
+  }
+
+  /**
+   * Lays the earth from the horizon to the bottom of the view.
+   *
+   * One grass-topped row on the horizon line, plain fill repeated below, both
+   * moving with the world at full camera speed so the ground does not slide
+   * under the characters standing on it.
+   */
+  private drawGroundBand(
+    ctx: CanvasRenderingContext2D,
+    ground: MapGround,
+    camX: number,
+    width: number,
+    height: number,
+    horizonY: number
+  ) {
+    const img = this.getImage(ground.src);
+    if (!img || !img.complete || !img.naturalWidth) return;
+
+    const tile = Math.max(8, ground.tile);
+    // Start a tile early so the left edge is never a partial column.
+    const startX = -(((camX % tile) + tile) % tile) - tile;
+    const s = ground.surface;
+    const f = ground.fill;
+
+    // Overlap by a pixel. The world is drawn through a camera scale, so tile
+    // edges that are whole numbers here land on fractions on the device and
+    // leave hairline gaps - which showed as vertical stripes of sky through
+    // the ground every tile.
+    const bleed = 1;
+    for (let x = startX; x < width + tile; x += tile) {
+      const dx = Math.round(x);
+      ctx.drawImage(img, s.sx, s.sy, s.sw, s.sh, dx, Math.round(horizonY), tile + bleed, tile + bleed);
+      for (let y = horizonY + tile; y < height; y += tile) {
+        ctx.drawImage(img, f.sx, f.sy, f.sw, f.sh, dx, Math.round(y), tile + bleed, tile + bleed);
+      }
+    }
+  }
+
+  /**
+   * Draws one measured region of a sheet at world scale, standing on baseY.
+   *
+   * Town props were previously drawn with a literal drawImage per object and a
+   * hand-typed width and height each time, so every piece carried its own
+   * chance of a wrong aspect ratio. Here only the height is chosen and the
+   * width follows from the measured box.
+   */
+  public drawSheetPiece(
+    ctx: CanvasRenderingContext2D,
+    src: string,
+    rect: { sx: number; sy: number; sw: number; sh: number },
+    centerX: number,
+    baseY: number,
+    targetH: number,
+    opts: { flip?: boolean; alpha?: number } = {}
+  ) {
+    const img = this.getImage(src);
+    if (!img || !img.complete || !img.naturalWidth) return;
+    if (rect.sw <= 0 || rect.sh <= 0 || targetH <= 0) return;
+
+    const destH = Math.round(targetH);
+    const destW = Math.max(1, Math.round(rect.sw * (destH / rect.sh)));
+    const x = Math.round(centerX - destW / 2);
+    const y = Math.round(baseY - destH);
+
+    ctx.save();
+    if (opts.alpha !== undefined) ctx.globalAlpha = opts.alpha;
+    if (opts.flip) {
+      ctx.translate(x + destW, y);
+      ctx.scale(-1, 1);
+      ctx.drawImage(img, rect.sx, rect.sy, rect.sw, rect.sh, 0, 0, destW, destH);
+    } else {
+      ctx.drawImage(img, rect.sx, rect.sy, rect.sw, rect.sh, x, y, destW, destH);
+    }
+    ctx.restore();
+  }
+
+  /**
+   * Places measured pieces along a repeating cycle instead of tiling one image.
+   *
+   * The cycle still repeats, but with several different pieces at different
+   * sizes and offsets - and some mirrored - the horizon reads as varied rather
+   * than as one silhouette stamped end to end.
+   */
+  private drawScatterLayer(
+    ctx: CanvasRenderingContext2D,
+    layer: MapLayer,
+    img: HTMLImageElement,
+    camX: number,
+    width: number,
+    height: number,
+    horizonY: number,
+    now: number
+  ) {
+    const items = layer.scatter;
+    if (!items || !items.length) return;
+    const spread = Math.max(1, layer.spread ?? 1600);
+    const shift = camX * layer.scroll + (layer.drift ? now * layer.drift : 0);
+
+    ctx.save();
+    if (layer.alpha !== undefined) ctx.globalAlpha = layer.alpha;
+    if (layer.blend) ctx.globalCompositeOperation = layer.blend;
+
+    const firstCycle = Math.floor((shift - width) / spread);
+    const lastCycle = Math.ceil((shift + width) / spread);
+
+    for (let cycle = firstCycle; cycle <= lastCycle; cycle++) {
+      for (const item of items) {
+        const { sx, sy, sw, sh } = item.rect;
+        if (sw <= 0 || sh <= 0) continue;
+
+        const destH = Math.max(1, Math.round(height * item.heightFrac));
+        const destW = Math.max(1, Math.round(sw * (destH / sh)));
+        const x = Math.round((cycle + item.at) * spread - shift);
+        if (x + destW < 0 || x > width) continue;
+
+        // lift raises the piece off its baseline; negative lowers it, which is
+        // how the cloud layer spreads its pieces down from the top edge.
+        const base = layer.anchor === 'top' ? 0
+                   : layer.anchor === 'bottom' ? height - destH
+                   : horizonY - destH;
+        const y = Math.round(base + (layer.offsetY ?? 0) - (item.lift ?? 0));
+
+        const priorAlpha = ctx.globalAlpha;
+        if (item.alpha !== undefined) ctx.globalAlpha = priorAlpha * item.alpha;
+
+        if (item.flip) {
+          ctx.save();
+          ctx.translate(x + destW, y);
+          ctx.scale(-1, 1);
+          ctx.drawImage(img, sx, sy, sw, sh, 0, 0, destW, destH);
+          ctx.restore();
+        } else {
+          ctx.drawImage(img, sx, sy, sw, sh, x, y, destW, destH);
+        }
+
+        ctx.globalAlpha = priorAlpha;
+      }
+    }
+
     ctx.restore();
   }
 
@@ -2517,7 +2673,7 @@ export class SpriteManager {
 
     // Data-driven maps take priority; themes without one fall through to the
     // original hand-written branches below.
-    if (this.drawParallaxTheme(ctx, safeTheme, safeCamX, canvasWidth, canvasHeight)) {
+    if (this.drawParallaxTheme(ctx, safeTheme, safeCamX, canvasWidth, canvasHeight, groundY)) {
       return;
     }
 
@@ -2943,6 +3099,16 @@ export class SpriteManager {
   /**
    * Draw Themed Multi-Level Platforms using Authentic Gothic Wooden Beams
    */
+  /**
+   * Jump-through ledges.
+   *
+   * These used to be planks carried on wooden legs that ran from the ledge all
+   * the way down to a hardcoded y of 600 - so in every map a pair of dark posts
+   * rose out of the floor, and once the ground band existed they punched
+   * straight through it. The ledge is what the player stands on; the legs were
+   * only decoration, so they are gone and the surface is a stone slab that
+   * suits a catacomb or a crypt rather than a scaffold.
+   */
   public drawPlatforms(
     ctx: CanvasRenderingContext2D,
     platforms: { x: number; y: number; width: number; height: number; type: string }[],
@@ -2950,43 +3116,39 @@ export class SpriteManager {
   ) {
     if (!platforms || platforms.length === 0) return;
 
+    const slabSrc = POLY_SHEETS.props;
+    const slab = POLY_PROPS.slab;
+    const img = this.getImage(slabSrc);
+    const haveSlab = Boolean(img && img.complete && img.naturalWidth);
+
     ctx.save();
     ctx.imageSmoothingEnabled = false;
 
-    const gvTopWood = this.images['gv_top_wood'];
-    const gvWoodLegs = this.images['gv_wood_legs'];
-
     for (const plat of platforms) {
-      // 1. Support Pillars down to ground
-      if (gvWoodLegs && gvWoodLegs.complete && gvWoodLegs.naturalWidth > 0) {
-        for (let py = plat.y + plat.height; py < 600; py += 32) {
-          ctx.drawImage(gvWoodLegs, plat.x + 12, py, 16, 32);
-          ctx.drawImage(gvWoodLegs, plat.x + plat.width - 28, py, 16, 32);
-        }
+      if (haveSlab && img) {
+        // One stretched slab per ledge, not a row of them. Tiling this rock
+        // repeated its rounded silhouette and read as a line of boulders
+        // rather than something you could stand on.
+        ctx.drawImage(
+          img,
+          slab.sx, slab.sy, slab.sw, slab.sh,
+          Math.round(plat.x), Math.round(plat.y), plat.width, plat.height
+        );
       } else {
-        ctx.fillStyle = '#27272a';
-        ctx.fillRect(plat.x + 16, plat.y + plat.height, 10, 480);
-        ctx.fillRect(plat.x + plat.width - 26, plat.y + plat.height, 10, 480);
-      }
-
-      // 2. Wooden Platform Plank Surface
-      if (gvTopWood && gvTopWood.complete && gvTopWood.naturalWidth > 0) {
-        for (let px = plat.x; px < plat.x + plat.width; px += 32) {
-          const drawW = Math.min(32, plat.x + plat.width - px);
-          ctx.drawImage(gvTopWood, 0, 0, drawW, 16, px, plat.y, drawW, plat.height);
-        }
-      } else {
-        const platGrad = ctx.createLinearGradient(plat.x, plat.y, plat.x, plat.y + plat.height);
-        platGrad.addColorStop(0, '#3f3f46');
-        platGrad.addColorStop(1, '#18181b');
-        ctx.fillStyle = platGrad;
+        const grad = ctx.createLinearGradient(plat.x, plat.y, plat.x, plat.y + plat.height);
+        grad.addColorStop(0, '#6b7280');
+        grad.addColorStop(1, '#374151');
+        ctx.fillStyle = grad;
         ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
       }
 
-      // Platform Border & Glow Accent
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(plat.x, plat.y, plat.width, plat.height);
+      // A soft shadow under the lip is what sells it as standable now that
+      // there are no legs holding it up.
+      const shadow = ctx.createLinearGradient(0, plat.y + plat.height, 0, plat.y + plat.height + 10);
+      shadow.addColorStop(0, 'rgba(0,0,0,0.35)');
+      shadow.addColorStop(1, 'transparent');
+      ctx.fillStyle = shadow;
+      ctx.fillRect(plat.x, plat.y + plat.height, plat.width, 10);
     }
 
     ctx.restore();

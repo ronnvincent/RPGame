@@ -5,6 +5,7 @@
  */
 
 import { CharacterClass, SkillDefinition, CHARACTER_CLASSES } from '../classes/ClassDefinitions';
+import { POLY_SHEETS, POLY_PROPS, POLY_HOUSES, POLY_NATURE } from './MapLibrary';
 import { BattleTheme, EnemyInstance } from '../dungeons/DungeonManager';
 import { ItemData, RARITY_CONFIGS } from '../items/ItemDatabase';
 import { ParticleSystem } from './ParticleSystem';
@@ -301,14 +302,8 @@ export class SideViewEngine {
     const gy = this.groundY;
 
     if (this.isTownMode) {
-      // Haven of Eldermoor Platforms (village lookout terraces, bridges)
-      this.platforms.push(
-        { x: 300, y: gy - 110, width: 260, height: 16, type: 'one-way' },
-        { x: 750, y: gy - 130, width: 320, height: 16, type: 'one-way' },
-        { x: 1250, y: gy - 110, width: 280, height: 16, type: 'one-way' },
-        { x: 1750, y: gy - 140, width: 340, height: 16, type: 'one-way' },
-        { x: 2300, y: gy - 120, width: 300, height: 16, type: 'one-way' }
-      );
+      // No ledges in the village. There is nothing to fight or reach up here,
+      // so they only ever hung over the street on tall wooden legs.
     } else if (theme === 'catacombs') {
       // Goblin Catacombs Platforms (multi-tier stone ledges)
       this.platforms.push(
@@ -2337,91 +2332,87 @@ export class SideViewEngine {
     const now = Date.now() / 1000;
     const activeNpc = this.townHub.getActiveNpc();
 
-    // 1. Draw Authentic GothicVania Town Buildings, Cathedral & Street Props
-    const gvChurch = (sprites as any).getImage('gv_church');
-    const gvHouseA = (sprites as any).getImage('gv_house_a');
-    const gvHouseB = (sprites as any).getImage('gv_house_b');
-    const gvHouseC = (sprites as any).getImage('gv_house_c');
-    const gvWell = (sprites as any).getImage('gv_well');
-    const gvWagon = (sprites as any).getImage('gv_wagon');
-    const gvLamp = (sprites as any).getImage('gv_street_lamp');
-    const gvCrateStack = (sprites as any).getImage('gv_crate_stack');
-    const gvCrate = (sprites as any).getImage('gv_crate');
-    const gvBarrel = (sprites as any).getImage('gv_barrel');
-    const gvSign = (sprites as any).getImage('gv_sign');
+    // 1. The PolyStyle village street.
+    //
+    // Every piece is a measured region of the pack's sheets rather than a
+    // separate file, and only its height is given here - drawSheetPiece derives
+    // the width from the box, so nothing can end up stretched. Drawn back to
+    // front: greenery, then buildings, then the props that sit against them.
+    const props = POLY_SHEETS.props;
+    const nature = POLY_SHEETS.nature;
+    const houses = POLY_SHEETS.houses;
+    const g = this.groundY;
 
     ctx.save();
     ctx.imageSmoothingEnabled = false;
 
-    // A. Town Notice Sign at Entrance
-    if (gvSign && gvSign.complete) {
-      ctx.drawImage(gvSign, 280, this.groundY - 45, 37, 45);
+    // A. Greenery behind the buildings, so the street has depth without
+    // anything standing in front of an NPC.
+    const greenery: Array<[typeof POLY_NATURE[keyof typeof POLY_NATURE], number, number, boolean]> = [
+      [POLY_NATURE.treeSlimA, 120, 124, false],
+      [POLY_NATURE.treeRound, 690, 140, false],
+      [POLY_NATURE.bushDark, 800, 32, false],
+      [POLY_NATURE.treeBroad, 1130, 136, true],
+      [POLY_NATURE.treeSlimB, 1660, 128, false],
+      [POLY_NATURE.bushGreen, 1770, 30, true],
+      [POLY_NATURE.treeRound, 2180, 132, true],
+      [POLY_NATURE.rock, 2300, 36, false],
+      [POLY_NATURE.treeBroad, 2680, 138, false],
+    ];
+    for (const [rect, x, h, flip] of greenery) {
+      sprites.drawSheetPiece(ctx, nature, rect, x, g, h, { flip });
     }
 
-    // B. House A near Elder Justinian (x = 380)
-    if (gvHouseA && gvHouseA.complete) {
-      ctx.drawImage(gvHouseA, 360, this.groundY - 183, 168, 183);
-    }
-    if (gvCrateStack && gvCrateStack.complete) {
-      ctx.drawImage(gvCrateStack, 330, this.groundY - 68, 73, 68);
+    // B. The four homes, one behind each questgiver.
+    sprites.drawSheetPiece(ctx, houses, POLY_HOUSES[0], 440, g, 150);
+    sprites.drawSheetPiece(ctx, houses, POLY_HOUSES[1], 950, g, 160);
+    sprites.drawSheetPiece(ctx, houses, POLY_HOUSES[0], 1450, g, 146, { flip: true });
+    sprites.drawSheetPiece(ctx, houses, POLY_HOUSES[1], 1960, g, 153, { flip: true });
+
+    // C. Street props. The forge pieces sit by the blacksmith, the cart and
+    // wheel by the merchant stretch, the arch frames the portal approach.
+    const street: Array<[typeof POLY_PROPS[keyof typeof POLY_PROPS], number, number, boolean]> = [
+      [POLY_PROPS.pillar, 250, 68, false],
+      [POLY_PROPS.crate, 330, 32, false],
+      [POLY_PROPS.boxOpen, 372, 23, false],
+      [POLY_PROPS.clothesline, 640, 52, false],
+      [POLY_PROPS.log, 720, 11, false],
+      [POLY_PROPS.barrel, 1040, 28, false],
+      [POLY_PROPS.barrel, 1068, 25, true],
+      [POLY_PROPS.well, 1180, 62, false],
+      [POLY_PROPS.oven, 1268, 68, false],
+      [POLY_PROPS.anvil, 1330, 27, false],
+      [POLY_PROPS.shield, 1560, 31, false],
+      [POLY_PROPS.cart, 1730, 45, false],
+      [POLY_PROPS.wheel, 1800, 35, false],
+      [POLY_PROPS.barrel, 2060, 27, false],
+      [POLY_PROPS.crate, 2090, 28, true],
+      [POLY_PROPS.log, 2255, 11, false],
+      [POLY_PROPS.arch, 2380, 124, false],
+    ];
+    for (const [rect, x, h, flip] of street) {
+      sprites.drawSheetPiece(ctx, props, rect, x, g, h, { flip });
     }
 
-    // C. House B near Captain Valerie (x = 880)
-    if (gvHouseB && gvHouseB.complete) {
-      ctx.drawImage(gvHouseB, 840, this.groundY - 244, 210, 244);
-    }
-    if (gvBarrel && gvBarrel.complete) {
-      ctx.drawImage(gvBarrel, 1050, this.groundY - 30, 24, 30);
-      ctx.drawImage(gvBarrel, 1070, this.groundY - 30, 24, 30);
+    // D. Grass along the kerb, small and cheap, breaking the hard ground line.
+    for (let x = 60; x < 2820; x += 190) {
+      const rect = (x / 190) % 2 === 0 ? POLY_NATURE.grassTuft : POLY_NATURE.grassTall;
+      const h = rect === POLY_NATURE.grassTuft ? 12 : 19;
+      sprites.drawSheetPiece(ctx, nature, rect, x, g + 2, h, { alpha: 0.9 });
     }
 
-    // D. Village Well between Valerie and Keith (x = 1200)
-    if (gvWell && gvWell.complete) {
-      ctx.drawImage(gvWell, 1180, this.groundY - 65, 65, 65);
-    }
-
-    // E. House C near Blacksmith Keith (x = 1380)
-    if (gvHouseC && gvHouseC.complete) {
-      ctx.drawImage(gvHouseC, 1340, this.groundY - 183, 221, 183);
-    }
-    if (gvCrate && gvCrate.complete) {
-      ctx.drawImage(gvCrate, 1570, this.groundY - 35, 39, 35);
-    }
-
-    // F. Merchant Horse Wagon between Keith and Morwenna (x = 1720)
-    if (gvWagon && gvWagon.complete) {
-      ctx.drawImage(gvWagon, 1680, this.groundY - 75, 93, 75);
-    }
-
-    // G. House A near Alchemist Morwenna (x = 1880)
-    if (gvHouseA && gvHouseA.complete) {
-      ctx.drawImage(gvHouseA, 1860, this.groundY - 183, 168, 183);
-    }
-    if (gvBarrel && gvBarrel.complete) {
-      ctx.drawImage(gvBarrel, 2040, this.groundY - 30, 24, 30);
-    }
-
-    // H. Grand Gothic Cathedral / Church behind the Dimensional Gateway (x = 2360)
-    if (gvChurch && gvChurch.complete) {
-      const churchW = gvChurch.naturalWidth || 320;
-      const churchH = gvChurch.naturalHeight || 240;
-      ctx.drawImage(gvChurch, 2320, this.groundY - churchH, churchW, churchH);
-    }
-
-    // I. Victorian Street Lamps with Warm Amber Illumination
+    // E. Lamp posts keep their warm halo - that glow is lighting, not art, so
+    // it stays hand-drawn.
     const lampPositions = [180, 640, 1120, 1620, 2140, 2720];
     lampPositions.forEach((lx) => {
-      if (gvLamp && gvLamp.complete) {
-        ctx.drawImage(gvLamp, lx - 17, this.groundY - 108, 35, 108);
-      }
-      // Glowing Lantern Light Halo
-      const lampGlow = ctx.createRadialGradient(lx, this.groundY - 88, 5, lx, this.groundY - 88, 55 + Math.sin(now * 6 + lx) * 4);
-      lampGlow.addColorStop(0, 'rgba(254, 240, 138, 0.7)');
-      lampGlow.addColorStop(0.4, 'rgba(245, 158, 11, 0.25)');
+      sprites.drawSheetPiece(ctx, props, POLY_PROPS.lampPost, lx, g, 90);
+      const lampGlow = ctx.createRadialGradient(lx, g - 74, 4, lx, g - 74, 38 + Math.sin(now * 6 + lx) * 3);
+      lampGlow.addColorStop(0, 'rgba(254, 240, 138, 0.55)');
+      lampGlow.addColorStop(0.4, 'rgba(245, 158, 11, 0.2)');
       lampGlow.addColorStop(1, 'transparent');
       ctx.fillStyle = lampGlow;
       ctx.beginPath();
-      ctx.arc(lx, this.groundY - 88, 60, 0, Math.PI * 2);
+      ctx.arc(lx, g - 74, 40, 0, Math.PI * 2);
       ctx.fill();
     });
 

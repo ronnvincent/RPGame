@@ -14,8 +14,16 @@ export interface MapLayer {
   src: string;
   /** 0 = fixed to camera, 1 = moves with the world. */
   scroll: number;
-  /** Where the layer sits vertically. */
-  anchor?: 'top' | 'bottom' | 'fill';
+  /**
+   * Where the layer sits vertically.
+   *
+   * 'bottom' pins the layer to the bottom of the view, which is what a
+   * full-height painted backdrop wants. 'horizon' stands it on the play line,
+   * which is what discrete objects - mountains, houses, trees - want. Using
+   * 'bottom' for those left them running off the bottom of the screen; using
+   * 'horizon' for a backdrop leaves a flat band under it.
+   */
+  anchor?: 'top' | 'bottom' | 'horizon' | 'fill';
   /** Pixels down from the anchor, in destination space. */
   offsetY?: number;
   /** Height as a fraction of the viewport. Defaults to filling it. */
@@ -26,12 +34,54 @@ export interface MapLayer {
   rect?: { sx: number; sy: number; sw: number; sh: number };
   /** Drift independent of the camera, px/sec - clouds, fog. */
   drift?: number;
+  /**
+   * Discrete objects spread along the layer instead of one tiled image.
+   *
+   * Tiling suits a painted strip, but a sheet of separate clouds, mountains or
+   * trees tiled as one rectangle reads as wallpaper: the same silhouette every
+   * few hundred pixels. Scattering places measured pieces at chosen points of a
+   * long cycle, so the skyline varies as the camera moves.
+   */
+  scatter?: ScatterItem[];
+  /** World pixels per full scatter cycle. */
+  spread?: number;
+}
+
+export interface ScatterItem {
+  rect: { sx: number; sy: number; sw: number; sh: number };
+  /** Height as a fraction of the viewport. */
+  heightFrac: number;
+  /** Position within the cycle, 0..1. */
+  at: number;
+  /** Pixels raised above the layer baseline. */
+  lift?: number;
+  alpha?: number;
+  /** Mirror horizontally, so one piece reads as two. */
+  flip?: boolean;
 }
 
 export interface MapTheme {
   /** Painted under everything, so a gap never shows the page through. */
   sky: string;
   layers: MapLayer[];
+  /**
+   * Tiled earth below the horizon.
+   *
+   * The town never had any: the old hand-written branches only painted down to
+   * groundY and stopped, so characters stood on the sky. The pack ships a
+   * ground tileset for exactly this.
+   */
+  ground?: MapGround;
+}
+
+export interface MapGround {
+  src: string;
+  /** Grass-topped tile laid along the horizon. */
+  surface: { sx: number; sy: number; sw: number; sh: number };
+  /** Plain tile repeated beneath the surface row. */
+  fill: { sx: number; sy: number; sw: number; sh: number };
+  /** Destination tile size in world pixels. */
+  tile: number;
 }
 
 const POLY = '/assets/maps/PolyStyle';
@@ -46,23 +96,134 @@ const BOG = '/assets/swamp/Evironment';
 const GROTTO = '/assets/warped-files/warped-files/Assets/PNG/environment/layers';
 const GOTHIC = '/assets/GothicVania-town-files/GothicVania-town-files/PNG/environment/layers';
 
+/**
+ * Measured regions of the PolyStyle sheets.
+ *
+ * These sheets are not grids - objects sit at irregular offsets inside mostly
+ * empty cells, so slicing them by dividing the image gives boxes that are
+ * largely transparent, which is why the mountains first rendered as small
+ * shapes hugging the floor. Every box below is the tight alpha bounding box
+ * reported by tools/measure-blobs.mjs.
+ */
+const R = (sx: number, sy: number, sw: number, sh: number) => ({ sx, sy, sw, sh });
+
+const MOUNTAIN = [R(5, 410, 1011, 607), R(1032, 258, 1005, 765), R(2057, 245, 1013, 778)];
+const CLOUD = [
+  R(7, 233, 499, 275), R(25, 857, 477, 156), R(516, 262, 500, 243),
+  R(519, 775, 504, 242), R(1033, 156, 495, 353), R(1036, 703, 497, 297),
+];
+const HILL_TOP = R(7, 235, 500, 277);
+const HOUSE = [R(36, 353, 985, 668), R(1041, 373, 1007, 650)];
+const TREE = {
+  round: R(1633, 1040, 379, 495),
+  broad: R(2163, 1024, 351, 505),
+  slimA: R(202, 1543, 210, 504),
+  slimB: R(682, 1544, 230, 503),
+};
+
+/** Foreground village pieces, drawn at world scale by the town renderer. */
+export const POLY_SHEETS = {
+  props: `${POLY}/Props and Houses/Props Tileset.png`,
+  houses: `${POLY}/Props and Houses/Houses.png`,
+  nature: `${POLY}/Nature/Nature Tileset.png`,
+};
+
+export const POLY_PROPS = {
+  anvil: R(24, 195, 419, 316),
+  well: R(87, 1545, 382, 485),
+  lampPost: R(137, 1027, 180, 506),
+  pillar: R(193, 532, 126, 491),
+  boxOpen: R(521, 1216, 499, 310),
+  clothesline: R(522, 627, 491, 393),
+  log: R(527, 1979, 480, 68),
+  barrel: R(598, 25, 340, 486),
+  crate: R(1057, 654, 426, 368),
+  slab: R(1546, 286, 495, 218),
+  shield: R(1553, 1048, 472, 487),
+  plank: R(1607, 1618, 369, 372),
+  oven: R(1686, 529, 212, 494),
+  bridge: R(2049, 1900, 511, 147),
+  arch: R(2081, 541, 464, 469),
+  hangingLantern: R(2241, 3, 123, 508),
+  cart: R(2568, 248, 495, 263),
+  wheel: R(2572, 1033, 475, 475),
+  wallLamp: R(2771, 515, 246, 506),
+};
+
+export const POLY_HOUSES = HOUSE;
+
+export const POLY_NATURE = {
+  treeRound: TREE.round,
+  treeBroad: TREE.broad,
+  treeSlimA: TREE.slimA,
+  treeSlimB: TREE.slimB,
+  bushDark: R(136, 763, 267, 259),
+  bushGreen: R(642, 796, 264, 227),
+  rock: R(1092, 724, 351, 297),
+  grassTuft: R(3, 317, 503, 192),
+  grassTall: R(148, 1028, 215, 507),
+  reeds: R(643, 1069, 265, 466),
+};
+
 export const MAPS: Record<string, MapTheme> = {
   // ---- Town: the PolyStyle village package ----
   town: {
-    sky: '#7ec0e8',
+    // Matches the top of PolyStyle's own BackGround gradient, so no seam shows
+    // if the viewport is taller than the art.
+    sky: '#5fd8ea',
     layers: [
-      { src: `${POLY}/BackGround.png`, scroll: 0.05, anchor: 'fill' },
-      // Clouds.png is a 3x2 sheet of 512px tiles; take one and drift it.
-      { src: `${POLY}/Nature/Clouds.png`, scroll: 0.12, anchor: 'top', offsetY: 20,
-        heightFrac: 0.34, alpha: 0.85, drift: 6,
-        rect: { sx: 0, sy: 0, sw: 512, sh: 512 } },
-      // Mountains.png is three 1024px panels side by side.
-      { src: `${POLY}/Nature/Mountains.png`, scroll: 0.22, anchor: 'bottom',
-        heightFrac: 0.55, rect: { sx: 0, sy: 0, sw: 1024, sh: 1024 } },
-      { src: `${POLY}/Nature/Hill.png`, scroll: 0.42, anchor: 'bottom', heightFrac: 0.40 },
-      { src: `${POLY}/Props and Houses/Houses.png`, scroll: 0.72, anchor: 'bottom',
-        heightFrac: 0.42, rect: { sx: 0, sy: 0, sw: 1024, sh: 1024 } },
-    ]
+      { src: `${POLY}/BackGround.png`, scroll: 0.02, anchor: 'fill' },
+
+      // Six distinct clouds, high and slow, drifting against the camera.
+      { src: `${POLY}/Nature/Clouds.png`, scroll: 0.10, anchor: 'top', drift: -5,
+        alpha: 0.9, spread: 2600, scatter: [
+          { rect: CLOUD[0], heightFrac: 0.13, at: 0.03, lift: -40 },
+          { rect: CLOUD[4], heightFrac: 0.16, at: 0.22, lift: -18 },
+          { rect: CLOUD[2], heightFrac: 0.11, at: 0.41, lift: -66 },
+          { rect: CLOUD[5], heightFrac: 0.14, at: 0.58, lift: -30 },
+          { rect: CLOUD[1], heightFrac: 0.08, at: 0.74, lift: -76 },
+          { rect: CLOUD[3], heightFrac: 0.12, at: 0.89, lift: -50 },
+        ] },
+
+      // The three peaks alternate, two mirrored, so the ridge never repeats
+      // within a screen width.
+      { src: `${POLY}/Nature/Mountains.png`, scroll: 0.20, anchor: 'horizon',
+        spread: 2100, scatter: [
+          { rect: MOUNTAIN[1], heightFrac: 0.52, at: 0.02 },
+          { rect: MOUNTAIN[0], heightFrac: 0.40, at: 0.26 },
+          { rect: MOUNTAIN[2], heightFrac: 0.56, at: 0.48, flip: true },
+          { rect: MOUNTAIN[0], heightFrac: 0.44, at: 0.72, flip: true },
+          { rect: MOUNTAIN[1], heightFrac: 0.36, at: 0.88 },
+        ] },
+
+      // A village in the valley: the same two houses the street uses, small and
+      // hazy enough to read as distance rather than as duplicates.
+      { src: `${POLY}/Props and Houses/Houses.png`, scroll: 0.34, anchor: 'horizon',
+        alpha: 0.55, spread: 1700, scatter: [
+          { rect: HOUSE[1], heightFrac: 0.13, at: 0.08 },
+          { rect: HOUSE[0], heightFrac: 0.11, at: 0.30, flip: true },
+          { rect: HOUSE[0], heightFrac: 0.14, at: 0.57 },
+          { rect: HOUSE[1], heightFrac: 0.10, at: 0.80, flip: true },
+        ] },
+
+      { src: `${POLY}/Nature/Hill.png`, scroll: 0.48, anchor: 'horizon',
+        heightFrac: 0.22, offsetY: 10, rect: HILL_TOP },
+
+      // Tree line just behind the street.
+      { src: `${POLY}/Nature/Nature Tileset.png`, scroll: 0.68, anchor: 'horizon',
+        spread: 1250, scatter: [
+          { rect: TREE.round, heightFrac: 0.30, at: 0.05 },
+          { rect: TREE.slimA, heightFrac: 0.24, at: 0.28, flip: true },
+          { rect: TREE.broad, heightFrac: 0.33, at: 0.52 },
+          { rect: TREE.slimB, heightFrac: 0.26, at: 0.79 },
+        ] },
+    ],
+    ground: {
+      src: `${POLY}/Village Tileset/Platformer-Ground Tileset.png`,
+      surface: R(128, 256, 128, 128),
+      fill: R(128, 128, 128, 128),
+      tile: 64,
+    }
   },
 
   // ---- Goblin Catacombs: the forest approach ----
@@ -157,5 +318,9 @@ export const THEMES_WITHOUT_ART = ['inferno'];
 export function allMapImagePaths(): string[] {
   const out = new Set<string>();
   for (const t of Object.values(MAPS)) for (const l of t.layers) out.add(l.src);
+  // The props sheet is never a parallax layer - the town street draws from it
+  // directly - so it has to be listed or it would load only on first sight.
+  for (const src of Object.values(POLY_SHEETS)) out.add(src);
+  for (const t of Object.values(MAPS)) if (t.ground) out.add(t.ground.src);
   return [...out];
 }
