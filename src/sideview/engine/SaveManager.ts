@@ -83,50 +83,57 @@ export class SaveManager {
     inventory: ItemData[];
     maxDungeonCleared: number;
   }> {
+    const empty = { playerState: null, inventory: [], maxDungeonCleared: 0 };
+
     try {
-      // 1. Try to fetch from cloud first
       const uuid = localStorage.getItem('playerUUID');
+      const db = await this.initDB();
+      const local = await db.get('saveData', uuid || 'slot1');
+
+      // The cloud is fetched, not trusted. The upload is fire and forget, so a
+      // failed or slow sync leaves the server holding an older save - and this
+      // used to take the cloud copy unconditionally and write it over the local
+      // one, throwing away everything since the last upload that worked. That
+      // is how a full inventory disappeared on a restart.
+      let cloud: any = null;
       if (uuid) {
         const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
         const API_URL = isLocal ? 'http://localhost:3001/api' : 'https://rpgame-production-3453.up.railway.app/api';
-        
         try {
           const res = await fetch(`${API_URL}/load/${uuid}`);
-          const cloudData = await res.json();
-          if (cloudData.success && cloudData.saveData) {
-             console.log('Game loaded from Cloud DB.');
-             
-             // Update local DB to match cloud DB
-             const db = await this.initDB();
-             await db.put('saveData', cloudData.saveData, uuid || 'slot1');
-             
-             return {
-                playerState: cloudData.saveData.playerState,
-                inventory: cloudData.saveData.inventory || [],
-                maxDungeonCleared: cloudData.saveData.maxDungeonCleared || 0,
-             };
-          }
-        } catch (e) {
-          console.warn('Cloud DB load failed, falling back to Local DB.');
+          const body = await res.json();
+          if (body.success && body.saveData) cloud = body.saveData;
+        } catch {
+          console.warn('Cloud load failed; using the local save.');
         }
       }
 
-      // 2. Fallback to local DB
-      const db = await this.initDB();
-      const data = await db.get('saveData', uuid || 'slot1');
-      if (data) {
-        console.log('Game loaded from Local DB.');
-        return {
-          playerState: data.playerState,
-          inventory: data.inventory,
-          maxDungeonCleared: data.maxDungeonCleared || 0,
-        };
-      }
+      const localAt = Number(local?.lastUpdated) || 0;
+      const cloudAt = Number(cloud?.lastUpdated) || 0;
+      const winner = cloudAt > localAt ? cloud : local;
+
+      if (!winner) return empty;
+
+      console.log(
+        `Save loaded from ${winner === cloud ? 'cloud' : 'local'}` +
+        ` (local ${localAt || 'none'}, cloud ${cloudAt || 'none'}).`
+      );
+
+      // Only write back when the cloud genuinely is ahead, so a stale copy
+      // cannot become the local one and make the loss permanent.
+      if (winner === cloud) await db.put('saveData', cloud, uuid || 'slot1');
+
+      return {
+        playerState: winner.playerState,
+        inventory: winner.inventory || [],
+        maxDungeonCleared: winner.maxDungeonCleared || 0,
+      };
     } catch (error) {
       console.error('Failed to load game:', error);
     }
-    return { playerState: null, inventory: [], maxDungeonCleared: 0 };
+    return empty;
   }
+
 
   public static async deleteSave() {
     try {

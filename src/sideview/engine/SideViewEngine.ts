@@ -2162,6 +2162,10 @@ export class SideViewEngine {
       if (dist < 45) {
         // Collect item into inventory
         p.inventory.push(loot.item);
+        // Picking something up was not saved at all. An item only reached disk
+        // if you happened to equip it or level up afterwards, so anything
+        // collected and left in the bag was gone on the next load.
+        this.triggerSave();
         audio.playLoot(loot.item.rarity);
         const rConfig = RARITY_CONFIGS[loot.item.rarity] || RARITY_CONFIGS.common;
         this.particles.addFloatingText(p.x, p.y - 25, `+ ${loot.item.name} (${rConfig.name})`, rConfig.color, true, 16);

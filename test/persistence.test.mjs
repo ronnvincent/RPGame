@@ -49,6 +49,29 @@ for (const field of saved) {
 if (!saved.has('equipment')) { console.log('  equipment is not saved - equipped items will vanish on reload'); failures++; }
 if (!/ps\.equipment/.test(loadBlock.slice(0, loadEnd))) { console.log('  equipment is not restored'); failures++; }
 
+// --- Every change that matters has to reach disk ------------------------
+const engineSrc2 = readFileSync('src/sideview/engine/SideViewEngine.ts', 'utf8');
+const pickup = engineSrc2.slice(engineSrc2.indexOf('p.inventory.push(loot.item)'));
+if (!/this\.triggerSave\(\)/.test(pickup.slice(0, 400))) {
+  console.log('  picking up loot does not save - it will vanish on reload');
+  failures++;
+}
+
+// --- A stale cloud must not overwrite newer local progress --------------
+const save = readFileSync('src/sideview/engine/SaveManager.ts', 'utf8');
+if (!/cloudAt > localAt \? cloud : local/.test(save)) {
+  console.log('  load does not compare timestamps - a stale cloud save can clobber local progress');
+  failures++;
+}
+if (!/if \(winner === cloud\) await db\.put/.test(save)) {
+  console.log('  a losing cloud save is still written to local, making the loss permanent');
+  failures++;
+}
+if (!/lastUpdated: Date\.now\(\)/.test(save)) {
+  console.log('  saves carry no timestamp, so newer cannot be told from older');
+  failures++;
+}
+
 console.log('');
 console.log(failures === 0 ? 'PERSISTENCE OK' : `PERSISTENCE FAILURES: ${failures}`);
 process.exit(failures === 0 ? 0 : 1);
