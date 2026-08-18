@@ -663,7 +663,11 @@ export class SideViewEngine {
 
     // Set cooldown
     p.skillCooldowns[skill.id] = skill.cooldown;
-    p.attackTimer = skill.cooldown === 0 ? 0.22 : 0.45;
+    // Attack pose length now follows the skill's cast time, so a heavy wind-up
+    // reads as heavier than a quick jab instead of every skill holding the same
+    // fixed 0.45s. Capped so casting never feels sluggish - attackTimer also
+    // gates the next input.
+    p.attackTimer = skill.cooldown === 0 ? 0.22 : Math.min(0.7, 0.3 + skill.castTime * 1.2);
     p.animState = 'attack';
 
     const attackX = p.x + (p.facing * (skill.range * 0.6));
@@ -996,70 +1000,9 @@ export class SideViewEngine {
       this.particles.triggerScreenShake(18, 0.65);
     }
 
-    // Trigger unique sprite-based visual effects for each skill
-    switch (skill.id) {
-      // Warrior
-      case 'w_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_pure', 25, 24, 1.5, '#ef4444'); break;
-      case 'w_2': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_pure', 25, 24, 1.6, '#f97316'); break;
-      case 'w_3': this.particles.playSanjuVfx(centerX, this.groundY - 40, 'sanju_earth', 25, 24, 1.8); break;
-      case 'w_4': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_blood', 25, 24, 1.5); break;
-      case 'w_5': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_pure', 25, 24, 2.0, '#ef4444'); break;
-      // Assassin
-      case 'as_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_blood', 25, 24, 1.4); break;
-      case 'as_2': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_cosmic', 25, 24, 1.6, '#a855f7'); break;
-      case 'as_3': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_blood', 25, 24, 1.8); break;
-      case 'as_4': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_pure', 25, 24, 1.5, '#10b981'); break;
-      case 'as_5': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_blood', 25, 24, 2.0); break;
-      // Mage
-      case 'm_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_fire', 25, 24, 1.5); break;
-      case 'm_2': this.particles.playSanjuVfx(centerX, centerY - 10, 'sanju_water', 25, 24, 1.8); break;
-      case 'm_3': this.particles.playSanjuVfx(centerX, centerY - 45, 'sanju_2d_sparks', 12, 24, 2.0); break;
-      case 'm_4': this.particles.playSanjuVfx(centerX, centerY - 30, 'sanju_pure', 25, 24, 1.8, '#38bdf8'); break;
-      case 'm_5': this.particles.playSanjuVfx(centerX, centerY - 40, 'sanju_water', 25, 24, 2.2); break;
-      // Archer
-      case 'ar_1': this.particles.playVfxSprite(centerX, centerY - 15, 'aaa_wind_bolt', p.facing, 1.5); break;
-      case 'ar_2': this.particles.playVfxSprite(centerX, centerY - 15, 'aaa_magic_sparks', p.facing, 1.8); break;
-      case 'ar_3': this.particles.playVfxSprite(centerX, centerY - 20, 'aaa_wind_bolt', p.facing, 1.6); break;
-      case 'ar_4': this.particles.playVfxSprite(centerX, centerY - 15, 'aaa_magic_sparks', p.facing, 1.5); break;
-      case 'ar_5': this.particles.playVfxSprite(centerX, centerY - 20, 'aaa_wind_bolt', p.facing, 2.0); break;
-      // Paladin
-      case 'p_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'aaa_light', 25, 24, 1.5); break;
-      case 'p_2': this.particles.playVfxSprite(centerX, centerY - 20, 'aaa_holy_shield', p.facing, 1.8); break;
-      case 'p_3': this.particles.playSanjuVfx(centerX, centerY - 30, 'aaa_light', 25, 24, 2.0); break;
-      case 'p_4': this.particles.playVfxSprite(centerX, centerY - 20, 'aaa_magic_sparks', p.facing, 1.8, '#facc15'); break;
-      case 'p_5': this.particles.playSanjuVfx(centerX, centerY - 25, 'aaa_light', 25, 24, 2.2); break;
-      // Necromancer
-      case 'n_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_blood', 25, 24, 1.5); break;
-      case 'n_2': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_blood', 25, 24, 1.8); break;
-      case 'n_4': this.particles.playSanjuVfx(centerX, centerY - 25, 'sanju_blood', 25, 24, 2.0); break;
-      case 'n_5': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_blood', 25, 24, 2.2); break;
-      // Berserker
-      case 'b_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_blood', 25, 24, 1.8); break;
-      case 'b_2': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_fire', 25, 24, 2.0); break;
-      case 'b_3': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_blood', 25, 24, 2.2); break;
-      case 'b_4': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_fire', 25, 24, 2.0); break;
-      case 'b_5': this.particles.playSanjuVfx(centerX, this.groundY - 30, 'sanju_fire', 25, 24, 2.4); break;
-      // Dragoon
-      case 'd_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_pure', 25, 24, 1.6, '#f97316'); break;
-      case 'd_2': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_pure', 25, 24, 1.8, '#f97316'); break;
-      case 'd_4': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_fire', 25, 24, 1.8); break;
-      case 'd_5': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_fire', 25, 24, 2.0); break;
-      // Priest
-      case 'pr_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'aaa_light', 25, 24, 1.5); break;
-      case 'pr_2': this.particles.playVfxSprite(centerX, centerY - 20, 'aaa_holy_shield', p.facing, 1.8); break;
-      case 'pr_3': this.particles.playVfxSprite(centerX, centerY - 20, 'aaa_magic_sparks', p.facing, 2.0, '#facc15'); break;
-      case 'pr_4': this.particles.playSanjuVfx(centerX, centerY - 20, 'aaa_light', 25, 24, 1.8); break;
-      case 'pr_5': this.particles.playSanjuVfx(centerX, centerY - 30, 'aaa_light', 25, 24, 2.2); break;
-      // Nightborne
-      case 'ni_1': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_cosmic', 25, 24, 1.5); break;
-      case 'ni_3': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_pure', 25, 24, 1.8, '#a855f7'); break;
-      case 'ni_4': this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_cosmic', 25, 24, 2.0); break;
-      case 'ni_5': this.particles.playSanjuVfx(centerX, centerY - 20, 'sanju_2d_sparks', 12, 24, 2.0); break;
-      // Fallback
-      default:
-        this.particles.playSanjuVfx(centerX, centerY - 15, 'sanju_pure', 25, 24, 1.5);
-        break;
-    }
+    // Legacy per-skill sprite VFX lived here as a switch on skill.id and ran on
+    // top of the catalogue effects, which is why the reworked skills still
+    // looked like the old ones. Visuals now come solely from playSkillVfx.
 
     let hitAny = false;
     this.enemies.forEach(enemy => {
@@ -1129,9 +1072,6 @@ export class SideViewEngine {
     this.particles.playVfx(isCrit ? 'fx_hit_big' : 'fx_spark_a', enemy.x, enemy.y - 12, { scale: isCrit ? 1.4 : 1 });
 
     // Custom Hit VFX for Warrior
-    if (this.player && this.player.characterClass.id === 'warrior') {
-      this.particles.playVfxSprite(enemy.x, enemy.y, 'warrior_vfx1', 1, 1.2);
-    }
 
     if (enemy.hp <= 0 && !enemy.isDead) {
       if (this.isHost) {
