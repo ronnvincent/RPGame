@@ -2327,6 +2327,12 @@ export class SpriteManager {
     // handled" and painted a legacy hand-written branch straight over the art
     // that had just been drawn.
     if (map.groundLine) {
+      // A pack whose terrain fades out still needs a definite surface drawn in
+      // front, or a character standing at exactly the right height reads as
+      // standing on nothing.
+      if (map.softGround && map.floor) {
+        this.drawFloorBand(ctx, map.floor, width, height, horizonY);
+      }
       ctx.restore();
       return true;
     }

@@ -103,6 +103,16 @@ export interface MapTheme {
    * theme rather than to any single layer.
    */
   groundLine?: number;
+  /**
+   * This pack's terrain fades out instead of ending in a surface.
+   *
+   * The ancient forest ships a Ground layer with a crisp grass edge, so the
+   * play line is obvious. The two painted forests do not - their lowest layer
+   * is soft undergrowth that simply gets darker, so a character standing at the
+   * right height still looked like it was standing on nothing. For those, the
+   * floor band is drawn in front to give the surface a definite edge.
+   */
+  softGround?: boolean;
 }
 
 export interface MapFloor {
@@ -306,6 +316,7 @@ export const MAPS: Record<string, MapTheme> = {
   void: {
     sky: '#0a1420',
     groundLine: 0.8898,
+    softGround: true,
     layers: [
       { src: `${FOREST}/10_Sky.png`, scroll: 0.02 },
       { src: `${FOREST}/09_Forest.png`, scroll: 0.10 },
@@ -318,7 +329,7 @@ export const MAPS: Record<string, MapTheme> = {
       { src: `${FOREST}/02_Bushes.png`, scroll: 1.0 },
       { src: `${FOREST}/01_Mist.png`, scroll: 0.58, alpha: 0.3, drift: -3 },
     ],
-    floor: { top: '#26403a', body: '#0a1412' }
+    floor: { top: '#42536e', body: '#161e2f' }
   },
 
 
@@ -381,6 +392,7 @@ export const MAPS: Record<string, MapTheme> = {
   crypt: {
     sky: '#0c140d',
     groundLine: 0.9319,
+    softGround: true,
     layers: [
       { src: `${EDER}/Layer_0011_0.png`, scroll: 0.03 },
       { src: `${EDER}/Layer_0010_1.png`, scroll: 0.08 },
@@ -395,7 +407,7 @@ export const MAPS: Record<string, MapTheme> = {
       { src: `${EDER}/Layer_0001_8.png`, scroll: 0.85 },
       { src: `${EDER}/Layer_0000_9.png`, scroll: 1.0 },
     ],
-    floor: { top: '#2f4a2a', body: '#10180f' }
+    floor: { top: '#3a5730', body: '#111a10' }
   },
 
 };
