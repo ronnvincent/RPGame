@@ -46,7 +46,10 @@ for (const theme of themes) {
   }
 
   const kind = map.ground ? `ground tiles (${map.ground.tile}px)` : `floor ${map.floor.body}`;
-  console.log(`  ${theme.padEnd(11)} ${String(map.layers.length).padStart(2)} layers, ${kind}`);
+  // A theme with no layers still renders - sky over ground - but it is a
+  // placeholder, so say so rather than letting it read as finished.
+  const note = map.layers.length === 0 ? '   <- awaiting new art' : '';
+  console.log(`  ${theme.padEnd(11)} ${String(map.layers.length).padStart(2)} layers, ${kind}${note}`);
 }
 
 console.log(failures === 0 ? 'MAP COMPLETENESS OK' : `MAP COMPLETENESS FAILURES: ${failures}`);

@@ -102,8 +102,6 @@ export interface MapGround {
 }
 
 const POLY = '/assets/maps/PolyStyle';
-const FOREST = '/assets/maps/parallax_forest/parallax_forest';
-const CITY = '/assets/maps/Futuristic City Parallax';
 
 // Five more layered sets were already sitting unused in public/assets - the
 // same story as the character packs. No download needed for these.
@@ -244,36 +242,24 @@ export const MAPS: Record<string, MapTheme> = {
   },
 
   // ---- Goblin Catacombs: the forest approach ----
+  // ---- Goblin Catacombs: awaiting new art ----
+  // The forest pack was removed; until its replacement lands this renders as a
+  // clean sky over solid ground rather than a broken or empty scene.
   catacombs: {
     sky: '#1b2733',
-    layers: [
-      { src: `${FOREST}/Background.png`, scroll: 0.04, anchor: 'fill' },
-      { src: `${FOREST}/Clouds_Plan_1.png`, scroll: 0.10, anchor: 'top', alpha: 0.8, drift: 4 },
-      { src: `${FOREST}/Mountains_Plan_1.png`, scroll: 0.18, anchor: 'bottom' },
-      { src: `${FOREST}/Mountains_Plan_2.png`, scroll: 0.30, anchor: 'bottom' },
-      { src: `${FOREST}/Trees_Plan_3.png`, scroll: 0.46, anchor: 'bottom' },
-      { src: `${FOREST}/Trees_Plan_2.png`, scroll: 0.62, anchor: 'bottom',
-        rect: { sx: 0, sy: 0, sw: 1800, sh: 240 } },
-      { src: `${FOREST}/Fog.png`, scroll: 0.55, anchor: 'bottom', alpha: 0.45, drift: -8 },
-    ],
+    layers: [],
     floor: { top: '#33452f', body: '#101a13' }
   },
 
+
   // ---- Void Nexus: the futuristic city reads as an astral rift ----
+  // ---- Void Nexus: awaiting new art ----
   void: {
     sky: '#120a1e',
-    layers: [
-      { src: `${CITY}/background.png`, scroll: 0.03, anchor: 'fill' },
-      { src: `${CITY}/city4plan.png`, scroll: 0.14, anchor: 'bottom' },
-      { src: `${CITY}/city3plan.png`, scroll: 0.28, anchor: 'bottom' },
-      { src: `${CITY}/city2plan.png`, scroll: 0.46, anchor: 'bottom' },
-      { src: `${CITY}/city1plan.png`, scroll: 0.68, anchor: 'bottom' },
-      { src: `${CITY}/smog2.png`, scroll: 0.36, anchor: 'bottom', alpha: 0.5, drift: -10 },
-      { src: `${CITY}/light.png`, scroll: 0.20, anchor: 'top', alpha: 0.35,
-        blend: 'lighter', rect: { sx: 0, sy: 0, sw: 630, sh: 60 } },
-    ],
+    layers: [],
     floor: { top: '#3d2c58', body: '#0c0715' }
   },
+
 
   // ---- Twilight Peaks: the mountain-dusk layer set ----
   mountain: {
