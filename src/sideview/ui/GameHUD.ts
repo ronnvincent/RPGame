@@ -192,9 +192,16 @@ export class GameHUD {
       /* Top Center: Wave Banner with Sprite Panel */
       .dungeon-wave-banner {
         position: absolute;
-        top: 10px;
-        left: 50%;
-        transform: translateX(-50%);
+        /* Tucked under the player panel, which is what the mobile rules already
+           did. Centred on the viewport it sat level with a right-anchored row
+           of ten buttons - three absolutely positioned elements with no
+           knowledge of each other - so they collided as soon as the row grew,
+           and voice had just added two more buttons to it. Left-aligned it
+           cannot be reached by that row however the row wraps. */
+        top: 52px;
+        left: max(8px, env(safe-area-inset-left));
+        transform: none;
+        max-width: min(420px, 60vw);
         background: url('/assets/kenney-rpg-ui/panel_brown.png') repeat;
         background-size: 100% 100%;
         padding: 6px 24px;
@@ -243,6 +250,12 @@ export class GameHUD {
         top: max(8px, env(safe-area-inset-top));
         right: max(8px, env(safe-area-inset-right));
         display: flex;
+        /* Wrap rather than run into the player panel. Ten items in a fixed row
+           only fits while nothing is added to it, and voice added two. */
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        max-width: calc(100vw - 300px);
+        row-gap: 5px;
         gap: 5px;
         pointer-events: auto;
         z-index: 10;
@@ -302,7 +315,8 @@ export class GameHUD {
       /* Mini Quest Tracker Widget */
       .mini-quest-tracker {
         position: absolute;
-        top: 48px;
+        /* Clear of a wrapped two-line button row. */
+        top: 78px;
         right: 10px;
         width: 220px;
         background: url('/assets/kenney-rpg-ui/panel_brown.png') repeat;
