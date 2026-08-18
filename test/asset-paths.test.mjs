@@ -45,9 +45,14 @@ const MAP_BASES = {
   POLY: '/assets/maps/PolyStyle',
   FOREST: '/assets/maps/parallax_forest/parallax_forest',
   CITY: '/assets/maps/Futuristic City Parallax',
+  DUSK: '/assets/mountain-dusk/MountainsLayers',
+  SEA: '/assets/underwater/PNG/layers',
+  BOG: '/assets/swamp/Evironment',
+  GROTTO: '/assets/warped-files/warped-files/Assets/PNG/environment/layers',
+  GOTHIC: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/environment/layers',
 };
 let mapLayers = 0;
-for (const m of mapSrc.matchAll(/\$\{(POLY|FOREST|CITY)\}\/([^`]+)`/g)) {
+for (const m of mapSrc.matchAll(/\$\{(POLY|FOREST|CITY|DUSK|SEA|BOG|GROTTO|GOTHIC)\}\/([^`]+)`/g)) {
   mapLayers++;
   const rel = MAP_BASES[m[1]] + '/' + m[2];
   if (!existsSync('public' + rel)) missing.set(rel, 'MapLibrary.ts');

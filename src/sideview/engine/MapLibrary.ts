@@ -38,6 +38,14 @@ const POLY = '/assets/maps/PolyStyle';
 const FOREST = '/assets/maps/parallax_forest/parallax_forest';
 const CITY = '/assets/maps/Futuristic City Parallax';
 
+// Five more layered sets were already sitting unused in public/assets - the
+// same story as the character packs. No download needed for these.
+const DUSK = '/assets/mountain-dusk/MountainsLayers';
+const SEA = '/assets/underwater/PNG/layers';
+const BOG = '/assets/swamp/Evironment';
+const GROTTO = '/assets/warped-files/warped-files/Assets/PNG/environment/layers';
+const GOTHIC = '/assets/GothicVania-town-files/GothicVania-town-files/PNG/environment/layers';
+
 export const MAPS: Record<string, MapTheme> = {
   // ---- Town: the PolyStyle village package ----
   town: {
@@ -86,12 +94,65 @@ export const MAPS: Record<string, MapTheme> = {
         blend: 'lighter', rect: { sx: 0, sy: 0, sw: 630, sh: 60 } },
     ]
   },
+
+  // ---- Twilight Peaks: the mountain-dusk layer set ----
+  mountain: {
+    sky: '#2b1d38',
+    layers: [
+      { src: `${DUSK}/sky.png`, scroll: 0.02, anchor: 'fill' },
+      { src: `${DUSK}/far-clouds.png`, scroll: 0.08, anchor: 'bottom', drift: 3 },
+      { src: `${DUSK}/far-mountains.png`, scroll: 0.16, anchor: 'bottom' },
+      { src: `${DUSK}/mountains.png`, scroll: 0.30, anchor: 'bottom' },
+      { src: `${DUSK}/near-clouds.png`, scroll: 0.22, anchor: 'bottom', alpha: 0.75, drift: 7 },
+      { src: `${DUSK}/trees.png`, scroll: 0.58, anchor: 'bottom' },
+    ]
+  },
+
+  // ---- Sunken Abyss ----
+  underwater: {
+    sky: '#06283d',
+    layers: [
+      { src: `${SEA}/far.png`, scroll: 0.05, anchor: 'fill' },
+      { src: `${SEA}/foreground-2.png`, scroll: 0.24, anchor: 'bottom' },
+      { src: `${SEA}/foreground-1.png`, scroll: 0.48, anchor: 'bottom' },
+      { src: `${SEA}/sand.png`, scroll: 0.75, anchor: 'bottom', heightFrac: 0.45 },
+    ]
+  },
+
+  // ---- Venomous Swamp ----
+  swamp: {
+    sky: '#0f1a14',
+    layers: [
+      { src: `${BOG}/background.png`, scroll: 0.04, anchor: 'fill' },
+      { src: `${BOG}/mid-layer-01.png`, scroll: 0.20, anchor: 'bottom' },
+      { src: `${BOG}/mid-layer-02.png`, scroll: 0.38, anchor: 'bottom' },
+      { src: `${BOG}/trees.png`, scroll: 0.62, anchor: 'bottom', heightFrac: 0.78 },
+    ]
+  },
+
+  // ---- Gallet Depths: the Warped grotto set ----
+  caves: {
+    sky: '#120d16',
+    layers: [
+      { src: `${GROTTO}/background.png`, scroll: 0.06, anchor: 'fill' },
+      { src: `${GROTTO}/middleground.png`, scroll: 0.26, anchor: 'bottom' },
+      { src: `${GROTTO}/walls.png`, scroll: 0.45, anchor: 'bottom', heightFrac: 0.70 },
+      { src: `${GROTTO}/props.png`, scroll: 0.66, anchor: 'bottom', heightFrac: 0.60 },
+    ]
+  },
+
+  // ---- Crypt of the Damned: GothicVania ----
+  crypt: {
+    sky: '#0d0b14',
+    layers: [
+      { src: `${GOTHIC}/background.png`, scroll: 0.05, anchor: 'fill' },
+      { src: `${GOTHIC}/middleground.png`, scroll: 0.30, anchor: 'bottom' },
+    ]
+  },
 };
 
 /** Themes still on the old hand-written renderer. */
-export const THEMES_WITHOUT_ART = [
-  'crypt', 'inferno', 'swamp', 'mountain', 'underwater', 'caves'
-];
+export const THEMES_WITHOUT_ART = ['inferno'];
 
 export function allMapImagePaths(): string[] {
   const out = new Set<string>();
