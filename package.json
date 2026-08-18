@@ -15,7 +15,8 @@
     "test:maps": "node test/map-completeness.test.mjs",
     "test:paths": "node tools/check-generated-paths.mjs",
     "test:balance": "node test/combat-balance.test.mjs",
-    "test:ground": "node tools/check-map-ground.mjs"
+    "test:ground": "node tools/check-map-ground.mjs",
+    "test:sprites": "node test/sprite-api.test.mjs"
   },
   "keywords": [],
   "author": "",

@@ -2283,6 +2283,171 @@ export class SpriteManager {
     ctx.restore();
   }
 
+  public drawGothicTownNPC(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    npcType: 'oldman' | 'bearded' | 'hatman' | 'woman',
+    facing: number = 1
+  ) {
+    let imgKey = 'gv_oldman_idle';
+    let frameCount = 6;
+    let frameW = 36;
+    let frameH = 44;
+
+    if (npcType === 'bearded') {
+      imgKey = 'gv_bearded_idle';
+      frameCount = 5;
+      frameW = 40;
+      frameH = 47;
+    } else if (npcType === 'hatman') {
+      imgKey = 'gv_hatman_idle';
+      frameCount = 4;
+      frameW = 38;
+      frameH = 45;
+    } else if (npcType === 'woman') {
+      imgKey = 'gv_woman_idle';
+      frameCount = 4;
+      frameW = 36;
+      frameH = 44;
+    }
+
+    const img = this.images[imgKey];
+    if (!img || !img.complete || img.naturalWidth === 0) return;
+
+    const fps = 6;
+    const currentFrame = Math.floor(this.animTimer * fps) % frameCount;
+    const scale = 2.0;
+    const destW = frameW * scale;
+    const destH = frameH * scale;
+
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.translate(x, y);
+
+    if (facing > 0) {
+      ctx.scale(-1, 1);
+    }
+
+    ctx.drawImage(
+      img,
+      currentFrame * frameW,
+      0,
+      frameW,
+      frameH,
+      -destW / 2,
+      -destH,
+      destW,
+      destH
+    );
+
+    ctx.restore();
+  }
+
+  /**
+   * Draw Animated Green Portal Sprite Sheet (512x192, 8 cols x 3 rows, 64x64 per frame)
+   * Row 0 = Idle loop, Row 1 = Opening, Row 2 = Closing
+   */
+  public drawDimensionalPortal(ctx: CanvasRenderingContext2D, x: number, y: number) {
+    const time = Date.now() / 1000;
+    const portalImg = this.images['green_portal'];
+
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+
+    // --- 1. Ambient Green Glow Aura on the Ground ---
+    const glowRadius = 75 + Math.sin(time * 3) * 8;
+    const groundGlow = ctx.createRadialGradient(x, y - 60, 10, x, y - 60, glowRadius);
+    groundGlow.addColorStop(0, 'rgba(74, 222, 128, 0.35)');
+    groundGlow.addColorStop(0.5, 'rgba(34, 197, 94, 0.12)');
+    groundGlow.addColorStop(1, 'transparent');
+    ctx.fillStyle = groundGlow;
+    ctx.beginPath();
+    ctx.arc(x, y - 60, glowRadius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // --- 2. Animated Green Portal Sprite ---
+    if (portalImg && portalImg.complete && portalImg.naturalWidth > 0) {
+      const cols = 4;
+      const rows = 2;
+      const totalFrames = 7;
+      const frameW = portalImg.naturalWidth / cols;   // 64
+      const frameH = portalImg.naturalHeight / rows;  // 64
+      
+      const frameIndex = Math.floor(this.animTimer * 10) % totalFrames;
+      const col = frameIndex % cols;
+      const row = Math.floor(frameIndex / cols);
+
+      const scale = 3.0; // Scale up from 64px to ~192px
+      const destW = frameW * scale;
+      const destH = frameH * scale;
+
+      ctx.shadowColor = '#22c55e';
+      ctx.shadowBlur = 20;
+      ctx.drawImage(
+        portalImg,
+        col * frameW,
+        row * frameH,
+        frameW,
+        frameH,
+        x - destW / 2,
+        y - destH + 10, // anchor to ground
+        destW,
+        destH
+      );
+    } else {
+      // Fallback: Draw a nice radial gradient portal if sprite not loaded
+      const fallbackGrad = ctx.createRadialGradient(x, y - 70, 8, x, y - 70, 50);
+      fallbackGrad.addColorStop(0, '#ffffff');
+      fallbackGrad.addColorStop(0.3, '#4ade80');
+      fallbackGrad.addColorStop(0.7, '#15803d');
+      fallbackGrad.addColorStop(1, 'transparent');
+      ctx.fillStyle = fallbackGrad;
+      ctx.beginPath();
+      ctx.ellipse(x, y - 70, 45 + Math.sin(time * 4) * 4, 65 + Math.cos(time * 3) * 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // --- 3. Floating Emerald Sparkle Particles ---
+    for (let s = 0; s < 8; s++) {
+      const angle = time * 2.2 + (s * Math.PI * 2 / 8);
+      const radiusX = 35 + Math.sin(time * 2.5 + s) * 12;
+      const radiusY = 50 + Math.cos(time * 2 + s) * 15;
+      const px = x + Math.cos(angle) * radiusX;
+      const py = (y - 80) + Math.sin(angle) * radiusY;
+
+      ctx.fillStyle = s % 3 === 0 ? '#ffd700' : s % 3 === 1 ? '#4ade80' : '#86efac';
+      ctx.shadowColor = '#22c55e';
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.arc(px, py, 2 + Math.sin(time * 5 + s) * 1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // --- 4. Glowing Title Above Portal ---
+    ctx.font = 'bold 13px "Cinzel", serif';
+    ctx.fillStyle = '#4ade80';
+    ctx.shadowColor = '#22c55e';
+    ctx.shadowBlur = 14;
+    ctx.textAlign = 'center';
+    ctx.fillText('❖ DIMENSIONAL GATEWAY ❖', x, y - 185);
+
+    ctx.restore();
+  }
+
+  /**
+   * Draw Clean, High-Contrast Parallax Backgrounds, Themed Grounds, and Atmosphere
+   * Uses 100% Authentic GothicVania Environment Layers & Tilesets
+   */
+
+  /**
+   * Generic parallax renderer. A layer is tiled horizontally so it never runs
+   * out, offset by the camera times its scroll factor.
+   *
+   * Returns false when the theme has no data-driven map, so drawEnvironment can
+   * fall through to its original hand-written branch for themes whose art has
+   * not been replaced yet.
+   */
   private drawParallaxTheme(
     ctx: CanvasRenderingContext2D,
     theme: string,
