@@ -138,6 +138,7 @@ export class SideViewGame {
     // Stream the VFX catalogue in the background so the first cast of a fight
     // already has its frames resident.
     this.engine.particles.warmVfx();
+    audio.warmSounds();
     
     if (saveData) {
       this.engine.loadSaveData(saveData);

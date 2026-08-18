@@ -3,13 +3,14 @@
  * Uses AudioBuffers for ZERO-LAG sound effects and DynamicsCompressor for safe volumes.
  */
 
-import { SFX } from './SfxLibrary';
+import { SFX, allSfxPaths } from './SfxLibrary';
 class AudioManager {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private compressor: DynamicsCompressorNode | null = null;
   
   public soundEnabled: boolean = true;
+  private warmed: boolean = false;
   public musicEnabled: boolean = true;
   
   private currentBgmAudio: HTMLAudioElement | null = null;
@@ -173,6 +174,21 @@ class AudioManager {
     const def = SFX[id];
     if (!def) return;
     this.playSFX(def.src, def.volume * volumeScale, def.rate ?? 1.0, def.maxDuration);
+  }
+
+  /**
+   * Decode every catalogue sound up front. Decoding a clip costs real time, and
+   * doing it on first cast is a stall the player feels mid-fight - which is
+   * what made casting lag. Staggered so the decodes do not fight the first
+   * frames for CPU.
+   */
+  public warmSounds() {
+    if (this.warmed) return;
+    this.warmed = true;
+    const paths = allSfxPaths();
+    paths.forEach((src, i) => {
+      window.setTimeout(() => { this.getAudioBuffer(src).catch(() => {}); }, i * 60);
+    });
   }
 
   public playSlash(type: 'light' | 'heavy' | 'dagger' | 'spear' = 'light', tone = 1) {
