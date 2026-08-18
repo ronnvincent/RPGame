@@ -2090,64 +2090,44 @@ export class SpriteManager {
     facing: number,
     hitStun: number
   ) {
+    // The sheet is a 23x4 GRID of 80x100 cells, not one strip: row 0 idle (9),
+    // row 1 run (12), row 2 attack (12), row 3 death (23). Reading it as a
+    // single row played whatever happened to sit to the right of idle, which is
+    // why Malakar and Ignis animated into unrelated poses.
+    let row = 0;
+    let frames = 9;
+    let fps = 8;
+
+    if (state === 'dead') { row = 3; frames = 23; fps = 10; }
+    else if (state === 'attack') { row = 2; frames = 12; fps = 12; }
+    else if (state === 'hit' || hitStun > 0) { row = 0; frames = 9; fps = 12; }
+    else if (state === 'run' || state === 'walk') { row = 1; frames = 12; fps = 12; }
+
     const img = this.images['nightborne_sheet'];
-    if (!img) return;
+    if (!img || !img.complete || !img.naturalWidth) return;
 
     const frameW = 80;
     const frameH = 100;
-    let row = 0; // row 0: idle, 1: run, 2: attack, 3: hurt/death
-    let frameCount = 9;
-    let fps = 8;
+    const raw = Math.floor(this.animTimer * fps);
+    const frame = state === 'dead' ? Math.min(frames - 1, raw % (frames * 3)) : raw % frames;
 
-    if (state === 'dead') {
-      row = 3;
-      frameCount = 15;
-      fps = 6;
-    } else if (state === 'hit' || hitStun > 0) {
-      row = 3;
-      frameCount = 5;
-      fps = 8;
-    } else if (state === 'run' || state === 'walk') {
-      row = 2; // combat slash charge
-      frameCount = 12;
-      fps = 10;
-    }
-
-    const currentFrame = Math.floor(this.animTimer * fps) % frameCount;
     const scale = 2.4;
     const destW = frameW * scale;
     const destH = frameH * scale;
 
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    ctx.translate(x, y);
-
-    if (facing > 0) {
-      ctx.scale(-1, 1);
-    }
-
-    if (hitStun > 0) {
-      ctx.filter = 'brightness(2.2) contrast(1.5)';
-    }
+    ctx.translate(Math.round(x), Math.round(y));
+    if (facing < 0) ctx.scale(-1, 1);
+    if (hitStun > 0) ctx.filter = 'brightness(2.0) contrast(1.4)';
 
     ctx.drawImage(
-      img,
-      currentFrame * frameW,
-      row * frameH,
-      frameW,
-      frameH,
-      -destW / 2,
-      -(destH - 120),
-      destW,
-      destH
+      img, frame * frameW, row * frameH, frameW, frameH,
+      Math.round(-destW / 2 + 3.5 * scale), Math.round(-(frameH - 36) * scale),
+      Math.round(destW), Math.round(destH)
     );
-
     ctx.restore();
   }
-
-  /**
-   * Draw Monsters_Creatures_Fantasy 150x150 Sprites (Skeleton, Goblin, Flying Eye, Mushroom)
-   */
 
   private drawReaperBoss(
     ctx: CanvasRenderingContext2D,
@@ -2157,68 +2137,42 @@ export class SpriteManager {
     facing: number,
     hitStun: number
   ) {
-    const img = this.images['reaper_sheet'];
-    if (!img) return;
-
-    // Bringer of Death spritesheet: 1120x744, 8 cols
-    // Row 0: Idle (8 frames), Row 1: Walk (8), Row 2: Attack (8), Row 3: Cast (8)
-    // Row 4: Spell (8), Row 5: Hurt (3), Row 6: Death (10), Row 7: Walk2 (8)
-    const frameW = 140;
-    const frameH = 93;
-    let row = 0;
-    let frameCount = 8;
+    // Numbered frames per folder, counted from disk: idle 8, walk 8, attack 10,
+    // hurt 3, death 10. Death was played as 8 and cut short.
+    let anim = 'idle';
+    let frames = 8;
     let fps = 8;
 
-    if (state === 'dead') {
-      row = 6;
-      frameCount = 8;
-      fps = 6;
-    } else if (state === 'hit' || hitStun > 0) {
-      row = 5;
-      frameCount = 3;
-      fps = 8;
-    } else if (state === 'run' || state === 'walk') {
-      row = 1;
-      frameCount = 8;
-      fps = 10;
-    } else {
-      row = 0;
-      frameCount = 8;
-      fps = 6;
-    }
+    if (state === 'dead') { anim = 'death'; frames = 10; fps = 8; }
+    else if (state === 'attack') { anim = 'atk'; frames = 10; fps = 12; }
+    else if (state === 'hit' || hitStun > 0) { anim = 'hurt'; frames = 3; fps = 10; }
+    else if (state === 'run' || state === 'walk') { anim = 'walk'; frames = 8; fps = 10; }
 
-    const currentFrame = Math.floor(this.animTimer * fps) % frameCount;
+    const raw = Math.floor(this.animTimer * fps);
+    const index = state === 'dead' ? Math.min(frames - 1, raw % (frames * 3)) : raw % frames;
+    const img = this.images[`reaper_${anim}_${index + 1}`] || this.images['reaper_idle_1'];
+    if (!img || !img.complete || !img.naturalWidth) return;
+
+    const frameH = 93;
     const scale = 2.8;
-    const destW = frameW * scale;
-    const destH = frameH * scale;
+    const destW = img.naturalWidth * scale;
+    const destH = img.naturalHeight * scale;
 
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    ctx.translate(x, y);
+    ctx.translate(Math.round(x), Math.round(y));
+    if (facing < 0) ctx.scale(-1, 1);
+    if (hitStun > 0) ctx.filter = 'brightness(2.0) contrast(1.4)';
 
-    if (facing > 0) {
-      ctx.scale(-1, 1);
-    }
-
-    if (hitStun > 0) {
-      ctx.filter = 'brightness(2.2) contrast(1.5)';
-    }
-
+    // The creature sits 36px right of centre in its frame and 1px above the
+    // bottom edge - measured, not assumed.
     ctx.drawImage(
-      img,
-      currentFrame * frameW,
-      row * frameH,
-      frameW,
-      frameH,
-      -destW / 2,
-      -(destH - 40),
-      destW,
-      destH
+      img, 0, 0, img.naturalWidth, img.naturalHeight,
+      Math.round(-destW / 2 - 36 * scale), Math.round(-(frameH - 1) * scale),
+      Math.round(destW), Math.round(destH)
     );
-
     ctx.restore();
   }
-
 
   private drawFantasyMob(
     ctx: CanvasRenderingContext2D,
@@ -2289,229 +2243,46 @@ export class SpriteManager {
     isBoss: boolean,
     hitStun: number
   ) {
-    let imgKey = 'orc_walk';
-    let frameCount = 8;
+    // Frame counts measured with tools/measure-mob-frames.mjs. The old code
+    // guessed 8 for everything and, worse, played orc_atk1 for RUNNING - so the
+    // Death Knight, Grimjaw and the Orc Berserker swung their weapon as a walk
+    // cycle and never showed an attack at all.
+    let key = 'orc_idle';
+    let frames = 6;
     let fps = 8;
 
-    if (state === 'hit' || hitStun > 0) {
-      imgKey = 'orc_hurt';
-      frameCount = 4;
-      fps = 6;
-    } else if (state === 'dead') {
-      imgKey = 'orc_death';
-      frameCount = 4;
-      fps = 4;
-    } else if (state === 'run') {
-      imgKey = 'orc_atk1';
-      frameCount = 6;
-      fps = 10;
-    }
+    if (state === 'hit' || hitStun > 0) { key = 'orc_hurt'; frames = 4; fps = 8; }
+    else if (state === 'dead') { key = 'orc_death'; frames = 4; fps = 5; }
+    else if (state === 'attack') { key = 'orc_atk1'; frames = 6; fps = 11; }
+    else if (state === 'run' || state === 'walk') { key = 'orc_walk'; frames = 8; fps = 10; }
 
-    const img = this.images[imgKey];
-    if (!img) return;
+    const img = this.images[key] || this.images['orc_idle'];
+    if (!img || !img.complete || !img.naturalWidth) return;
 
     const frameW = 100;
     const frameH = 100;
-    const currentFrame = Math.floor(this.animTimer * fps) % frameCount;
-    const scale = isBoss ? 2.2 : 1.35;
+    const raw = Math.floor(this.animTimer * fps);
+    const frame = state === 'dead' ? Math.min(frames - 1, raw % (frames * 3)) : raw % frames;
+
+    const scale = isBoss ? 2.6 : 1.5;
     const destW = frameW * scale;
     const destH = frameH * scale;
 
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    ctx.translate(x, y);
+    ctx.translate(Math.round(x), Math.round(y));
+    if (facing < 0) ctx.scale(-1, 1);
+    if (hitStun > 0) ctx.filter = 'brightness(2.2) contrast(1.5)';
 
-    if (facing > 0) {
-      ctx.scale(-1, 1);
-    }
-
-    if (hitStun > 0) {
-      ctx.filter = 'brightness(2.2) contrast(1.5)';
-    }
-
+    // 40px of the 100px frame is empty below the feet.
     ctx.drawImage(
-      img,
-      currentFrame * frameW,
-      0,
-      frameW,
-      frameH,
-      -destW / 2,
-      -(destH - 55),
-      destW,
-      destH
+      img, frame * frameW, 0, frameW, frameH,
+      Math.round(-destW / 2 - 4.5 * scale), Math.round(-(frameH - 40) * scale),
+      Math.round(destW), Math.round(destH)
     );
-
     ctx.restore();
   }
 
-  /**
-   * Draw Authentic GothicVania Town NPC with animated idle breathing
-   */
-  public drawGothicTownNPC(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    npcType: 'oldman' | 'bearded' | 'hatman' | 'woman',
-    facing: number = 1
-  ) {
-    let imgKey = 'gv_oldman_idle';
-    let frameCount = 6;
-    let frameW = 36;
-    let frameH = 44;
-
-    if (npcType === 'bearded') {
-      imgKey = 'gv_bearded_idle';
-      frameCount = 5;
-      frameW = 40;
-      frameH = 47;
-    } else if (npcType === 'hatman') {
-      imgKey = 'gv_hatman_idle';
-      frameCount = 4;
-      frameW = 38;
-      frameH = 45;
-    } else if (npcType === 'woman') {
-      imgKey = 'gv_woman_idle';
-      frameCount = 4;
-      frameW = 36;
-      frameH = 44;
-    }
-
-    const img = this.images[imgKey];
-    if (!img || !img.complete || img.naturalWidth === 0) return;
-
-    const fps = 6;
-    const currentFrame = Math.floor(this.animTimer * fps) % frameCount;
-    const scale = 2.0;
-    const destW = frameW * scale;
-    const destH = frameH * scale;
-
-    ctx.save();
-    ctx.imageSmoothingEnabled = false;
-    ctx.translate(x, y);
-
-    if (facing > 0) {
-      ctx.scale(-1, 1);
-    }
-
-    ctx.drawImage(
-      img,
-      currentFrame * frameW,
-      0,
-      frameW,
-      frameH,
-      -destW / 2,
-      -destH,
-      destW,
-      destH
-    );
-
-    ctx.restore();
-  }
-
-  /**
-   * Draw Animated Green Portal Sprite Sheet (512x192, 8 cols x 3 rows, 64x64 per frame)
-   * Row 0 = Idle loop, Row 1 = Opening, Row 2 = Closing
-   */
-  public drawDimensionalPortal(ctx: CanvasRenderingContext2D, x: number, y: number) {
-    const time = Date.now() / 1000;
-    const portalImg = this.images['green_portal'];
-
-    ctx.save();
-    ctx.imageSmoothingEnabled = false;
-
-    // --- 1. Ambient Green Glow Aura on the Ground ---
-    const glowRadius = 75 + Math.sin(time * 3) * 8;
-    const groundGlow = ctx.createRadialGradient(x, y - 60, 10, x, y - 60, glowRadius);
-    groundGlow.addColorStop(0, 'rgba(74, 222, 128, 0.35)');
-    groundGlow.addColorStop(0.5, 'rgba(34, 197, 94, 0.12)');
-    groundGlow.addColorStop(1, 'transparent');
-    ctx.fillStyle = groundGlow;
-    ctx.beginPath();
-    ctx.arc(x, y - 60, glowRadius, 0, Math.PI * 2);
-    ctx.fill();
-
-    // --- 2. Animated Green Portal Sprite ---
-    if (portalImg && portalImg.complete && portalImg.naturalWidth > 0) {
-      const cols = 4;
-      const rows = 2;
-      const totalFrames = 7;
-      const frameW = portalImg.naturalWidth / cols;   // 64
-      const frameH = portalImg.naturalHeight / rows;  // 64
-      
-      const frameIndex = Math.floor(this.animTimer * 10) % totalFrames;
-      const col = frameIndex % cols;
-      const row = Math.floor(frameIndex / cols);
-
-      const scale = 3.0; // Scale up from 64px to ~192px
-      const destW = frameW * scale;
-      const destH = frameH * scale;
-
-      ctx.shadowColor = '#22c55e';
-      ctx.shadowBlur = 20;
-      ctx.drawImage(
-        portalImg,
-        col * frameW,
-        row * frameH,
-        frameW,
-        frameH,
-        x - destW / 2,
-        y - destH + 10, // anchor to ground
-        destW,
-        destH
-      );
-    } else {
-      // Fallback: Draw a nice radial gradient portal if sprite not loaded
-      const fallbackGrad = ctx.createRadialGradient(x, y - 70, 8, x, y - 70, 50);
-      fallbackGrad.addColorStop(0, '#ffffff');
-      fallbackGrad.addColorStop(0.3, '#4ade80');
-      fallbackGrad.addColorStop(0.7, '#15803d');
-      fallbackGrad.addColorStop(1, 'transparent');
-      ctx.fillStyle = fallbackGrad;
-      ctx.beginPath();
-      ctx.ellipse(x, y - 70, 45 + Math.sin(time * 4) * 4, 65 + Math.cos(time * 3) * 4, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // --- 3. Floating Emerald Sparkle Particles ---
-    for (let s = 0; s < 8; s++) {
-      const angle = time * 2.2 + (s * Math.PI * 2 / 8);
-      const radiusX = 35 + Math.sin(time * 2.5 + s) * 12;
-      const radiusY = 50 + Math.cos(time * 2 + s) * 15;
-      const px = x + Math.cos(angle) * radiusX;
-      const py = (y - 80) + Math.sin(angle) * radiusY;
-
-      ctx.fillStyle = s % 3 === 0 ? '#ffd700' : s % 3 === 1 ? '#4ade80' : '#86efac';
-      ctx.shadowColor = '#22c55e';
-      ctx.shadowBlur = 8;
-      ctx.beginPath();
-      ctx.arc(px, py, 2 + Math.sin(time * 5 + s) * 1, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // --- 4. Glowing Title Above Portal ---
-    ctx.font = 'bold 13px "Cinzel", serif';
-    ctx.fillStyle = '#4ade80';
-    ctx.shadowColor = '#22c55e';
-    ctx.shadowBlur = 14;
-    ctx.textAlign = 'center';
-    ctx.fillText('❖ DIMENSIONAL GATEWAY ❖', x, y - 185);
-
-    ctx.restore();
-  }
-
-  /**
-   * Draw Clean, High-Contrast Parallax Backgrounds, Themed Grounds, and Atmosphere
-   * Uses 100% Authentic GothicVania Environment Layers & Tilesets
-   */
-
-  /**
-   * Generic parallax renderer. A layer is tiled horizontally so it never runs
-   * out, offset by the camera times its scroll factor.
-   *
-   * Returns false when the theme has no data-driven map, so drawEnvironment can
-   * fall through to its original hand-written branch for themes whose art has
-   * not been replaced yet.
-   */
   private drawParallaxTheme(
     ctx: CanvasRenderingContext2D,
     theme: string,
