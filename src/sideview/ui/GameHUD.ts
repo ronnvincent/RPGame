@@ -11,6 +11,7 @@
 
 import { SideViewEngine } from '../engine/SideViewEngine';
 import { voice } from '../network/VoiceChat';
+import { LeaderboardUI } from './LeaderboardUI';
 import { ItemData, RARITY_CONFIGS } from '../items/ItemDatabase';
 import { audio } from '../engine/AudioManager';
 import { sprites } from '../engine/SpriteManager';
@@ -26,6 +27,7 @@ export class GameHUD {
   private engine: SideViewEngine;
   private game?: SideViewGame;
   private inventoryOpen: boolean = false;
+  private leaderboard = new LeaderboardUI(document.body);
   public questLogUI: QuestLogUI | null = null;
   public worldMapUI: WorldMapUI | null = null;
   private selectedItem: { item: ItemData; isEquipped: boolean; slotOrIdx: string | number } | null = null;
@@ -227,6 +229,12 @@ export class GameHUD {
         font-family: 'Outfit', sans-serif;
         text-shadow: 1px 1px 2px #000;
         margin-top: 1px;
+      }
+
+      .player-power {
+        color: #ffd700 !important;
+        margin-left: 8px;
+        letter-spacing: 0.5px;
       }
 
       .player-id-row span {
@@ -1338,6 +1346,7 @@ export class GameHUD {
                is exactly the kind of thing that should be on screen already. -->
           <div class="player-id-row" id="hud-id-row" title="Your Player ID - give this to a friend to be invited">
             ID <span id="hud-id-text">${localStorage.getItem('playerShortId') || '—'}</span>
+            <span class="player-power" id="hud-power" title="Total Power - every level, item and upgrade counts">⚡ ${this.engine.computePower().toLocaleString()}</span>
           </div>
           <!-- HP Bar Sprite Frame with Delayed Hit Lag Bar -->
           <div class="sprite-bar-frame" title="Health (HP)">
@@ -1396,6 +1405,7 @@ export class GameHUD {
         <button class="inv-btn inv-btn-quest" id="toggle-voice-btn" title="Toggle Party Audio" style="display:none">🎧 VOICE</button>
         <button class="inv-btn inv-btn-quest" id="toggle-quests-btn">📜 QUESTS</button>
         <button class="inv-btn inv-btn-quest" id="toggle-map-btn">🗺️ MAP</button>
+        <button class="inv-btn inv-btn-quest" id="toggle-rank-btn" title="Power Rankings">🏆 RANK</button>
         <button class="inv-btn inv-btn-town" id="return-town-btn" style="display: ${this.engine.isTownMode ? 'none' : 'block'};">⛺ TOWN</button>
         <button class="inv-btn" id="toggle-inv-btn">🎒 BAG</button>
         <button class="inv-btn inv-btn-quest" id="toggle-fullscreen-btn" title="Toggle Fullscreen">🖵 FULLSCREEN</button>
@@ -1600,6 +1610,12 @@ export class GameHUD {
       const enabled = audio.toggleMusic();
       musicBtn.innerHTML = enabled ? `<img src='/assets/gui/PNG/iconCircle_blue.png' width='16' height='16'/>` : `<img src='/assets/gui/PNG/iconCross_blue.png' width='16' height='16'/>`;
       this.showToast(enabled ? 'Music Enabled' : 'Music Muted');
+    });
+
+    this.container.querySelector('#toggle-rank-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      audio.playClick();
+      this.leaderboard.open(this.engine.computePower());
     });
 
     const potionSlot = this.container.querySelector('#potion-slot') as HTMLElement;
@@ -2066,6 +2082,12 @@ export class GameHUD {
     // The ID is assigned when the account is created, which can happen after
     // the HUD has already been built once.
     this.paintPotionSlot();
+
+    const powerText = this.container.querySelector('#hud-power');
+    if (powerText) {
+      const value = `⚡ ${this.engine.computePower().toLocaleString()}`;
+      if (powerText.textContent !== value) powerText.textContent = value;
+    }
 
     const idText = this.container.querySelector('#hud-id-text');
     const shortId = localStorage.getItem('playerShortId');

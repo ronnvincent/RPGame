@@ -30,7 +30,7 @@ export class SaveManager {
     return this.dbPromise;
   }
 
-  public static async saveGame(playerState: PlayerState, inventory: ItemData[], maxDungeonCleared: number) {
+  public static async saveGame(playerState: PlayerState, inventory: ItemData[], maxDungeonCleared: number, power: number = 0) {
     try {
       const db = await this.initDB();
       // Only extract necessary state to save
@@ -67,7 +67,16 @@ export class SaveManager {
         fetch(`${API_URL}/save`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ uuid, saveData })
+          // Power travels with the save it was computed from, so the
+          // leaderboard can never show a figure for state the server does not
+          // have.
+          body: JSON.stringify({
+            uuid,
+            saveData,
+            power,
+            className: playerState.characterClass?.name,
+            level: playerState.level,
+          })
         }).then(res => res.json()).then(data => {
            if(data.success) console.log('Game synced to Cloud DB.');
         }).catch(err => console.error('Cloud DB Sync failed:', err));

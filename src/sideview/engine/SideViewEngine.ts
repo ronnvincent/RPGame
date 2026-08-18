@@ -1253,7 +1253,7 @@ export class SideViewEngine {
 
 
   public triggerSave() {
-    SaveManager.saveGame(this.player, this.player.inventory, this.player.maxDungeonCleared);
+    SaveManager.saveGame(this.player, this.player.inventory, this.player.maxDungeonCleared, this.computePower());
   }
 
   public loadSaveData(data: any) {
@@ -2108,6 +2108,43 @@ export class SideViewEngine {
   /** How many healing items are in the bag, for the quick-slot badge. */
   public get potionCount(): number {
     return this.player.inventory.filter((i) => i.consumableEffect?.type === 'heal_hp').length;
+  }
+
+  /**
+   * One number for everything the player has earned.
+   *
+   * Built from the totals rather than from the sources, so it counts levels,
+   * equipment and forge purchases without having to know which contributed
+   * what - and an item that raises attack is worth the same as a level that
+   * raises it by as much, which is the honest comparison.
+   *
+   * The weights are per point of each stat, chosen so no single line dominates:
+   * offence and survivability are worth roughly the same at typical values, and
+   * the percentage stats are scaled to be comparable to the flat ones.
+   */
+  public computePower(): number {
+    const p = this.player;
+
+    const offence = p.totalAtk * 10;
+    const defence = p.totalDef * 8;
+    const health = p.maxHp * 0.6;
+    const mana = p.maxMp * 0.3;
+    const crit = p.totalCrit * 100 * 6;     // totalCrit is a fraction
+    const speed = p.totalSpeed * 12;
+    // Levels count on their own as well: two characters with the same stats but
+    // different levels did not arrive at the same place.
+    const levels = p.level * 40;
+
+    // Equipment counts twice over - once through the stats it already grants
+    // above, and once for its rarity, so a legendary reads as an achievement
+    // rather than only as its numbers.
+    const rarityValue: Record<string, number> = { common: 15, rare: 45, epic: 110, legendary: 260 };
+    let gear = 0;
+    for (const slot of Object.values(p.equipment)) {
+      if (slot) gear += rarityValue[slot.rarity] ?? 15;
+    }
+
+    return Math.round(offence + defence + health + mana + crit + speed + levels + gear);
   }
 
   private enemyAttackPlayer(enemy: EnemyInstance, multiplier: number = 1) {

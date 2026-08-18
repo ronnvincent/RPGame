@@ -47,6 +47,10 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
+    // Added after the table existed, so it has to be additive.
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS power INTEGER DEFAULT 0;`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS power_class VARCHAR(40);`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS power_level INTEGER DEFAULT 1;`);
     // Friendships are stored once per pair, with the two uuids ordered so the
     // relationship is inherently mutual and cannot be duplicated.
     await pool.query(`
@@ -142,9 +146,28 @@ app.post('/api/login', async (req, res) => {
 });
 
 app.post('/api/save', async (req, res) => {
-  const { uuid, saveData } = req.body;
+  const { uuid, saveData, power, className, level } = req.body;
+  const score = Math.max(0, Math.round(Number(power) || 0));
+
+  // Power rides along with the save rather than having an endpoint of its own:
+  // it is derived from exactly the state being written, so two calls could
+  // disagree with each other.
+  if (!HAS_DB) {
+    const rec = memUsers.get(uuid);
+    if (rec) {
+      rec.save_data = saveData;
+      rec.power = score;
+      rec.power_class = className || rec.power_class;
+      rec.power_level = Number(level) || rec.power_level || 1;
+    }
+    return res.json({ success: Boolean(rec) });
+  }
+
   try {
-    await pool.query('UPDATE users SET save_data = $1 WHERE uuid = $2', [JSON.stringify(saveData), uuid]);
+    await pool.query(
+      'UPDATE users SET save_data = $1, power = $2, power_class = COALESCE($3, power_class), power_level = COALESCE($4, power_level) WHERE uuid = $5',
+      [JSON.stringify(saveData), score, className || null, Number(level) || null, uuid]
+    );
     res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -152,7 +175,51 @@ app.post('/api/save', async (req, res) => {
   }
 });
 
+/**
+ * Highest power, best first.
+ *
+ * Ranked on the stored figure rather than recomputed here: the server has no
+ * idea what an item is worth, and duplicating the formula would let the two
+ * drift apart silently.
+ */
+app.get('/api/leaderboard', async (req, res) => {
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 25));
+
+  if (!HAS_DB) {
+    const rows = [...memUsers.values()]
+      .filter((u) => (u.power || 0) > 0)
+      .sort((a, b) => (b.power || 0) - (a.power || 0))
+      .slice(0, limit)
+      .map((u, i) => ({ rank: i + 1, name: u.username, shortId: u.short_id, power: u.power || 0, className: u.power_class || null, level: u.power_level || 1 }));
+    return res.json({ success: true, entries: rows });
+  }
+
+  try {
+    const result = await pool.query(
+      'SELECT username, short_id, power, power_class, power_level FROM users WHERE power > 0 ORDER BY power DESC LIMIT $1',
+      [limit]
+    );
+    res.json({
+      success: true,
+      entries: result.rows.map((r, i) => ({
+        rank: i + 1, name: r.username, shortId: r.short_id,
+        power: r.power, className: r.power_class, level: r.power_level,
+      })),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load leaderboard' });
+  }
+});
+
 app.get('/api/load/:uuid', async (req, res) => {
+  if (!HAS_DB) {
+    const rec = memUsers.get(req.params.uuid);
+    return res.json(rec && rec.save_data
+      ? { success: true, saveData: rec.save_data }
+      : { success: false, msg: 'No save found' });
+  }
+
   try {
     const result = await pool.query('SELECT save_data FROM users WHERE uuid = $1', [req.params.uuid]);
     if (result.rows.length > 0 && result.rows[0].save_data) {
