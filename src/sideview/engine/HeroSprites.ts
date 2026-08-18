@@ -11,9 +11,15 @@
 export interface HeroSpriteSet {
   frameW: number;
   frameH: number;
-  /** Draw scale relative to the 288x128 source frame. */
+  /** Draw scale, chosen per class so every hero lands on the same height. */
   scale: number;
   anims: Record<string, number>;
+  /**
+   * Packs that ship one horizontal strip per animation instead of a folder of
+   * frames. Maps animation name -> sheet path; the frame is sliced at draw
+   * time using frameW/frameH.
+   */
+  strips?: Record<string, string>;
 }
 
 export const HERO_SPRITES: Record<string, HeroSpriteSet> = {
@@ -48,6 +54,23 @@ export const HERO_SPRITES: Record<string, HeroSpriteSet> = {
   priest: {
     frameW: 288, frameH: 128, scale: 1.148,
     anims: { air_atk: 8, atk1: 7, atk2: 21, atk3: 27, idle: 8, jump_down: 3, jump_up: 3, roll: 6, run: 10 }
+  },
+  ninja: {
+    // LuizMelo Martial Hero - one horizontal strip per animation, 200x200
+    // frames, measured with tools/analyze-spritesheet.mjs.
+    frameW: 200, frameH: 200, scale: 0.735,
+    anims: { idle: 8, run: 8, jump_up: 2, jump_down: 2, atk1: 6, atk2: 6, atk3: 6, hurt: 4, death: 6 },
+    strips: {
+      idle: '/assets/martial-hero/Sprites/Idle.png',
+      run: '/assets/martial-hero/Sprites/Run.png',
+      jump_up: '/assets/martial-hero/Sprites/Jump.png',
+      jump_down: '/assets/martial-hero/Sprites/Fall.png',
+      atk1: '/assets/martial-hero/Sprites/Attack1.png',
+      atk2: '/assets/martial-hero/Sprites/Attack2.png',
+      atk3: '/assets/martial-hero/Sprites/Attack1.png',
+      hurt: '/assets/martial-hero/Sprites/Take Hit.png',
+      death: '/assets/martial-hero/Sprites/Death.png'
+    }
   },
   warrior: {
     frameW: 288, frameH: 128, scale: 1.148,

@@ -999,9 +999,13 @@ export class SpriteManager {
       frame = Math.floor(this.animTimer * fps) % count;
     }
 
-    const img = this.getImage(heroFrame(cid, anim, frame));
+    // Two pack shapes: a folder of frames, or one horizontal strip per
+    // animation that has to be sliced at draw time.
+    const stripSrc = set.strips?.[anim];
+    const img = this.getImage(stripSrc || heroFrame(cid, anim, frame));
     if (!img || !img.complete || !img.naturalWidth) return;
 
+    const sx = stripSrc ? frame * set.frameW : 0;
     const w = set.frameW * set.scale;
     const h = set.frameH * set.scale;
 
@@ -1010,7 +1014,10 @@ export class SpriteManager {
     ctx.translate(Math.round(x), Math.round(y));
     if (facing < 0) ctx.scale(-1, 1);
     // Source frames are bottom-anchored on the character's feet.
-    ctx.drawImage(img, Math.round(-w / 2), Math.round(-h), Math.round(w), Math.round(h));
+    ctx.drawImage(
+      img, sx, 0, set.frameW, set.frameH,
+      Math.round(-w / 2), Math.round(-h), Math.round(w), Math.round(h)
+    );
     ctx.restore();
   }
 
