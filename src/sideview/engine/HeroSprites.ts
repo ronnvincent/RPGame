@@ -55,20 +55,62 @@ export const HERO_SPRITES: Record<string, HeroSpriteSet> = {
     content: { centreOff: 1.0, feetGap: 7 }
   },
   dragoon: {
-    frameW: 725, frameH: 445, scale: 0.158,
-    anims: { atk1: 40, idle: 40, run: 40 },
-    content: { centreOff: 62.5, feetGap: 98 }
+    // Medieval Warrior 3 - the halberd and polearm spearman, which is what the
+    // class description promises: "wields long lances".
+    //
+    // This entry previously pointed at the Elder Dragon art. That is the
+    // dragoon's summon, not the dragoon - and it is the boss sprite too, so the
+    // player character was identical to a boss. SpriteManager already had a
+    // working drawDragoonHero using these sheets, but drawHero checks
+    // HERO_SPRITES first, so the dragon entry shadowed it and that branch had
+    // been unreachable ever since.
+    frameW: 135, frameH: 135, scale: 1.20,
+    anims: { idle: 10, run: 6, atk1: 4, atk2: 4, atk3: 5, jump_up: 2, jump_down: 2, hurt: 3, death: 9 },
+    strips: {
+      idle: '/assets/warrior3/Sprites/Idle.png',
+      run: '/assets/warrior3/Sprites/Run.png',
+      atk1: '/assets/warrior3/Sprites/Attack1.png',
+      atk2: '/assets/warrior3/Sprites/Attack2.png',
+      atk3: '/assets/warrior3/Sprites/Attack3.png',
+      jump_up: '/assets/warrior3/Sprites/Jump.png',
+      jump_down: '/assets/warrior3/Sprites/Fall.png',
+      hurt: '/assets/warrior3/Sprites/Get Hit.png',
+      death: '/assets/warrior3/Sprites/Death.png'
+    },
+    content: { centreOff: -0.5, feetGap: 49 }
   },
+
   mage: {
     frameW: 288, frameH: 128, scale: 1.148,
     anims: { air_atk: 8, atk1: 7, atk2: 7, atk3: 17, death: 15, defend: 9, hurt: 6, idle: 8, jump_down: 3, jump_up: 3, roll: 8, run: 8, sp_atk: 15 },
     content: { centreOff: 5.5, feetGap: 1 }
   },
   necromancer: {
-    frameW: 140, frameH: 93, scale: 0.855,
-    anims: { atk1: 10, death: 10, hurt: 3, idle: 8, run: 8, sp_atk: 9 },
-    content: { centreOff: 36.0, feetGap: 1 }
+    // Evil Wizard - a caster, which is what the class is.
+    //
+    // This entry used to point at /assets/heroes/necromancer, which is the
+    // Bringer of Death reaper: byte for byte the same file the reaper boss uses,
+    // and one of the necromancer's own summons. So the player character was
+    // identical both to a boss and to a thing it conjures. Same fault as the
+    // dragoon, and the same cause - drawHero checks HERO_SPRITES before its
+    // hand-written branches, so drawEvilWizardHero has been unreachable.
+    //
+    // The pack has no jump or fall frames; drawElementalsHero falls back to idle
+    // for any animation a set does not carry.
+    frameW: 150, frameH: 150, scale: 0.84,
+    anims: { idle: 8, run: 8, atk1: 8, atk2: 8, atk3: 8, hurt: 4, death: 5 },
+    strips: {
+      idle: '/assets/evil-wizard/Sprites/Idle.png',
+      run: '/assets/evil-wizard/Sprites/Move.png',
+      atk1: '/assets/evil-wizard/Sprites/Attack.png',
+      atk2: '/assets/evil-wizard/Sprites/Attack.png',
+      atk3: '/assets/evil-wizard/Sprites/Attack.png',
+      hurt: '/assets/evil-wizard/Sprites/Take Hit.png',
+      death: '/assets/evil-wizard/Sprites/Death.png'
+    },
+    content: { centreOff: -2.0, feetGap: 50 }
   },
+
   paladin: {
     frameW: 288, frameH: 128, scale: 1.148,
     anims: { air_atk: 8, atk1: 11, atk2: 19, atk3: 28, death: 13, defend: 10, hurt: 6, idle: 8, jump_down: 3, jump_up: 3, roll: 8, run: 8, sp_atk: 18 },

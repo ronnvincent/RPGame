@@ -980,6 +980,11 @@ export class SpriteManager {
     else if (state === 'run') anim = 'run';
     else anim = 'idle';
 
+    // Not every pack carries every animation - the Evil Wizard has no jump or
+    // fall frames. Without this the lookup resolves to a path that does not
+    // exist and the character simply disappears for the length of the jump.
+    if (!set.anims[anim]) anim = 'idle';
+
     const count = set.anims[anim] || set.anims.idle;
     const fps = HERO_FPS[anim] || 12;
 
