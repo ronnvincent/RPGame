@@ -201,6 +201,12 @@ export class SideViewEngine {
   private attackHold: number = 0;
   /** Short global cooldown between casts, independent of the swing animation. */
   private castLock: number = 0;
+  /** Set when the run has been lost, so defeat is announced exactly once. */
+  public runOver = false;
+  /** Raised when the player dies with no revive left. */
+  public onRunLost: (() => void) | null = null;
+  /** Which of a boss's abilities comes next, per boss. */
+  private bossRotation = new Map<string, number>();
   private playerSyncTimer: number = 0;
   public townHub: TownHub | null = null;
   public readonly portalX: number = 2560;
@@ -714,11 +720,24 @@ export class SideViewEngine {
       return;
     }
 
+    // Mana. Every skill cost 0 and mana was never spent anywhere, so the blue
+    // bar filled up and did nothing - and the correct way to play was to press
+    // whichever skill was off cooldown. A cost is what turns that into a
+    // choice.
+    const cost = skill.manaCost || 0;
+    if (cost > 0 && p.mp < cost) {
+      this.particles.addFloatingText(p.x, p.y - 34, 'NOT ENOUGH MANA', '#60a5fa', true, 15);
+      audio.playClick();
+      return;
+    }
+
     // Check cooldown
     if ((p.skillCooldowns[skill.id] || 0) > 0) {
       this.particles.addFloatingText(p.x, p.y - 20, 'On Cooldown!', '#ef5350', false, 14);
       return;
     }
+
+    if (cost > 0) p.mp = Math.max(0, p.mp - cost);
 
     // Set cooldown
     p.skillCooldowns[skill.id] = skill.cooldown;
@@ -1374,8 +1393,13 @@ export class SideViewEngine {
         audio.playLevelUp();
         this.particles.addFloatingText(p.x, p.y - 40, '✨ PHOENIX FEATHER RESURRECTION! ✨', '#ffd700', true, 20);
         this.triggerSave();
-      } else {
+      } else if (!this.runOver) {
+        // Dying used to set an animation state and nothing else: no defeat, no
+        // respawn, nothing lost. You could not lose the game, and a fight you
+        // cannot lose has no tension no matter how hard the boss hits.
         p.animState = 'dead';
+        this.runOver = true;
+        this.onRunLost?.();
       }
     } else if (p.attackTimer > 0) {
       p.attackTimer -= dt;
@@ -1954,14 +1978,35 @@ export class SideViewEngine {
     const skills = bossSkillsFor(enemy.name);
     if (!skills.length || enemy.isDead) return;
 
+    // Half health is where the fight changes. `phases: 2` was declared on three
+    // bosses and nothing ever read it - the same shape of gap as minLevel and
+    // isAttacking. A boss that fights identically from full health to zero has
+    // no second act.
+    if ((enemy.phases || 1) >= 2 && (enemy.currentPhase || 1) < 2 && enemy.hp <= enemy.maxHp * 0.5) {
+      enemy.currentPhase = 2;
+      enemy.attackCooldown = Math.max(0.7, enemy.attackCooldown * 0.65);
+      enemy.speed = enemy.speed * 1.25;
+      enemy.specialAttackTimer = 0.8;
+      this.particles.addFloatingText(enemy.x, enemy.y - 100, `${enemy.name.toUpperCase()} IS ENRAGED`, '#ef4444', true, 20);
+      this.particles.triggerScreenShake(20, 0.7);
+      this.particles.addScreenFlash('#ef4444', 0.45, 0.08);
+      audio.playBossRoar();
+    }
+
     enemy.specialAttackTimer = (enemy.specialAttackTimer || 0) - dt;
     if (enemy.specialAttackTimer > 0) return;
 
-    // Alternate, so both are seen rather than one winning every roll.
-    const index = (enemy.currentPhase || 1) % skills.length;
-    const skill = skills[index];
-    enemy.currentPhase = (enemy.currentPhase || 1) + 1;
-    enemy.specialAttackTimer = skill.cooldown;
+    // Alternate, so both are seen rather than one winning every roll. Kept in
+    // its own counter: currentPhase means the phase of the fight, and using it
+    // for the rotation as well would have made a phase change look like a
+    // skill change.
+    const turn = (this.bossRotation.get(enemy.id) || 0);
+    const skill = skills[turn % skills.length];
+    this.bossRotation.set(enemy.id, turn + 1);
+
+    // Phase two presses harder: the same abilities, closer together.
+    const enraged = (enemy.currentPhase || 1) >= 2;
+    enemy.specialAttackTimer = enraged ? skill.cooldown * 0.6 : skill.cooldown;
 
     this.castBossSkill(enemy, skill);
   }

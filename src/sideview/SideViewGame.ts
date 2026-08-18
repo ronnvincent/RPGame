@@ -137,6 +137,8 @@ export class SideViewGame {
 
     // Stream the VFX catalogue in the background so the first cast of a fight
     // already has its frames resident.
+    this.engine.onRunLost = () => this.onRunLost();
+
     this.engine.particles.warmVfx();
     audio.warmSounds();
     
@@ -388,6 +390,34 @@ export class SideViewGame {
       cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = null;
     }
+  }
+
+  /**
+   * The run is lost.
+   *
+   * Experience and gold already banked are kept - the time spent was real -
+   * but the dungeon has to be started again, and anything still lying on the
+   * ground is left behind. Without a cost, nothing else in the fight matters.
+   */
+  private onRunLost() {
+    if (!this.engine) return;
+    const lostLoot = this.engine.droppedLoots.length;
+
+    this.hud?.showToast('💀 DEFEATED - returning to Eldermoor');
+    if (lostLoot > 0) {
+      window.setTimeout(() => this.hud?.showToast(`${lostLoot} unclaimed item${lostLoot > 1 ? 's' : ''} left behind`), 1800);
+    }
+
+    // A moment to see it happen before the screen changes.
+    window.setTimeout(() => {
+      if (!this.engine) return;
+      this.engine.droppedLoots = [];
+      this.engine.player.hp = Math.max(1, Math.round(this.engine.player.maxHp * 0.4));
+      this.engine.player.mp = Math.round(this.engine.player.maxMp * 0.4);
+      this.engine.player.animState = 'idle';
+      this.engine.runOver = false;
+      this.loadTownHub(true);
+    }, 2600);
   }
 
   public loadTownHub(broadcastParty: boolean = true) {
