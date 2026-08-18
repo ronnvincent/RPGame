@@ -45,7 +45,23 @@ export class VoiceChat {
   public get isMicOn() { return this.micOn; }
   public get isSpeakerOn() { return this.speakerOn; }
   public get isJoined() { return this.joined; }
-  public get peerCount() { return this.peers.size; }
+  /**
+   * Peers actually carrying audio, not peers we have started talking to.
+   *
+   * Counting created connections showed the same number whether media was
+   * flowing or the handshake had stalled, which makes the indicator useless
+   * exactly when something is wrong.
+   */
+  public get peerCount() {
+    let live = 0;
+    this.peers.forEach((p) => {
+      if (p.pc.connectionState === 'connected') live++;
+    });
+    return live;
+  }
+
+  /** Peers we are attempting, connected or not. */
+  public get attemptedPeers() { return this.peers.size; }
 
   public attach(socket: any) {
     if (this.socket === socket) return;
@@ -64,6 +80,10 @@ export class VoiceChat {
     socket.on('voice_peer_left', ({ socketId }: { socketId: string }) => this.dropPeer(socketId));
 
     socket.on('voice_signal', async ({ from, signal }: { from: string; signal: Signal }) => {
+      // Building a connection before we have joined gives it no local audio,
+      // and a track cannot be added later without renegotiating - so the call
+      // would be permanently one-way: we hear them, they never hear us.
+      if (!this.joined) return;
       const peer = this.peers.get(from) || this.connectTo(from, 'Party', false);
       if (!peer) return;
       try {
@@ -161,7 +181,14 @@ export class VoiceChat {
     const peer: Peer = { pc, audio, name };
     this.peers.set(socketId, peer);
 
-    this.stream?.getTracks().forEach((track) => pc.addTrack(track, this.stream!));
+    if (this.stream) {
+      this.stream.getTracks().forEach((track) => pc.addTrack(track, this.stream!));
+    } else {
+      // No microphone: ask for a receive-only audio line explicitly. Without
+      // this the connection carries no audio section at all and the promise
+      // that you can still listen would be empty.
+      pc.addTransceiver('audio', { direction: 'recvonly' });
+    }
 
     pc.ontrack = (ev) => {
       audio.srcObject = ev.streams[0];

@@ -1473,8 +1473,21 @@ export class GameHUD {
         micBtn.style.opacity = voice.isMicOn ? '1' : '0.55';
       }
       if (voiceBtn) {
-        voiceBtn.textContent = voice.isSpeakerOn ? `🎧 ${voice.peerCount}` : '🎧 OFF';
+        // Connected and connecting are different states and matter to the
+        // player: "..." means the handshake is still going, a number means
+        // audio is actually flowing. Showing one figure for both hides the
+        // failure that matters.
+        const live = voice.peerCount;
+        const trying = voice.attemptedPeers;
+        const label = !voice.isSpeakerOn ? '🎧 OFF'
+          : live > 0 ? `🎧 ${live}`
+          : trying > 0 ? '🎧 …'
+          : '🎧 ON';
+        voiceBtn.textContent = label;
         voiceBtn.style.opacity = voice.isSpeakerOn ? '1' : '0.55';
+        voiceBtn.title = live > 0
+          ? `Talking with ${live} in the party`
+          : trying > 0 ? 'Connecting to the party…' : 'Party audio';
       }
     };
     voice.onStateChange = paintVoice;

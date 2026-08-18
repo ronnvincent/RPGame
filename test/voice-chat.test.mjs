@@ -74,6 +74,14 @@ const run = async () => {
   check('muting disables the track rather than dropping the connection', /t\.enabled = this\.micOn/.test(vc));
   check('the speaker mutes locally, per peer', /p\.audio\.muted = !on/.test(vc));
 
+  // The three things that decide whether audio actually goes both ways.
+  check('a signal arriving before joining is ignored, so the call cannot end up one-way',
+        /if \(!this\.joined\) return;/.test(vc));
+  check('with no microphone it still asks for a receive-only audio line',
+        /addTransceiver\('audio', \{ direction: 'recvonly' \}\)/.test(vc));
+  check('the peer count reports connected peers, not attempted ones',
+        /connectionState === 'connected'/.test(vc));
+
   console.log('');
   console.log(failures === 0 ? 'PARTY VOICE OK' : `PARTY VOICE FAILURES: ${failures}`);
   process.exit(failures === 0 ? 0 : 1);
