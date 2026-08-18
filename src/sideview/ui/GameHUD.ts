@@ -1512,12 +1512,20 @@ export class GameHUD {
         if (tooltipPopup) tooltipPopup.style.display = 'none';
       };
 
-      slot.addEventListener('mouseenter', showTooltip);
-      slot.addEventListener('mouseleave', hideTooltip);
+      // Only bind the hover tooltip on devices that genuinely hover. A tap on
+      // a touchscreen fires a synthetic mouseenter with no matching mouseleave
+      // - the finger lifts, nothing moves out - so the card opened on every
+      // skill press and stayed there covering the fight.
+      const canHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+      if (canHover) {
+        slot.addEventListener('mouseenter', showTooltip);
+        slot.addEventListener('mouseleave', hideTooltip);
+      }
 
       const triggerSkill = (e: Event) => {
         e.preventDefault();
         e.stopPropagation();
+        hideTooltip();
         const now = Date.now();
         if (now - lastTriggerTime < 180) return; // Debounce synthetic double-tap
         lastTriggerTime = now;

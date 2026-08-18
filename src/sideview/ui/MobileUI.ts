@@ -100,6 +100,12 @@ export function installMobileStyles() {
       overflow-y: auto;
     }
 
+    /* Belt and braces: never let the skill tooltip render on a touch device,
+       whatever else tries to open it. */
+    @media (hover: none), (pointer: coarse) {
+      .skill-tooltip-popup { display: none !important; }
+    }
+
     /* Tables and wide rows scroll inside themselves instead of stretching. */
     .dialogue-box-frame table, .inventory-modal table { display: block; overflow-x: auto; }
   `;
