@@ -73,5 +73,25 @@ if (!/lastUpdated: Date\.now\(\)/.test(save)) {
 }
 
 console.log('');
+// An equipped item survived being written and was lost on the way back. A new
+// player starts with `equipment: {}` - no keys at all - and the restore loop
+// walked THOSE keys, so it ran zero times. The item was gone from the slot and
+// from the bag at once, while anything still in the bag came back fine.
+{
+  const eng = readFileSync('src/sideview/engine/SideViewEngine.ts', 'utf8');
+  const walksSaved = /for \(const slot of Object\.keys\(ps\.equipment\)/.test(eng);
+  if (!walksSaved) {
+    console.log('  FAIL  equipment is restored from the saved keys, not the empty ones');
+    failures++;
+  } else console.log('  PASS  equipment is restored from the saved keys, not the empty ones');
+
+  // Both sides have to hold for the round trip to work at all.
+  const save = readFileSync('src/sideview/engine/SaveManager.ts', 'utf8');
+  if (!/equipment: playerState\.equipment/.test(save)) {
+    console.log('  FAIL  and equipment is still written on the way out');
+    failures++;
+  } else console.log('  PASS  and equipment is still written on the way out');
+}
+
 console.log(failures === 0 ? 'PERSISTENCE OK' : `PERSISTENCE FAILURES: ${failures}`);
 process.exit(failures === 0 ? 0 : 1);

@@ -1356,7 +1356,13 @@ export class SideViewEngine {
     if (typeof ps.skillPoints === 'number') this.player.skillPoints = ps.skillPoints;
 
     if (ps.equipment) {
-      for (const slot of Object.keys(this.player.equipment) as Array<keyof typeof this.player.equipment>) {
+      // Walk what was saved, not what the fresh player has. A new player starts
+      // with `equipment: {}` - an object with no keys at all - so iterating its
+      // keys ran the loop zero times and restored nothing. Equipping removed the
+      // item from the bag and stored it here, both saved correctly; it was the
+      // reload that dropped it, which is why an equipped item vanished from the
+      // slot and the bag at once while everything still in the bag survived.
+      for (const slot of Object.keys(ps.equipment) as Array<keyof typeof this.player.equipment>) {
         const item = ps.equipment[slot];
         if (item) this.player.equipment[slot] = item;
       }
