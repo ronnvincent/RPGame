@@ -1349,8 +1349,8 @@ export class GameHUD {
         /* Pulled in from the corner. At right/bottom 22 it sat 83px clear of
            the nearest skill while the arc's own slots are about 7px apart, so
            the button you press most read as belonging to nothing. */
-        bottom: calc(30px + env(safe-area-inset-bottom));
-        right: calc(96px + env(safe-area-inset-right));
+        bottom: calc(22px + env(safe-area-inset-bottom));
+        right: calc(22px + env(safe-area-inset-right));
         z-index: 10;
       }
       .hotbar-slot[data-skill-idx="0"] .slot-icon-img {
@@ -1365,11 +1365,11 @@ export class GameHUD {
         width: 58px;
         height: 58px;
       }
-      .hotbar-slot[data-skill-idx="1"] { bottom: calc(36px + env(safe-area-inset-bottom)); right: calc(191px + env(safe-area-inset-right)); }
-      .hotbar-slot[data-skill-idx="2"] { bottom: calc(99px + env(safe-area-inset-bottom)); right: calc(178px + env(safe-area-inset-right)); }
-      .hotbar-slot[data-skill-idx="3"] { bottom: calc(151px + env(safe-area-inset-bottom)); right: calc(140px + env(safe-area-inset-right)); }
-      .hotbar-slot[data-skill-idx="4"] { bottom: calc(183px + env(safe-area-inset-bottom)); right: calc(84px + env(safe-area-inset-right)); }
-      .hotbar-slot[data-skill-idx="5"] { bottom: calc(190px + env(safe-area-inset-bottom)); right: calc(20px + env(safe-area-inset-right)); }
+      .hotbar-slot[data-skill-idx="1"] { bottom: calc(45px + env(safe-area-inset-bottom)); right: calc(211px + env(safe-area-inset-right)); }
+      .hotbar-slot[data-skill-idx="2"] { bottom: calc(109px + env(safe-area-inset-bottom)); right: calc(195px + env(safe-area-inset-right)); }
+      .hotbar-slot[data-skill-idx="3"] { bottom: calc(162px + env(safe-area-inset-bottom)); right: calc(158px + env(safe-area-inset-right)); }
+      .hotbar-slot[data-skill-idx="4"] { bottom: calc(198px + env(safe-area-inset-bottom)); right: calc(103px + env(safe-area-inset-right)); }
+      .hotbar-slot[data-skill-idx="5"] { bottom: calc(211px + env(safe-area-inset-bottom)); right: calc(39px + env(safe-area-inset-right)); }
 
       /* The potion. On mobile the slots are placed one by one and this one had
          no place of its own, so it sat wherever the container defaulted to.
@@ -1435,14 +1435,14 @@ export class GameHUD {
         width: 54px;
         height: 54px;
         bottom: calc(28px + env(safe-area-inset-bottom));
-        right: calc(268px + env(safe-area-inset-right));
+        right: calc(300px + env(safe-area-inset-right));
         font-size: 9px;
       }
       .dash-touch-btn {
         width: 50px;
         height: 50px;
         bottom: calc(92px + env(safe-area-inset-bottom));
-        right: calc(268px + env(safe-area-inset-right));
+        right: calc(300px + env(safe-area-inset-right));
         font-size: 8.5px;
       }
 
@@ -1451,7 +1451,7 @@ export class GameHUD {
         width: 50px;
         height: 50px;
         bottom: calc(156px + env(safe-area-inset-bottom));
-        right: calc(268px + env(safe-area-inset-right));
+        right: calc(300px + env(safe-area-inset-right));
         font-size: 8.5px;
       }
 
