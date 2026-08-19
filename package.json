@@ -33,7 +33,8 @@
     "test:unlocks": "node test/unlocks.test.mjs",
     "test:levels": "node test/level-visibility.test.mjs",
     "test:revive": "node test/coop-revive.test.mjs",
-    "test:rewards": "node test/coop-rewards.test.mjs"
+    "test:rewards": "node test/coop-rewards.test.mjs",
+    "test:chat": "node test/coop-chat.test.mjs"
   },
   "keywords": [],
   "author": "",

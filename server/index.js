@@ -1035,6 +1035,23 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Quick chat carries an id, never typed text, so there is nothing here to
+  // sanitise and no free-text channel to moderate. Anything that is not a
+  // short id is dropped rather than relayed.
+  socket.on('party_chat', (data = {}) => {
+    const p = players[socket.id];
+    const lineId = typeof data.lineId === 'string' ? data.lineId.slice(0, 16) : '';
+    if (!p || !p.room || !/^[a-z]+$/.test(lineId)) return;
+    socket.to(p.room).emit('remote_party_chat', { socketId: socket.id, lineId });
+  });
+
+  socket.on('party_ping', (data = {}) => {
+    const p = players[socket.id];
+    if (!p || !p.room) return;
+    if (typeof data.x !== 'number' || typeof data.y !== 'number') return;
+    socket.to(p.room).emit('remote_party_ping', { socketId: socket.id, x: data.x, y: data.y });
+  });
+
   socket.on('player_skill', (data) => {
     const p = players[socket.id];
     if (p && p.room) {

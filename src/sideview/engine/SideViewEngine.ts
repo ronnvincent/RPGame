@@ -18,6 +18,7 @@ import { quests } from '../quests/QuestManager';
 import { TownHub } from '../town/TownHub';
 import { SaveManager } from './SaveManager';
 import { network } from '../network/NetworkManager';
+import { quickChatById } from '../network/QuickChat';
 
 export interface PlayerEquipment {
   helmet?: ItemData;
@@ -1405,6 +1406,7 @@ export class SideViewEngine {
     // Bleeding out. Ticked before anything else so a downed player cannot act,
     // and so the countdown keeps running while the fight carries on around it.
     this.tickDowned(dt);
+    this.tickPartyChatter(dt);
 
     // 1. Cooldowns & Timers
     Object.keys(p.skillCooldowns).forEach(skillId => {
@@ -2237,6 +2239,92 @@ export class SideViewEngine {
     }
   }
 
+  /** Live speech bubbles, keyed by who said it so a spammer overwrites itself. */
+  private chatBubbles: Record<string, { lineId: string; timer: number }> = {};
+  /** World markers dropped by the party. */
+  private pings: { x: number; y: number; timer: number }[] = [];
+
+  /** Show a canned line over a player's head. Our own id is 'me'. */
+  public showChatBubble(socketId: string, lineId: string) {
+    if (!quickChatById(lineId)) return;
+    this.chatBubbles[socketId] = { lineId, timer: 2.6 };
+  }
+
+  public addPing(x: number, y: number) {
+    // A handful at most: a ping that never expires is a ping nobody looks at.
+    if (this.pings.length > 6) this.pings.shift();
+    this.pings.push({ x, y, timer: 4 });
+  }
+
+  private tickPartyChatter(dt: number) {
+    for (const id in this.chatBubbles) {
+      this.chatBubbles[id].timer -= dt;
+      if (this.chatBubbles[id].timer <= 0) delete this.chatBubbles[id];
+    }
+    for (let i = this.pings.length - 1; i >= 0; i--) {
+      this.pings[i].timer -= dt;
+      if (this.pings[i].timer <= 0) this.pings.splice(i, 1);
+    }
+  }
+
+  /**
+   * Bubbles and pings, drawn in world space. Without these a party without
+   * microphones has no way to say anything at all - which is most parties on
+   * a phone.
+   */
+  private drawPartyChatter(ctx: CanvasRenderingContext2D) {
+    ctx.save();
+    ctx.textAlign = 'center';
+
+    for (const ping of this.pings) {
+      const life = ping.timer / 4;
+      const r = 14 + (1 - life) * 26;
+      ctx.globalAlpha = Math.max(0, life);
+      ctx.strokeStyle = '#facc15';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(ping.x, ping.y + this.groundY, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(ping.x, ping.y + this.groundY, 4, 0, Math.PI * 2);
+      ctx.fillStyle = '#facc15';
+      ctx.fill();
+    }
+
+    ctx.globalAlpha = 1;
+    for (const socketId in this.chatBubbles) {
+      const entry = this.chatBubbles[socketId];
+      const line = quickChatById(entry.lineId);
+      if (!line) continue;
+
+      let bx: number;
+      let by: number;
+      if (socketId === 'me') {
+        bx = this.player.x;
+        by = this.player.y + this.groundY - 78;
+      } else {
+        const r = network.remotePlayers[socketId];
+        if (!r) continue;
+        bx = r.x;
+        by = r.y + this.groundY - 78;
+      }
+
+      ctx.font = 'bold 12px "Outfit", sans-serif';
+      const w = ctx.measureText(line.bubble).width + 18;
+      ctx.globalAlpha = Math.min(1, entry.timer / 0.4);
+      ctx.fillStyle = 'rgba(12, 10, 20, 0.88)';
+      ctx.strokeStyle = line.color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(bx - w / 2, by - 15, w, 22, 5);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = line.color;
+      ctx.fillText(line.bubble, bx, by);
+    }
+    ctx.restore();
+  }
+
   /** Seconds you stay down before the run is lost. Long enough to be crossed. */
   public static readonly BLEED_OUT_SECONDS = 18;
   /** Seconds a teammate must stay beside you. Long enough to be a real risk. */
@@ -2893,6 +2981,8 @@ export class SideViewEngine {
 
       this.drawDownedMarkers(ctx);
     }
+
+    this.drawPartyChatter(ctx);
 
     // 5. Render Particle System (VFX, Projectiles, Minions, Clones, Zones, Floating Text)
     this.particles.draw(ctx);

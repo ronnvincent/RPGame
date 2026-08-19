@@ -10,6 +10,7 @@
  */
 
 import { SideViewEngine } from '../engine/SideViewEngine';
+import { QUICK_CHAT } from '../network/QuickChat';
 import { voice } from '../network/VoiceChat';
 import { LeaderboardUI } from './LeaderboardUI';
 import { ItemData, RARITY_CONFIGS } from '../items/ItemDatabase';
@@ -778,6 +779,39 @@ export class GameHUD {
         gap: 10px;
         pointer-events: auto;
       }
+
+      /* The quick chat menu. Sits above the dock it opens from, and is built
+         from the shared line table so the wire ids and the labels cannot drift
+         apart. */
+      .qc-wheel {
+        position: absolute;
+        display: none;
+        flex-direction: column;
+        gap: 5px;
+        z-index: 70;
+        padding: 7px;
+        background: rgba(12, 10, 20, 0.94);
+        border: 2px solid #d4af37;
+        border-radius: 6px;
+      }
+
+      .qc-wheel.open { display: flex; }
+
+      .qc-line {
+        min-width: 118px;
+        padding: 8px 12px;
+        cursor: pointer;
+        background: rgba(255,255,255,0.06);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 4px;
+        color: #f3e6c8;
+        font-family: 'Outfit', sans-serif;
+        font-weight: 700;
+        font-size: 12.5px;
+        text-align: left;
+      }
+
+      .qc-line:active { transform: scale(0.97); }
 
       .voice-dock {
         position: absolute;
@@ -1574,7 +1608,11 @@ export class GameHUD {
       <div class="voice-dock" id="voice-dock" style="display:none">
         <button class="voice-dock-btn" id="dock-mic-btn" title="Toggle Microphone">🎙️</button>
         <button class="voice-dock-btn" id="dock-spk-btn" title="Toggle Party Audio">🎧</button>
+        <button class="voice-dock-btn" id="dock-chat-btn" title="Quick chat">💬</button>
+        <button class="voice-dock-btn" id="dock-ping-btn" title="Ping your position">📍</button>
       </div>
+
+      <div class="qc-wheel" id="qc-wheel"></div>
 
       <div class="mobile-controls-wrapper">
         <!-- Left Side: Touch Joystick -->
@@ -1764,6 +1802,48 @@ export class GameHUD {
     const dock = this.container.querySelector('#voice-dock') as HTMLElement;
     const dockMic = this.container.querySelector('#dock-mic-btn') as HTMLElement;
     const dockSpk = this.container.querySelector('#dock-spk-btn') as HTMLElement;
+    const dockChat = this.container.querySelector('#dock-chat-btn') as HTMLElement;
+    const dockPing = this.container.querySelector('#dock-ping-btn') as HTMLElement;
+    const wheel = this.container.querySelector('#qc-wheel') as HTMLElement;
+
+    // Built from the shared line table, so the labels on screen and the ids on
+    // the wire cannot drift apart.
+    if (wheel) {
+      wheel.innerHTML = QUICK_CHAT
+        .map(l => `<button class="qc-line" data-line="${l.id}" style="color:${l.color}">${l.label}</button>`)
+        .join('');
+      wheel.querySelectorAll('.qc-line').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const id = (btn as HTMLElement).dataset.line;
+          if (id) this.game?.sayQuickChat(id);
+          wheel.classList.remove('open');
+        });
+      });
+    }
+
+    const placeWheel = () => {
+      if (!wheel || !dockChat) return;
+      const r = dockChat.getBoundingClientRect();
+      const host = this.container.getBoundingClientRect();
+      wheel.style.left = `${Math.max(6, r.left - host.left - 30)}px`;
+      wheel.style.bottom = `${Math.max(6, host.bottom - r.top + 8)}px`;
+    };
+
+    dockChat?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!wheel) return;
+      placeWheel();
+      wheel.classList.toggle('open');
+    });
+
+    dockPing?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.game?.dropPing();
+    });
+
+    // Anywhere else closes it, so it never sits over the fight.
+    this.container.addEventListener('click', () => wheel?.classList.remove('open'));
 
     const paintVoice = () => {
       const inParty = Boolean(network.room);

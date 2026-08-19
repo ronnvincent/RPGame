@@ -374,6 +374,16 @@ export class SideViewGame {
         };
       });
 
+      mod.network.onQuickChat((payload) => {
+        if (!this.engine || !payload?.socketId) return;
+        this.engine.showChatBubble(payload.socketId, payload.lineId);
+      });
+
+      mod.network.onPing((payload) => {
+        if (!this.engine) return;
+        this.engine.addPing(payload.x, payload.y);
+      });
+
       mod.network.onRoleChange((isHost) => {
         console.log('[NET] Role assigned by server. isHost =', isHost);
         if (!isHost) mod.network.requestFullSync();
@@ -837,6 +847,21 @@ export class SideViewGame {
         ]
       });
     }, 2800);
+  }
+
+  /** Say a canned line: shown over our own head at once, and sent to the party. */
+  public sayQuickChat(lineId: string) {
+    if (!this.engine) return;
+    this.engine.showChatBubble('me', lineId);
+    network.sendQuickChat(lineId);
+  }
+
+  /** Drop a marker where we are standing, for pointing at something. */
+  public dropPing() {
+    if (!this.engine) return;
+    const { x, y } = this.engine.player;
+    this.engine.addPing(x, y);
+    network.sendPing(x, y);
   }
 
   public interactWithActiveNpc() {

@@ -137,6 +137,8 @@ export class NetworkManager {
   public profile: LocalProfile = {};
   private onPartySupportCb: ((payload: any) => void) | null = null;
   private onRunStatsCb: ((payload: any) => void) | null = null;
+  private onQuickChatCb: ((payload: any) => void) | null = null;
+  private onPingCb: ((payload: any) => void) | null = null;
 
   constructor() {
     NetworkManager.instance = this;
@@ -280,6 +282,14 @@ export class NetworkManager {
 
     this.socket.on('remote_party_stats', (data) => {
       this.onRunStatsCb?.(data);
+    });
+
+    this.socket.on('remote_party_chat', (data) => {
+      this.onQuickChatCb?.(data);
+    });
+
+    this.socket.on('remote_party_ping', (data) => {
+      this.onPingCb?.(data);
     });
 
     this.socket.on('lobby_error', (data) => {
@@ -464,6 +474,27 @@ export class NetworkManager {
 
   public onRunStats(cb: (payload: RunStats & { socketId: string }) => void) {
     this.onRunStatsCb = cb;
+  }
+
+  /**
+   * A canned line, by id. Only the id crosses the wire - never typed text -
+   * so there is no free-text channel to moderate.
+   */
+  public sendQuickChat(lineId: string) {
+    this.socket?.emit('party_chat', { lineId });
+  }
+
+  public onQuickChat(cb: (payload: { socketId: string; lineId: string }) => void) {
+    this.onQuickChatCb = cb;
+  }
+
+  /** A marker dropped on the world, for pointing at something. */
+  public sendPing(x: number, y: number) {
+    this.socket?.emit('party_ping', { x, y });
+  }
+
+  public onPing(cb: (payload: { socketId: string; x: number; y: number }) => void) {
+    this.onPingCb = cb;
   }
 
   public onPartySupport(cb: (payload: any) => void) {
