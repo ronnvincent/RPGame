@@ -1346,8 +1346,11 @@ export class GameHUD {
       .hotbar-slot[data-skill-idx="0"] {
         width: 86px;
         height: 86px;
-        bottom: calc(22px + env(safe-area-inset-bottom));
-        right: calc(22px + env(safe-area-inset-right));
+        /* Pulled in from the corner. At right/bottom 22 it sat 83px clear of
+           the nearest skill while the arc's own slots are about 7px apart, so
+           the button you press most read as belonging to nothing. */
+        bottom: calc(30px + env(safe-area-inset-bottom));
+        right: calc(96px + env(safe-area-inset-right));
         z-index: 10;
       }
       .hotbar-slot[data-skill-idx="0"] .slot-icon-img {
