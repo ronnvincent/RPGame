@@ -46,12 +46,15 @@ const run = async () => {
     !/playerLevel\s*:\s*number\s*=/.test(openSig),
   );
 
-  const mapCalls = [...hud.matchAll(/worldMapUI\?\.open\(([^;]*)\)/g)].map(m => m[1]);
-  check('the HUD map button has a call to check', mapCalls.length > 0);
-  check(
-    'and it passes the real level, not the default',
-    mapCalls.every(args => /player\.level/.test(args)),
-  );
+  // The HUD used to call worldMapUI.open directly; every screen goes through
+  // showScreen now, which is the single place the level is read.
+  const game = readFileSync('src/sideview/SideViewGame.ts', 'utf8');
+  const opener = game.slice(game.indexOf('public showScreen('), game.indexOf('public interactWithActiveNpc'));
+  check('the map is opened from one place', /this\.worldMap\?\.open\(/.test(opener));
+  check('and that place passes the real level, not the default',
+    /player\.level \|\| 1/.test(opener));
+  check('the HUD asks for the screen rather than opening it itself',
+    /showScreen\('map'\)/.test(hud) && !/worldMapUI\?\.open\(/.test(hud));
 
   // --- The level other players see ---
   const a = await connect(); a.emit('register_player', A);

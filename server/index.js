@@ -503,6 +503,23 @@ async function buildFriendList(uuid) {
   return entries;
 }
 
+/**
+ * Tell this player's friends that their presence changed.
+ *
+ * The friend list was pushed on add, remove and level-up, but never on
+ * connecting or disconnecting - the two events it exists to report. A friend
+ * logging in was invisible: your list kept saying Offline until you closed the
+ * lobby and reopened it, which re-requested the whole thing by hand.
+ */
+async function broadcastPresence(uuid) {
+  try {
+    const friends = await friendUuidsOf(uuid);
+    await Promise.all(friends.map((fid) => pushFriendList(fid)));
+  } catch (e) {
+    console.error('[FRIENDS] presence broadcast failed:', e.message);
+  }
+}
+
 async function pushFriendList(uuid) {
   const sid = socketIdFor(uuid);
   if (!sid) return;
@@ -556,6 +573,8 @@ io.on('connection', (socket) => {
   // This doubles as the reconnect path: if we already know this uuid we
   // re-point the record at the new socket and put it back into its room.
   socket.on('register_player', (data) => {
+    // Coming online is news to everyone who has you on their list.
+    if (data && data.uuid) setTimeout(() => broadcastPresence(data.uuid), 0);
     if (!data || !data.uuid) return;
 
     const existing = playersByUuid[data.uuid];
@@ -1195,6 +1214,10 @@ io.on('connection', (socket) => {
   // can reclaim it instead of the party silently falling apart.
   socket.on('disconnect', () => {
     console.log(`[AUTH] User disconnected: ${socket.id}`);
+    // And so is going offline. Queued so it runs after this handler has
+    // cleared the socket, or the list would still report them as present.
+    const goneUuid = players[socket.id]?.uuid;
+    if (goneUuid) setTimeout(() => broadcastPresence(goneUuid), 0);
     const voiceRec = players[socket.id];
     if (voiceRec && voiceRec.room) {
       voiceRec.voice = false;

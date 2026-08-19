@@ -81,7 +81,33 @@ const run = async () => {
   check('friend now shows as in a party', !!afterJoin && afterJoin.friends[0].inParty === true);
 
   // Removal is mutual.
-  const aGone = waitFor(a, 'friends_list');
+  const aGone = new Promise((res) => {
+    const onList = (d) => {
+      if ((d?.friends || []).length === 0) { a.off('friends_list', onList); res(d); }
+    };
+    a.on('friends_list', onList);
+    setTimeout(() => { a.off('friends_list', onList); res(null); }, T(3000));
+  });
+  // --- Presence arrives on its own ---------------------------------------
+  // The list was pushed on add, remove and level-up, but never on connecting or
+  // disconnecting - the two events it exists to report. A friend logging in was
+  // invisible: the list kept saying Offline until you closed the lobby and
+  // reopened it, which re-requested the whole thing by hand.
+  b.disconnect();
+  const wentOffline = await waitFor(a, 'friends_list', T(3000));
+  check('a friend going offline reaches you without asking',
+    wentOffline?.friends?.find(f => f.uuid === B.uuid)?.online === false);
+
+  const comesBack = waitFor(a, 'friends_list', T(3000));
+  const b2 = await connect();
+  b2.emit('register_player', B);
+  const backOn = await comesBack;
+  check('and so does one coming online',
+    backOn?.friends?.find(f => f.uuid === B.uuid)?.online === true);
+  // Let the reconnect's own push land before the removal, or the next
+  // waitFor would catch that one instead of the removal's.
+  await new Promise(r => setTimeout(r, T(400)));
+
   a.emit('friend_remove', { uuid: B.uuid });
   const ag = await aGone;
   check('removing a friend empties the list', !!ag && ag.friends.length === 0);
