@@ -444,18 +444,39 @@ async function buildFriendList(uuid) {
   for (const fid of uuids) {
     const live = playersByUuid[fid];
     let base = live;
-    if (!base && hasDB()) {
-      try {
-        const r = await pool.query('SELECT uuid, username, short_id FROM users WHERE uuid = $1', [fid]);
-        if (r.rows.length) base = { uuid: fid, name: r.rows[0].username, shortId: r.rows[0].short_id };
-      } catch { /* fall through to the placeholder below */ }
+    // The level used to come only from the live socket, and a socket carries one
+    // only after that player has sent it. An offline friend - or one who simply
+    // had not opened a lobby yet - therefore read as Lv 1. Same bug the
+    // leaderboard had, same fix: the save is the source of truth for level.
+    let savedLevel = 0;
+    if (!base || typeof live.level !== 'number') {
+      if (hasDB()) {
+        try {
+          const r = await pool.query(
+            `SELECT username, short_id,
+                    COALESCE(NULLIF(save_data->'playerState'->>'level', '')::int, NULLIF(power_level, 0), 1) AS saved_level
+               FROM users WHERE uuid = $1`,
+            [fid]
+          );
+          if (r.rows.length) {
+            savedLevel = Number(r.rows[0].saved_level) || 0;
+            if (!base) base = { uuid: fid, name: r.rows[0].username, shortId: r.rows[0].short_id };
+          }
+        } catch { /* fall through to the placeholder below */ }
+      } else {
+        const rec = memUsers.get(fid);
+        if (rec) {
+          savedLevel = Number(rec.save_data?.playerState?.level) || Number(rec.power_level) || 0;
+          if (!base) base = { uuid: fid, name: rec.username, shortId: rec.short_id };
+        }
+      }
     }
     entries.push({
       uuid: fid,
       name: base?.name || 'Adventurer',
       shortId: base?.shortId || '',
       classId: live?.classId || null,
-      level: live?.level || 1,
+      level: Number(live?.level) || savedLevel || 1,
       online: !!(live && live.socketId),
       inParty: !!(live && live.room)
     });
@@ -654,6 +675,21 @@ io.on('connection', (socket) => {
   });
 
   // ---------- FRIENDS ----------
+
+  // Levelling up mid-session used to be invisible to everyone else: the server
+  // heard a level only in lobby packets. The client now pushes on every change,
+  // and everyone looking at this player is refreshed.
+  socket.on('profile_update', async (data = {}) => {
+    const p = players[socket.id];
+    if (!p) return;
+    const before = p.level;
+    applyProfile(p, data);
+    if (p.level === before) return;
+    if (p.room) broadcastLobby(p.room);
+    const friends = await friendUuidsOf(p.uuid);
+    await Promise.all(friends.map((fid) => pushFriendList(fid)));
+    await pushFriendList(p.uuid);
+  });
 
   socket.on('friends_request_list', async () => {
     const p = players[socket.id];

@@ -620,8 +620,7 @@ export class SideViewGame {
     if (!this.engine) return;
     const level = this.engine.player.level;
     const classId = this.engine.player.characterClass.id;
-    if (network.profile.level === level && network.profile.classId === classId) return;
-    network.profile = { classId, level };
+    network.updateProfile({ classId, level });
   }
 
   private spawnNextWave() {

@@ -178,7 +178,7 @@ export class NetworkManager {
     const name = localStorage.getItem('playerName');
     const shortId = localStorage.getItem('playerShortId');
     if (uuid && name && shortId) {
-      this.socket?.emit('register_player', { uuid, name, shortId });
+      this.socket?.emit('register_player', { uuid, name, shortId, ...this.profile });
     }
   }
 
@@ -365,6 +365,20 @@ export class NetworkManager {
       this.debug('IN', 'full_sync', { enemies: data?.enemies?.length, waveIndex: data?.waveIndex });
       if (data) this.onFullSyncCb?.(data);
     });
+  }
+
+  /**
+   * The server learned a player's level only from lobby packets, so anyone who
+   * had not created or joined a lobby this session was Lv 1 to everyone else -
+   * in the friends list, on the lobby cards, and to the invite gate, which then
+   * refused them dungeons they had long outlevelled. Registration now carries
+   * the profile, and this pushes it again whenever the level actually changes.
+   */
+  public updateProfile(profile: LocalProfile) {
+    const same = this.profile.level === profile.level && this.profile.classId === profile.classId;
+    this.profile = profile;
+    if (same) return;
+    this.socket?.emit('profile_update', profile);
   }
 
   public createLobby(dungeonId: string, minLevel: number, onUpdate: (lobbyData: any) => void, onStart: (roomData: any) => void) {

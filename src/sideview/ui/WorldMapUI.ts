@@ -150,7 +150,11 @@ export class WorldMapUI {
     this.onSelectLocation = onSelectLocation;
   }
 
-  public open(maxDungeonCleared: number = 0, playerLevel: number = 1) {
+  // No defaults. These both had one, so the HUD's MAP button calling
+  // open(maxDungeonCleared) compiled fine and silently gated every dungeon
+  // against level 1 - a level 11 character was told to "REACH Lv. 5".
+  // Required parameters turn that into a compile error instead.
+  public open(maxDungeonCleared: number, playerLevel: number) {
     this.close();
     audio.playPageTurn();
 

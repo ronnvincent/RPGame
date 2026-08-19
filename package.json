@@ -30,7 +30,8 @@
     "test:endgame": "node test/endgame.test.mjs",
     "test:leaderboard": "node test/leaderboard.test.mjs",
     "test:types": "node test/typecheck.test.mjs",
-    "test:unlocks": "node test/unlocks.test.mjs"
+    "test:unlocks": "node test/unlocks.test.mjs",
+    "test:levels": "node test/level-visibility.test.mjs"
   },
   "keywords": [],
   "author": "",
