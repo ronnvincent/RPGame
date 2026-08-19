@@ -11,6 +11,8 @@ export interface RemotePlayerState {
   isAttacking: boolean;
   animState: string;
   isTownMode?: boolean;
+  /** Down and bleeding out, waiting for someone to reach them. */
+  downed?: boolean;
   /** Skill slot of their current swing, for attack animation variety. */
   lastSkillIndex?: number;
 }
@@ -432,7 +434,7 @@ export class NetworkManager {
    * Support skills only ever touched the caster, so a priest healing in a party
    * healed nobody who needed it.
    */
-  public sendPartySupport(payload: { kind: 'heal' | 'buff'; amount?: number; stat?: string; multiplier?: number; duration?: number; casterName?: string }) {
+  public sendPartySupport(payload: { kind: 'heal' | 'buff' | 'downed' | 'revive'; amount?: number; stat?: string; multiplier?: number; duration?: number; casterName?: string; targetSocketId?: string }) {
     this.socket?.emit('party_support', payload);
   }
 
@@ -482,7 +484,9 @@ export class NetworkManager {
       isGrounded: playerState.isGrounded,
       isAttacking,
       animState: playerState.animState || 'idle',
-      isTownMode: Boolean(isTownMode)
+      isTownMode: Boolean(isTownMode),
+      // Teammates need to see you are down, not merely standing still.
+      downed: Boolean(playerState.downed)
     });
   }
 
@@ -534,6 +538,11 @@ export class NetworkManager {
     }
     this.setRoom(null);
     this.isHost = true; // Solo play from here on.
+  }
+
+  /** Our own socket id, so a targeted party packet can tell if it means us. */
+  public get mySocketId(): string | null {
+    return this.socket?.id || null;
   }
 
   /** True when we are in a room with at least one other player. */

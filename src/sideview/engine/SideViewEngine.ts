@@ -73,6 +73,16 @@ export interface PlayerState {
   attackTimer: number;
   stealthTimer: number;
   animState: 'idle' | 'run' | 'attack' | 'jump' | 'dead';
+  /**
+   * Downed, not dead. In a party a killing blow drops you to your knees with a
+   * bleed-out timer instead of ending the run, so a teammate has a window to
+   * reach you. Alone there is nobody coming, so the run ends as before.
+   */
+  downed?: boolean;
+  /** Seconds of bleed-out left. Reaching zero ends the run. */
+  downTimer?: number;
+  /** One rescue per run: an unlimited one removes the cost of dying. */
+  revivesUsed?: number;
   width: number;
   height: number;
   // Dynamic Combat Stats
@@ -207,6 +217,25 @@ export class SideViewEngine {
   private castLock: number = 0;
   /** Set when the run has been lost, so defeat is announced exactly once. */
   public runOver = false;
+
+  // What you actually did this run. Nothing tracked contribution before, so a
+  // finished dungeon said nothing about who carried it - and a co-op run with
+  // no record of who did what is just four people in the same room.
+  public damageDealt = 0;
+  public damageTaken = 0;
+  public killCount = 0;
+  public revivesGiven = 0;
+
+  /** Wipe the run tally. Called when a dungeon starts, not when it ends. */
+  public resetRunStats() {
+    this.damageDealt = 0;
+    this.damageTaken = 0;
+    this.killCount = 0;
+    this.revivesGiven = 0;
+    this.player.downed = false;
+    this.player.downTimer = 0;
+    this.player.revivesUsed = 0;
+  }
   /** Raised when the player dies with no revive left. */
   public onRunLost: (() => void) | null = null;
   /** Which of a boss's abilities comes next, per boss. */
@@ -366,6 +395,9 @@ export class SideViewEngine {
   // --- PLAYER ACTIONS ---
 
   public movePlayer(direction: number) {
+    // Downed players are out of the fight until somebody reaches them.
+    if (this.player.downed) return;
+
     if (this.player.isDashing) return;
     this.player.vx = direction * this.player.totalSpeed;
     if (direction !== 0) {
@@ -374,6 +406,9 @@ export class SideViewEngine {
   }
 
   public jumpPlayer(holdingDown: boolean = false) {
+    // Downed players are out of the fight until somebody reaches them.
+    if (this.player.downed) return;
+
     const p = this.player;
 
     // Drop through one-way platforms when holding Down + Jump
@@ -399,6 +434,9 @@ export class SideViewEngine {
   }
 
   public dashPlayer() {
+    // Downed players are out of the fight until somebody reaches them.
+    if (this.player.downed) return;
+
     const p = this.player;
     if (p.dashTimer > 0 || p.isDashing || (p.dashCooldown || 0) > 0) return;
     p.isDashing = true;
@@ -718,6 +756,8 @@ export class SideViewEngine {
 
   public castSkill(skillIndex: number) {
     const p = this.player;
+    // Downed players are out of the fight until somebody reaches them.
+    if (p.downed) return;
     const skill: SkillDefinition = p.characterClass.skills[skillIndex];
     if (!skill) return;
 
@@ -1140,6 +1180,10 @@ export class SideViewEngine {
       : Math.max(1, Math.round(afterDefence(rawDamage, enemy.def)));
 
     enemy.hp -= finalDamage;
+    // Only count damage we actually dealt. A remote packet is a teammate's
+    // blow arriving for replay, and crediting it would hand everyone the same
+    // total and make the summary meaningless.
+    if (!fromRemote) this.damageDealt += finalDamage;
     enemy.hitStun = 0.25;
     // Knockback used to be a flat 3.5 on every hit, including the basic attack -
     // and the basic attack is the one you use continuously, so monsters were
@@ -1177,6 +1221,7 @@ export class SideViewEngine {
     // Custom Hit VFX for Warrior
 
     if (enemy.hp <= 0 && !enemy.isDead) {
+      if (!fromRemote) this.killCount++;
       if (this.isHost) {
         this.onEnemyDefeated(enemy);
       }
@@ -1337,6 +1382,10 @@ export class SideViewEngine {
     const p = this.player;
     const dtFrame = dt * this.physicsFrameScale;
 
+    // Bleeding out. Ticked before anything else so a downed player cannot act,
+    // and so the countdown keeps running while the fight carries on around it.
+    this.tickDowned(dt);
+
     // 1. Cooldowns & Timers
     Object.keys(p.skillCooldowns).forEach(skillId => {
       if (p.skillCooldowns[skillId] > 0) {
@@ -1411,7 +1460,20 @@ export class SideViewEngine {
         audio.playLevelUp();
         this.particles.addFloatingText(p.x, p.y - 40, '✨ PHOENIX FEATHER RESURRECTION! ✨', '#ffd700', true, 20);
         this.triggerSave();
-      } else if (!this.runOver) {
+      } else if (!p.downed && this.canBeRevived()) {
+        // In a party, going down is a call for help rather than the end of the
+        // run. The teammate who comes for you is the moment people remember,
+        // and it cannot happen if death is instant.
+        p.downed = true;
+        p.downTimer = SideViewEngine.BLEED_OUT_SECONDS;
+        p.revivesUsed = (p.revivesUsed || 0) + 1;
+        p.animState = 'dead';
+        p.vx = 0;
+        p.hp = 0;
+        audio.playHit();
+        this.particles.addFloatingText(p.x, p.y - 46, 'DOWNED! HOLD ON!', '#ff6b6b', true, 18);
+        network.sendPartySupport({ kind: 'downed', casterName: this.playerName() });
+      } else if (!this.runOver && !p.downed) {
         // Dying used to set an animation state and nothing else: no defeat, no
         // respawn, nothing lost. You could not lose the game, and a fight you
         // cannot lose has no tension no matter how hard the boss hits.
@@ -2099,6 +2161,163 @@ export class SideViewEngine {
    * a potion would matter, it may as well not have been there. Returns what
    * happened so the HUD can say why nothing did.
    */
+  /**
+   * Downed teammates, drawn in world space so the marker sits on the body. A
+   * downed player is silent otherwise - same sprite as any other corpse pose -
+   * and a rescue you cannot see coming is one nobody makes.
+   */
+  private drawDownedMarkers(ctx: CanvasRenderingContext2D) {
+    const pulse = 0.55 + Math.sin(performance.now() / 160) * 0.45;
+    for (const socketId in network.remotePlayers) {
+      const r = network.remotePlayers[socketId];
+      if (!r.downed) continue;
+      if (Boolean(r.isTownMode) !== Boolean(this.isTownMode)) continue;
+
+      const bx = r.x;
+      const by = r.y + this.groundY - 62;
+
+      ctx.save();
+      ctx.textAlign = 'center';
+
+      // A beacon you can find from off-screen.
+      ctx.globalAlpha = pulse;
+      ctx.fillStyle = '#ef4444';
+      ctx.beginPath();
+      ctx.moveTo(bx, by + 12);
+      ctx.lineTo(bx - 9, by - 2);
+      ctx.lineTo(bx + 9, by - 2);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.globalAlpha = 1;
+      ctx.font = 'bold 11px "Outfit", sans-serif';
+      ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+      ctx.lineWidth = 3;
+      ctx.fillStyle = '#fca5a5';
+      const label = `${r.name || 'Teammate'} IS DOWN`;
+      ctx.strokeText(label, bx, by - 8);
+      ctx.fillText(label, bx, by - 8);
+
+      // The hold prompt and its progress, shown only to whoever is close
+      // enough to act on it.
+      if (this.reviveTargetId === socketId && this.reviveHold > 0) {
+        const pct = Math.min(1, this.reviveHold / SideViewEngine.REVIVE_HOLD_SECONDS);
+        const w = 64;
+        ctx.fillStyle = 'rgba(0,0,0,0.65)';
+        ctx.fillRect(bx - w / 2, by + 18, w, 7);
+        ctx.fillStyle = '#4ade80';
+        ctx.fillRect(bx - w / 2 + 1, by + 19, (w - 2) * pct, 5);
+      } else if (Math.hypot(r.x - this.player.x, r.y - this.player.y) < SideViewEngine.REVIVE_RANGE) {
+        ctx.font = 'bold 10px "Outfit", sans-serif';
+        ctx.fillStyle = '#4ade80';
+        ctx.strokeText('HOLD E TO REVIVE', bx, by + 26);
+        ctx.fillText('HOLD E TO REVIVE', bx, by + 26);
+      }
+      ctx.restore();
+    }
+  }
+
+  /** Seconds you stay down before the run is lost. Long enough to be crossed. */
+  public static readonly BLEED_OUT_SECONDS = 18;
+  /** Seconds a teammate must stay beside you. Long enough to be a real risk. */
+  public static readonly REVIVE_HOLD_SECONDS = 2.5;
+  /** How close the rescuer must stand. */
+  public static readonly REVIVE_RANGE = 95;
+
+  /** Progress of the revive we are currently performing, in seconds. */
+  public reviveHold = 0;
+  /** Socket id of the teammate we are reviving, for the on-screen prompt. */
+  public reviveTargetId: string | null = null;
+
+  private playerName(): string {
+    return localStorage.getItem('playerName') || 'A hero';
+  }
+
+  /**
+   * Going down only makes sense when somebody can come for you. Alone, or
+   * having already been picked up once this run, a killing blow is final.
+   */
+  private canBeRevived(): boolean {
+    return network.isPartied && (this.player.revivesUsed || 0) < 1;
+  }
+
+  /** The nearest downed teammate within reach, if any. */
+  public nearestDownedAlly(): { socketId: string; x: number; y: number; name: string } | null {
+    if (!network.isPartied) return null;
+    let best: { socketId: string; x: number; y: number; name: string } | null = null;
+    let bestDist = SideViewEngine.REVIVE_RANGE;
+    for (const socketId in network.remotePlayers) {
+      const r = network.remotePlayers[socketId];
+      if (!r.downed) continue;
+      if (Boolean(r.isTownMode) !== Boolean(this.isTownMode)) continue;
+      const d = Math.hypot(r.x - this.player.x, r.y - this.player.y);
+      if (d < bestDist) {
+        bestDist = d;
+        best = { socketId, x: r.x, y: r.y, name: r.name };
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Called every frame with whether the interact key is held. Standing beside a
+   * downed teammate and holding fills the bar; stepping away or letting go
+   * loses it, so a rescue costs you position in the middle of a fight.
+   */
+  public updateRevive(dt: number, holding: boolean) {
+    const target = this.nearestDownedAlly();
+    if (!target || !holding || this.player.downed) {
+      this.reviveHold = 0;
+      this.reviveTargetId = null;
+      return;
+    }
+    if (this.reviveTargetId !== target.socketId) {
+      this.reviveTargetId = target.socketId;
+      this.reviveHold = 0;
+    }
+    this.reviveHold += dt;
+    if (this.reviveHold < SideViewEngine.REVIVE_HOLD_SECONDS) return;
+
+    this.reviveHold = 0;
+    this.reviveTargetId = null;
+    network.sendPartySupport({ kind: 'revive', targetSocketId: target.socketId, casterName: this.playerName() });
+    this.revivesGiven++;
+    audio.playLevelUp();
+    this.particles.addFloatingText(target.x, target.y - 50, 'REVIVED!', '#4ade80', true, 18);
+  }
+
+  /** We were picked up: back on our feet, hurt but standing. */
+  public acceptRevive(byName?: string) {
+    const p = this.player;
+    if (!p.downed) return;
+    p.downed = false;
+    p.downTimer = 0;
+    p.hp = Math.max(1, Math.round(p.maxHp * 0.4));
+    p.mp = Math.max(p.mp, Math.round(p.maxMp * 0.25));
+    p.iframeTimer = 2.5;
+    p.animState = 'idle';
+    audio.playLevelUp();
+    this.particles.addFloatingText(
+      p.x, p.y - 46,
+      byName ? `SAVED BY ${byName.toUpperCase()}!` : 'BACK ON YOUR FEET!',
+      '#4ade80', true, 19,
+    );
+  }
+
+  /** Bleed-out. Nobody reached us in time, so the run ends after all. */
+  private tickDowned(dt: number) {
+    const p = this.player;
+    if (!p.downed) return;
+    p.vx = 0;
+    p.animState = 'dead';
+    p.downTimer = Math.max(0, (p.downTimer || 0) - dt);
+    if (p.downTimer > 0) return;
+    p.downed = false;
+    if (this.runOver) return;
+    this.runOver = true;
+    this.onRunLost?.();
+  }
+
   public quickHeal(): 'healed' | 'full' | 'none' {
     const p = this.player;
     if (p.hp >= p.maxHp) return 'full';
@@ -2216,12 +2435,16 @@ export class SideViewEngine {
     const p = this.player;
     // Committing to an ultimate should never get you punished for it - the
     // caster is untouchable for the length of the cinematic.
+    // Already down: the bleed-out clock is the threat now, not the boss. Being
+    // finished off while helpless would just shorten a window meant for rescue.
+    if (p.downed) return;
     if (p.iframeTimer > 0 || p.stealthTimer > 0 || this.ultimate.invulnerable) return;
 
     const rawDamage = enemy.atk * BALANCE.enemyAtk * multiplier * (1 + (Math.random() * 0.2 - 0.1));
     const finalDamage = Math.max(1, Math.round(afterDefence(rawDamage, p.totalDef)));
 
     p.hp = Math.max(0, p.hp - finalDamage);
+    this.damageTaken += finalDamage;
     p.iframeTimer = 0.4;
     p.vx = enemy.facing * 4.0;
     p.vy = -2.0;
@@ -2637,6 +2860,8 @@ export class SideViewEngine {
         
         ctx.restore();
       }
+
+      this.drawDownedMarkers(ctx);
     }
 
     // 5. Render Particle System (VFX, Projectiles, Minions, Clones, Zones, Floating Text)

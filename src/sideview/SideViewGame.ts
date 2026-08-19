@@ -333,6 +333,14 @@ export class SideViewGame {
         if (!this.engine || !payload) return;
         if (payload.kind === 'heal') {
           this.engine.applyPartyHeal(Number(payload.amount) || 0, payload.casterName);
+        } else if (payload.kind === 'revive') {
+          // Targeted: the relay goes to the whole room, so only the person who
+          // was actually picked up should stand up.
+          if (payload.targetSocketId && payload.targetSocketId === mod.network.mySocketId) {
+            this.engine.acceptRevive(payload.casterName);
+          }
+        } else if (payload.kind === 'downed') {
+          this.hud?.showToast?.(`${payload.casterName || 'A teammate'} is down!`);
         } else if (payload.kind === 'buff') {
           this.engine.applyPartyBuff(
             payload.stat,
@@ -560,6 +568,9 @@ export class SideViewGame {
     this.engine.player.vx = 0;
     this.engine.player.vy = 0;
     this.engine.particles.summonedMinions = [];
+    // A fresh tally per run, and one rescue per run: entering the dungeon is
+    // where both are reset, not clearing it.
+    this.engine.resetRunStats();
 
     const prevDungeonIndex = this.currentDungeonIndex;
     this.currentDungeonIndex = dungeonIndex % DUNGEONS.length;
@@ -843,12 +854,23 @@ export class SideViewGame {
     });
   }
 
+  /** Held state of the on-screen revive button. */
+  public touchReviveHeld = false;
+  /** Duration of the frame just run, for input that accumulates over time. */
+  private lastFrameDt = 0;
+
   private processContinuousInput() {
     if (!this.engine) return;
     let dir = this.touchMoveDir;
     if (this.keysPressed['KeyA'] || this.keysPressed['ArrowLeft']) dir -= 1;
     if (this.keysPressed['KeyD'] || this.keysPressed['ArrowRight']) dir += 1;
     this.engine.movePlayer(Math.max(-1, Math.min(1, dir)));
+
+    // Reviving shares the interact key with talking to an NPC - there are no
+    // NPCs in a dungeon, so the two never compete. Held, not tapped: a rescue
+    // that costs nothing is not a rescue.
+    const holding = Boolean(this.keysPressed['KeyE'] || this.touchReviveHeld);
+    this.engine.updateRevive(this.lastFrameDt, holding);
   }
 
   private gameLoop(timestamp: number) {
@@ -856,6 +878,7 @@ export class SideViewGame {
     this.animationFrameId = requestAnimationFrame(this.gameLoop.bind(this));
 
     const dt = Math.min((timestamp - this.lastTime) / 1000, 0.1);
+    this.lastFrameDt = dt;
     this.lastTime = timestamp;
 
     try {

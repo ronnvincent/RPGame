@@ -508,6 +508,63 @@ export class GameHUD {
       }
 
       /* Touch Talk Button for NPC Interaction */
+      /* Reviving is the one prompt that must read instantly, so it is louder
+         than the talk prompt it replaces. */
+      .touch-revive-btn {
+        box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.9), 0 0 14px rgba(74, 222, 128, 0.5);
+      }
+
+      .downed-overlay {
+        position: absolute;
+        left: 50%;
+        top: 24%;
+        transform: translateX(-50%);
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        padding: 14px 26px;
+        background: rgba(20, 4, 6, 0.82);
+        border: 2px solid rgba(239, 68, 68, 0.75);
+        border-radius: 6px;
+        pointer-events: none;
+        z-index: 60;
+        text-align: center;
+      }
+
+      .downed-overlay.is-down { display: flex; }
+
+      .downed-title {
+        font-family: 'Cinzel', serif;
+        font-weight: 900;
+        font-size: 20px;
+        letter-spacing: 2px;
+        color: #ef4444;
+        text-shadow: 0 2px 6px rgba(0,0,0,0.9);
+      }
+
+      .downed-sub {
+        font-size: 11.5px;
+        color: #fca5a5;
+        letter-spacing: 0.4px;
+      }
+
+      .downed-bar {
+        width: 220px;
+        height: 9px;
+        background: rgba(0,0,0,0.7);
+        border: 1px solid rgba(239, 68, 68, 0.6);
+        border-radius: 4px;
+        overflow: hidden;
+      }
+
+      .downed-fill {
+        height: 100%;
+        width: 100%;
+        background: linear-gradient(90deg, #ef4444, #fbbf24);
+        transition: width 0.12s linear;
+      }
+
       .touch-talk-btn {
         width: 68px;
         height: 68px;
@@ -1530,6 +1587,12 @@ export class GameHUD {
         </div>
 
         <!-- Right Side: Touch Action Hub (Talk, Jump & Dash) -->
+        <div class="downed-overlay" id="downed-overlay">
+          <div class="downed-title">YOU ARE DOWN</div>
+          <div class="downed-sub" id="downed-sub">Hold on - a teammate can still reach you</div>
+          <div class="downed-bar"><div class="downed-fill" id="downed-fill"></div></div>
+        </div>
+
         <div class="mobile-action-hub">
           <button class="touch-action-btn touch-talk-btn" id="touch-talk-btn">
             <img src="/assets/gui/PNG/iconCircle_beige.png" width="20" height="20" />
@@ -1815,6 +1878,15 @@ export class GameHUD {
       e.stopPropagation();
       this.game?.interactWithActiveNpc();
     });
+    // Reviving is a hold, so the button reports press and release rather than
+    // a tap. Cancel and leave both clear it, or walking away mid-hold would
+    // leave the flag stuck on.
+    const setHold = (held: boolean) => { if (this.game) this.game.touchReviveHeld = held; };
+    talkBtn?.addEventListener('touchstart', () => setHold(true));
+    ['touchend', 'touchcancel', 'pointerup', 'pointerleave'].forEach(ev =>
+      talkBtn?.addEventListener(ev, () => setHold(false)));
+    talkBtn?.addEventListener('pointerdown', () => setHold(true));
+
     talkBtn?.addEventListener('touchstart', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -2162,12 +2234,26 @@ export class GameHUD {
       townBtn.style.display = this.engine.isTownMode ? 'none' : 'block';
     }
 
-    // Touch Talk Button
+    // Touch Talk Button, which doubles as the revive button. In town it talks;
+    // in a dungeon standing over a downed teammate it picks them up. The two
+    // never apply at once, so one button covers both without extra clutter.
     const talkBtn = this.container.querySelector('#touch-talk-btn') as HTMLElement;
     if (talkBtn) {
       const activeNpc = this.engine.townHub?.getActiveNpc();
-      talkBtn.style.display = (this.engine.isTownMode && activeNpc) ? 'flex' : 'none';
+      const downedAlly = this.engine.nearestDownedAlly();
+      const label = talkBtn.querySelector('span');
+      if (downedAlly && !this.engine.isTownMode) {
+        talkBtn.style.display = 'flex';
+        talkBtn.classList.add('touch-revive-btn');
+        if (label) label.textContent = 'REVIVE';
+      } else {
+        talkBtn.classList.remove('touch-revive-btn');
+        if (label) label.textContent = 'TALK';
+        talkBtn.style.display = (this.engine.isTownMode && activeNpc) ? 'flex' : 'none';
+      }
     }
+
+    this.paintDownedOverlay();
 
     // Mini Quest Tracker update
     const activeQuests = quests.getAllActiveQuests();
@@ -2426,6 +2512,28 @@ export class GameHUD {
       this.selectedItem = null;
       this.renderInspectorPane();
     });
+  }
+
+  /**
+   * Your own bleed-out. The world-space marker tells teammates where you are;
+   * this tells you how long you have, because from the floor you cannot see
+   * whether anyone is coming.
+   */
+  private paintDownedOverlay() {
+    const overlay = this.container.querySelector('#downed-overlay') as HTMLElement;
+    if (!overlay || !this.engine) return;
+    const p = this.engine.player;
+    if (!p.downed) {
+      overlay.classList.remove('is-down');
+      return;
+    }
+    overlay.classList.add('is-down');
+    const left = Math.max(0, p.downTimer || 0);
+    const pct = Math.max(0, Math.min(1, left / SideViewEngine.BLEED_OUT_SECONDS));
+    const fill = this.container.querySelector('#downed-fill') as HTMLElement;
+    if (fill) fill.style.width = `${pct * 100}%`;
+    const sub = this.container.querySelector('#downed-sub') as HTMLElement;
+    if (sub) sub.textContent = `${left.toFixed(0)}s - a teammate can still reach you`;
   }
 
   private paintPotionSlot() {

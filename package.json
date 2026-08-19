@@ -31,7 +31,8 @@
     "test:leaderboard": "node test/leaderboard.test.mjs",
     "test:types": "node test/typecheck.test.mjs",
     "test:unlocks": "node test/unlocks.test.mjs",
-    "test:levels": "node test/level-visibility.test.mjs"
+    "test:levels": "node test/level-visibility.test.mjs",
+    "test:revive": "node test/coop-revive.test.mjs"
   },
   "keywords": [],
   "author": "",
