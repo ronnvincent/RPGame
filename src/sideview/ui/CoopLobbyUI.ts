@@ -586,6 +586,7 @@ export class CoopLobbyUI {
       .cl-crests {
         display: flex; gap: 16px;
         align-items: stretch;
+        justify-content: center;
         flex: 1; min-height: 0;
         max-height: 460px;
       }
@@ -625,16 +626,22 @@ export class CoopLobbyUI {
         letter-spacing: 1px; color: #b9c0c9;
       }
 
+      /* Centred under the crests rather than pinned to the left of a wide
+         column. A left accent bar reads as lopsided once the block is centred,
+         so the accent runs along the top instead. */
       .cl-syn {
-        padding: 10px 14px; max-width: 420px;
-        border-left: 3px solid rgba(255,255,255,0.14);
+        align-self: center;
+        width: min(560px, 100%);
+        padding: 11px 16px;
+        text-align: center;
+        border-top: 3px solid rgba(255,255,255,0.14);
         background: rgba(255,255,255,0.03);
       }
-      .cl-syn.on { border-left-color: #ffd98a; background: rgba(120, 95, 30, 0.18); }
+      .cl-syn.on { border-top-color: #ffd98a; background: rgba(120, 95, 30, 0.18); }
       .cl-syn-label { font-family: 'Cinzel', serif; font-weight: 800; font-size: 13px; letter-spacing: 1.2px; color: #e8ecf1; }
       .cl-syn.on .cl-syn-label { color: #ffd98a; }
       .cl-syn-detail { font-size: 11px; color: #8a9099; margin-top: 2px; }
-      .cl-syn-nums { display: flex; gap: 12px; margin-top: 6px; }
+      .cl-syn-nums { display: flex; gap: 12px; margin-top: 6px; justify-content: center; }
       .cl-syn-nums span { font-size: 11px; font-weight: 800; color: #7dd3fc; }
 
       .cl-pane {
@@ -705,6 +712,17 @@ export class CoopLobbyUI {
         font-size: 9.5px; font-weight: 800; color: #cfd3d8;
       }
       .cl-key:disabled { opacity: 0.4; cursor: default; }
+
+      /* No keyboard, no key caps. The footer legend told a phone to press ESC
+         and ENTER, which that device does not have - the buttons themselves are
+         tappable, so only the label is worth showing there. */
+      @media (hover: none) and (pointer: coarse) {
+        .cl-key b { display: none; }
+        .cl-key { gap: 0; padding: 8px 14px; font-weight: 700; }
+        .cl-start:not(:disabled), .cl-ready {
+          border: 1px solid currentColor; border-radius: 3px;
+        }
+      }
       .cl-start:not(:disabled) { color: #ffd98a; }
       .cl-start:not(:disabled) b { border-color: #caa04a; color: #ffd98a; }
       .cl-ready { color: #4ade80; }

@@ -105,6 +105,21 @@ const run = async () => {
   check('the growth is scoped to the party tab, not the panes',
     !/\.cl-pane \{[^}]*flex: 1;[^}]*max-height: 460px/.test(lobby));
 
+  // --- Centred, and honest about the device -------------------------------
+  // Measured in the browser at 812x375: the crest row and the bonus banner both
+  // sit on the column's centre line, 0px off.
+  check('the crests are centred in their column', /justify-content: center;/.test(lobby));
+  check('and the bonus banner with them',
+    /\.cl-syn \{[^}]*align-self: center/.test(lobby));
+  check('its accent moved off the left edge, which reads lopsided when centred',
+    /border-top: 3px solid/.test(lobby) && !/\.cl-syn \{[^}]*border-left/.test(lobby));
+
+  // The footer legend told a phone to press ESC and ENTER. Confirmed in the
+  // browser: the rule parses and resolves the cap to display:none when the
+  // query is satisfied.
+  check('key caps are hidden where there is no keyboard',
+    /@media \(hover: none\) and \(pointer: coarse\) \{[\s\S]{0,120}\.cl-key b \{ display: none; \}/.test(lobby));
+
   // --- Composition means something ---------------------------------------
   check('a party of one gets no bonus', /present\.length < 2\) return NO_SYNERGY/.test(synergy));
   check('the strongest bonus applies rather than a stack', /Read in order, best first/.test(synergy));
