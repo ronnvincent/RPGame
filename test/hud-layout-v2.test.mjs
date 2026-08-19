@@ -166,6 +166,15 @@ check('the attack button is not parked in the corner', rightOf(attackRule) > 22)
 check('and sits near the arc it belongs to, which starts at 191px',
   rightOf(attackRule) > 60 && rightOf(attackRule) < 191);
 
+// --- One arc, not five hand-placed offsets -------------------------------
+// The attack button sat among the skills instead of at the centre they turn
+// around. Measured in the browser: all five skills are exactly 175px from the
+// attack button's centre, nothing overlaps, nothing leaves the screen.
+check('the skills sit on one circle around the attack button',
+  /radius 175 around the attack button/.test(hud));
+check('and the attack anchors the corner it rings',
+  /\.hotbar-slot\[data-skill-idx="0"\][\s\S]{0,220}right: calc\(22px/.test(hud));
+
 // --- The party rail -----------------------------------------------------
 check('allies have a rail', /ally-rail/.test(hud) && /paintAllyRail/.test(hud));
 check('it shows their health', /ally-hp-fill/.test(hud));
