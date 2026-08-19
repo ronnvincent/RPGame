@@ -16,7 +16,7 @@ import { LeaderboardUI } from './LeaderboardUI';
 import { ItemData, RARITY_CONFIGS } from '../items/ItemDatabase';
 import { audio } from '../engine/AudioManager';
 import { sprites } from '../engine/SpriteManager';
-import { SkillDefinition } from '../classes/ClassDefinitions';
+import { SkillDefinition, CHARACTER_CLASSES } from '../classes/ClassDefinitions';
 import { SideViewGame } from '../SideViewGame';
 import { network } from '../network/NetworkManager';
 import { quests } from '../quests/QuestManager';
@@ -24,6 +24,10 @@ import { QuestLogUI } from './QuestLogUI';
 import { WorldMapUI } from './WorldMapUI';
 
 export class GameHUD {
+  /** Last threat class written, so the transition is not restarted each frame. */
+  private threatClass = '';
+  /** Which allies the rail was last built for, so it is not rebuilt per frame. */
+  private allyKey = '';
   /**
    * Interface glyphs.
    *
@@ -407,6 +411,145 @@ export class GameHUD {
         border: none; color: #fff8e1;
         font-family: 'Cinzel', serif; font-weight: 800;
         font-size: 12px; letter-spacing: 1.2px;
+      }
+
+      /* The plate's footer: what the character is worth, not what they can
+         press. Gold lived alone in the top right, which made a number look
+         like a control. */
+      .plate-meta {
+        display: flex; align-items: center; gap: 10px;
+        margin-top: 3px;
+        font-size: 10.5px; font-weight: 700; letter-spacing: 0.3px;
+      }
+      .plate-gold {
+        display: inline-flex; align-items: center; gap: 3px;
+        color: #ffd700;
+      }
+      .plate-gold img { image-rendering: pixelated; }
+      .plate-power {
+        display: inline-flex; align-items: center; gap: 3px;
+        color: #7dd3fc;
+      }
+      .plate-power .hud-glyph { width: 11px; height: 11px; }
+      /* The ID is read out loud to a friend once, so it does not need weight -
+         but it does need to be on screen without opening anything. */
+      .plate-id { margin-left: auto; color: #9b8a68; font-weight: 600; }
+      .plate-id b { color: #f3e6c8; letter-spacing: 1px; }
+
+      /* Experience as the plate's underline. It was a third framed bar, which
+         gave a slow background number the same weight as health. The plate is
+         already position:relative, and its 10px bottom padding leaves room. */
+      .plate-exp {
+        position: absolute;
+        left: 6px; right: 6px; bottom: 3px;
+        height: 3px;
+        background: rgba(0, 0, 0, 0.55);
+        border-radius: 2px;
+        overflow: hidden;
+      }
+      .plate-exp-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #a78bfa, #f0abfc);
+        transition: width 0.25s ease-out;
+      }
+
+      /* Threat-responsive chrome.
+         The HUD carries a level set every frame from what is actually on
+         screen. When nothing threatens, the panels that only report state step
+         back; the moment something does, they are at full strength again. The
+         controls dim far less than the readouts - a button you are about to
+         press should not look disabled - and nothing here changes hit testing,
+         so a dimmed control is still exactly as tappable. */
+      .hud-calm .player-status-panel,
+      .hud-calm .mini-quest-tracker,
+      .hud-calm .hud-top-right,
+      .hud-calm .voice-dock {
+        opacity: 0.38;
+      }
+      .hud-calm .skills-hotbar,
+      .hud-calm .mobile-controls-wrapper {
+        opacity: 0.72;
+      }
+
+      .player-status-panel,
+      .mini-quest-tracker,
+      .hud-top-right,
+      .voice-dock,
+      .skills-hotbar,
+      .mobile-controls-wrapper {
+        transition: opacity 0.45s ease-out;
+      }
+
+      /* A boss is the one moment the readouts should be louder than normal. */
+      .hud-boss .player-status-panel {
+        box-shadow: 0 4px 15px rgba(0,0,0,0.9), 0 0 0 2px rgba(239, 68, 68, 0.55);
+      }
+
+      /* Coming back has to be instant - a fade-in you can watch is a fade-in
+         that arrives after the hit that needed it. */
+      .hud-alert .player-status-panel,
+      .hud-boss .player-status-panel,
+      .hud-alert .skills-hotbar,
+      .hud-boss .skills-hotbar {
+        transition: opacity 0.08s ease-out;
+      }
+
+      .ally-rail {
+        display: none;
+        flex-direction: column;
+        gap: 3px;
+        margin-top: 4px;
+        pointer-events: none;
+      }
+      .ally-rail.has-allies { display: flex; }
+
+      .ally {
+        display: flex; align-items: center; gap: 6px;
+        padding: 3px 7px;
+        width: 152px;
+        background: rgba(10, 8, 16, 0.72);
+        border-left: 3px solid var(--ally, #4fade5);
+        border-radius: 2px;
+      }
+
+      .ally-name {
+        flex: 1; min-width: 0;
+        font-size: 10.5px; font-weight: 700; color: #dfe4ea;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+
+      .ally-hp {
+        width: 46px; height: 4px;
+        background: rgba(0,0,0,0.6);
+        border-radius: 2px; overflow: hidden;
+      }
+      .ally-hp-fill {
+        height: 100%; background: #4ade80;
+        transition: width 0.2s linear;
+      }
+      .ally-hp-fill.hurt { background: #facc15; }
+      .ally-hp-fill.critical { background: #ef4444; }
+
+      /* Down is the one state that has to carry across a busy screen, so it
+         pulses rather than sitting quietly in a colour. */
+      .ally.is-down {
+        border-left-color: #ef4444;
+        animation: allyDown 0.9s ease-in-out infinite;
+      }
+      .ally.is-down .ally-name { color: #fca5a5; }
+      .ally-down-tag {
+        font-size: 8.5px; font-weight: 900; letter-spacing: 0.8px;
+        color: #ef4444;
+      }
+      @keyframes allyDown {
+        0%, 100% { background: rgba(70, 10, 14, 0.75); }
+        50%      { background: rgba(130, 20, 26, 0.85); }
+      }
+
+      @media (max-width: 767px), (orientation: landscape) and (max-height: 500px) {
+        .ally { width: 118px; padding: 2px 5px; }
+        .ally-name { font-size: 9.5px; }
+        .ally-hp { width: 34px; }
       }
 
       .hud-top-right {
@@ -1620,6 +1763,14 @@ export class GameHUD {
            because it comes after it, at whatever height the panel happens to
            be. -->
       <div class="hud-top-left">
+      <!-- One plate.
+           This was a portrait, a name row, an ID row, a power chip and three
+           framed bars, with the gold living separately in the top right - six
+           pieces of chrome for one idea. The ID moved into the menu, since it
+           is read out once and never watched. Gold and Power fold in here
+           because they describe the character rather than being controls. EXP
+           became a hairline along the bottom edge: it matters, but not enough
+           to spend a third bar on it. -->
       <div class="player-status-panel">
         <div class="player-portrait-box">
           <canvas class="player-portrait-canvas" id="hud-portrait-cvs" width="48" height="48"></canvas>
@@ -1629,30 +1780,37 @@ export class GameHUD {
             <span style="color: ${p.characterClass.accentColor}">${p.characterClass.name}</span>
             <span style="color: #ffd700" id="hud-level-text">Lv. ${p.level}</span>
           </div>
-          <!-- The ID a friend needs to invite you. It lived only in the party
-               panel, so sharing it meant opening the world map and the lobby
-               first - and it is a short string you read out to someone, which
-               is exactly the kind of thing that should be on screen already. -->
-          <div class="player-id-row" id="hud-id-row" title="Your Player ID - give this to a friend to be invited">
-            ID <span id="hud-id-text">${localStorage.getItem('playerShortId') || '—'}</span>
-            <span class="player-power" id="hud-power" title="Total Power - every level, item and upgrade counts">${GameHUD.glyph('spark')} ${this.engine.computePower().toLocaleString()}</span>
-          </div>
-          <!-- HP Bar Sprite Frame with Delayed Hit Lag Bar -->
+
           <div class="sprite-bar-frame" title="Health (HP)">
             <div class="sprite-bar-lag sprite-bar-lag-hp" id="hud-hp-lag" style="width: 100%"></div>
             <div class="sprite-bar-fill sprite-bar-hp" id="hud-hp-bar" style="width: 100%"></div>
           </div>
-          <!-- MP Bar Sprite Frame with Blue Fill -->
+
           <div class="sprite-bar-frame" style="height: 10px;" title="Mana (MP)">
             <div class="sprite-bar-lag sprite-bar-lag-mp" id="hud-mp-lag" style="width: 100%; background: #60a5fa;"></div>
             <div class="sprite-bar-fill sprite-bar-mp" id="hud-mp-bar" style="width: 100%"></div>
           </div>
-          <!-- EXP Bar Sprite Frame -->
-          <div class="sprite-bar-frame" style="height: 7px;" title="Experience (EXP)">
-            <div class="sprite-bar-fill sprite-bar-exp" id="hud-exp-bar" style="width: 0%"></div>
+
+          <div class="plate-meta">
+            <span class="plate-gold" title="Gold">
+              <img src="/assets/gui/PNG/iconCircle_brown.png" width="12" height="12" alt="" />
+              <span id="hud-gold-text">${p.gold}</span>
+            </span>
+            <span class="plate-power" id="hud-power" title="Total Power - every level, item and upgrade counts">${GameHUD.glyph('spark')} ${this.engine.computePower().toLocaleString()}</span>
+            <span class="plate-id" title="Your Player ID - give this to a friend to be invited">ID <b id="hud-id-text">${localStorage.getItem('playerShortId') || '&mdash;'}</b></span>
           </div>
         </div>
+
+        <!-- Experience, as the plate's own underline. -->
+        <div class="plate-exp" title="Experience (EXP)"><div class="plate-exp-fill" id="hud-exp-bar" style="width: 0%"></div></div>
       </div>
+
+      <!-- Who else is here.
+           Almost no 2D side-scroller has a party HUD - the genre's references
+           are single-player, so there is nothing to copy. Without this the
+           downed and revive system is invisible until you happen to walk past
+           the body: you cannot answer "is anyone in trouble" from the screen. -->
+      <div class="ally-rail" id="ally-rail"></div>
 
       <!-- Zone and wave, stacked under the player panel -->
       <div class="dungeon-wave-banner" id="dungeon-wave-banner">
@@ -1689,7 +1847,6 @@ export class GameHUD {
            during a fight. Everything except the gold moved into the menu
            below, keeping its id so every existing handler still finds it. -->
       <div class="hud-top-right">
-        <div class="gold-badge"><img src="/assets/gui/PNG/iconCircle_brown.png" width="16" height="16" style="vertical-align:middle;margin-right:4px;" /> <span id="hud-gold-text">${p.gold}</span></div>
         <button class="hud-menu-btn" id="hud-menu-btn" title="Menu (Esc)">
           ${GameHUD.glyph('menu')}
         </button>
@@ -2519,10 +2676,6 @@ export class GameHUD {
       if (powerText.textContent !== value) powerText.textContent = value;
     }
 
-    const idText = this.container.querySelector('#hud-id-text');
-    const shortId = localStorage.getItem('playerShortId');
-    if (idText && shortId && idText.textContent !== shortId) idText.textContent = shortId;
-
     // Town Return button
     const townBtn = this.container.querySelector('#return-town-btn') as HTMLElement;
     if (townBtn) {
@@ -2549,6 +2702,12 @@ export class GameHUD {
     }
 
     this.paintDownedOverlay();
+    const idText = this.container.querySelector('#hud-id-text');
+    const shortId = localStorage.getItem('playerShortId');
+    if (idText && shortId && idText.textContent !== shortId) idText.textContent = shortId;
+
+    this.paintThreat();
+    this.paintAllyRail();
 
     // Mini Quest Tracker update
     const activeQuests = quests.getAllActiveQuests();
@@ -2814,6 +2973,76 @@ export class GameHUD {
    * this tells you how long you have, because from the floor you cannot see
    * whether anyone is coming.
    */
+  /**
+   * Put the moment's threat level on the container so CSS can respond. Written
+   * only when it changes: touching className every frame would restart the
+   * transition on each one and the fade would never actually run.
+   */
+  /**
+   * The party, as a rail under your own plate.
+   *
+   * Rebuilt only when the shape of the party changes; the bars themselves are
+   * written in place every frame. Rebuilding the markup each frame would throw
+   * away the width transition on every bar and make a smooth drain look like a
+   * stutter.
+   */
+  private paintAllyRail() {
+    const rail = this.container.querySelector('#ally-rail') as HTMLElement;
+    if (!rail || !this.engine) return;
+
+    const ids = Object.keys(network.remotePlayers);
+    if (!ids.length) {
+      if (rail.classList.contains('has-allies')) {
+        rail.classList.remove('has-allies');
+        rail.innerHTML = '';
+        this.allyKey = '';
+      }
+      return;
+    }
+    rail.classList.add('has-allies');
+
+    const key = ids.join('|');
+    if (key !== this.allyKey) {
+      this.allyKey = key;
+      rail.innerHTML = ids.map(id => {
+        const r = network.remotePlayers[id];
+        const cls = CHARACTER_CLASSES.find(c => c.id === r.classId);
+        const accent = cls?.themeColor || '#4fade5';
+        return `
+          <div class="ally" data-ally="${id}" style="--ally:${accent}">
+            <span class="ally-name">${r.name || 'Ally'}</span>
+            <span class="ally-down-tag" style="display:none">DOWN</span>
+            <span class="ally-hp"><span class="ally-hp-fill" style="width:100%"></span></span>
+          </div>`;
+      }).join('');
+    }
+
+    ids.forEach(id => {
+      const r = network.remotePlayers[id];
+      const row = rail.querySelector(`[data-ally="${id}"]`) as HTMLElement;
+      if (!row) return;
+      const pct = Math.max(0, Math.min(100, r.hpPct ?? 100));
+      const fill = row.querySelector('.ally-hp-fill') as HTMLElement;
+      if (fill) {
+        fill.style.width = `${r.downed ? 0 : pct}%`;
+        fill.className = `ally-hp-fill${pct <= 25 ? ' critical' : pct <= 55 ? ' hurt' : ''}`;
+      }
+      row.classList.toggle('is-down', !!r.downed);
+      const tag = row.querySelector('.ally-down-tag') as HTMLElement;
+      if (tag) tag.style.display = r.downed ? 'inline' : 'none';
+    });
+  }
+
+  private paintThreat() {
+    if (!this.engine) return;
+    const level = this.engine.threatLevel();
+    const cls = level === 2 ? 'hud-boss' : level === 1 ? 'hud-alert' : 'hud-calm';
+    if (this.threatClass === cls) return;
+    this.threatClass = cls;
+    this.container.classList.remove('hud-calm', 'hud-alert', 'hud-boss');
+    this.container.classList.add(cls);
+  }
+
   private paintDownedOverlay() {
     const overlay = this.container.querySelector('#downed-overlay') as HTMLElement;
     if (!overlay || !this.engine) return;

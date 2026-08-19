@@ -2325,6 +2325,34 @@ export class SideViewEngine {
     ctx.restore();
   }
 
+  /** When we were last hit, so the HUD can stay up through a fight's lulls. */
+  private lastHurtAt = 0;
+
+  /**
+   * How dangerous the moment is: 0 calm, 1 fighting, 2 a boss is present.
+   *
+   * The HUD reads this and dims when nothing is happening. Chrome that is
+   * always at full strength competes with the game for attention in exactly
+   * the stretches - walking, exploring, standing in town - where there is
+   * nothing to read on it.
+   */
+  public threatLevel(): 0 | 1 | 2 {
+    if (this.isTownMode) return 0;
+    const p = this.player;
+    if (p.downed) return 2;
+
+    let near = false;
+    for (const e of this.enemies) {
+      if (e.isDead) continue;
+      if (e.type === 'boss' && Math.abs(e.x - p.x) < 900) return 2;
+      if (!near && Math.abs(e.x - p.x) < 520) near = true;
+    }
+    if (near) return 1;
+    // A fight has gaps. Dimming the instant the last enemy on screen dies and
+    // brightening again a second later is worse than a short hold.
+    return (performance.now() - this.lastHurtAt) < 3500 ? 1 : 0;
+  }
+
   /** Seconds you stay down before the run is lost. Long enough to be crossed. */
   public static readonly BLEED_OUT_SECONDS = 18;
   /** Seconds a teammate must stay beside you. Long enough to be a real risk. */
@@ -2553,6 +2581,7 @@ export class SideViewEngine {
 
     p.hp = Math.max(0, p.hp - finalDamage);
     this.damageTaken += finalDamage;
+    this.lastHurtAt = performance.now();
     p.iframeTimer = 0.4;
     p.vx = enemy.facing * 4.0;
     p.vy = -2.0;

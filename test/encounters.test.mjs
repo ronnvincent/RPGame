@@ -29,13 +29,27 @@ check('the slot shows how many are left', /potionCount/.test(engine) && /potion-
 // its own lands wherever the container happens to default to. The potion had no
 // rule and sat on the joystick. Rather than trust the eye, do the arithmetic:
 // pull both rules out of the stylesheet and prove they cannot touch.
-const mobileCss = hud.slice(hud.indexOf('@media'));
-const potionRule = (mobileCss.match(/\.potion-slot \{[^}]*\}/) || [''])[0];
-const joystickRule = (mobileCss.match(/\.mobile-joystick-area \{[^}]*\}/) || [''])[0];
+//
+// The rules are found by what they contain, not by where they sit. Slicing from
+// the first @media broke the moment an unrelated media query was added above.
+const ruleFor = (selector, mustHave) => {
+  const found = [];
+  const needle = selector + ' {';
+  for (let i = hud.indexOf(needle); i !== -1; i = hud.indexOf(needle, i + 1)) {
+    const end = hud.indexOf('}', i);
+    if (end === -1) break;
+    found.push(hud.slice(i, end + 1));
+  }
+  return found.find(r => r.includes(mustHave)) || '';
+};
+
 const px = (rule, prop) => {
   const m = rule.match(new RegExp(prop + ':[^;]*?([0-9]+)px'));
   return m ? Number(m[1]) : NaN;
 };
+
+const potionRule = ruleFor('.potion-slot', 'right: auto');
+const joystickRule = ruleFor('.mobile-joystick-area', 'width');
 const potionLeft = px(potionRule, 'left');
 const potionWidth = px(potionRule, 'width');
 const stickLeft = px(joystickRule, 'left');
@@ -45,7 +59,7 @@ check('the potion has a place of its own on mobile', Number.isFinite(potionLeft)
 check('it is not pinned to the right with the skills', /right: auto/.test(potionRule));
 check(
   'it clears the joystick horizontally, so a heal is never a stray step',
-  potionLeft >= stickLeft + stickWidth,
+  Number.isFinite(stickLeft) && Number.isFinite(stickWidth) && potionLeft >= stickLeft + stickWidth,
 );
 check('and is a full-size target, not the smallest button on screen', potionWidth >= 58);
 

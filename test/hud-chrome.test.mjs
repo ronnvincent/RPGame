@@ -28,7 +28,8 @@ const topRight = hud.slice(
 const buttonsInBar = (topRight.match(/<button/g) || []).length;
 check(`the top bar holds one button, not eleven (found ${buttonsInBar})`, buttonsInBar === 1);
 check('and it is the menu', /id="hud-menu-btn"/.test(topRight));
-check('gold stays, because it is a number not a control', /hud-gold-text/.test(topRight));
+check('nothing else is up there - even the gold moved into the plate',
+  !/hud-gold-text/.test(topRight) && /plate-gold[\s\S]{0,200}hud-gold-text/.test(hud));
 
 // --- Nothing was dropped, only moved ------------------------------------
 const moved = ['toggle-quests-btn', 'toggle-map-btn', 'toggle-rank-btn', 'toggle-inv-btn',

@@ -33,6 +33,8 @@ export interface RemotePlayerState {
   isTownMode?: boolean;
   /** Down and bleeding out, waiting for someone to reach them. */
   downed?: boolean;
+  /** Their health as a fraction, so the ally rail can show it. */
+  hpPct?: number;
   /** Skill slot of their current swing, for attack animation variety. */
   lastSkillIndex?: number;
 }
@@ -253,7 +255,12 @@ export class NetworkManager {
           x: data.x, y: data.y, facing: data.facing,
           isGrounded: data.isGrounded, isAttacking: data.isAttacking,
           animState: data.animState || 'idle',
-          isTownMode: !!data.isTownMode
+          isTownMode: !!data.isTownMode,
+          // Both of these were sent but never applied on arrival, so a downed
+          // teammate looked like a teammate standing still and the marker over
+          // them never drew.
+          downed: !!data.downed,
+          hpPct: typeof data.hpPct === 'number' ? data.hpPct : 100
         };
       } else {
         existing.classId = data.classId;
@@ -265,6 +272,8 @@ export class NetworkManager {
         existing.isAttacking = data.isAttacking;
         existing.animState = data.animState || 'idle';
         existing.isTownMode = !!data.isTownMode;
+        existing.downed = !!data.downed;
+        if (typeof data.hpPct === 'number') existing.hpPct = data.hpPct;
       }
     });
 
@@ -590,7 +599,10 @@ export class NetworkManager {
       animState: playerState.animState || 'idle',
       isTownMode: Boolean(isTownMode),
       // Teammates need to see you are down, not merely standing still.
-      downed: Boolean(playerState.downed)
+      downed: Boolean(playerState.downed),
+      // Rounded to whole percent: this rides every move packet, and nobody can
+      // read the difference between 61% and 61.4% on a sliver four pixels tall.
+      hpPct: Math.max(0, Math.min(100, Math.round((playerState.hp / Math.max(1, playerState.maxHp)) * 100)))
     });
   }
 
