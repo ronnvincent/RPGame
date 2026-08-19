@@ -2008,10 +2008,10 @@ export class GameHUD {
           <div class="pause-group" id="pause-party-group" style="display:none">
             <div class="pause-label">PARTY</div>
             <div class="pause-grid">
-              <button class="pause-tile" id="toggle-mic-btn" title="Toggle Microphone">
+              <button class="pause-tile" data-keeps-menu id="toggle-mic-btn" title="Toggle Microphone">
                 ${GameHUD.glyph('mic')}<span>Microphone</span>
               </button>
-              <button class="pause-tile" id="toggle-voice-btn" title="Toggle Party Audio">
+              <button class="pause-tile" data-keeps-menu id="toggle-voice-btn" title="Toggle Party Audio">
                 ${GameHUD.glyph('headset')}<span>Party Audio</span>
               </button>
             </div>
@@ -2020,13 +2020,13 @@ export class GameHUD {
           <div class="pause-group">
             <div class="pause-label">SETTINGS</div>
             <div class="pause-grid">
-              <button class="pause-tile" id="toggle-music-btn" title="Toggle Music">
+              <button class="pause-tile" data-keeps-menu id="toggle-music-btn" title="Toggle Music">
                 ${GameHUD.glyph('note')}<span>Music</span>
               </button>
-              <button class="pause-tile" id="toggle-sfx-btn" title="Toggle Sound SFX">
+              <button class="pause-tile" data-keeps-menu id="toggle-sfx-btn" title="Toggle Sound SFX">
                 ${GameHUD.glyph('speaker')}<span>Sound</span>
               </button>
-              <button class="pause-tile" id="toggle-fullscreen-btn" title="Toggle Fullscreen">
+              <button class="pause-tile" data-keeps-menu id="toggle-fullscreen-btn" title="Toggle Fullscreen">
                 ${GameHUD.glyph('expand')}<span>Fullscreen</span>
               </button>
             </div>
@@ -2337,6 +2337,21 @@ export class GameHUD {
       const party = this.container.querySelector('#pause-party-group') as HTMLElement;
       if (party) party.style.display = network.room ? 'block' : 'none';
     };
+    // A tile that opens something else has to take the menu down with it.
+    //
+    // Every tile handler closed the menu itself, or forgot to - and four of the
+    // six forgot. Pressing Bag, Quests, Rankings or Return to Town left the menu
+    // sitting on top of what you had just asked for, so you had to dismiss it by
+    // hand before you could use anything. Settings toggles are the exception:
+    // they belong in the menu and must not dismiss it.
+    //
+    // Capture phase, because the tile handlers call stopPropagation and a
+    // bubbling listener would never see the click.
+    pauseBack?.addEventListener('click', (e) => {
+      const tile = (e.target as HTMLElement)?.closest?.('.pause-tile');
+      if (tile && !tile.hasAttribute('data-keeps-menu')) setMenu(false);
+    }, true);
+
     menuBtn?.addEventListener('click', (e) => {
       e.stopPropagation();
       setMenu(pauseBack?.style.display === 'none');

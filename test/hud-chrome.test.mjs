@@ -139,5 +139,20 @@ check(`no screen is opened outside that route (${strayGame.length + strayHud.len
 check('the map asks for the lobby rather than opening it itself',
   /this\.onOpenLobby\?\.\(\)/.test(map) && !/coopLobby/.test(map));
 
+// --- The menu gets out of the way ---------------------------------------
+// Each tile handler closed the menu itself, or forgot to, and four of the six
+// forgot: Bag, Quests, Rankings and Return to Town all left it sitting on top
+// of what you had just asked for. Verified in a browser with the real
+// stopPropagation in place - six navigation tiles close it, three settings
+// toggles keep it.
+check('one rule dismisses the menu, in the capture phase so stopPropagation cannot hide the click',
+  /closest\?\.\('\.pause-tile'\)/.test(hud) && /\}, true\);/.test(hud));
+const keeps = [...menu.matchAll(/data-keeps-menu id="([\w-]+)"/g)].map(m => m[1]);
+check(`settings toggles are exempt (${keeps.length} marked)`, keeps.length === 5);
+const navTiles = [...menu.matchAll(/<button class="pause-tile"(?! data-keeps-menu) id="([\w-]+)"/g)].map(m => m[1]);
+check(`and every other tile takes it down (${navTiles.length} navigate)`, navTiles.length >= 5);
+check('no navigation tile is marked exempt by mistake',
+  !keeps.some(id => /inv|quest|rank|town|map|skills/.test(id)));
+
 console.log(failures ? `\nHUD CHROME FAILURES: ${failures}\n` : '\nHUD CHROME OK\n');
 process.exitCode = failures ? 1 : 0;
