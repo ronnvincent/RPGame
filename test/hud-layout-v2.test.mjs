@@ -110,10 +110,19 @@ const ruleBody = (selector) => {
 // 5px of a skill - so one thumb had two unrelated kinds of action in one shape.
 // Measured after the move: at 812x375, 667x375 and 568x320 the tightest pair is
 // two skills in the arc, and nothing overlaps.
+// Base indentation, not breakpoint indentation. The ring moved to the base
+// sheet while these stayed inside the 860px query, so on a touch device wider
+// than that the arc applied and the hub did not - jump, dash and talk fell back
+// to a flex column against the right edge, on top of the skills. Measured after
+// the move at 1024x768, 1180x820, 812x375 and 568x320: jump sits 268px from the
+// right edge at every one, and nothing overlaps.
 const offsetOf = (cls) => {
-  const i = hud.indexOf('        .' + cls + ' {');
-  const m = hud.slice(i, i + 260).match(/right: calc\(([0-9]+)px/);
-  return m ? Number(m[1]) : NaN;
+  const needle = '      .' + cls + ' {';
+  for (let i = hud.indexOf(needle); i !== -1; i = hud.indexOf(needle, i + 1)) {
+    const m = hud.slice(i, i + 300).match(/right: calc\(([0-9]+)px/);
+    if (m) return Number(m[1]);
+  }
+  return NaN;
 };
 const utility = ['jump-touch-btn', 'dash-touch-btn', 'touch-talk-btn'].map(offsetOf);
 check('the utility buttons share one column', new Set(utility).size === 1 && Number.isFinite(utility[0]));
@@ -123,6 +132,20 @@ check('and that column is clear of the skill arc, which reaches 191px',
 // --- Stepping back, not vanishing ----------------------------------------
 check(`a calm HUD is still readable (readouts at ${calmReadouts})`,
   calmReadouts >= 0.6 && calmReadouts < 1);
+
+// --- The menu tiles all look the same -----------------------------------
+// .inv-btn paints a blue button image, and only the tiles that also carried
+// .inv-btn-quest repainted over it - so Bag, which had neither, looked
+// permanently selected. Confirmed in the browser: Quests and Bag now compute to
+// the same background, image and border.
+const menuBlock = hud.slice(hud.indexOf('<div class="pause-back"'), hud.indexOf('<!-- Mini Quest Tracker -->'));
+check('no menu control carries a legacy button class', !/class="[^"]*inv-btn/.test(menuBlock));
+check('and every tile is styled by one class', (menuBlock.match(/class="pause-tile"/g) || []).length >= 8);
+
+// --- Town does not dim ---------------------------------------------------
+// The threat level in town is always 0, so the HUD sat stepped back the whole
+// time you were in the one place you stand around reading it.
+check('town is exempt from the fade', /isTownMode \? 'hud-alert'/.test(hud));
 
 // --- The party rail -----------------------------------------------------
 check('allies have a rail', /ally-rail/.test(hud) && /paintAllyRail/.test(hud));

@@ -409,8 +409,12 @@ export class GameHUD {
       }
       .pause-id { font-size: 11px; color: #9b8a68; letter-spacing: 0.5px; }
       .pause-id b { color: #f3e6c8; letter-spacing: 1.5px; }
+      /* The one primary action in the panel, so it keeps a button plate while
+         the tiles stay flat. It carried .inv-btn for this, which is the class
+         that made Bag look permanently selected. */
       .pause-close {
         padding: 8px 20px; cursor: pointer;
+        border: none;
         background: url('/assets/kenney-rpg-ui/buttonLong_brown.png') no-repeat center/100% 100%;
         border: none; color: #fff8e1;
         font-family: 'Cinzel', serif; font-weight: 800;
@@ -471,11 +475,11 @@ export class GameHUD {
       .hud-calm .mini-quest-tracker,
       .hud-calm .hud-top-right,
       .hud-calm .voice-dock {
-        opacity: 0.68;
+        opacity: 0.85;
       }
       .hud-calm .skills-hotbar,
       .hud-calm .mobile-controls-wrapper {
-        opacity: 0.88;
+        opacity: 0.95;
       }
 
       .player-status-panel,
@@ -1325,6 +1329,55 @@ export class GameHUD {
          next to it - which left it stranded alone in the bottom-left corner.
          Here it joins the ring instead, outside the arc so it is never a
          mis-tap for a skill. */
+      /* The action hub travels with the ring.
+
+         These positions lived inside the phone breakpoint while the ring
+         moved to the base sheet, so on a touch device wider than 860px the
+         arc applied and the hub did not: jump, dash and talk fell back to a
+         flex column against the right edge, on top of the skills. */
+      .mobile-action-hub {
+        bottom: 0;
+        right: 0;
+        width: 100vw;
+        height: 100vh;
+        pointer-events: none;
+      }
+
+      .touch-action-btn {
+        position: absolute;
+        pointer-events: auto;
+      }
+
+      /* Inner Arc: Jump and Dash (Radius 95px) */
+      /* Jump, dash and talk sat threaded through the skill arc - jump came
+         within 5px of a skill button - so the right thumb had two unrelated
+         kinds of action mixed into one shape. They are their own column now,
+         left of the arc, which is where this genre puts its utility buttons.
+         Ordered by how often they are pressed, nearest thumb first. */
+      .jump-touch-btn {
+        width: 54px;
+        height: 54px;
+        bottom: calc(28px + env(safe-area-inset-bottom));
+        right: calc(268px + env(safe-area-inset-right));
+        font-size: 9px;
+      }
+      .dash-touch-btn {
+        width: 50px;
+        height: 50px;
+        bottom: calc(92px + env(safe-area-inset-bottom));
+        right: calc(268px + env(safe-area-inset-right));
+        font-size: 8.5px;
+      }
+
+      /* Talk button sitting safely out of the action arc */
+      .touch-talk-btn {
+        width: 50px;
+        height: 50px;
+        bottom: calc(156px + env(safe-area-inset-bottom));
+        right: calc(268px + env(safe-area-inset-right));
+        font-size: 8.5px;
+      }
+
       @media (hover: hover) and (pointer: fine) and (min-width: 861px) {
         .potion-slot {
           bottom: calc(36px + env(safe-area-inset-bottom));
@@ -1409,48 +1462,6 @@ export class GameHUD {
           height: 52px;
         }
 
-        .mobile-action-hub {
-          bottom: 0;
-          right: 0;
-          width: 100vw;
-          height: 100vh;
-          pointer-events: none;
-        }
-
-        .touch-action-btn {
-          position: absolute;
-          pointer-events: auto;
-        }
-
-        /* Inner Arc: Jump and Dash (Radius 95px) */
-        /* Jump, dash and talk sat threaded through the skill arc - jump came
-           within 5px of a skill button - so the right thumb had two unrelated
-           kinds of action mixed into one shape. They are their own column now,
-           left of the arc, which is where this genre puts its utility buttons.
-           Ordered by how often they are pressed, nearest thumb first. */
-        .jump-touch-btn {
-          width: 54px;
-          height: 54px;
-          bottom: calc(28px + env(safe-area-inset-bottom));
-          right: calc(268px + env(safe-area-inset-right));
-          font-size: 9px;
-        }
-        .dash-touch-btn {
-          width: 50px;
-          height: 50px;
-          bottom: calc(92px + env(safe-area-inset-bottom));
-          right: calc(268px + env(safe-area-inset-right));
-          font-size: 8.5px;
-        }
-
-        /* Talk button sitting safely out of the action arc */
-        .touch-talk-btn {
-          width: 50px;
-          height: 50px;
-          bottom: calc(156px + env(safe-area-inset-bottom));
-          right: calc(268px + env(safe-area-inset-right));
-          font-size: 8.5px;
-        }
       }
 
       /* Inventory Modal with Sprite Panel */
@@ -1912,19 +1923,19 @@ export class GameHUD {
           <div class="pause-group">
             <div class="pause-label">ADVENTURE</div>
             <div class="pause-grid">
-              <button class="inv-btn inv-btn-quest pause-tile" id="toggle-quests-btn">
+              <button class="pause-tile" id="toggle-quests-btn">
                 <img src="/assets/ui_sprites/icons/I_Scroll.png" alt="" /><span>Quests</span>
               </button>
-              <button class="inv-btn inv-btn-quest pause-tile" id="toggle-map-btn">
+              <button class="pause-tile" id="toggle-map-btn">
                 <img src="/assets/ui_sprites/icons/I_Map.png" alt="" /><span>World Map</span>
               </button>
-              <button class="inv-btn inv-btn-quest pause-tile" id="toggle-rank-btn" title="Power Rankings">
+              <button class="pause-tile" id="toggle-rank-btn" title="Power Rankings">
                 <img src="/assets/ui_sprites/icons/Ac_Medal01.png" alt="" /><span>Rankings</span>
               </button>
-              <button class="inv-btn pause-tile" id="toggle-inv-btn">
+              <button class="pause-tile" id="toggle-inv-btn">
                 <img src="/assets/ui_sprites/icons/I_Chest01.png" alt="" /><span>Bag</span>
               </button>
-              <button class="inv-btn inv-btn-town pause-tile" id="return-town-btn" style="display: ${this.engine.isTownMode ? 'none' : 'flex'};">
+              <button class="pause-tile" id="return-town-btn" style="display: ${this.engine.isTownMode ? 'none' : 'flex'};">
                 ${GameHUD.glyph('home')}<span>Return to Town</span>
               </button>
             </div>
@@ -1933,10 +1944,10 @@ export class GameHUD {
           <div class="pause-group" id="pause-party-group" style="display:none">
             <div class="pause-label">PARTY</div>
             <div class="pause-grid">
-              <button class="inv-btn inv-btn-quest pause-tile" id="toggle-mic-btn" title="Toggle Microphone">
+              <button class="pause-tile" id="toggle-mic-btn" title="Toggle Microphone">
                 ${GameHUD.glyph('mic')}<span>Microphone</span>
               </button>
-              <button class="inv-btn inv-btn-quest pause-tile" id="toggle-voice-btn" title="Toggle Party Audio">
+              <button class="pause-tile" id="toggle-voice-btn" title="Toggle Party Audio">
                 ${GameHUD.glyph('headset')}<span>Party Audio</span>
               </button>
             </div>
@@ -1945,13 +1956,13 @@ export class GameHUD {
           <div class="pause-group">
             <div class="pause-label">SETTINGS</div>
             <div class="pause-grid">
-              <button class="inv-btn inv-btn-quest pause-tile" id="toggle-music-btn" title="Toggle Music">
+              <button class="pause-tile" id="toggle-music-btn" title="Toggle Music">
                 ${GameHUD.glyph('note')}<span>Music</span>
               </button>
-              <button class="inv-btn inv-btn-quest pause-tile" id="toggle-sfx-btn" title="Toggle Sound SFX">
+              <button class="pause-tile" id="toggle-sfx-btn" title="Toggle Sound SFX">
                 ${GameHUD.glyph('speaker')}<span>Sound</span>
               </button>
-              <button class="inv-btn inv-btn-quest pause-tile" id="toggle-fullscreen-btn" title="Toggle Fullscreen">
+              <button class="pause-tile" id="toggle-fullscreen-btn" title="Toggle Fullscreen">
                 ${GameHUD.glyph('expand')}<span>Fullscreen</span>
               </button>
             </div>
@@ -1959,7 +1970,7 @@ export class GameHUD {
 
           <div class="pause-foot">
             <span class="pause-id">ID <b>${localStorage.getItem('playerShortId') || '&mdash;'}</b></span>
-            <button class="inv-btn pause-close" id="pause-close-btn">CLOSE</button>
+            <button class="pause-close" id="pause-close-btn">CLOSE</button>
           </div>
         </div>
       </div>
@@ -3091,7 +3102,14 @@ export class GameHUD {
   private paintThreat() {
     if (!this.engine) return;
     const level = this.engine.threatLevel();
-    const cls = level === 2 ? 'hud-boss' : level === 1 ? 'hud-alert' : 'hud-calm';
+    // Town never dims. The level there is always 0, so the HUD sat stepped back
+    // the entire time you were in the one place you actually stand around
+    // reading it. The fade exists to clear the view during a fight; in town
+    // there is nothing competing with it.
+    const cls = this.engine.isTownMode ? 'hud-alert'
+      : level === 2 ? 'hud-boss'
+      : level === 1 ? 'hud-alert'
+      : 'hud-calm';
     if (this.threatClass === cls) return;
     this.threatClass = cls;
     this.container.classList.remove('hud-calm', 'hud-alert', 'hud-boss');
