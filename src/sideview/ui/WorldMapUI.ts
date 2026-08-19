@@ -168,7 +168,7 @@ export class WorldMapUI {
       id: 'castle_approach',
       name: 'Castle Approach',
       actTitle: 'Bonus Zone: The Long Climb',
-      recommendedLevel: 12,
+      recommendedLevel: 13,
       icon: '/assets/ui_sprites/icons/I_Key01.png',
       color: '#94a3b8',
       description: 'The long climb to a keep that has not opened its gates in an age.',
@@ -244,7 +244,20 @@ export class WorldMapUI {
     const grid = document.createElement('div');
     grid.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; margin-bottom: 16px;';
 
-    WorldMapUI.LOCATIONS.forEach((loc) => {
+    // Sorted for reading, not reordered. DUNGEONS array position is what the
+    // unlock check counts, so the list itself must not move - the cards were
+    // coming out 1, 5, 9, 14, 3, 6, 10, 12, 16, 4, 8, 13 because they were
+    // drawn in the order the runs were added rather than the order you meet
+    // them. The town stays first; it is not a run.
+    const ordered = [...WorldMapUI.LOCATIONS].sort((a, b) => {
+      if (a.id === 'town_eldermoor') return -1;
+      if (b.id === 'town_eldermoor') return 1;
+      const lv = (l: WorldMapLocation) =>
+        DUNGEONS.find(d => d.id === l.id)?.minLevel ?? l.recommendedLevel;
+      return lv(a) - lv(b);
+    });
+
+    ordered.forEach((loc) => {
       const isTown = loc.id === 'town_eldermoor';
       const dungeonIdx = DUNGEONS.findIndex(d => d.id === loc.id);
       // Two separate requirements, and the map only ever checked one. Clearing

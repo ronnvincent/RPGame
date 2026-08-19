@@ -14,6 +14,7 @@ import { readFileSync } from 'node:fs';
 // neighbours without file extensions, which Node's ESM resolver rejects.
 const dungeonSrc = readFileSync('src/sideview/dungeons/DungeonManager.ts', 'utf8');
 const game = readFileSync('src/sideview/SideViewGame.ts', 'utf8');
+const hud = readFileSync('src/sideview/ui/GameHUD.ts', 'utf8');
 const mapSrc = readFileSync('src/sideview/ui/WorldMapUI.ts', 'utf8');
 
 // Walk the lines: an id line, then minLevel if the dungeon declares one.
@@ -68,6 +69,32 @@ if (!/Math\.min\(this\.currentWaveIndex \+ 1, total\)/.test(game)) {
   console.log('  FAIL  the wave counter cannot exceed its own total');
   failures++;
 } else console.log('  PASS  the wave counter cannot exceed its own total');
+
+// Every run needs its own rung on the ladder - two at Lv 12 read as a
+// duplicate, and the cards came out in the order the runs were added rather
+// than the order you meet them.
+{
+  const lv = [...dungeonSrc.matchAll(/minLevel: (\d+)/g)].map((m) => Number(m[1]));
+  const dupes = [...new Set(lv.filter((v, i) => lv.indexOf(v) !== i))];
+  if (dupes.length) {
+    console.log('  FAIL  no two runs share a level (found ' + dupes.join(', ') + ')');
+    failures++;
+  } else console.log('  PASS  no two runs share a level (' + lv.length + ' runs)');
+
+  const map = readFileSync('src/sideview/ui/WorldMapUI.ts', 'utf8');
+  const sortedForReading = /const ordered = \[\.\.\.WorldMapUI\.LOCATIONS\]\.sort/.test(map)
+    && /const ordered = DUNGEONS\.map\(\(d, i\) => \(\{ d, i \}\)\)/.test(hud);
+  if (!sortedForReading) {
+    console.log('  FAIL  the map and the picker list runs in level order');
+    failures++;
+  } else console.log('  PASS  the map and the picker list runs in level order');
+
+  // Sorting the array itself would change which runs unlock which.
+  if (/DUNGEONS\.sort\(/.test(hud) || /LOCATIONS\.sort\(/.test(map)) {
+    console.log('  FAIL  the source arrays are sorted in place, which moves story order');
+    failures++;
+  } else console.log('  PASS  and neither sorts the array itself, so story order holds');
+}
 
 console.log(failures === 0 ? 'PROGRESSION OK' : `PROGRESSION FAILURES: ${failures}`);
 process.exit(failures === 0 ? 0 : 1);

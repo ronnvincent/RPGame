@@ -2343,7 +2343,13 @@ export class GameHUD {
       if (!list || !this.engine) return;
       const lvl = this.engine.player.level || 1;
       const cleared = this.engine.player.maxDungeonCleared || 0;
-      list.innerHTML = DUNGEONS.map((d, i) => {
+      // Same rule as the world map: sorted for reading, never reordered. The
+      // index carried alongside each row is the array position, because that is
+      // what the story-order check counts - sorting the array itself would
+      // quietly change which runs unlock which.
+      const ordered = DUNGEONS.map((d, i) => ({ d, i }))
+        .sort((a, b) => (a.d.minLevel || 1) - (b.d.minLevel || 1));
+      list.innerHTML = ordered.map(({ d, i }) => {
         const inOrder = Boolean((d as any).sideContent) || i <= cleared;
         const levelMet = lvl >= (d.minLevel || 1);
         const open = inOrder && levelMet;

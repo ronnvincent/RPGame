@@ -471,7 +471,7 @@ export const DUNGEONS: DungeonDefinition[] = [
   {
     id: 'castle_approach',
     sideContent: true,
-    minLevel: 12,
+    minLevel: 13,
     name: 'Castle Approach',
     subtitle: 'The long climb to a keep that has not opened its gates in an age.',
     theme: 'castle_approach',
