@@ -14,6 +14,8 @@
 import { readFileSync, existsSync } from 'node:fs';
 
 const hud = readFileSync('src/sideview/ui/GameHUD.ts', 'utf8');
+const game = readFileSync('src/sideview/SideViewGame.ts', 'utf8');
+const map = readFileSync('src/sideview/ui/WorldMapUI.ts', 'utf8');
 
 let failures = 0;
 const check = (l, c) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${l}`); if (!c) failures++; };
@@ -113,6 +115,29 @@ check('and the gate closes after both setups have run',
 check('the surviving joystick handler looks its elements up per event',
   /const live = <T extends HTMLElement>/.test(hud)
   && /const joystickKnob = live<HTMLElement>\('#joystick-knob'\)/.test(hud));
+
+// --- One screen at a time -----------------------------------------------
+// Screens closed each other by hand at each call site, so the routes that
+// remembered worked and the routes that forgot left two stacked. Opening co-op
+// from the world map was one: the lobby opened underneath the map, and you had
+// to close the map yourself to reach what you had just asked for.
+check('there is one route that opens a screen', /public showScreen\(/.test(game));
+check('and it closes whatever else was open',
+  /if \(which !== 'map'\) this\.worldMap\?\.close\(\)/.test(game)
+  && /if \(which !== 'lobby'\) this\.coopLobby\?\.close\(\)/.test(game));
+check('including the panels the HUD owns', /this\.hud\?\.closePanels\(\)/.test(game)
+  && /public closePanels\(\)/.test(hud));
+
+// The implementation is allowed to call open; nothing else is.
+const body = game.slice(game.indexOf('public showScreen('), game.indexOf('public interactWithActiveNpc'));
+const strayGame = [...game.matchAll(/this\.(worldMap|coopLobby)\?\.open\(/g)]
+  .filter(m => !body.includes(m[0]));
+const strayHud = [...hud.matchAll(/(worldMapUI|coopLobby)\?\.open\(/g)];
+check(`no screen is opened outside that route (${strayGame.length + strayHud.length} strays)`,
+  strayGame.length === 0 && strayHud.length === 0);
+
+check('the map asks for the lobby rather than opening it itself',
+  /this\.onOpenLobby\?\.\(\)/.test(map) && !/coopLobby/.test(map));
 
 console.log(failures ? `\nHUD CHROME FAILURES: ${failures}\n` : '\nHUD CHROME OK\n');
 process.exitCode = failures ? 1 : 0;

@@ -2232,7 +2232,7 @@ export class GameHUD {
     const mapBtn = this.container.querySelector('#toggle-map-btn');
     mapBtn?.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.worldMapUI?.open(this.engine.player.maxDungeonCleared || 0, this.engine.player.level || 1);
+      this.game?.showScreen('map');
     });
 
     // Return to Town button
@@ -2799,8 +2799,6 @@ export class GameHUD {
 
       acceptBtn.onclick = () => {
         document.body.removeChild(overlay);
-        // Force close Town Hub / World Map if open
-        if (this.worldMapUI) this.worldMapUI.close();
 
         // Join room and wait for dungeon_start
         // Accepting puts you in the party LOBBY. The run begins only when the
@@ -2811,7 +2809,7 @@ export class GameHUD {
              this.game.onSelectLocation(roomData.dungeonId, network.isHost);
           }
         });
-        this.game?.coopLobby?.open();
+        this.game?.showScreen('lobby');
       };
 
       btnWrapper.appendChild(acceptBtn);
@@ -3241,6 +3239,19 @@ export class GameHUD {
     this.threatClass = cls;
     this.container.classList.remove('hud-calm', 'hud-alert', 'hud-boss', 'hud-town');
     this.container.classList.add(cls);
+  }
+
+  /**
+   * Shut every panel this HUD owns. Called when a full screen takes over, so
+   * the pause menu, the skills panel and the chat wheel cannot be left hanging
+   * behind a map or a lobby.
+   */
+  public closePanels() {
+    ['#pause-back', '#skills-back'].forEach((sel) => {
+      const el = this.container.querySelector(sel) as HTMLElement | null;
+      if (el) el.style.display = 'none';
+    });
+    this.container.querySelector('#qc-wheel')?.classList.remove('open');
   }
 
   private paintDownedOverlay() {

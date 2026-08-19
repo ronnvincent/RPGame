@@ -179,7 +179,7 @@ export class SideViewGame {
 
     // Party lobby. Closes itself and enters the dungeon when the host starts.
     this.coopLobby = new CoopLobbyUI(this.container, () => {});
-    this.worldMap.onOpenLobby = () => this.coopLobby?.open();
+    this.worldMap.onOpenLobby = () => this.showScreen('lobby');
 
     this.runSummary = new RunSummaryUI(this.container);
     this.runSummary.onRematch = () => this.loadDungeon(this.currentDungeonIndex, true);
@@ -874,12 +874,37 @@ export class SideViewGame {
     network.sendPing(x, y);
   }
 
+  /**
+   * One full screen at a time.
+   *
+   * Screens used to close each other by hand at each call site, so the routes
+   * that remembered worked and the routes that forgot left two stacked. Opening
+   * co-op from the world map was one of those: the lobby opened underneath the
+   * map, and you had to close the map yourself to reach the thing you had just
+   * asked for. Every route goes through here now, so a new screen cannot be
+   * added without inheriting the rule.
+   */
+  public showScreen(which: 'map' | 'lobby' | 'none') {
+    if (which !== 'map') this.worldMap?.close();
+    if (which !== 'lobby') this.coopLobby?.close();
+    this.hud?.closePanels();
+
+    if (which === 'map') {
+      this.worldMap?.open(
+        this.engine?.player.maxDungeonCleared || 0,
+        this.engine?.player.level || 1,
+      );
+    } else if (which === 'lobby') {
+      this.coopLobby?.open();
+    }
+  }
+
   public interactWithActiveNpc() {
     if (!this.engine || !this.townHub || !this.dialogue || !this.engine.isTownMode) return;
     const activeNpc = this.townHub.getActiveNpc();
     if (activeNpc) {
       this.townHub.interactWithNpc(activeNpc, this.engine, this.dialogue, () => {
-        this.worldMap?.open(this.engine?.player.maxDungeonCleared || 0, this.engine?.player.level || 1);
+        this.showScreen('map');
       });
     }
   }
@@ -918,7 +943,7 @@ export class SideViewGame {
 
       // World Map toggle: KeyM
       if (e.code === 'KeyM') {
-        this.worldMap?.open(this.engine?.player.maxDungeonCleared || 0, this.engine?.player.level || 1);
+        this.showScreen('map');
       }
 
       // Return to Town: KeyT
@@ -1010,7 +1035,7 @@ export class SideViewGame {
           // used to split the guest into their own room and silently break the
           // whole run. The host drives where the party goes.
           if (this.engine.isPlayerNearPortal && !wasNear && !this.dialogue?.isOpen && !network.isPartied) {
-            this.worldMap?.open(this.engine?.player.maxDungeonCleared || 0, this.engine?.player.level || 1);
+            this.showScreen('map');
           }
           // Auto-close WorldMap when player leaves portal zone
           if (!this.engine.isPlayerNearPortal && wasNear) {
