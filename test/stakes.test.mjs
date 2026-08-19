@@ -40,7 +40,18 @@ if (regen) {
 
 // --- Dying costs something ---------------------------------------------
 check('death raises a defeat', /this\.onRunLost\?\.\(\)/.test(engine));
-check('and only once per run', /if \(!this\.runOver\)/.test(engine));
+// A defeat must fire once. There are two paths to one now - dying alone, and
+// bleeding out after nobody reached you - so rather than match one branch's
+// shape, require every raise to claim the flag first.
+{
+  const raises = [...engine.matchAll(/this\.onRunLost\?\.\(\)/g)];
+  const guarded = raises.filter((m) => {
+    const before = engine.slice(Math.max(0, m.index - 260), m.index);
+    return /this\.runOver = true;/.test(before) && /runOver/.test(before);
+  });
+  check(`and only once per run (${guarded.length}/${raises.length} paths claim the flag)`,
+    raises.length > 0 && guarded.length === raises.length);
+}
 check('the run returns to town', /loadTownHub\(true\)/.test(game));
 check('unclaimed loot is left behind', /droppedLoots = \[\]/.test(game));
 check('but banked progress is kept', !/player\.gold = 0|player\.exp = 0/.test(game));

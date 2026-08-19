@@ -1,19 +1,29 @@
 /**
- * Co-op party lobby - MLBB-style.
+ * Co-op party lobby.
  *
  * Replaces the old inline "Creating lobby..." box that lived inside the World
  * Map. That box auto-started the run the moment anyone accepted an invite,
  * which is how a guest could end up creating a second lobby and silently
- * splitting the party. The lobby is now an explicit place you sit in: slots,
+ * splitting the party. The lobby is an explicit place you sit in: slots,
  * ready-up, and a host-driven START.
+ *
+ * The layout follows the console-style staging screen it was asked to match:
+ * a full-bleed dark stage, tabs across the top, your character standing large
+ * on the left with the run's details listed under them, empty party slots as
+ * crests to the right, and the controls as a key legend along the bottom.
+ * Everything the old panel could do is still here - it moved into tabs rather
+ * than being stacked in one column.
  */
 
-import { network, LobbyState, LobbyMember, FriendEntry } from '../network/NetworkManager';
+import { network, LobbyState, LobbyMember, FriendEntry, OpenLobby } from '../network/NetworkManager';
 import { voice } from '../network/VoiceChat';
 import { CHARACTER_CLASSES } from '../classes/ClassDefinitions';
 import { DUNGEONS } from '../dungeons/DungeonManager';
+import { HERO_SPRITES, heroFrame } from '../engine/HeroSprites';
+import { synergyFor } from '../network/PartySynergy';
 
 const STYLE_ID = 'coop-lobby-style';
+type Tab = 'party' | 'public' | 'friends';
 
 function classOf(classId: string | null) {
   return CHARACTER_CLASSES.find(c => c.id === classId) || null;
@@ -33,6 +43,12 @@ export class CoopLobbyUI {
   private onLaunch: () => void;
   private localReady = false;
   private friends: FriendEntry[] = [];
+  private tab: Tab = 'party';
+  private openLobbies: OpenLobby[] = [];
+  /** Frame of the standing idle loop, advanced by a timer while open. */
+  private idleFrame = 0;
+  private idleTimer: number | null = null;
+  private keyHandler: ((e: KeyboardEvent) => void) | null = null;
 
   constructor(parent: HTMLElement, onLaunch: () => void) {
     this.parent = parent;
@@ -56,6 +72,11 @@ export class CoopLobbyUI {
       if (this.root) this.render();
     });
     network.onFriendNotice(msg => this.toast(msg));
+
+    network.onLobbyList(lobbies => {
+      this.openLobbies = lobbies;
+      if (this.root && this.tab === 'public') this.render();
+    });
   }
 
   public get isOpen(): boolean {
@@ -73,11 +94,43 @@ export class CoopLobbyUI {
     this.root = root;
     network.requestFriends();
     this.render();
+
+    // The character on the stage breathes. A still frame reads as a loading
+    // screen; the walk cycle is what makes the lobby feel like the game.
+    this.idleTimer = window.setInterval(() => {
+      this.idleFrame++;
+      const img = this.root?.querySelector('.cl-hero-img') as HTMLImageElement | null;
+      const src = this.heroIdleSrc();
+      if (img && src) img.src = src;
+    }, 110);
   }
 
   public close() {
+    if (this.keyHandler) {
+      window.removeEventListener('keydown', this.keyHandler);
+      this.keyHandler = null;
+    }
+    if (this.idleTimer !== null) {
+      window.clearInterval(this.idleTimer);
+      this.idleTimer = null;
+    }
     this.root?.remove();
     this.root = null;
+  }
+
+  /** Our own class, from the lobby if the server knows it or the save if not. */
+  private myClassId(): string | null {
+    const mine = this.state?.members.find(m => m.socketId === network.socket?.id);
+    return mine?.classId || localStorage.getItem('lastClassId') || null;
+  }
+
+  /** Current frame of the idle loop, wrapped to whatever the class actually has. */
+  private heroIdleSrc(): string | null {
+    const cls = this.myClassId();
+    if (!cls) return null;
+    const set = HERO_SPRITES[cls];
+    const frames = set?.anims?.idle || 1;
+    return heroFrame(cls, 'idle', this.idleFrame % frames);
   }
 
   private toast(msg: string) {
@@ -90,100 +143,181 @@ export class CoopLobbyUI {
 
   private render() {
     if (!this.root) return;
-    const s = this.state;
-    const max = s?.maxPlayers ?? 4;
-    const members = s?.members ?? [];
-    const dungeon = DUNGEONS.find(d => d.id === s?.dungeonId);
-    const me = members.find(m => m.socketId === network.socket?.id);
+    const st = this.state;
+    const max = st?.maxPlayers ?? 4;
+    const members = st?.members ?? [];
+    const dungeon = DUNGEONS.find(d => d.id === st?.dungeonId);
     const iAmHost = network.isHost;
-    const everyoneReady = members.every(m => m.ready);
+    const everyoneReady = members.length > 0 && members.every(m => m.ready);
+    const synergy = synergyFor(members);
+    const heroSrc = this.heroIdleSrc();
 
-    const slots: string[] = [];
-    for (let i = 0; i < max; i++) {
-      slots.push(members[i] ? this.slotCard(members[i]) : this.emptySlot());
+    // You are the character standing on the stage, so the crests to the right
+    // are everyone else - which is what makes an empty lobby read as "room for
+    // three more" rather than "three things missing".
+    const others = members.filter(m => m.socketId !== network.socket?.id);
+    const crests: string[] = [];
+    for (let i = 0; i < max - 1; i++) {
+      crests.push(others[i] ? this.crest(others[i]) : this.emptyCrest());
     }
 
-    const actionBtn = iAmHost
-      ? `<button class="cl-btn cl-start" ${everyoneReady ? '' : 'disabled'}>
-           ${everyoneReady ? 'START' : 'WAITING FOR PARTY'}
+    const action = iAmHost
+      ? `<button class="cl-key cl-start" ${everyoneReady ? '' : 'disabled'}>
+           <b>ENTER</b> ${everyoneReady ? 'Start Run' : 'Waiting for party'}
          </button>`
-      : `<button class="cl-btn ${this.localReady ? 'cl-unready' : 'cl-ready'}">
-           ${this.localReady ? 'CANCEL READY' : 'READY'}
+      : `<button class="cl-key ${this.localReady ? 'cl-unready' : 'cl-ready'}">
+           <b>R</b> ${this.localReady ? 'Cancel Ready' : 'Ready'}
          </button>`;
 
     this.root.innerHTML = `
-      <div class="cl-panel">
-        <div class="cl-head">
-          <div>
-            <div class="cl-title">PARTY</div>
-            <div class="cl-sub">${dungeon ? dungeon.name : (s?.dungeonId || '—')}</div>
-          </div>
-          <div class="cl-count">${members.length}/${max}</div>
+      <div class="cl-stage">
+        <div class="cl-topo"></div>
+
+        <div class="cl-tabs">
+          <span class="cl-hint">Q</span>
+          ${this.tabBtn('party', 'Party')}
+          ${this.tabBtn('public', 'Public Games')}
+          ${this.tabBtn('friends', 'Friends')}
+          <span class="cl-hint">E</span>
         </div>
 
-        <div class="cl-slots">${slots.join('')}</div>
+        <div class="cl-main">
+          <div class="cl-left">
+            <button class="cl-quick">QUICK JOIN</button>
 
-        <div class="cl-cols">
-          <div class="cl-col">
-            <div class="cl-label">INVITE BY ID</div>
-            <div class="cl-invite">
-              <input class="cl-id" type="text" maxlength="6" placeholder="PLAYER ID" />
-              <button class="cl-btn cl-inv">INVITE</button>
+            <div class="cl-hero">
+              ${heroSrc
+                ? `<img class="cl-hero-img" src="${heroSrc}" alt="" />`
+                : '<div class="cl-hero-none"></div>'}
             </div>
-            <div class="cl-myid">Your ID: <b>${localStorage.getItem('playerShortId') || '—'}</b></div>
+
+            <div class="cl-facts">
+              ${this.fact('Dungeon', dungeon ? dungeon.name : (st?.dungeonId || 'Not chosen'))}
+              ${this.fact('Network', network.socket?.connected ? 'CONNECTED' : 'OFFLINE')}
+              ${this.fact('Party', `${members.length}/${max}`)}
+              ${this.fact('Bonus', synergy.label, synergy.id !== 'none')}
+              ${this.fact('Your ID', localStorage.getItem('playerShortId') || '&mdash;')}
+            </div>
           </div>
 
-          <div class="cl-col">
-            <div class="cl-label">FRIENDS</div>
-            <div class="cl-invite">
-              <input class="cl-fid" type="text" maxlength="6" placeholder="ADD BY ID" />
-              <button class="cl-btn cl-addf">ADD</button>
-            </div>
-            <div class="cl-friends">${this.friendRows()}</div>
+          <div class="cl-right">
+            ${this.tab === 'party' ? `
+              <div class="cl-crests">${crests.join('')}</div>
+              <div class="cl-syn ${synergy.id !== 'none' ? 'on' : ''}">
+                <div class="cl-syn-label">${synergy.label}</div>
+                <div class="cl-syn-detail">${synergy.detail}</div>
+                ${synergy.id !== 'none' ? `<div class="cl-syn-nums">
+                  ${synergy.atk !== 1 ? `<span>ATK ${this.pct(synergy.atk)}</span>` : ''}
+                  ${synergy.def !== 1 ? `<span>DEF ${this.pct(synergy.def)}</span>` : ''}
+                  ${synergy.exp !== 1 ? `<span>EXP ${this.pct(synergy.exp)}</span>` : ''}
+                </div>` : ''}
+              </div>` : ''}
+
+            ${this.tab === 'public' ? this.publicPanel() : ''}
+            ${this.tab === 'friends' ? this.friendsPanel() : ''}
           </div>
         </div>
 
         <div class="cl-toast"></div>
 
         <div class="cl-foot">
-          <!-- Same voice controls as the HUD, driven by the same object, so the
-               state matches wherever you look and joining from either place is
-               the one user gesture the browser needs for the microphone. -->
-          <button class="cl-btn cl-mic" title="Toggle Microphone">MIC</button>
-          <button class="cl-btn cl-spk" title="Toggle Party Audio">SPEAKER</button>
-          <button class="cl-btn cl-leave">LEAVE PARTY</button>
-          ${actionBtn}
+          <button class="cl-key cl-leave"><b>ESC</b> Leave Party</button>
+          <button class="cl-key cl-mic" title="Toggle Microphone"><b>M</b> Mic</button>
+          <button class="cl-key cl-spk" title="Toggle Party Audio"><b>H</b> Audio</button>
+          <div class="cl-foot-right">${action}</div>
         </div>
       </div>`;
 
     this.bind();
   }
 
-  private slotCard(m: LobbyMember): string {
+  private pct(mult: number): string {
+    const d = Math.round((mult - 1) * 100);
+    return `${d > 0 ? '+' : ''}${d}%`;
+  }
+
+  private tabBtn(id: Tab, label: string): string {
+    return `<button class="cl-tab ${this.tab === id ? 'on' : ''}" data-tab="${id}">${label}</button>`;
+  }
+
+  private fact(label: string, value: string, highlight = false): string {
+    return `<div class="cl-fact">
+      <span class="cl-fact-k">${label}</span>
+      <span class="cl-fact-v ${highlight ? 'hot' : ''}">${value}</span>
+    </div>`;
+  }
+
+  /** A filled party slot, drawn as a crest so it matches the empty ones. */
+  private crest(m: LobbyMember): string {
     const cls = classOf(m.classId);
     const icon = classIcon(m.classId);
     const accent = cls?.themeColor || '#6b7280';
-    const badge = m.isHost
-      ? '<div class="cl-badge cl-hostb">LEADER</div>'
-      : m.ready
-        ? '<div class="cl-badge cl-readyb">READY</div>'
-        : '<div class="cl-badge cl-waitb">WAITING</div>';
+    const state = m.isHost ? 'LEADER' : m.ready ? 'READY' : 'WAITING';
+    return `
+      <div class="cl-crest filled ${m.ready ? 'is-ready' : ''}" style="--accent:${accent}">
+        <div class="cl-crest-art">${icon ? `<img src="${icon}" alt="" />` : ''}</div>
+        <div class="cl-crest-name">${m.name}${m.online ? '' : ' <i>(offline)</i>'}</div>
+        <div class="cl-crest-meta">Lv ${m.level} &middot; ${cls ? cls.name : 'Choosing'}</div>
+        ${m.power ? `<div class="cl-crest-power">${m.power.toLocaleString()} PWR</div>` : ''}
+        <div class="cl-crest-state">${state}</div>
+      </div>`;
+  }
+
+  private emptyCrest(): string {
+    return `
+      <div class="cl-crest empty">
+        <div class="cl-crest-plus">&#10010;</div>
+        <div class="cl-crest-meta">Open slot</div>
+      </div>`;
+  }
+
+  private publicPanel(): string {
+    const rows = this.openLobbies.length
+      ? this.openLobbies.map(l => {
+          const d = DUNGEONS.find(x => x.id === l.dungeonId);
+          const host = `${l.hostName}&rsquo;s party`;
+          return `
+            <div class="cl-pub">
+              <div class="cl-pub-meta">
+                <div class="cl-pub-name">${d ? d.name : l.dungeonId}</div>
+                <div class="cl-pub-sub">${host} &middot; Lv ${l.minLevel}+ &middot; ${l.members}/${l.maxPlayers}</div>
+              </div>
+              <button class="cl-mini cl-join" data-room="${l.roomId}">JOIN</button>
+            </div>`;
+        }).join('')
+      : '<div class="cl-none">No open parties right now. Start one and others can find you.</div>';
 
     return `
-      <div class="cl-slot ${m.ready ? 'is-ready' : ''}" style="--accent:${accent}">
-        <div class="cl-portrait">
-          ${icon ? `<img src="${icon}" alt="" />` : '<div class="cl-noart"></div>'}
+      <div class="cl-pane">
+        <div class="cl-pane-head">
+          <span>OPEN PARTIES</span>
+          <button class="cl-mini cl-refresh">REFRESH</button>
         </div>
-        <div class="cl-name">${m.name}${m.online ? '' : ' <span class="cl-off">(offline)</span>'}</div>
-        <div class="cl-meta">Lv ${m.level} · ${cls ? cls.role : '—'}</div>
-        <div class="cl-class">${cls ? cls.name : 'Choosing…'}</div>
-        ${badge}
+        <div class="cl-pub-list">${rows}</div>
+      </div>`;
+  }
+
+  private friendsPanel(): string {
+    return `
+      <div class="cl-pane">
+        <div class="cl-pane-head"><span>INVITE BY ID</span></div>
+        <div class="cl-row">
+          <input class="cl-id" type="text" maxlength="6" placeholder="PLAYER ID" />
+          <button class="cl-mini cl-inv">INVITE</button>
+        </div>
+
+        <div class="cl-pane-head"><span>FRIENDS</span></div>
+        <div class="cl-row">
+          <input class="cl-fid" type="text" maxlength="6" placeholder="ADD BY ID" />
+          <button class="cl-mini cl-addf">ADD</button>
+        </div>
+        <div class="cl-friends">${this.friendRows()}</div>
       </div>`;
   }
 
   private friendRows(): string {
     if (!this.friends.length) {
-      return '<div class="cl-nofriends">No friends yet — add one by their Player ID.</div>';
+      return '<div class="cl-none">No friends yet &mdash; add one by their Player ID.</div>';
     }
     return this.friends.map(f => {
       const cls = classOf(f.classId);
@@ -194,20 +328,12 @@ export class CoopLobbyUI {
           <span class="cl-dot ${f.online ? 'on' : ''}"></span>
           <div class="cl-fmeta">
             <div class="cl-fname">${f.name}</div>
-            <div class="cl-fsub">Lv ${f.level}${cls ? ' · ' + cls.name : ''} · ${status}</div>
+            <div class="cl-fsub">Lv ${f.level}${cls ? ' &middot; ' + cls.name : ''} &middot; ${status}</div>
           </div>
           <button class="cl-mini cl-finv" data-uuid="${f.uuid}" ${canInvite ? '' : 'disabled'}>INVITE</button>
-          <button class="cl-mini cl-frem" data-uuid="${f.uuid}" title="Remove">✕</button>
+          <button class="cl-mini cl-frem" data-uuid="${f.uuid}" title="Remove">&#10005;</button>
         </div>`;
     }).join('');
-  }
-
-  private emptySlot(): string {
-    return `
-      <div class="cl-slot cl-empty">
-        <div class="cl-plus">+</div>
-        <div class="cl-meta">Open slot</div>
-      </div>`;
   }
 
   private bind() {
@@ -288,6 +414,62 @@ export class CoopLobbyUI {
       btn.addEventListener('click', () => network.inviteFriend(btn.dataset.uuid || '')));
     this.root.querySelectorAll<HTMLButtonElement>('.cl-frem').forEach(btn =>
       btn.addEventListener('click', () => network.removeFriend(btn.dataset.uuid || '')));
+
+    // Tabs. Switching to Public asks the server for the list rather than
+    // showing whatever was fetched last time the tab happened to be opened.
+    this.root.querySelectorAll<HTMLButtonElement>('.cl-tab').forEach(btn =>
+      btn.addEventListener('click', () => this.setTab(btn.dataset.tab as Tab)));
+
+    q<HTMLButtonElement>('.cl-quick')?.addEventListener('click', () => {
+      this.toast('Looking for an open party...');
+      network.quickJoin();
+    });
+
+    q<HTMLButtonElement>('.cl-refresh')?.addEventListener('click', () => network.browseLobbies());
+
+    this.root.querySelectorAll<HTMLButtonElement>('.cl-join').forEach(btn =>
+      btn.addEventListener('click', () => {
+        const room = btn.dataset.room;
+        if (room) network.acceptInvite(room);
+      }));
+
+    this.bindKeys();
+  }
+
+  private setTab(tab: Tab) {
+    if (!tab || tab === this.tab) return;
+    this.tab = tab;
+    if (tab === 'public') network.browseLobbies();
+    this.render();
+  }
+
+  /**
+   * The key legend along the bottom is a promise that those keys work, so they
+   * are bound rather than decorative. One listener, replaced on each render, or
+   * they accumulate every time the lobby repaints.
+   */
+  private bindKeys() {
+    if (this.keyHandler) window.removeEventListener('keydown', this.keyHandler);
+    const order: Tab[] = ['party', 'public', 'friends'];
+    this.keyHandler = (e: KeyboardEvent) => {
+      if (!this.root) return;
+      const typing = (e.target as HTMLElement)?.tagName === 'INPUT';
+      if (typing) return;
+
+      const at = order.indexOf(this.tab);
+      if (e.code === 'KeyQ') this.setTab(order[(at + order.length - 1) % order.length]);
+      else if (e.code === 'KeyE') this.setTab(order[(at + 1) % order.length]);
+      else if (e.code === 'Escape') { network.leaveLobby(); this.close(); }
+      else if (e.code === 'KeyM') { voice.ensureJoined(network.socket).then(() => voice.toggleMic()); }
+      else if (e.code === 'KeyH') { voice.ensureJoined(network.socket).then(() => voice.toggleSpeaker()); }
+      else if (e.code === 'KeyR' && !network.isHost) {
+        this.localReady = !this.localReady;
+        network.sendReady(this.localReady);
+      } else if (e.code === 'Enter' && network.isHost) {
+        network.startMatch();
+      }
+    };
+    window.addEventListener('keydown', this.keyHandler);
   }
 
   private injectStyle() {
@@ -295,108 +477,242 @@ export class CoopLobbyUI {
     const st = document.createElement('style');
     st.id = STYLE_ID;
     st.textContent = `
-      #coop-lobby{position:fixed;inset:0;z-index:99998;display:flex;align-items:center;
-        justify-content:center;background:rgba(6,4,12,.86);font-family:'Cinzel',serif;}
-      #coop-lobby img{image-rendering:pixelated;}
-      .cl-panel{width:min(920px,94vw);max-height:92dvh;overflow-y:auto;padding:16px 18px 14px;
-        background:#241a13;border:3px solid #6b4a24;border-radius:10px;
-        box-shadow:0 0 0 3px #120c08, 0 18px 50px rgba(0,0,0,.7);color:#f5e7c8;
-        /* The game container blocks touchmove globally; the panel is in that
-           allowlist, and these let the gesture actually scroll it. */
-        touch-action:pan-y;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}
-      .cl-head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px;}
-      .cl-title{font-size:22px;letter-spacing:3px;color:#ffd77a;}
-      .cl-sub{font-size:13px;opacity:.75;font-family:'Outfit',sans-serif;}
-      .cl-count{font-size:18px;color:#ffd77a;}
-      /* Adapts to whatever width is available instead of guessing breakpoints. */
-      .cl-slots{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:8px;}
-      .cl-slot{position:relative;background:#1a1209;border:2px solid #4a3320;
-        border-radius:8px;padding:12px 8px 30px;text-align:center;
-        border-top:3px solid var(--accent,#6b7280);min-height:150px;}
-      .cl-slot.is-ready{box-shadow:0 0 0 2px rgba(126,231,150,.45) inset;}
-      .cl-portrait{width:56px;height:56px;margin:0 auto 8px;display:flex;align-items:center;
-        justify-content:center;background:#0e0906;border:2px solid #3a2a18;border-radius:6px;}
-      .cl-portrait img{width:40px;height:40px;}
-      .cl-noart{width:40px;height:40px;background:#241a13;}
-      .cl-name{font-size:14px;color:#fff;}
-      .cl-off{font-size:10px;color:#e57373;}
-      .cl-meta{font-size:11px;opacity:.7;font-family:'Outfit',sans-serif;}
-      .cl-class{font-size:12px;color:var(--accent,#aaa);margin-top:2px;}
-      .cl-badge{position:absolute;left:0;right:0;bottom:0;padding:4px 0;font-size:10px;
-        letter-spacing:2px;border-bottom-left-radius:5px;border-bottom-right-radius:5px;}
-      .cl-hostb{background:#7a5a12;color:#ffe9a8;}
-      .cl-readyb{background:#1f5c34;color:#b9f6ca;}
-      .cl-waitb{background:#3a2a18;color:#c9b79a;}
-      .cl-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;
-        border-style:dashed;opacity:.5;padding-bottom:12px;}
-      .cl-plus{font-size:30px;color:#8d7a5c;}
-      .cl-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
-        gap:12px;margin-top:14px;}
-      .cl-label{font-size:11px;letter-spacing:2px;color:#c9a961;margin-bottom:6px;}
-      .cl-myid{font-size:11px;opacity:.7;margin-top:6px;font-family:'Outfit',sans-serif;}
-      .cl-myid b{color:#ffd77a;letter-spacing:2px;}
-      .cl-friends{margin-top:8px;max-height:150px;overflow-y:auto;
-        background:#150e08;border:2px solid #3a2a18;border-radius:6px;}
-      .cl-nofriends{padding:14px 10px;font-size:11px;opacity:.6;text-align:center;
-        font-family:'Outfit',sans-serif;}
-      .cl-friend{display:flex;align-items:center;gap:8px;padding:7px 9px;
-        border-bottom:1px solid #2a1e12;}
-      .cl-friend:last-child{border-bottom:none;}
-      .cl-friend.is-off{opacity:.5;}
-      .cl-dot{width:8px;height:8px;border-radius:50%;background:#6b5a44;flex:none;}
-      .cl-dot.on{background:#4ade80;box-shadow:0 0 6px #4ade80;}
-      .cl-fmeta{flex:1;min-width:0;}
-      .cl-fname{font-size:13px;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-      .cl-fsub{font-size:10px;opacity:.65;font-family:'Outfit',sans-serif;}
-      .cl-mini{padding:4px 8px;font-size:10px;letter-spacing:1px;border:1px solid #6b4a24;
-        border-radius:4px;background:#3b2a16;color:#ffe9a8;cursor:pointer;font-family:'Cinzel',serif;}
-      .cl-mini:hover{background:#4c3720;}
-      .cl-mini:disabled{opacity:.35;cursor:not-allowed;}
-      .cl-frem{color:#ffb4b4;border-color:#7a3a3a;background:#3a1f1f;}
-      .cl-invite{display:flex;gap:8px;}
-      .cl-id{flex:1;padding:9px;background:#0e0906;border:2px solid #4a3320;border-radius:5px;
-        color:#fff;letter-spacing:3px;text-align:center;font-family:'Outfit',sans-serif;}
-      .cl-id:focus{outline:none;border-color:#a1791f;}
-      .cl-btn{padding:9px 16px;border:2px solid #6b4a24;border-radius:5px;background:#3b2a16;
-        color:#ffe9a8;cursor:pointer;letter-spacing:2px;font-family:'Cinzel',serif;font-size:13px;}
-      .cl-btn:hover{background:#4c3720;}
-      .cl-btn:disabled{opacity:.45;cursor:not-allowed;}
-      .cl-start{background:#1f5c34;border-color:#2e8b4f;color:#d6ffe4;}
-      .cl-ready{background:#1f5c34;border-color:#2e8b4f;color:#d6ffe4;}
-      .cl-unready{background:#5c1f1f;border-color:#8b2e2e;color:#ffd6d6;}
-      .cl-leave{background:#3a1f1f;border-color:#7a3a3a;color:#ffc9c9;}
-      .cl-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;
-        margin-top:14px;flex-wrap:wrap;}
-      .cl-foot .cl-btn{flex:1 1 auto;min-width:130px;}
-      .cl-toast{min-height:16px;margin-top:8px;font-size:12px;color:#ffd77a;opacity:0;
-        transition:opacity .25s;font-family:'Outfit',sans-serif;text-align:center;}
-
-      /* Phones in landscape are SHORT, not narrow - height is the constraint the
-         old width-only breakpoint missed entirely. Tighten vertical rhythm and
-         keep the action buttons reachable without scrolling. */
-      @media (max-height:560px){
-        .cl-panel{padding:10px 12px 10px;max-height:96dvh;}
-        .cl-head{margin-bottom:8px;}
-        .cl-title{font-size:17px;}
-        .cl-sub{font-size:11px;}
-        .cl-slots{gap:6px;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));}
-        .cl-slot{min-height:0;padding:8px 6px 24px;}
-        .cl-portrait{width:40px;height:40px;margin-bottom:5px;}
-        .cl-portrait img{width:28px;height:28px;}
-        .cl-name{font-size:12px;}
-        .cl-class{font-size:11px;}
-        .cl-badge{padding:3px 0;font-size:9px;}
-        .cl-cols{margin-top:10px;gap:8px;}
-        .cl-friends{max-height:96px;}
-        .cl-foot{margin-top:10px;}
-        .cl-toast{margin-top:4px;min-height:14px;}
+      #coop-lobby {
+        position: absolute; inset: 0; z-index: 90;
+        font-family: 'Outfit', sans-serif;
+        color: #cfd3d8;
+        background: #07080a;
       }
 
-      /* Fingers need a real target even when everything else shrinks. */
-      @media (pointer:coarse){
-        .cl-btn{min-height:42px;padding:10px 18px;}
-        .cl-mini{min-height:34px;padding:6px 10px;}
-        .cl-id,.cl-fid{min-height:42px;font-size:16px;} /* 16px stops iOS zoom */
+      .cl-stage {
+        position: absolute; inset: 0;
+        display: flex; flex-direction: column;
+        overflow: hidden;
+        background:
+          radial-gradient(120% 80% at 20% 40%, rgba(38,42,50,0.55) 0%, rgba(7,8,10,0) 60%),
+          linear-gradient(180deg, #0b0d10 0%, #060709 100%);
+      }
+
+      /* The contour wash behind everything. Drawn as repeating conic slivers so
+         it costs nothing to render and never tiles visibly. */
+      .cl-topo {
+        position: absolute; inset: -20%;
+        pointer-events: none;
+        opacity: 0.16;
+        background-image:
+          repeating-radial-gradient(circle at 22% 42%, transparent 0 38px, rgba(150,170,190,0.30) 38px 39px),
+          repeating-radial-gradient(circle at 78% 66%, transparent 0 54px, rgba(150,170,190,0.22) 54px 55px);
+      }
+
+      .cl-tabs {
+        position: relative;
+        display: flex; align-items: center; justify-content: center;
+        gap: 4px; padding: 12px 16px 10px;
+        border-bottom: 1px solid rgba(255,255,255,0.07);
+      }
+
+      .cl-tab {
+        background: none; border: none; cursor: pointer;
+        padding: 6px 16px; border-radius: 3px;
+        color: #8a9099;
+        font-family: 'Outfit', sans-serif;
+        font-size: 13px; font-weight: 600; letter-spacing: 0.4px;
+      }
+      .cl-tab:hover { color: #dfe4ea; }
+      .cl-tab.on { color: #f5f7fa; background: rgba(255,255,255,0.09); }
+
+      .cl-hint {
+        width: 20px; height: 20px; margin: 0 8px;
+        display: inline-flex; align-items: center; justify-content: center;
+        border: 1px solid rgba(255,255,255,0.28); border-radius: 3px;
+        font-size: 10px; font-weight: 700; color: #9aa1ab;
+      }
+
+      .cl-main {
+        position: relative; flex: 1;
+        display: grid; grid-template-columns: minmax(260px, 34%) 1fr;
+        gap: 20px; padding: 18px 26px; min-height: 0;
+      }
+
+      .cl-left { display: flex; flex-direction: column; min-height: 0; }
+
+      .cl-quick {
+        align-self: flex-start;
+        padding: 11px 26px; margin-bottom: 6px; cursor: pointer;
+        background: linear-gradient(180deg, #6b5320, #4a380f);
+        border: 1px solid #caa04a; border-radius: 2px;
+        color: #ffd98a;
+        font-family: 'Cinzel', serif; font-weight: 800;
+        font-size: 13px; letter-spacing: 1.6px;
+      }
+      .cl-quick:hover { background: linear-gradient(180deg, #86682a, #5b4514); }
+      .cl-quick:active { transform: translateY(1px); }
+
+      /* The character stands on the stage. Pixel art scaled hard, so smoothing
+         must be off or it turns to mush at this size. */
+      .cl-hero {
+        flex: 1; min-height: 0;
+        display: flex; align-items: flex-end; justify-content: center;
+        padding-bottom: 4px;
+      }
+      .cl-hero-img {
+        max-height: 100%; max-width: 100%;
+        image-rendering: pixelated;
+        filter: drop-shadow(0 18px 22px rgba(0,0,0,0.75));
+        transform: scale(1.6); transform-origin: bottom center;
+      }
+      .cl-hero-none { width: 120px; height: 180px; background: rgba(255,255,255,0.03); }
+
+      .cl-facts { display: flex; flex-direction: column; gap: 3px; }
+      .cl-fact { display: flex; gap: 12px; font-size: 11.5px; }
+      .cl-fact-k { width: 74px; color: #6f7681; letter-spacing: 0.3px; }
+      .cl-fact-v { color: #e3e7ec; font-weight: 700; letter-spacing: 0.5px; }
+      .cl-fact-v.hot { color: #ffd98a; }
+
+      .cl-right { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+
+      .cl-crests { display: flex; gap: 16px; align-items: flex-start; }
+
+      /* The crest shape from the reference: a shield tapering to a point. */
+      .cl-crest {
+        width: 116px; min-height: 190px;
+        padding: 14px 8px 22px;
+        display: flex; flex-direction: column; align-items: center; gap: 5px;
+        text-align: center;
+        clip-path: polygon(0 0, 100% 0, 100% 82%, 50% 100%, 0 82%);
+        background: rgba(255,255,255,0.035);
+        border: 1px solid rgba(255,255,255,0.10);
+      }
+      .cl-crest.empty { color: #565c66; }
+      .cl-crest-plus { font-size: 26px; opacity: 0.5; margin-top: 52px; }
+      .cl-crest.filled {
+        background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(0,0,0,0.35));
+        box-shadow: inset 0 0 0 1px var(--accent, #6b7280);
+      }
+      .cl-crest.is-ready { box-shadow: inset 0 0 0 2px #4ade80; }
+      .cl-crest-art { width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; }
+      .cl-crest-art img { width: 44px; height: 44px; image-rendering: pixelated; }
+      .cl-crest-name { font-size: 12.5px; font-weight: 800; color: #eef1f5; }
+      .cl-crest-name i { font-style: normal; color: #6f7681; font-size: 10px; }
+      .cl-crest-meta { font-size: 10.5px; color: #8a9099; }
+      .cl-crest-power { font-size: 10.5px; font-weight: 800; color: #ffd98a; letter-spacing: 0.5px; }
+      .cl-crest-state {
+        margin-top: auto; font-size: 9.5px; font-weight: 800;
+        letter-spacing: 1px; color: #b9c0c9;
+      }
+
+      .cl-syn {
+        padding: 10px 14px; max-width: 420px;
+        border-left: 3px solid rgba(255,255,255,0.14);
+        background: rgba(255,255,255,0.03);
+      }
+      .cl-syn.on { border-left-color: #ffd98a; background: rgba(120, 95, 30, 0.18); }
+      .cl-syn-label { font-family: 'Cinzel', serif; font-weight: 800; font-size: 13px; letter-spacing: 1.2px; color: #e8ecf1; }
+      .cl-syn.on .cl-syn-label { color: #ffd98a; }
+      .cl-syn-detail { font-size: 11px; color: #8a9099; margin-top: 2px; }
+      .cl-syn-nums { display: flex; gap: 12px; margin-top: 6px; }
+      .cl-syn-nums span { font-size: 11px; font-weight: 800; color: #7dd3fc; }
+
+      .cl-pane {
+        flex: 1; min-height: 0; overflow-y: auto;
+        max-width: 520px;
+        background: rgba(255,255,255,0.025);
+        border: 1px solid rgba(255,255,255,0.07);
+        padding: 12px 14px;
+      }
+      .cl-pane-head {
+        display: flex; align-items: center; justify-content: space-between;
+        font-size: 10.5px; font-weight: 800; letter-spacing: 1.4px;
+        color: #6f7681; margin: 4px 0 8px;
+      }
+      .cl-row { display: flex; gap: 8px; margin-bottom: 10px; }
+      .cl-row input {
+        flex: 1; padding: 8px 10px;
+        background: rgba(0,0,0,0.45);
+        border: 1px solid rgba(255,255,255,0.14);
+        color: #e8ecf1; font-family: 'Outfit', sans-serif;
+        font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase;
+      }
+
+      .cl-mini {
+        padding: 7px 12px; cursor: pointer;
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.16);
+        color: #dfe4ea; font-family: 'Outfit', sans-serif;
+        font-size: 10.5px; font-weight: 800; letter-spacing: 0.8px;
+      }
+      .cl-mini:hover { background: rgba(255,255,255,0.14); }
+      .cl-mini:disabled { opacity: 0.35; cursor: default; }
+
+      .cl-pub, .cl-friend {
+        display: flex; align-items: center; gap: 10px;
+        padding: 9px 10px; margin-bottom: 6px;
+        background: rgba(0,0,0,0.28);
+        border: 1px solid rgba(255,255,255,0.07);
+      }
+      .cl-pub-meta, .cl-fmeta { flex: 1; min-width: 0; }
+      .cl-pub-name, .cl-fname { font-size: 12.5px; font-weight: 700; color: #e8ecf1; }
+      .cl-pub-sub, .cl-fsub { font-size: 10.5px; color: #7c838d; }
+      .cl-friend.is-off { opacity: 0.55; }
+      .cl-dot { width: 7px; height: 7px; border-radius: 50%; background: #4b5563; }
+      .cl-dot.on { background: #4ade80; }
+      .cl-none { font-size: 11.5px; color: #6f7681; padding: 10px 2px; }
+
+      .cl-foot {
+        position: relative;
+        display: flex; align-items: center; gap: 8px;
+        padding: 10px 26px 14px;
+        border-top: 1px solid rgba(255,255,255,0.07);
+      }
+      .cl-foot-right { margin-left: auto; }
+
+      .cl-key {
+        display: inline-flex; align-items: center; gap: 8px;
+        padding: 7px 12px; cursor: pointer;
+        background: none; border: none;
+        color: #9aa1ab; font-family: 'Outfit', sans-serif;
+        font-size: 11.5px; font-weight: 600;
+      }
+      .cl-key:hover { color: #e8ecf1; }
+      .cl-key b {
+        display: inline-flex; align-items: center; justify-content: center;
+        min-width: 22px; height: 20px; padding: 0 5px;
+        border: 1px solid rgba(255,255,255,0.28); border-radius: 3px;
+        font-size: 9.5px; font-weight: 800; color: #cfd3d8;
+      }
+      .cl-key:disabled { opacity: 0.4; cursor: default; }
+      .cl-start:not(:disabled) { color: #ffd98a; }
+      .cl-start:not(:disabled) b { border-color: #caa04a; color: #ffd98a; }
+      .cl-ready { color: #4ade80; }
+      .cl-ready b { border-color: #4ade80; color: #4ade80; }
+
+      .cl-toast {
+        position: absolute; left: 50%; bottom: 66px; transform: translateX(-50%);
+        padding: 8px 16px; border-radius: 3px;
+        background: rgba(0,0,0,0.85); border: 1px solid #caa04a;
+        color: #ffd98a; font-size: 12px; font-weight: 600;
+        opacity: 0; transition: opacity 0.25s; pointer-events: none;
+        z-index: 5;
+      }
+
+      /* Landscape phones: the stage still works, but the crests have to shrink
+         and the character cannot take a third of the width. */
+      @media (max-width: 900px), (orientation: landscape) and (max-height: 500px) {
+        .cl-main { grid-template-columns: minmax(180px, 30%) 1fr; gap: 12px; padding: 10px 14px; }
+        .cl-tabs { padding: 8px 10px 6px; }
+        .cl-tab { padding: 5px 10px; font-size: 11.5px; }
+        .cl-quick { padding: 8px 16px; font-size: 11px; }
+        .cl-crest { width: 88px; min-height: 148px; padding: 10px 6px 18px; }
+        .cl-crest-plus { margin-top: 36px; font-size: 20px; }
+        .cl-crest-art { width: 40px; height: 40px; }
+        .cl-crest-art img { width: 34px; height: 34px; }
+        .cl-crest-name { font-size: 11px; }
+        .cl-crests { gap: 10px; }
+        .cl-hero-img { transform: scale(1.15); }
+        .cl-fact { font-size: 10.5px; }
+        .cl-fact-k { width: 60px; }
+        .cl-foot { padding: 8px 14px 10px; }
+        .cl-key { padding: 6px 8px; font-size: 10.5px; }
       }
     `;
     document.head.appendChild(st);

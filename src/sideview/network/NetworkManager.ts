@@ -1,6 +1,16 @@
 import { io, Socket } from 'socket.io-client';
 import { PlayerState } from '../engine/SideViewEngine';
 
+/** An open party shown in the browser. */
+export interface OpenLobby {
+  roomId: string;
+  dungeonId: string;
+  minLevel: number;
+  hostName: string;
+  members: number;
+  maxPlayers: number;
+}
+
 /** One member's contribution to a finished run. */
 export interface RunStats {
   name: string;
@@ -34,6 +44,7 @@ export interface LobbyMember {
   shortId: string;
   classId: string | null;
   level: number;
+  power?: number;
   ready: boolean;
   isHost: boolean;
   online: boolean;
@@ -61,6 +72,8 @@ export interface FriendEntry {
 export interface LocalProfile {
   classId?: string;
   level?: number;
+  /** Total Power, so a party card can show what each member brings. */
+  power?: number;
 }
 
 export interface FullSyncSnapshot {
@@ -139,6 +152,7 @@ export class NetworkManager {
   private onRunStatsCb: ((payload: any) => void) | null = null;
   private onQuickChatCb: ((payload: any) => void) | null = null;
   private onPingCb: ((payload: any) => void) | null = null;
+  private onLobbyListCb: ((lobbies: any[]) => void) | null = null;
 
   constructor() {
     NetworkManager.instance = this;
@@ -292,6 +306,16 @@ export class NetworkManager {
       this.onPingCb?.(data);
     });
 
+    this.socket.on('lobby_list', (data) => {
+      this.onLobbyListCb?.(data?.lobbies || []);
+    });
+
+    // Quick join is answered with a room to enter, so the join runs through the
+    // same path an accepted invite does rather than a second way in.
+    this.socket.on('quick_join_room', (data) => {
+      if (data?.roomId) this.acceptInvite(data.roomId);
+    });
+
     this.socket.on('lobby_error', (data) => {
       console.warn('[NET] lobby_error:', data?.msg);
       this.onLobbyErrorCb?.(data?.msg || 'Could not create lobby.');
@@ -432,10 +456,15 @@ export class NetworkManager {
     });
   }
 
-  public acceptInvite(roomId: string, onStart: (roomData: any) => void) {
+  /**
+   * Quick join enters through here too, and passes no callback: it must not
+   * clobber the one the invite path already registered, or accepting an invite
+   * after a quick join would start nothing.
+   */
+  public acceptInvite(roomId: string, onStart?: (roomData: any) => void) {
     if (!this.socket) this.connect();
 
-    this.onDungeonStartCb = onStart;
+    if (onStart) this.onDungeonStartCb = onStart;
 
     const uuid = localStorage.getItem('playerUUID');
     const name = localStorage.getItem('playerName');
@@ -495,6 +524,22 @@ export class NetworkManager {
 
   public onPing(cb: (payload: { socketId: string; x: number; y: number }) => void) {
     this.onPingCb = cb;
+  }
+
+  /** Open parties we could join, filtered server-side by our level. */
+  public browseLobbies() {
+    if (!this.socket) this.connect();
+    this.socket?.emit('browse_lobbies');
+  }
+
+  public onLobbyList(cb: (lobbies: OpenLobby[]) => void) {
+    this.onLobbyListCb = cb;
+  }
+
+  /** Ask the server for the best open party and join it. */
+  public quickJoin() {
+    if (!this.socket) this.connect();
+    this.socket?.emit('quick_join');
   }
 
   public onPartySupport(cb: (payload: any) => void) {

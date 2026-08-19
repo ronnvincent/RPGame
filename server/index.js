@@ -339,6 +339,7 @@ function buildLobbyState(roomId) {
         shortId: rec.shortId || '',
         classId: rec.classId || null,
         level: rec.level || 1,
+        power: rec.power || 0,
         ready: uuid === room.hostUuid ? true : !!room.ready[uuid],
         isHost: uuid === room.hostUuid,
         online: !!rec.socketId
@@ -500,6 +501,7 @@ function applyProfile(p, data) {
   if (!p || !data) return;
   if (data.classId) p.classId = data.classId;
   if (typeof data.level === 'number') p.level = data.level;
+  if (typeof data.power === 'number') p.power = data.power;
 }
 
 function removeMemberFromRoom(uuid, roomId) {
@@ -689,6 +691,58 @@ io.on('connection', (socket) => {
     const friends = await friendUuidsOf(p.uuid);
     await Promise.all(friends.map((fid) => pushFriendList(fid)));
     await pushFriendList(p.uuid);
+  });
+
+  /**
+   * Open parties anyone may join.
+   *
+   * Co-op was invite-only and friends-only, so a player with nobody online
+   * could never reach it - the feature existed but was unreachable for exactly
+   * the people most likely to try it once. A room is listed only while it is
+   * still a lobby: not started, not full, and within the joiner's level.
+   */
+  function openLobbies(forLevel) {
+    return Object.entries(rooms)
+      .filter(([, room]) =>
+        !room.started &&
+        room.members.length < MAX_PARTY &&
+        (room.minLevel || 1) <= forLevel &&
+        // At least one member still connected. members[] holds uuids, which
+        // outlive the socket, so counting the array alone advertised rooms
+        // whose players had all left - and quick join walked straight into
+        // one of those empty rooms instead of the party that was waiting.
+        room.members.some(uuid => playersByUuid[uuid]?.socketId))
+      .map(([roomId, room]) => {
+        const host = playersByUuid[room.hostUuid];
+        return {
+          roomId,
+          dungeonId: room.dungeonId,
+          minLevel: room.minLevel || 1,
+          hostName: host?.name || 'Adventurer',
+          members: room.members.length,
+          maxPlayers: MAX_PARTY,
+        };
+      })
+      .sort((a, b) => b.members - a.members);
+  }
+
+  socket.on('browse_lobbies', () => {
+    const p = players[socket.id];
+    if (!p) return;
+    socket.emit('lobby_list', { lobbies: openLobbies(p.level || 1) });
+  });
+
+  /** The fullest room we qualify for - joining a party of three beats a party of one. */
+  socket.on('quick_join', () => {
+    const p = players[socket.id];
+    if (!p) return;
+    const mine = p.room;
+    const best = openLobbies(p.level || 1).find(l => l.roomId !== mine);
+    if (!best) {
+      socket.emit('lobby_error', { msg: 'No open parties right now - start one and others can find you.' });
+      return;
+    }
+    socket.emit('quick_join_room', { roomId: best.roomId });
   });
 
   socket.on('friends_request_list', async () => {
