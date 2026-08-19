@@ -545,12 +545,12 @@ export class CoopLobbyUI {
 
       .cl-quick {
         align-self: flex-start;
-        padding: 11px 26px; margin-bottom: 6px; cursor: pointer;
+        padding: 14px 32px; margin-bottom: 6px; cursor: pointer;
         background: linear-gradient(180deg, #6b5320, #4a380f);
         border: 1px solid #caa04a; border-radius: 2px;
         color: #ffd98a;
         font-family: 'Cinzel', serif; font-weight: 800;
-        font-size: 13px; letter-spacing: 1.6px;
+        font-size: 15px; letter-spacing: 1.8px;
       }
       .cl-quick:hover { background: linear-gradient(180deg, #86682a, #5b4514); }
       .cl-quick:active { transform: translateY(1px); }
@@ -562,12 +562,12 @@ export class CoopLobbyUI {
          so the frame is cropped to the figure rather than scaled to fit - at
          fit-size the character would be a quarter of the card. */
       .cl-crest-art.cl-crest-hero {
-        width: 100%; height: 96px;
+        width: 100%; height: 150px;
         overflow: hidden;
         display: flex; align-items: flex-end; justify-content: center;
       }
       .cl-crest-art img.cl-hero-img {
-        height: 150px; width: auto; max-width: none;
+        height: 228px; width: auto; max-width: none;
         image-rendering: pixelated;
         filter: drop-shadow(0 8px 10px rgba(0,0,0,0.7));
       }
@@ -580,7 +580,15 @@ export class CoopLobbyUI {
 
       .cl-right { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
 
-      .cl-crests { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+      /* The party tab had the crests pinned to the top of a tall column with
+         the rest of it empty. They fill it now. Only this tab grows - the other
+         two are lists, and a list stretched to fill reads as padding. */
+      .cl-crests {
+        display: flex; gap: 16px;
+        align-items: stretch;
+        flex: 1; min-height: 0;
+        max-height: 460px;
+      }
 
       /* The crest shape from the reference: a shield tapering to a point. */
       .cl-crest {
@@ -588,7 +596,7 @@ export class CoopLobbyUI {
            items shrink by default, so at narrow widths all four collapsed to
            slivers rather than the row simply running out of space. */
         flex: none;
-        width: 116px; min-height: 226px;
+        width: 150px; min-height: 0;
         padding: 14px 8px 22px;
         display: flex; flex-direction: column; align-items: center; gap: 5px;
         text-align: center;
@@ -597,7 +605,7 @@ export class CoopLobbyUI {
         border: 1px solid rgba(255,255,255,0.10);
       }
       .cl-crest.empty { color: #565c66; }
-      .cl-crest-plus { font-size: 26px; opacity: 0.5; margin-top: 52px; }
+      .cl-crest-plus { font-size: 34px; opacity: 0.5; margin-top: auto; }
       .cl-crest.filled {
         background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(0,0,0,0.35));
         box-shadow: inset 0 0 0 1px var(--accent, #6b7280);
@@ -608,12 +616,12 @@ export class CoopLobbyUI {
       .cl-crest.is-me.is-ready { box-shadow: inset 0 0 0 2px #4ade80, inset 0 0 0 4px rgba(212,175,55,0.5); }
       .cl-crest-art { width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; }
       .cl-crest-art img { width: 44px; height: 44px; image-rendering: pixelated; }
-      .cl-crest-name { font-size: 12.5px; font-weight: 800; color: #eef1f5; }
+      .cl-crest-name { font-size: 14px; font-weight: 800; color: #eef1f5; }
       .cl-crest-name i { font-style: normal; color: #6f7681; font-size: 10px; }
-      .cl-crest-meta { font-size: 10.5px; color: #8a9099; }
-      .cl-crest-power { font-size: 10.5px; font-weight: 800; color: #ffd98a; letter-spacing: 0.5px; }
+      .cl-crest-meta { font-size: 11.5px; color: #8a9099; }
+      .cl-crest-power { font-size: 12px; font-weight: 800; color: #ffd98a; letter-spacing: 0.5px; }
       .cl-crest-state {
-        margin-top: auto; font-size: 9.5px; font-weight: 800;
+        margin-top: auto; font-size: 11px; font-weight: 800;
         letter-spacing: 1px; color: #b9c0c9;
       }
 
@@ -718,14 +726,14 @@ export class CoopLobbyUI {
         .cl-tabs { padding: 8px 10px 6px; }
         .cl-tab { padding: 5px 10px; font-size: 11.5px; }
         .cl-quick { padding: 8px 16px; font-size: 11px; }
-        .cl-crest { width: 78px; min-height: 168px; padding: 8px 4px 16px; }
-        .cl-crest-art.cl-crest-hero { height: 72px; }
-        .cl-crest-art img.cl-hero-img { height: 112px; }
+        .cl-crest { width: 96px; min-height: 0; padding: 10px 5px 18px; }
+        .cl-crest-art.cl-crest-hero { height: 104px; }
+        .cl-crest-art img.cl-hero-img { height: 158px; }
         .cl-crest-plus { margin-top: 36px; font-size: 20px; }
         .cl-crest-art { width: 40px; height: 40px; }
         .cl-crest-art img { width: 34px; height: 34px; }
-        .cl-crest-name { font-size: 11px; }
-        .cl-crests { gap: 7px; }
+        .cl-crest-name { font-size: 12px; }
+        .cl-crests { gap: 9px; max-height: none; }
         .cl-fact { font-size: 10.5px; }
         .cl-fact-k { width: 60px; }
         .cl-foot { padding: 8px 14px 10px; }

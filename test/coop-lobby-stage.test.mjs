@@ -93,6 +93,18 @@ const run = async () => {
   check('a power change alone still reaches the party cards',
     /this\.profile\.power === profile\.power/.test(net));
 
+  // --- The party tab uses the room it has ---------------------------------
+  // The crests sat pinned to the top of a tall column with the rest of it
+  // empty. Measured after: 150x409 cards filling 89% of the column at 1280x800,
+  // and 96x218 at 812x375 - fitting the width, not wrapping, clear of the
+  // footer. Only this tab grows; the other two are lists, and a list stretched
+  // to fill just reads as padding.
+  check('the crest row takes the height instead of hugging the top',
+    /\.cl-crests \{[^}]*flex: 1/.test(lobby) && /align-items: stretch/.test(lobby));
+  check('and the cards grew with it', /width: 150px; min-height: 0;/.test(lobby));
+  check('the growth is scoped to the party tab, not the panes',
+    !/\.cl-pane \{[^}]*flex: 1;[^}]*max-height: 460px/.test(lobby));
+
   // --- Composition means something ---------------------------------------
   check('a party of one gets no bonus', /present\.length < 2\) return NO_SYNERGY/.test(synergy));
   check('the strongest bonus applies rather than a stack', /Read in order, best first/.test(synergy));
