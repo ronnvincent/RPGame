@@ -1212,6 +1212,119 @@ export class GameHUD {
         z-index: 5;
       }
 
+      /* The skill ring.
+
+         This lived inside the phone breakpoint, so anything wider than
+         860px got a flat strip of labelled buttons along the bottom - the
+         layout that reads as a toolbar. The ring is the arrangement this
+         game is played with, on every screen: slots placed around the
+         thumb, no labels, the basic attack largest.
+
+         It sits after the strip rules on purpose. Same specificity, so the
+         later block wins and the strip becomes the fallback that never
+         applies rather than something to delete and lose. */
+      .skills-hotbar {
+        background: none;
+        box-shadow: none;
+        padding: 0;
+        bottom: 0;
+        left: auto;
+        right: 0;
+        transform: none;
+        width: 100vw;
+        height: 100vh;
+        pointer-events: none; /* Let touches pass through to underlying elements */
+      }
+
+      .hotbar-slot {
+        position: absolute;
+        pointer-events: auto;
+        border-radius: 50%;
+        width: 44px;
+        height: 44px;
+        background-image: url('/assets/kenney-rpg-ui/buttonRound_brown.png');
+      }
+
+      .slot-skill-name {
+        display: none;
+      }
+
+      .slot-key-badge {
+        font-size: 6.5px;
+        padding: 0 2px;
+        top: -4px;
+        left: -4px;
+      }
+
+      /* The Main Attack Button (Skill 0) */
+      .hotbar-slot[data-skill-idx="0"] {
+        width: 86px;
+        height: 86px;
+        bottom: calc(22px + env(safe-area-inset-bottom));
+        right: calc(22px + env(safe-area-inset-right));
+        z-index: 10;
+      }
+      .hotbar-slot[data-skill-idx="0"] .slot-icon-img {
+        width: 48px;
+        height: 48px;
+      }
+
+      /* Outer Arc layout for active skills 1-5 (Radius 155px) */
+      .hotbar-slot[data-skill-idx="1"], .hotbar-slot[data-skill-idx="2"], 
+      .hotbar-slot[data-skill-idx="3"], .hotbar-slot[data-skill-idx="4"], 
+      .hotbar-slot[data-skill-idx="5"] {
+        width: 58px;
+        height: 58px;
+      }
+      .hotbar-slot[data-skill-idx="1"] { bottom: calc(36px + env(safe-area-inset-bottom)); right: calc(191px + env(safe-area-inset-right)); }
+      .hotbar-slot[data-skill-idx="2"] { bottom: calc(99px + env(safe-area-inset-bottom)); right: calc(178px + env(safe-area-inset-right)); }
+      .hotbar-slot[data-skill-idx="3"] { bottom: calc(151px + env(safe-area-inset-bottom)); right: calc(140px + env(safe-area-inset-right)); }
+      .hotbar-slot[data-skill-idx="4"] { bottom: calc(183px + env(safe-area-inset-bottom)); right: calc(84px + env(safe-area-inset-right)); }
+      .hotbar-slot[data-skill-idx="5"] { bottom: calc(190px + env(safe-area-inset-bottom)); right: calc(20px + env(safe-area-inset-right)); }
+
+      /* The potion. On mobile the slots are placed one by one and this one had
+         no place of its own, so it sat wherever the container defaulted to.
+         It goes on the LEFT, above the joystick: the skills are a tight arc
+         under the right thumb, and a heal squeezed among them would be pressed
+         by accident in exactly the fight where you cannot afford to. */
+      .potion-slot {
+        /* Beside the joystick, not above it. Above looks natural on a tall
+           phone but the left column also carries the player panel, and on a
+           short landscape screen (320px) panel + potion + joystick do not fit
+           - the potion landed on top of the panel. Sitting to the right of the
+           joystick keeps one position on every device, which is what muscle
+           memory needs from a heal button. */
+        bottom: calc(max(20px, env(safe-area-inset-bottom)) + 22px);
+        left: calc(176px + env(safe-area-inset-left));
+        right: auto;
+        margin-left: 0;
+        /* Same size as a skill button: this is the panic button, so it should
+           not be the smallest target on screen. */
+        width: 58px;
+        height: 58px;
+        box-shadow: inset 0 0 0 2px rgba(74, 222, 128, 0.5);
+      }
+
+      .potion-slot .slot-skill-name { display: none; }
+      .potion-slot .slot-key-badge { display: none; }
+      .potion-count {
+        right: 3px;
+        bottom: 2px;
+        font-size: 11px;
+      }
+
+      /* On a pointer device the joystick is hidden, and the potion was placed
+         next to it - which left it stranded alone in the bottom-left corner.
+         Here it joins the ring instead, outside the arc so it is never a
+         mis-tap for a skill. */
+      @media (hover: hover) and (pointer: fine) and (min-width: 861px) {
+        .potion-slot {
+          bottom: calc(36px + env(safe-area-inset-bottom));
+          right: 269px;
+          left: auto;
+        }
+      }
+
       @media (max-width: 860px) {
         .player-status-panel {
           top: 6px;
@@ -1273,96 +1386,6 @@ export class GameHUD {
         }
 
         /* MLBB-Style Action HUD for Right Thumb */
-        .skills-hotbar {
-          background: none;
-          box-shadow: none;
-          padding: 0;
-          bottom: 0;
-          left: auto;
-          right: 0;
-          transform: none;
-          width: 100vw;
-          height: 100vh;
-          pointer-events: none; /* Let touches pass through to underlying elements */
-        }
-
-        .hotbar-slot {
-          position: absolute;
-          pointer-events: auto;
-          border-radius: 50%;
-          width: 44px;
-          height: 44px;
-          background-image: url('/assets/kenney-rpg-ui/buttonRound_brown.png');
-        }
-
-        .slot-skill-name {
-          display: none;
-        }
-
-        .slot-key-badge {
-          font-size: 6.5px;
-          padding: 0 2px;
-          top: -4px;
-          left: -4px;
-        }
-
-        /* The Main Attack Button (Skill 0) */
-        .hotbar-slot[data-skill-idx="0"] {
-          width: 86px;
-          height: 86px;
-          bottom: calc(22px + env(safe-area-inset-bottom));
-          right: calc(22px + env(safe-area-inset-right));
-          z-index: 10;
-        }
-        .hotbar-slot[data-skill-idx="0"] .slot-icon-img {
-          width: 48px;
-          height: 48px;
-        }
-
-        /* Outer Arc layout for active skills 1-5 (Radius 155px) */
-        .hotbar-slot[data-skill-idx="1"], .hotbar-slot[data-skill-idx="2"], 
-        .hotbar-slot[data-skill-idx="3"], .hotbar-slot[data-skill-idx="4"], 
-        .hotbar-slot[data-skill-idx="5"] {
-          width: 58px;
-          height: 58px;
-        }
-        .hotbar-slot[data-skill-idx="1"] { bottom: calc(36px + env(safe-area-inset-bottom)); right: calc(191px + env(safe-area-inset-right)); }
-        .hotbar-slot[data-skill-idx="2"] { bottom: calc(99px + env(safe-area-inset-bottom)); right: calc(178px + env(safe-area-inset-right)); }
-        .hotbar-slot[data-skill-idx="3"] { bottom: calc(151px + env(safe-area-inset-bottom)); right: calc(140px + env(safe-area-inset-right)); }
-        .hotbar-slot[data-skill-idx="4"] { bottom: calc(183px + env(safe-area-inset-bottom)); right: calc(84px + env(safe-area-inset-right)); }
-        .hotbar-slot[data-skill-idx="5"] { bottom: calc(190px + env(safe-area-inset-bottom)); right: calc(20px + env(safe-area-inset-right)); }
-
-        /* The potion. On mobile the slots are placed one by one and this one had
-           no place of its own, so it sat wherever the container defaulted to.
-           It goes on the LEFT, above the joystick: the skills are a tight arc
-           under the right thumb, and a heal squeezed among them would be pressed
-           by accident in exactly the fight where you cannot afford to. */
-        .potion-slot {
-          /* Beside the joystick, not above it. Above looks natural on a tall
-             phone but the left column also carries the player panel, and on a
-             short landscape screen (320px) panel + potion + joystick do not fit
-             - the potion landed on top of the panel. Sitting to the right of the
-             joystick keeps one position on every device, which is what muscle
-             memory needs from a heal button. */
-          bottom: calc(max(20px, env(safe-area-inset-bottom)) + 22px);
-          left: calc(176px + env(safe-area-inset-left));
-          right: auto;
-          margin-left: 0;
-          /* Same size as a skill button: this is the panic button, so it should
-             not be the smallest target on screen. */
-          width: 58px;
-          height: 58px;
-          box-shadow: inset 0 0 0 2px rgba(74, 222, 128, 0.5);
-        }
-
-        .potion-slot .slot-skill-name { display: none; }
-        .potion-slot .slot-key-badge { display: none; }
-        .potion-count {
-          right: 3px;
-          bottom: 2px;
-          font-size: 11px;
-        }
-
         .mobile-joystick-area {
           bottom: max(20px, env(safe-area-inset-bottom));
           left: max(20px, env(safe-area-inset-left));

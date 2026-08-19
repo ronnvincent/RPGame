@@ -2469,15 +2469,29 @@ export class SpriteManager {
     }
 
     const now = Date.now() / 1000;
+    let drawn = 0;
     for (const layer of map.layers) {
       if (layer.front) continue;
       const img = this.getImage(layer.src);
       if (!img || !img.complete || !img.naturalWidth) continue;
+      drawn++;
       if (layer.scatter && layer.scatter.length) {
         this.drawScatterLayer(ctx, layer, img, camX, width, height, horizonY, now);
       } else {
         this.drawParallaxLayer(ctx, layer, img, camX, width, height, horizonY, now, map.groundLine);
       }
+    }
+
+    // Nothing was ready yet. The sky is already painted and this function has
+    // committed to handling the theme, so returning here leaves a flat colour
+    // with the character standing on nothing - which is what a fresh load at a
+    // new window size actually looked like. Lay down earth so the world still
+    // reads as a place while the art arrives.
+    if (drawn === 0) {
+      ctx.fillStyle = map.floor ? map.floor.body : 'rgba(28, 22, 18, 0.92)';
+      ctx.fillRect(0, horizonY, width, height - horizonY);
+      ctx.fillStyle = map.floor ? map.floor.top : 'rgba(58, 48, 36, 0.95)';
+      ctx.fillRect(0, horizonY, width, 4);
     }
 
     // Where the pack brings no ground of its own, the earth goes on last, in

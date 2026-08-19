@@ -66,6 +66,19 @@ check('and come back for a finger, or a window small enough to need them',
 check('the gate sits below both base rules, or the cascade would undo it',
   gateAt > hud.indexOf('.mobile-action-hub {\n        position: absolute;'));
 
+// --- The skill ring is the layout everywhere -----------------------------
+// The ring lived inside the phone breakpoint, so anything wider than 860px got
+// a flat strip of labelled buttons. Measured in the browser: at 1280x800 and
+// at 812x375 no two slot circles touch and none leaves the screen.
+const ringAt = hud.indexOf('The skill ring.');
+check('the ring is in the base sheet, not a breakpoint', ringAt !== -1);
+check('and it wins over the strip, which stays as the fallback',
+  ringAt > hud.indexOf('.skills-hotbar {'));
+check('slots are placed individually, which is what makes it a ring',
+  /\.hotbar-slot\[data-skill-idx="5"\] \{[^}]*bottom: calc/.test(hud));
+check('the potion joins the ring where there is no joystick to sit beside',
+  /@media \(hover: hover\) and \(pointer: fine\) and \(min-width: 861px\)/.test(hud));
+
 // --- The party rail -----------------------------------------------------
 check('allies have a rail', /ally-rail/.test(hud) && /paintAllyRail/.test(hud));
 check('it shows their health', /ally-hp-fill/.test(hud));
