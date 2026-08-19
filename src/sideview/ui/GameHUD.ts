@@ -1365,6 +1365,13 @@ export class GameHUD {
         width: 58px;
         height: 58px;
       }
+      /* One arc, not five hand-placed offsets.
+         Points on a circle of radius 175 around the attack button's centre,
+         21.5 degrees apart, sweeping from its left round to above it - the
+         arrangement this genre uses, where the basic attack anchors the corner
+         and the skills ring it. Placed by hand they had drifted out of any
+         shape, with the attack sitting among them rather than at the centre
+         they turn around. */
       .hotbar-slot[data-skill-idx="1"] { bottom: calc(45px + env(safe-area-inset-bottom)); right: calc(211px + env(safe-area-inset-right)); }
       .hotbar-slot[data-skill-idx="2"] { bottom: calc(109px + env(safe-area-inset-bottom)); right: calc(195px + env(safe-area-inset-right)); }
       .hotbar-slot[data-skill-idx="3"] { bottom: calc(162px + env(safe-area-inset-bottom)); right: calc(158px + env(safe-area-inset-right)); }

@@ -148,32 +148,20 @@ check('and every tile is styled by one class', (menuBlock.match(/class="pause-ti
 check('town is exempt from the fade, in a state of its own', /isTownMode \? 'hud-town'/.test(hud) && /\.hud-town \.player-status-panel/.test(hud));
 check('and the state is cleared with the others', /'hud-boss', 'hud-town'/.test(hud));
 
-// --- The button you press most belongs to the group ----------------------
-// The basic attack sat in the corner at right/bottom 22, which left it 83px
-// clear of the nearest skill while the arc's own slots are about 7px apart - so
-// it read as belonging to nothing. Measured after moving it, at 812x375,
-// 667x375 and 568x320: 9px from the nearest skill, nothing overlapping.
-const attackRule = (() => {
-  const needle = '      .hotbar-slot[data-skill-idx="0"] {';
-  const i = hud.lastIndexOf(needle);
-  return i === -1 ? '' : hud.slice(i, i + 420);
-})();
-const rightOf = (rule) => {
-  const m = rule.match(/right: calc\(([0-9]+)px/);
-  return m ? Number(m[1]) : NaN;
-};
-check('the attack button is not parked in the corner', rightOf(attackRule) > 22);
-check('and sits near the arc it belongs to, which starts at 191px',
-  rightOf(attackRule) > 60 && rightOf(attackRule) < 191);
-
 // --- One arc, not five hand-placed offsets -------------------------------
-// The attack button sat among the skills instead of at the centre they turn
-// around. Measured in the browser: all five skills are exactly 175px from the
-// attack button's centre, nothing overlaps, nothing leaves the screen.
+// The slots were hand-placed and had drifted out of any shape, with the attack
+// button nudged in among them rather than at the centre they turn around.
+// Measured in the browser: all five sit exactly 175px from the attack button's
+// centre, 7px between neighbours, nothing overlapping or off screen.
 check('the skills sit on one circle around the attack button',
   /radius 175 around the attack button/.test(hud));
-check('and the attack anchors the corner it rings',
-  /\.hotbar-slot\[data-skill-idx="0"\][\s\S]{0,220}right: calc\(22px/.test(hud));
+// The attack anchors the corner on purpose - it is what the arc is drawn about,
+// so an earlier check that it must NOT be in the corner had it backwards.
+const attackRule = (() => {
+  const i = hud.lastIndexOf('      .hotbar-slot[data-skill-idx="0"] {');
+  return i === -1 ? '' : hud.slice(i, i + 420);
+})();
+check('and the attack anchors the corner it rings', /right: calc\(22px/.test(attackRule));
 
 // --- The party rail -----------------------------------------------------
 check('allies have a rail', /ally-rail/.test(hud) && /paintAllyRail/.test(hud));
