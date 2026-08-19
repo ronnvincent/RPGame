@@ -152,11 +152,12 @@ export class CoopLobbyUI {
     const synergy = synergyFor(members);
     const heroSrc = this.heroIdleSrc();
 
-    // You are the character standing on the stage, so the crests to the right
-    // are everyone else - which is what makes an empty lobby read as "room for
-    // three more" rather than "three things missing".
+    // Four cards, and yours is the first of them. Standing your character off
+    // to the side of the stage separated you from the party you are forming -
+    // the point of the screen is the four of you together.
+    const me = members.find(m => m.socketId === network.socket?.id);
     const others = members.filter(m => m.socketId !== network.socket?.id);
-    const crests: string[] = [];
+    const crests: string[] = [this.crest(me, heroSrc)];
     for (let i = 0; i < max - 1; i++) {
       crests.push(others[i] ? this.crest(others[i]) : this.emptyCrest());
     }
@@ -184,12 +185,6 @@ export class CoopLobbyUI {
         <div class="cl-main">
           <div class="cl-left">
             <button class="cl-quick">QUICK JOIN</button>
-
-            <div class="cl-hero">
-              ${heroSrc
-                ? `<img class="cl-hero-img" src="${heroSrc}" alt="" />`
-                : '<div class="cl-hero-none"></div>'}
-            </div>
 
             <div class="cl-facts">
               ${this.fact('Dungeon', dungeon ? dungeon.name : (st?.dungeonId || 'Not chosen'))}
@@ -247,15 +242,24 @@ export class CoopLobbyUI {
     </div>`;
   }
 
-  /** A filled party slot, drawn as a crest so it matches the empty ones. */
-  private crest(m: LobbyMember): string {
+  /**
+   * A filled party slot. Yours gets your actual character standing in it -
+   * animated, from the same idle loop the game uses - while everyone else's
+   * shows their class mark, which is all the server gives us about them.
+   */
+  private crest(m: LobbyMember | undefined, heroSrc?: string | null): string {
+    if (!m) return this.emptyCrest();
     const cls = classOf(m.classId);
     const icon = classIcon(m.classId);
     const accent = cls?.themeColor || '#6b7280';
     const state = m.isHost ? 'LEADER' : m.ready ? 'READY' : 'WAITING';
+    const mine = m.socketId === network.socket?.id;
+    const art = mine && heroSrc
+      ? `<img class="cl-hero-img" src="${heroSrc}" alt="" />`
+      : icon ? `<img src="${icon}" alt="" />` : '';
     return `
-      <div class="cl-crest filled ${m.ready ? 'is-ready' : ''}" style="--accent:${accent}">
-        <div class="cl-crest-art">${icon ? `<img src="${icon}" alt="" />` : ''}</div>
+      <div class="cl-crest filled ${mine ? 'is-me' : ''} ${m.ready ? 'is-ready' : ''}" style="--accent:${accent}">
+        <div class="cl-crest-art ${mine ? 'cl-crest-hero' : ''}">${art}</div>
         <div class="cl-crest-name">${m.name}${m.online ? '' : ' <i>(offline)</i>'}</div>
         <div class="cl-crest-meta">Lv ${m.level} &middot; ${cls ? cls.name : 'Choosing'}</div>
         ${m.power ? `<div class="cl-crest-power">${m.power.toLocaleString()} PWR</div>` : ''}
@@ -478,7 +482,10 @@ export class CoopLobbyUI {
     st.id = STYLE_ID;
     st.textContent = `
       #coop-lobby {
-        position: absolute; inset: 0; z-index: 90;
+        /* Fixed, not absolute: this is a whole screen, and it should not be
+           able to be clipped or inset by whatever it happens to be parented to.
+           The z-index clears the HUD layer beneath it. */
+        position: fixed; inset: 0; z-index: 400;
         font-family: 'Outfit', sans-serif;
         color: #cfd3d8;
         background: #07080a;
@@ -530,11 +537,11 @@ export class CoopLobbyUI {
 
       .cl-main {
         position: relative; flex: 1;
-        display: grid; grid-template-columns: minmax(260px, 34%) 1fr;
+        display: grid; grid-template-columns: minmax(190px, 24%) 1fr;
         gap: 20px; padding: 18px 26px; min-height: 0;
       }
 
-      .cl-left { display: flex; flex-direction: column; min-height: 0; }
+      .cl-left { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
 
       .cl-quick {
         align-self: flex-start;
@@ -550,18 +557,20 @@ export class CoopLobbyUI {
 
       /* The character stands on the stage. Pixel art scaled hard, so smoothing
          must be off or it turns to mush at this size. */
-      .cl-hero {
-        flex: 1; min-height: 0;
+      /* Your character stands inside your own card now, not off to the side of
+         the stage. The sprite sheets are wide frames with the figure centred,
+         so the frame is cropped to the figure rather than scaled to fit - at
+         fit-size the character would be a quarter of the card. */
+      .cl-crest-art.cl-crest-hero {
+        width: 100%; height: 96px;
+        overflow: hidden;
         display: flex; align-items: flex-end; justify-content: center;
-        padding-bottom: 4px;
       }
-      .cl-hero-img {
-        max-height: 100%; max-width: 100%;
+      .cl-crest-art img.cl-hero-img {
+        height: 150px; width: auto; max-width: none;
         image-rendering: pixelated;
-        filter: drop-shadow(0 18px 22px rgba(0,0,0,0.75));
-        transform: scale(1.6); transform-origin: bottom center;
+        filter: drop-shadow(0 8px 10px rgba(0,0,0,0.7));
       }
-      .cl-hero-none { width: 120px; height: 180px; background: rgba(255,255,255,0.03); }
 
       .cl-facts { display: flex; flex-direction: column; gap: 3px; }
       .cl-fact { display: flex; gap: 12px; font-size: 11.5px; }
@@ -571,11 +580,15 @@ export class CoopLobbyUI {
 
       .cl-right { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
 
-      .cl-crests { display: flex; gap: 16px; align-items: flex-start; }
+      .cl-crests { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
 
       /* The crest shape from the reference: a shield tapering to a point. */
       .cl-crest {
-        width: 116px; min-height: 190px;
+        /* Do not let the row squeeze them. A fourth card was added and flex
+           items shrink by default, so at narrow widths all four collapsed to
+           slivers rather than the row simply running out of space. */
+        flex: none;
+        width: 116px; min-height: 226px;
         padding: 14px 8px 22px;
         display: flex; flex-direction: column; align-items: center; gap: 5px;
         text-align: center;
@@ -590,6 +603,9 @@ export class CoopLobbyUI {
         box-shadow: inset 0 0 0 1px var(--accent, #6b7280);
       }
       .cl-crest.is-ready { box-shadow: inset 0 0 0 2px #4ade80; }
+      /* Yours reads as yours at a glance across four near-identical cards. */
+      .cl-crest.is-me { box-shadow: inset 0 0 0 2px #d4af37; }
+      .cl-crest.is-me.is-ready { box-shadow: inset 0 0 0 2px #4ade80, inset 0 0 0 4px rgba(212,175,55,0.5); }
       .cl-crest-art { width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; }
       .cl-crest-art img { width: 44px; height: 44px; image-rendering: pixelated; }
       .cl-crest-name { font-size: 12.5px; font-weight: 800; color: #eef1f5; }
@@ -698,17 +714,18 @@ export class CoopLobbyUI {
       /* Landscape phones: the stage still works, but the crests have to shrink
          and the character cannot take a third of the width. */
       @media (max-width: 900px), (orientation: landscape) and (max-height: 500px) {
-        .cl-main { grid-template-columns: minmax(180px, 30%) 1fr; gap: 12px; padding: 10px 14px; }
+        .cl-main { grid-template-columns: minmax(140px, 22%) 1fr; gap: 12px; padding: 10px 14px; }
         .cl-tabs { padding: 8px 10px 6px; }
         .cl-tab { padding: 5px 10px; font-size: 11.5px; }
         .cl-quick { padding: 8px 16px; font-size: 11px; }
-        .cl-crest { width: 88px; min-height: 148px; padding: 10px 6px 18px; }
+        .cl-crest { width: 78px; min-height: 168px; padding: 8px 4px 16px; }
+        .cl-crest-art.cl-crest-hero { height: 72px; }
+        .cl-crest-art img.cl-hero-img { height: 112px; }
         .cl-crest-plus { margin-top: 36px; font-size: 20px; }
         .cl-crest-art { width: 40px; height: 40px; }
         .cl-crest-art img { width: 34px; height: 34px; }
         .cl-crest-name { font-size: 11px; }
-        .cl-crests { gap: 10px; }
-        .cl-hero-img { transform: scale(1.15); }
+        .cl-crests { gap: 7px; }
         .cl-fact { font-size: 10.5px; }
         .cl-fact-k { width: 60px; }
         .cl-foot { padding: 8px 14px 10px; }

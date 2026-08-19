@@ -37,11 +37,11 @@ export function installMobileStyles() {
        hard-coding a second set of sizes. */
     @media (pointer: coarse) {
       .dialogue-box-frame, .inventory-modal, .world-map-modal,
-      .quest-log-modal, #coop-lobby, .details-area, .showcase-area {
+      .quest-log-modal, .details-area, .showcase-area {
         font-size: clamp(13px, 3.4vw, 16px);
       }
       .dialogue-box-frame *, .inventory-modal *, .world-map-modal *,
-      .quest-log-modal *, #coop-lobby *, .details-area * {
+      .quest-log-modal * *, .details-area * {
         font-size: max(1em, 12px);
         line-height: 1.35;
       }
@@ -65,7 +65,7 @@ export function installMobileStyles() {
 
     /* ---- Scrollable panels --------------------------------------------- */
     .dialogue-box-frame, .inventory-modal, .world-map-modal,
-    .quest-log-modal, #coop-lobby, .details-area, .showcase-area {
+    .quest-log-modal, .details-area, .showcase-area {
       -webkit-overflow-scrolling: touch;
       overscroll-behavior: contain;
     }
@@ -83,7 +83,7 @@ export function installMobileStyles() {
        sideways - the case width-only breakpoints miss entirely. */
     @media (max-height: 560px) {
       .dialogue-box-frame, .inventory-modal, .world-map-modal,
-      .quest-log-modal, #coop-lobby {
+      .quest-log-modal {
         max-height: 94dvh !important;
         padding: 10px 12px !important;
       }
@@ -92,7 +92,7 @@ export function installMobileStyles() {
 
     /* Never let a panel force the page sideways. */
     .dialogue-box-frame, .inventory-modal, .world-map-modal,
-    .quest-log-modal, #coop-lobby { max-width: 96vw; }
+    .quest-log-modal { max-width: 96vw; }
 
     /* Any full-screen centred overlay must be able to scroll, or content that
        does not fit a short landscape phone becomes unreachable. */

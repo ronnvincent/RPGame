@@ -33,6 +33,7 @@ const waitFor = (s, ev, ms = T(2000)) => new Promise(res => {
 
 const lobby = readFileSync('src/sideview/ui/CoopLobbyUI.ts', 'utf8');
 const synergy = readFileSync('src/sideview/network/PartySynergy.ts', 'utf8');
+const mobileCss = readFileSync('src/sideview/ui/MobileUI.ts', 'utf8');
 
 const run = async () => {
   console.log('\n=== LOBBY STAGE ===\n');
@@ -55,6 +56,24 @@ const run = async () => {
   check('the key listener is removed on close, so it cannot pile up',
     /removeEventListener\('keydown', this\.keyHandler\)/.test(lobby));
   check('a member crest shows what they bring', /cl-crest-power/.test(lobby) && /PWR/.test(lobby));
+
+  // --- It is a screen, not a dialog ---------------------------------------
+  // Measured in the browser: the lobby came out 1229px wide in a 1280 viewport,
+  // exactly 96vw, because MobileUI listed it among the centred modals and
+  // capped it at 96vw / 94dvh with padding. It was a panel when that was
+  // written. It is fixed, full bleed and above the HUD layer now.
+  check('the lobby fills the screen rather than sitting in it',
+    /position: fixed; inset: 0/.test(lobby));
+  check('and is no longer sized like a dialog', !/coop-lobby/.test(mobileCss));
+  check('it out-ranks the HUD, which used to paint over it',
+    /z-index: 400/.test(lobby));
+
+  // --- Four cards, and yours is one of them --------------------------------
+  check('your character stands in your own card, not beside the stage',
+    /crests: string\[\] = \[this\.crest\(me, heroSrc\)\]/.test(lobby) && !/cl-hero">/.test(lobby));
+  check('and there are four of them', /for \(let i = 0; i < max - 1; i\+\+\)/.test(lobby));
+  check('yours is marked so you can find it', /cl-crest\.is-me/.test(lobby));
+  check('the cards keep their width instead of collapsing', /flex: none;/.test(lobby));
 
   // --- Composition means something ---------------------------------------
   check('a party of one gets no bonus', /present\.length < 2\) return NO_SYNERGY/.test(synergy));

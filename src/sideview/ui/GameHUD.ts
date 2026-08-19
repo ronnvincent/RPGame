@@ -131,6 +131,12 @@ export class GameHUD {
       #game-hud-overlay {
         position: absolute;
         inset: 0;
+        /* Its own stacking context. Without a z-index here the overlay creates
+           none, so every child's z-index - the pause menu at 110, a toast at
+           99999 - competed directly with whatever else was on the page. That is
+           how the party lobby ended up painted behind the HUD. Contained, the
+           HUD sits as one layer and full-screen panels can simply out-rank it. */
+        z-index: 10;
         pointer-events: none;
         user-select: none;
         -webkit-user-select: none;
