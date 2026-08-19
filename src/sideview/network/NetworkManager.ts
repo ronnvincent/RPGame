@@ -1,6 +1,16 @@
 import { io, Socket } from 'socket.io-client';
 import { PlayerState } from '../engine/SideViewEngine';
 
+/** One member's contribution to a finished run. */
+export interface RunStats {
+  name: string;
+  classId?: string;
+  damageDealt: number;
+  damageTaken: number;
+  kills: number;
+  revives: number;
+}
+
 export interface RemotePlayerState {
   classId?: string;
   name: string;
@@ -126,6 +136,7 @@ export class NetworkManager {
   /** Class/level of the local player, attached to lobby packets. */
   public profile: LocalProfile = {};
   private onPartySupportCb: ((payload: any) => void) | null = null;
+  private onRunStatsCb: ((payload: any) => void) | null = null;
 
   constructor() {
     NetworkManager.instance = this;
@@ -265,6 +276,10 @@ export class NetworkManager {
     // The server refuses to let a partied player open a second lobby.
     this.socket.on('remote_party_support', (data) => {
       this.onPartySupportCb?.(data);
+    });
+
+    this.socket.on('remote_party_stats', (data) => {
+      this.onRunStatsCb?.(data);
     });
 
     this.socket.on('lobby_error', (data) => {
@@ -434,8 +449,21 @@ export class NetworkManager {
    * Support skills only ever touched the caster, so a priest healing in a party
    * healed nobody who needed it.
    */
-  public sendPartySupport(payload: { kind: 'heal' | 'buff' | 'downed' | 'revive'; amount?: number; stat?: string; multiplier?: number; duration?: number; casterName?: string; targetSocketId?: string }) {
+  public sendPartySupport(payload: { kind: 'heal' | 'buff' | 'downed' | 'revive' | 'loot'; amount?: number; stat?: string; multiplier?: number; duration?: number; casterName?: string; targetSocketId?: string; itemName?: string; rarity?: string }) {
     this.socket?.emit('party_support', payload);
+  }
+
+  /**
+   * What each member did this run, exchanged when the dungeon ends. Every
+   * client tallies only its own blows, so a summary of the whole party can
+   * only be assembled by everyone saying their own number.
+   */
+  public sendRunStats(payload: RunStats) {
+    this.socket?.emit('party_stats', payload);
+  }
+
+  public onRunStats(cb: (payload: RunStats & { socketId: string }) => void) {
+    this.onRunStatsCb = cb;
   }
 
   public onPartySupport(cb: (payload: any) => void) {

@@ -32,7 +32,8 @@
     "test:types": "node test/typecheck.test.mjs",
     "test:unlocks": "node test/unlocks.test.mjs",
     "test:levels": "node test/level-visibility.test.mjs",
-    "test:revive": "node test/coop-revive.test.mjs"
+    "test:revive": "node test/coop-revive.test.mjs",
+    "test:rewards": "node test/coop-rewards.test.mjs"
   },
   "keywords": [],
   "author": "",

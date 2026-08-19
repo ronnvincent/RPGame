@@ -18,6 +18,7 @@ import { WorldMapUI } from './ui/WorldMapUI';
 import { quests } from './quests/QuestManager';
 import { CoopDebugOverlay } from './ui/CoopDebugOverlay';
 import { CoopLobbyUI } from './ui/CoopLobbyUI';
+import { RunSummaryUI, SummaryRow } from './ui/RunSummaryUI';
 import { installMobileStyles, findScrollable } from './ui/MobileUI';
 
 export class SideViewGame {
@@ -29,6 +30,9 @@ export class SideViewGame {
   private townHub: TownHub | null = null;
   private dialogue: DialogueSystem | null = null;
   private worldMap: WorldMapUI | null = null;
+  private runSummary: RunSummaryUI | null = null;
+  /** Contributions reported by teammates for the run that just ended. */
+  private partyStats: Record<string, SummaryRow> = {};
   private coopDebug: CoopDebugOverlay | null = null;
   public coopLobby: CoopLobbyUI | null = null;
   private currentDungeonIndex: number = 0;
@@ -176,6 +180,9 @@ export class SideViewGame {
     // Party lobby. Closes itself and enters the dungeon when the host starts.
     this.coopLobby = new CoopLobbyUI(this.container, () => {});
     this.worldMap.onOpenLobby = () => this.coopLobby?.open();
+
+    this.runSummary = new RunSummaryUI(this.container);
+    this.runSummary.onRematch = () => this.loadDungeon(this.currentDungeonIndex, true);
 
     // Class and level travel with lobby packets so party cards can show them.
     this.refreshNetworkProfile();
@@ -339,6 +346,8 @@ export class SideViewGame {
           if (payload.targetSocketId && payload.targetSocketId === mod.network.mySocketId) {
             this.engine.acceptRevive(payload.casterName);
           }
+        } else if (payload.kind === 'loot') {
+          this.hud?.showToast?.(`${payload.casterName} found ${payload.itemName}!`);
         } else if (payload.kind === 'downed') {
           this.hud?.showToast?.(`${payload.casterName || 'A teammate'} is down!`);
         } else if (payload.kind === 'buff') {
@@ -349,6 +358,20 @@ export class SideViewGame {
             payload.casterName
           );
         }
+      });
+
+      mod.network.onRunStats((payload) => {
+        if (!payload?.socketId) return;
+        this.partyStats[payload.socketId] = {
+          socketId: payload.socketId,
+          isMe: false,
+          name: payload.name || 'Teammate',
+          classId: payload.classId,
+          damageDealt: Number(payload.damageDealt) || 0,
+          damageTaken: Number(payload.damageTaken) || 0,
+          kills: Number(payload.kills) || 0,
+          revives: Number(payload.revives) || 0,
+        };
       });
 
       mod.network.onRoleChange((isHost) => {
@@ -431,6 +454,9 @@ export class SideViewGame {
       this.engine.player.animState = 'idle';
       this.engine.runOver = false;
       this.loadTownHub(true);
+      // A defeat is still a run worth reading. No rematch offered from here -
+      // the way back in is the world map, which re-checks the level gate.
+      this.showRunSummary('DEFEATED', 'You were carried back to Eldermoor', false);
     }, 2600);
   }
 
@@ -677,6 +703,48 @@ export class SideViewGame {
     });
   }
 
+  /**
+   * Every client counts only its own blows, so the party summary has to be
+   * assembled from everyone reporting theirs. We send ours, give the others a
+   * moment to arrive, then draw whatever showed up - a teammate who dropped
+   * out simply does not appear rather than holding up the card.
+   */
+  private showRunSummary(title: string, subtitle: string, canRematch: boolean) {
+    if (!this.engine) return;
+    const e = this.engine;
+
+    if (network.isPartied) {
+      network.sendRunStats({
+        name: localStorage.getItem('playerName') || 'Player',
+        classId: e.player.characterClass.id,
+        damageDealt: Math.round(e.damageDealt),
+        damageTaken: Math.round(e.damageTaken),
+        kills: e.killCount,
+        revives: e.revivesGiven,
+      });
+    }
+
+    const draw = () => {
+      const mine: SummaryRow = {
+        socketId: network.mySocketId || 'me',
+        isMe: true,
+        name: localStorage.getItem('playerName') || 'You',
+        classId: e.player.characterClass.id,
+        damageDealt: Math.round(e.damageDealt),
+        damageTaken: Math.round(e.damageTaken),
+        kills: e.killCount,
+        revives: e.revivesGiven,
+      };
+      const rows = [mine, ...Object.values(this.partyStats)];
+      this.partyStats = {};
+      this.runSummary?.open(rows, title, subtitle, canRematch);
+    };
+
+    // Solo has nobody to wait for.
+    if (network.isPartied) window.setTimeout(draw, 900);
+    else draw();
+  }
+
   private onDungeonCleared() {
     if (!this.engine) return;
     this.waveActive = false;
@@ -690,6 +758,12 @@ export class SideViewGame {
     const dungeon = DUNGEONS[this.currentDungeonIndex];
     audio.playFanfare();
     this.engine.particles.addFloatingText(this.engine.player.x, this.engine.player.y - 60, '🏆 DUNGEON CLEARED! 🏆', '#ffd700', true, 28);
+
+    this.showRunSummary(
+      'DUNGEON CLEARED',
+      dungeon ? dungeon.name : 'Victory',
+      true,
+    );
 
     // If final Void Nexus dungeon cleared
     if (dungeon.id === 'void_nexus') {

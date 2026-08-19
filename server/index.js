@@ -1025,6 +1025,16 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Each client tallies only its own blows, so the party summary is assembled
+  // from everyone reporting their own. Relayed untouched - the server has no
+  // view of combat and no reason to arbitrate it.
+  socket.on('party_stats', (data) => {
+    const p = players[socket.id];
+    if (p && p.room) {
+      socket.to(p.room).emit('remote_party_stats', { socketId: socket.id, ...data });
+    }
+  });
+
   socket.on('player_skill', (data) => {
     const p = players[socket.id];
     if (p && p.room) {

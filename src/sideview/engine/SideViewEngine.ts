@@ -1289,10 +1289,30 @@ export class SideViewEngine {
     });
   }
 
+  /**
+   * EXP earned per extra party member. Co-op had no mechanical advantage over
+   * playing alone - it was purely social - so the sensible way to level was to
+   * go by yourself. Bringing people has to pay.
+   */
+  public static readonly PARTY_EXP_PER_MEMBER = 0.10;
+
+  /** Everyone in the room, us included. */
+  public partySize(): number {
+    if (!network.room) return 1;
+    return 1 + Object.keys(network.remotePlayers).length;
+  }
+
   public addExp(amount: number) {
     const p = this.player;
-    p.exp += amount;
-    this.particles.addFloatingText(p.x, p.y - 45, `+${amount} EXP`, '#42a5f5', false, 15);
+    const members = this.partySize();
+    const bonus = (members - 1) * SideViewEngine.PARTY_EXP_PER_MEMBER;
+    const total = Math.max(1, Math.round(amount * (1 + bonus)));
+    p.exp += total;
+    this.particles.addFloatingText(
+      p.x, p.y - 45,
+      bonus > 0 ? `+${total} EXP (+${Math.round(bonus * 100)}% party)` : `+${total} EXP`,
+      bonus > 0 ? '#7dd3fc' : '#42a5f5', false, 15,
+    );
 
     while (p.exp >= p.maxExp) {
       p.exp -= p.maxExp;
@@ -2494,6 +2514,16 @@ export class SideViewEngine {
         audio.playLoot(loot.item.rarity);
         const rConfig = RARITY_CONFIGS[loot.item.rarity] || RARITY_CONFIGS.common;
         this.particles.addFloatingText(p.x, p.y - 25, `+ ${loot.item.name} (${rConfig.name})`, rConfig.color, true, 16);
+        // Tell the party about anything worth envying. A drop nobody else sees
+        // is the same as no drop at all for the mood of a run.
+        if (loot.item.rarity !== 'common' && network.isPartied) {
+          network.sendPartySupport({
+            kind: 'loot',
+            casterName: localStorage.getItem('playerName') || 'A teammate',
+            itemName: loot.item.name,
+            rarity: loot.item.rarity,
+          });
+        }
         this.droppedLoots.splice(i, 1);
       }
     }
