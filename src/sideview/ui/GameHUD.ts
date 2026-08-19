@@ -946,6 +946,37 @@ export class GameHUD {
         .hotbar-slot[data-skill-idx="4"] { bottom: calc(183px + env(safe-area-inset-bottom)); right: calc(84px + env(safe-area-inset-right)); }
         .hotbar-slot[data-skill-idx="5"] { bottom: calc(190px + env(safe-area-inset-bottom)); right: calc(20px + env(safe-area-inset-right)); }
 
+        /* The potion. On mobile the slots are placed one by one and this one had
+           no place of its own, so it sat wherever the container defaulted to.
+           It goes on the LEFT, above the joystick: the skills are a tight arc
+           under the right thumb, and a heal squeezed among them would be pressed
+           by accident in exactly the fight where you cannot afford to. */
+        .potion-slot {
+          /* Beside the joystick, not above it. Above looks natural on a tall
+             phone but the left column also carries the player panel, and on a
+             short landscape screen (320px) panel + potion + joystick do not fit
+             - the potion landed on top of the panel. Sitting to the right of the
+             joystick keeps one position on every device, which is what muscle
+             memory needs from a heal button. */
+          bottom: calc(max(20px, env(safe-area-inset-bottom)) + 22px);
+          left: calc(176px + env(safe-area-inset-left));
+          right: auto;
+          margin-left: 0;
+          /* Same size as a skill button: this is the panic button, so it should
+             not be the smallest target on screen. */
+          width: 58px;
+          height: 58px;
+          box-shadow: inset 0 0 0 2px rgba(74, 222, 128, 0.5);
+        }
+
+        .potion-slot .slot-skill-name { display: none; }
+        .potion-slot .slot-key-badge { display: none; }
+        .potion-count {
+          right: 3px;
+          bottom: 2px;
+          font-size: 11px;
+        }
+
         .mobile-joystick-area {
           bottom: max(20px, env(safe-area-inset-bottom));
           left: max(20px, env(safe-area-inset-left));

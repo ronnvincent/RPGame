@@ -25,6 +25,30 @@ check('it spends the smallest potion that covers the wound',
 check('it says why nothing happened', /No healing potions/.test(hud) && /Already at full health/.test(hud));
 check('the slot shows how many are left', /potionCount/.test(engine) && /potion-count/.test(hud));
 
+// On mobile every slot is positioned individually, so a slot with no rule of
+// its own lands wherever the container happens to default to. The potion had no
+// rule and sat on the joystick. Rather than trust the eye, do the arithmetic:
+// pull both rules out of the stylesheet and prove they cannot touch.
+const mobileCss = hud.slice(hud.indexOf('@media'));
+const potionRule = (mobileCss.match(/\.potion-slot \{[^}]*\}/) || [''])[0];
+const joystickRule = (mobileCss.match(/\.mobile-joystick-area \{[^}]*\}/) || [''])[0];
+const px = (rule, prop) => {
+  const m = rule.match(new RegExp(prop + ':[^;]*?([0-9]+)px'));
+  return m ? Number(m[1]) : NaN;
+};
+const potionLeft = px(potionRule, 'left');
+const potionWidth = px(potionRule, 'width');
+const stickLeft = px(joystickRule, 'left');
+const stickWidth = px(joystickRule, 'width');
+
+check('the potion has a place of its own on mobile', Number.isFinite(potionLeft) && Number.isFinite(potionWidth));
+check('it is not pinned to the right with the skills', /right: auto/.test(potionRule));
+check(
+  'it clears the joystick horizontally, so a heal is never a stray step',
+  potionLeft >= stickLeft + stickWidth,
+);
+check('and is a full-size target, not the smallest button on screen', potionWidth >= 58);
+
 // --- Elites -------------------------------------------------------------
 const chance = dungeons.match(/ELITE_SPAWN_CHANCE = ([\d.]+)/);
 check('elites can spawn', !!chance);
