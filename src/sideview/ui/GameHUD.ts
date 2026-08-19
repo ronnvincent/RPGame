@@ -374,6 +374,28 @@ export class GameHUD {
         text-shadow: 0 2px 6px rgba(0,0,0,0.9);
       }
 
+      .sk-points { text-align: center; font-size: 12px; color: #c9b48a; margin-bottom: 12px; }
+      .sk-points b { color: #ffd700; font-size: 14px; }
+      .sk-row {
+        display: flex; align-items: center; gap: 10px;
+        padding: 8px 10px; margin-bottom: 6px;
+        background: rgba(0,0,0,0.3);
+        border: 1px solid rgba(255,255,255,0.1); border-radius: 3px;
+      }
+      .sk-row img { width: 26px; height: 26px; image-rendering: pixelated; flex: none; }
+      .sk-meta { flex: 1; min-width: 0; }
+      .sk-name { font-size: 12.5px; font-weight: 800; color: #f3e6c8; }
+      .sk-bonus { font-size: 10.5px; color: #7dd3fc; }
+      .sk-pips { display: flex; gap: 3px; flex: none; }
+      .sk-pip { width: 9px; height: 9px; border-radius: 2px; background: rgba(255,255,255,0.14); }
+      .sk-pip.on { background: #ffd700; }
+      .sk-up {
+        flex: none; width: 30px; height: 30px; cursor: pointer;
+        background: rgba(212,175,55,0.2); border: 1px solid #d4af37; border-radius: 3px;
+        color: #ffd700; font-weight: 900; font-size: 15px; line-height: 1;
+      }
+      .sk-up:disabled { opacity: 0.28; cursor: default; border-color: rgba(255,255,255,0.16); color: #8a7b5c; }
+
       .pause-group { margin-bottom: 14px; }
       .pause-label {
         font-size: 10px; font-weight: 800; letter-spacing: 1.6px;
@@ -1927,6 +1949,22 @@ export class GameHUD {
         </button>
       </div>
 
+      <!-- Skill levels.
+           One point per level, five to a skill, +12% damage each. All of that
+           was computed, saved and loaded already; there was simply nowhere to
+           spend a point, so they accumulated and did nothing. -->
+      <div class="pause-back" id="skills-back" style="display:none">
+        <div class="pause-panel">
+          <div class="pause-title">SKILLS</div>
+          <div class="sk-points">Unspent points: <b id="sk-points">0</b></div>
+          <div id="sk-list"></div>
+          <div class="pause-foot">
+            <span class="pause-id">One point per level &middot; five per skill</span>
+            <button class="pause-close" id="skills-close-btn">CLOSE</button>
+          </div>
+        </div>
+      </div>
+
       <div class="pause-back" id="pause-back" style="display:none">
         <div class="pause-panel">
           <div class="pause-title">MENU</div>
@@ -1942,6 +1980,9 @@ export class GameHUD {
               </button>
               <button class="pause-tile" id="toggle-rank-btn" title="Power Rankings">
                 <img src="/assets/ui_sprites/icons/Ac_Medal01.png" alt="" /><span>Rankings</span>
+              </button>
+              <button class="pause-tile" id="toggle-skills-btn">
+                <img src="/assets/ui_sprites/icons/S_Buff01.png" alt="" /><span>Skills</span>
               </button>
               <button class="pause-tile" id="toggle-inv-btn">
                 <img src="/assets/ui_sprites/icons/I_Chest01.png" alt="" /><span>Bag</span>
@@ -2226,6 +2267,54 @@ export class GameHUD {
     // The menu. Everything that used to sit in the top right lives here now,
     // so this one button has to open it and Escape has to close it - the two
     // gestures a player will try without being told.
+    const skillsBack = this.container.querySelector('#skills-back') as HTMLElement;
+    const paintSkills = () => {
+      if (!skillsBack || !this.engine) return;
+      const p = this.engine.player;
+      const pts = p.skillPoints || 0;
+      const ptsEl = this.container.querySelector('#sk-points');
+      if (ptsEl) ptsEl.textContent = String(pts);
+      const list = this.container.querySelector('#sk-list');
+      if (!list) return;
+      list.innerHTML = p.characterClass.skills.map((sk) => {
+        const lvl = this.engine.skillLevel(sk.id);
+        const pips = Array.from({ length: 5 }, (_, n) =>
+          `<span class="sk-pip ${n < lvl ? 'on' : ''}"></span>`).join('');
+        const icon = this.getSkillIcon(sk, p.characterClass.id);
+        return `
+          <div class="sk-row">
+            <img src="${icon}" alt="" />
+            <div class="sk-meta">
+              <div class="sk-name">${sk.name}</div>
+              <div class="sk-bonus">${lvl > 0 ? `+${lvl * 12}% damage` : 'No points spent'}</div>
+            </div>
+            <div class="sk-pips">${pips}</div>
+            <button class="sk-up" data-skill="${sk.id}" ${pts > 0 && lvl < 5 ? '' : 'disabled'}>+</button>
+          </div>`;
+      }).join('');
+      list.querySelectorAll('.sk-up').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const id = (btn as HTMLElement).dataset.skill;
+          if (id && this.engine.upgradeSkill(id)) paintSkills();
+        });
+      });
+    };
+
+    this.container.querySelector('#toggle-skills-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const back = this.container.querySelector('#pause-back') as HTMLElement;
+      if (back) back.style.display = 'none';
+      paintSkills();
+      if (skillsBack) skillsBack.style.display = 'flex';
+    });
+    this.container.querySelector('#skills-close-btn')?.addEventListener('click', () => {
+      if (skillsBack) skillsBack.style.display = 'none';
+    });
+    skillsBack?.addEventListener('click', (e) => {
+      if (e.target === skillsBack) skillsBack.style.display = 'none';
+    });
+
     const menuBtn = this.container.querySelector('#hud-menu-btn') as HTMLElement;
     const pauseBack = this.container.querySelector('#pause-back') as HTMLElement;
     const setMenu = (open: boolean) => {

@@ -85,5 +85,17 @@ const missing = [...new Set(art)].filter(a => !existsSync('public' + a));
 check(`every icon the menu points at exists on disk (${new Set(art).size} paths)`, missing.length === 0);
 if (missing.length) console.log('        missing:', missing.join(', '));
 
+// --- The points can finally be spent -------------------------------------
+// One point per level, five to a skill, +12% damage each - all of it computed,
+// saved and loaded, with nowhere to spend a point. They simply accumulated.
+check('there is a screen for skill points', /skills-back/.test(hud) && /toggle-skills-btn/.test(hud));
+check('it spends through the engine rather than writing state itself',
+  /this\.engine\.upgradeSkill\(id\)/.test(hud));
+check('a capped skill or an empty pool disables the button', /pts > 0 && lvl < 5/.test(hud));
+check('it redraws after a spend, so the count is never stale',
+  /upgradeSkill\(id\)\) paintSkills\(\)/.test(hud));
+check('and it takes pointer events back like every other panel',
+  /skills-back[\s\S]{0,80}pause-back/.test(hud) || /class="pause-back" id="skills-back"/.test(hud));
+
 console.log(failures ? `\nHUD CHROME FAILURES: ${failures}\n` : '\nHUD CHROME OK\n');
 process.exitCode = failures ? 1 : 0;
