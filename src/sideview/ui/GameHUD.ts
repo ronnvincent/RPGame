@@ -24,6 +24,18 @@ import { QuestLogUI } from './QuestLogUI';
 import { WorldMapUI } from './WorldMapUI';
 
 export class GameHUD {
+  /**
+   * Whether the window-level listeners are already attached.
+   *
+   * render() rebuilds the whole HUD and re-runs attachEvents and the gamepad
+   * setup, and it is called again every time an item is equipped or used. The
+   * markup is replaced each time so element listeners die with their elements -
+   * but window is not replaced, so every equip added another Escape handler and
+   * another full set of joystick handlers. After three equips, one Escape press
+   * toggled the menu four times and one drag moved the joystick four times.
+   */
+  private globalsBound = false;
+
   /** Last threat class written, so the transition is not restarted each frame. */
   private threatClass = '';
   /** Which allies the rail was last built for, so it is not rebuilt per frame. */
@@ -2168,6 +2180,8 @@ export class GameHUD {
 
     this.attachEvents();
     this.setupVirtualTouchGamepad();
+    // Both have had their one chance to bind to window.
+    this.globalsBound = true;
   }
 
   private attachEvents() {
@@ -2330,7 +2344,7 @@ export class GameHUD {
     this.container.querySelector('#pause-close-btn')?.addEventListener('click', () => setMenu(false));
     // Clicking the darkened area outside the panel closes it too.
     pauseBack?.addEventListener('click', (e) => { if (e.target === pauseBack) setMenu(false); });
-    window.addEventListener('keydown', (e) => {
+    if (!this.globalsBound) window.addEventListener('keydown', (e) => {
       if (e.code !== 'Escape') return;
       // The lobby owns Escape while it is open, and it sits above this.
       if (this.game?.coopLobby?.isOpen) return;
@@ -2575,7 +2589,17 @@ export class GameHUD {
 
     if (!joystickZone || !joystickKnob) return;
 
+    // Looked up per event rather than captured. The surviving window listener
+    // outlives the markup it was bound against, so a captured reference would
+    // be driving a detached element after the first re-render.
+    const live = <T extends HTMLElement>(sel: string) =>
+      this.container.querySelector(sel) as T | null;
+
     const handleJoystickMove = (clientX: number, clientY: number) => {
+      const joystickKnob = live<HTMLElement>('#joystick-knob');
+      const arrowLeft = live<HTMLElement>('#joy-arrow-left');
+      const arrowRight = live<HTMLElement>('#joy-arrow-right');
+      if (!joystickKnob) return;
       const dx = clientX - this.joystickCenterX;
       const maxRadius = 45;
       const distance = Math.min(maxRadius, Math.abs(dx));
@@ -2624,7 +2648,7 @@ export class GameHUD {
       handleJoystickMove(touch.clientX, touch.clientY);
     }, { passive: false });
 
-    window.addEventListener('touchmove', (e: TouchEvent) => {
+    if (!this.globalsBound) window.addEventListener('touchmove', (e: TouchEvent) => {
       if (!this.joystickActive) return;
       for (let i = 0; i < e.changedTouches.length; i++) {
         if (e.changedTouches[i].identifier === this.joystickTouchId) {
@@ -2634,7 +2658,7 @@ export class GameHUD {
       }
     }, { passive: false });
 
-    window.addEventListener('touchend', (e: TouchEvent) => {
+    if (!this.globalsBound) window.addEventListener('touchend', (e: TouchEvent) => {
       if (!this.joystickActive) return;
       for (let i = 0; i < e.changedTouches.length; i++) {
         if (e.changedTouches[i].identifier === this.joystickTouchId) {
@@ -2644,7 +2668,7 @@ export class GameHUD {
       }
     }, { passive: false });
 
-    window.addEventListener('touchcancel', () => resetJoystick(), { passive: true });
+    if (!this.globalsBound) window.addEventListener('touchcancel', () => resetJoystick(), { passive: true });
 
     // Pointer Events for Mouse Simulation on Desktop
     joystickZone.addEventListener('pointerdown', (e: PointerEvent) => {
@@ -2657,13 +2681,13 @@ export class GameHUD {
       }
     });
 
-    window.addEventListener('pointermove', (e: PointerEvent) => {
+    if (!this.globalsBound) window.addEventListener('pointermove', (e: PointerEvent) => {
       if (this.joystickActive && e.pointerType === 'mouse') {
         handleJoystickMove(e.clientX, e.clientY);
       }
     });
 
-    window.addEventListener('pointerup', () => {
+    if (!this.globalsBound) window.addEventListener('pointerup', () => {
       if (this.joystickActive) resetJoystick();
     });
 

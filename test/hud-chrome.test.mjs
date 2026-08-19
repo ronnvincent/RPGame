@@ -97,5 +97,22 @@ check('it redraws after a spend, so the count is never stale',
 check('and it takes pointer events back like every other panel',
   /skills-back[\s\S]{0,80}pause-back/.test(hud) || /class="pause-back" id="skills-back"/.test(hud));
 
+// --- Nothing binds to window twice --------------------------------------
+// render() rebuilds the HUD and re-runs both event setups, and it runs again
+// on every equip and every item use. The markup is replaced so element
+// listeners die with their elements, but window is not - so each equip added
+// another Escape handler and another full set of joystick handlers. Three
+// equips in and one Escape press toggled the menu four times.
+const winBinds = [...hud.matchAll(/(.{0,28})window\.addEventListener\('(\w+)'/g)];
+const ungated = winBinds.filter(m => !/globalsBound\) $/.test(m[1]));
+check(`every window listener binds once (${winBinds.length} found, ${ungated.length} ungated)`,
+  winBinds.length > 0 && ungated.length === 0);
+if (ungated.length) console.log('        ungated:', ungated.map(m => m[2]).join(', '));
+check('and the gate closes after both setups have run',
+  /this\.globalsBound = true;/.test(hud));
+check('the surviving joystick handler looks its elements up per event',
+  /const live = <T extends HTMLElement>/.test(hud)
+  && /const joystickKnob = live<HTMLElement>\('#joystick-knob'\)/.test(hud));
+
 console.log(failures ? `\nHUD CHROME FAILURES: ${failures}\n` : '\nHUD CHROME OK\n');
 process.exitCode = failures ? 1 : 0;
