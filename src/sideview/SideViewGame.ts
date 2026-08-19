@@ -426,10 +426,20 @@ export class SideViewGame {
       });
     });
 
-    // Start with Epic Story Prologue Cutscene
-    this.dialogue!.playPrologue(() => {
+    // The prologue is a first-time thing and had no gate at all, so it played
+    // on every single open. Keyed to the account rather than the browser: a new
+    // character on this machine still gets the story, and the person who has
+    // already read it never sees it again.
+    const uuid = localStorage.getItem('playerUUID') || 'guest';
+    const seenKey = `prologueSeen:${uuid}`;
+    if (localStorage.getItem(seenKey)) {
       this.loadTownHub();
-    });
+    } else {
+      this.dialogue!.playPrologue(() => {
+        localStorage.setItem(seenKey, '1');
+        this.loadTownHub();
+      });
+    }
 
     if (this.isRunning) return;
     this.isRunning = true;
@@ -646,10 +656,16 @@ export class SideViewGame {
 
   /** "Wave 12" in an endless run; "Wave 2/4" everywhere else. */
   private waveLabel(dungeon: DungeonDefinition): string {
-    const n = this.currentWaveIndex + 1;
+    // The index has already moved on by the time the last wave is cleared, so
+    // the banner read "Wave 5/4" on the final one. Endless has no total to
+    // exceed, so only the counted kind needs holding at its own length.
+    const total = dungeon.waves.length;
+    const n = dungeon.endless
+      ? this.currentWaveIndex + 1
+      : Math.min(this.currentWaveIndex + 1, total);
     return dungeon.endless
       ? `${dungeon.name} - Wave ${n}${this.bestEndlessWave ? `  (best ${this.bestEndlessWave})` : ''}`
-      : `${dungeon.name} - Wave ${n}/${dungeon.waves.length}`;
+      : `${dungeon.name} - Wave ${n}/${total}`;
   }
 
   /**

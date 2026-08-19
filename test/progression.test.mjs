@@ -13,6 +13,7 @@ import { readFileSync } from 'node:fs';
 // Read the source rather than importing it: DungeonManager imports its
 // neighbours without file extensions, which Node's ESM resolver rejects.
 const dungeonSrc = readFileSync('src/sideview/dungeons/DungeonManager.ts', 'utf8');
+const game = readFileSync('src/sideview/SideViewGame.ts', 'utf8');
 const mapSrc = readFileSync('src/sideview/ui/WorldMapUI.ts', 'utf8');
 
 // Walk the lines: an id line, then minLevel if the dungeon declares one.
@@ -53,5 +54,20 @@ if (!/const isUnlocked = isTown \|\| \(cleared && levelMet\)/.test(mapSrc)) {
 }
 
 console.log('');
+// The prologue had no gate at all and replayed on every open. Keyed to the
+// account, so a new character still gets the story and a returning player does
+// not sit through it again.
+if (!/prologueSeen:\$\{uuid\}/.test(game) || !/localStorage.setItem\(seenKey/.test(game)) {
+  console.log('  FAIL  the prologue is shown once per account');
+  failures++;
+} else console.log('  PASS  the prologue is shown once per account');
+
+// The wave index has already advanced when the last wave clears, so the banner
+// read "Wave 5/4" on the final one.
+if (!/Math\.min\(this\.currentWaveIndex \+ 1, total\)/.test(game)) {
+  console.log('  FAIL  the wave counter cannot exceed its own total');
+  failures++;
+} else console.log('  PASS  the wave counter cannot exceed its own total');
+
 console.log(failures === 0 ? 'PROGRESSION OK' : `PROGRESSION FAILURES: ${failures}`);
 process.exit(failures === 0 ? 0 : 1);
