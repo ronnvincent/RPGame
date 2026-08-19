@@ -35,7 +35,8 @@
     "test:revive": "node test/coop-revive.test.mjs",
     "test:rewards": "node test/coop-rewards.test.mjs",
     "test:chat": "node test/coop-chat.test.mjs",
-    "test:stage": "node test/coop-lobby-stage.test.mjs"
+    "test:stage": "node test/coop-lobby-stage.test.mjs",
+    "test:chrome": "node test/hud-chrome.test.mjs"
   },
   "keywords": [],
   "author": "",

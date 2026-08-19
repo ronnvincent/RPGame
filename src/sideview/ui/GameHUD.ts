@@ -24,6 +24,48 @@ import { QuestLogUI } from './QuestLogUI';
 import { WorldMapUI } from './WorldMapUI';
 
 export class GameHUD {
+  /**
+   * Interface glyphs.
+   *
+   * The icon packs cover objects that exist in the world - scrolls, maps,
+   * medals, chests - and those are used as-is. They have nothing for system
+   * controls like music, fullscreen or a microphone, and emoji is exactly what
+   * this pass exists to remove, so those are drawn here: one flat set that
+   * takes its size and colour from CSS like any other text.
+   */
+  private static readonly GLYPHS: Record<string, string> = {
+    menu: '<path d="M3 6h18M3 12h18M3 18h18"/>',
+    home: '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>',
+    note: '<path d="M9 18V5l10-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>',
+    speaker: '<path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M17 8.5a5 5 0 0 1 0 7"/>',
+    mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/>',
+    headset: '<path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="2" y="13" width="5" height="7" rx="2"/><rect x="17" y="13" width="5" height="7" rx="2"/>',
+    expand: '<path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/>',
+    micOff: '<path d="M9 9V6a3 3 0 0 1 6 0v4"/><path d="M5 11a7 7 0 0 0 11 5.5"/><path d="M12 18v3"/><path d="M3 3l18 18"/>',
+    headsetOff: '<path d="M4 14v-2a8 8 0 0 1 12.5-6.6"/><rect x="2" y="13" width="5" height="7" rx="2"/><path d="M3 3l18 18"/>',
+    chat: '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>',
+    pin: '<path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/>',
+    close: '<path d="M6 6l12 12M18 6L6 18"/>',
+    clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+    check: '<path d="M4 12.5l5 5L20 6.5"/>',
+    box: '<rect x="4.5" y="4.5" width="15" height="15" rx="2"/>',
+    // Stat marks. These read at 14px, which the emoji they replace did not.
+    sword: '<path d="M17 3h4v4L11 17l-4-4L17 3z"/><path d="M6 14l4 4"/><path d="M3 21l3.5-3.5"/>',
+    shield: '<path d="M12 3l7 3v5c0 4.6-3 8.2-7 10-4-1.8-7-5.4-7-10V6l7-3z"/>',
+    heart: '<path d="M12 20s-7-4.4-7-9.5A4 4 0 0 1 12 8a4 4 0 0 1 7 2.5C19 15.6 12 20 12 20z"/>',
+    orb: '<path d="M12 3s6 6.4 6 10a6 6 0 0 1-12 0c0-3.6 6-10 6-10z"/>',
+    spark: '<path d="M13 2L5 13h5l-1 9 8-11h-5l1-9z"/>',
+    wind: '<path d="M3 8h10a3 3 0 1 0-3-3"/><path d="M3 12h14a3 3 0 1 1-3 3"/><path d="M3 16h7"/>',
+  };
+
+  /** One glyph as inline SVG, inheriting colour so CSS still drives the look. */
+  public static glyph(name: string, cls = 'hud-glyph'): string {
+    const body = GameHUD.GLYPHS[name];
+    if (!body) return '';
+    return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+  }
+
   private container: HTMLElement;
   private engine: SideViewEngine;
   private game?: SideViewGame;
@@ -280,6 +322,93 @@ export class GameHUD {
       }
 
       /* Top Right: Gold & Navigation Buttons */
+      .hud-glyph {
+        width: 1.15em; height: 1.15em;
+        flex: none;
+        vertical-align: -0.2em;
+      }
+
+      /* The only chrome left in the top right besides the gold. */
+      .hud-menu-btn {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 34px; height: 34px; padding: 0; cursor: pointer;
+        background: url('/assets/kenney-rpg-ui/buttonSquare_brown.png') no-repeat center/100% 100%;
+        border: none; color: #f3e6c8;
+      }
+      .hud-menu-btn:active { transform: translateY(1px); }
+      .hud-menu-btn .hud-glyph { width: 18px; height: 18px; }
+
+      .pause-back {
+        position: absolute; inset: 0; z-index: 110;
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(6, 5, 10, 0.78);
+      }
+
+      .pause-panel {
+        width: min(520px, 92vw); max-height: 88vh; overflow-y: auto;
+        padding: 18px 22px;
+        background: url('/assets/kenney-rpg-ui/panelInset_brown.png') repeat;
+        background-size: 100% 100%;
+        border: 3px solid #d4af37; border-radius: 5px;
+        box-shadow: 0 18px 50px rgba(0,0,0,0.7);
+      }
+
+      .pause-title {
+        font-family: 'Cinzel', serif; font-weight: 900;
+        font-size: 19px; letter-spacing: 3px; color: #ffd700;
+        text-align: center; margin-bottom: 14px;
+        text-shadow: 0 2px 6px rgba(0,0,0,0.9);
+      }
+
+      .pause-group { margin-bottom: 14px; }
+      .pause-label {
+        font-size: 10px; font-weight: 800; letter-spacing: 1.6px;
+        color: #9b8a68; margin-bottom: 7px;
+      }
+
+      .pause-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(146px, 1fr));
+        gap: 8px;
+      }
+
+      /* Tiles, not a row of text buttons - that row is what made the game read
+         as a web page rather than a game. */
+      .pause-tile {
+        display: flex; align-items: center; gap: 9px;
+        padding: 10px 12px; cursor: pointer;
+        background: rgba(0,0,0,0.3);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 3px;
+        color: #f3e6c8;
+        font-family: 'Outfit', sans-serif;
+        font-size: 12.5px; font-weight: 700; letter-spacing: 0.3px;
+        text-align: left;
+      }
+      .pause-tile:hover { background: rgba(212, 175, 55, 0.16); border-color: #d4af37; }
+      .pause-tile:active { transform: translateY(1px); }
+      .pause-tile img {
+        width: 22px; height: 22px; flex: none;
+        image-rendering: pixelated;
+      }
+      .pause-tile .hud-glyph { width: 22px; height: 22px; color: #d4af37; }
+      .pause-tile span { flex: 1; }
+
+      .pause-foot {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 10px; padding-top: 10px;
+        border-top: 1px solid rgba(255,255,255,0.1);
+      }
+      .pause-id { font-size: 11px; color: #9b8a68; letter-spacing: 0.5px; }
+      .pause-id b { color: #f3e6c8; letter-spacing: 1.5px; }
+      .pause-close {
+        padding: 8px 20px; cursor: pointer;
+        background: url('/assets/kenney-rpg-ui/buttonLong_brown.png') no-repeat center/100% 100%;
+        border: none; color: #fff8e1;
+        font-family: 'Cinzel', serif; font-weight: 800;
+        font-size: 12px; letter-spacing: 1.2px;
+      }
+
       .hud-top-right {
         position: absolute;
         top: max(8px, env(safe-area-inset-top));
@@ -743,11 +872,17 @@ export class GameHUD {
         justify-content: center;
       }
 
+      /* The knob's centre mark, drawn rather than typed. It was the glyph
+         U+2756, which depends on the device having that character - on a phone
+         it can land as a tofu box or a colour emoji. A rotated square is the
+         same diamond everywhere. */
       .joystick-knob::before {
-        content: '❖';
-        color: #ffd700;
-        font-size: 15px;
-        text-shadow: 0 0 4px #000;
+        content: '';
+        width: 11px;
+        height: 11px;
+        background: #ffd700;
+        transform: rotate(45deg);
+        box-shadow: 0 0 4px #000;
       }
 
       .joystick-arrow-img {
@@ -1500,7 +1635,7 @@ export class GameHUD {
                is exactly the kind of thing that should be on screen already. -->
           <div class="player-id-row" id="hud-id-row" title="Your Player ID - give this to a friend to be invited">
             ID <span id="hud-id-text">${localStorage.getItem('playerShortId') || '—'}</span>
-            <span class="player-power" id="hud-power" title="Total Power - every level, item and upgrade counts">⚡ ${this.engine.computePower().toLocaleString()}</span>
+            <span class="player-power" id="hud-power" title="Total Power - every level, item and upgrade counts">${GameHUD.glyph('spark')} ${this.engine.computePower().toLocaleString()}</span>
           </div>
           <!-- HP Bar Sprite Frame with Delayed Hit Lag Bar -->
           <div class="sprite-bar-frame" title="Health (HP)">
@@ -1547,22 +1682,76 @@ export class GameHUD {
       <!-- Toast Notification Banner -->
       <div class="hud-toast-banner" id="hud-toast-banner" style="display: none;"></div>
 
-      <!-- Top Right: Gold, Audio Toggles & Navigation Buttons -->
+      <!-- Top right. One button.
+           This was a row of eleven - gold, BGM, SFX, MIC, VOICE, QUESTS, MAP,
+           RANK, TOWN, BAG, FULLSCREEN - which wrapped onto a second line on
+           narrow screens and read as a web toolbar. None of it is touched
+           during a fight. Everything except the gold moved into the menu
+           below, keeping its id so every existing handler still finds it. -->
       <div class="hud-top-right">
         <div class="gold-badge"><img src="/assets/gui/PNG/iconCircle_brown.png" width="16" height="16" style="vertical-align:middle;margin-right:4px;" /> <span id="hud-gold-text">${p.gold}</span></div>
-        <button class="inv-btn inv-btn-quest" id="toggle-music-btn" title="Toggle Music">🎵 BGM</button>
-        <button class="inv-btn inv-btn-quest" id="toggle-sfx-btn" title="Toggle Sound SFX">🔊 SFX</button>
-        <!-- Party voice. Lives in the HUD rather than the lobby panel so it is
-             still here inside a dungeon, which is where you actually need to
-             talk. Hidden until there is a party to talk to. -->
-        <button class="inv-btn inv-btn-quest" id="toggle-mic-btn" title="Toggle Microphone" style="display:none">🎙️ MIC</button>
-        <button class="inv-btn inv-btn-quest" id="toggle-voice-btn" title="Toggle Party Audio" style="display:none">🎧 VOICE</button>
-        <button class="inv-btn inv-btn-quest" id="toggle-quests-btn">📜 QUESTS</button>
-        <button class="inv-btn inv-btn-quest" id="toggle-map-btn">🗺️ MAP</button>
-        <button class="inv-btn inv-btn-quest" id="toggle-rank-btn" title="Power Rankings">🏆 RANK</button>
-        <button class="inv-btn inv-btn-town" id="return-town-btn" style="display: ${this.engine.isTownMode ? 'none' : 'block'};">⛺ TOWN</button>
-        <button class="inv-btn" id="toggle-inv-btn">🎒 BAG</button>
-        <button class="inv-btn inv-btn-quest" id="toggle-fullscreen-btn" title="Toggle Fullscreen">🖵 FULLSCREEN</button>
+        <button class="hud-menu-btn" id="hud-menu-btn" title="Menu (Esc)">
+          ${GameHUD.glyph('menu')}
+        </button>
+      </div>
+
+      <div class="pause-back" id="pause-back" style="display:none">
+        <div class="pause-panel">
+          <div class="pause-title">MENU</div>
+
+          <div class="pause-group">
+            <div class="pause-label">ADVENTURE</div>
+            <div class="pause-grid">
+              <button class="inv-btn inv-btn-quest pause-tile" id="toggle-quests-btn">
+                <img src="/assets/ui_sprites/icons/I_Scroll.png" alt="" /><span>Quests</span>
+              </button>
+              <button class="inv-btn inv-btn-quest pause-tile" id="toggle-map-btn">
+                <img src="/assets/ui_sprites/icons/I_Map.png" alt="" /><span>World Map</span>
+              </button>
+              <button class="inv-btn inv-btn-quest pause-tile" id="toggle-rank-btn" title="Power Rankings">
+                <img src="/assets/ui_sprites/icons/Ac_Medal01.png" alt="" /><span>Rankings</span>
+              </button>
+              <button class="inv-btn pause-tile" id="toggle-inv-btn">
+                <img src="/assets/ui_sprites/icons/I_Chest01.png" alt="" /><span>Bag</span>
+              </button>
+              <button class="inv-btn inv-btn-town pause-tile" id="return-town-btn" style="display: ${this.engine.isTownMode ? 'none' : 'flex'};">
+                ${GameHUD.glyph('home')}<span>Return to Town</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="pause-group" id="pause-party-group" style="display:none">
+            <div class="pause-label">PARTY</div>
+            <div class="pause-grid">
+              <button class="inv-btn inv-btn-quest pause-tile" id="toggle-mic-btn" title="Toggle Microphone">
+                ${GameHUD.glyph('mic')}<span>Microphone</span>
+              </button>
+              <button class="inv-btn inv-btn-quest pause-tile" id="toggle-voice-btn" title="Toggle Party Audio">
+                ${GameHUD.glyph('headset')}<span>Party Audio</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="pause-group">
+            <div class="pause-label">SETTINGS</div>
+            <div class="pause-grid">
+              <button class="inv-btn inv-btn-quest pause-tile" id="toggle-music-btn" title="Toggle Music">
+                ${GameHUD.glyph('note')}<span>Music</span>
+              </button>
+              <button class="inv-btn inv-btn-quest pause-tile" id="toggle-sfx-btn" title="Toggle Sound SFX">
+                ${GameHUD.glyph('speaker')}<span>Sound</span>
+              </button>
+              <button class="inv-btn inv-btn-quest pause-tile" id="toggle-fullscreen-btn" title="Toggle Fullscreen">
+                ${GameHUD.glyph('expand')}<span>Fullscreen</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="pause-foot">
+            <span class="pause-id">ID <b>${localStorage.getItem('playerShortId') || '&mdash;'}</b></span>
+            <button class="inv-btn pause-close" id="pause-close-btn">CLOSE</button>
+          </div>
+        </div>
       </div>
 
       <!-- Mini Quest Tracker -->
@@ -1606,10 +1795,10 @@ export class GameHUD {
            driven by the same object, so either can be used. Hidden entirely
            when there is no party to talk to. -->
       <div class="voice-dock" id="voice-dock" style="display:none">
-        <button class="voice-dock-btn" id="dock-mic-btn" title="Toggle Microphone">🎙️</button>
-        <button class="voice-dock-btn" id="dock-spk-btn" title="Toggle Party Audio">🎧</button>
-        <button class="voice-dock-btn" id="dock-chat-btn" title="Quick chat">💬</button>
-        <button class="voice-dock-btn" id="dock-ping-btn" title="Ping your position">📍</button>
+        <button class="voice-dock-btn" id="dock-mic-btn" title="Toggle Microphone">${GameHUD.glyph('mic')}</button>
+        <button class="voice-dock-btn" id="dock-spk-btn" title="Toggle Party Audio">${GameHUD.glyph('headset')}</button>
+        <button class="voice-dock-btn" id="dock-chat-btn" title="Quick chat">${GameHUD.glyph('chat')}</button>
+        <button class="voice-dock-btn" id="dock-ping-btn" title="Ping your position">${GameHUD.glyph('pin')}</button>
       </div>
 
       <div class="qc-wheel" id="qc-wheel"></div>
@@ -1652,7 +1841,7 @@ export class GameHUD {
       <div class="inventory-modal" id="inventory-modal">
         <div class="inv-header">
           <h2 class="inv-title">HERO INVENTORY & EQUIPMENT</h2>
-          <button class="inv-close-btn" id="close-inv-btn">✕</button>
+          <button class="inv-close-btn" id="close-inv-btn">${GameHUD.glyph('close')}</button>
         </div>
         <div class="inv-grid-container">
           <!-- Left: Equipment Paperdoll Slots -->
@@ -1802,6 +1991,31 @@ export class GameHUD {
     const dock = this.container.querySelector('#voice-dock') as HTMLElement;
     const dockMic = this.container.querySelector('#dock-mic-btn') as HTMLElement;
     const dockSpk = this.container.querySelector('#dock-spk-btn') as HTMLElement;
+    // The menu. Everything that used to sit in the top right lives here now,
+    // so this one button has to open it and Escape has to close it - the two
+    // gestures a player will try without being told.
+    const menuBtn = this.container.querySelector('#hud-menu-btn') as HTMLElement;
+    const pauseBack = this.container.querySelector('#pause-back') as HTMLElement;
+    const setMenu = (open: boolean) => {
+      if (!pauseBack) return;
+      pauseBack.style.display = open ? 'flex' : 'none';
+      const party = this.container.querySelector('#pause-party-group') as HTMLElement;
+      if (party) party.style.display = network.room ? 'block' : 'none';
+    };
+    menuBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setMenu(pauseBack?.style.display === 'none');
+    });
+    this.container.querySelector('#pause-close-btn')?.addEventListener('click', () => setMenu(false));
+    // Clicking the darkened area outside the panel closes it too.
+    pauseBack?.addEventListener('click', (e) => { if (e.target === pauseBack) setMenu(false); });
+    window.addEventListener('keydown', (e) => {
+      if (e.code !== 'Escape') return;
+      // The lobby owns Escape while it is open, and it sits above this.
+      if (this.game?.coopLobby?.isOpen) return;
+      setMenu(pauseBack?.style.display === 'none');
+    });
+
     const dockChat = this.container.querySelector('#dock-chat-btn') as HTMLElement;
     const dockPing = this.container.querySelector('#dock-ping-btn') as HTMLElement;
     const wheel = this.container.querySelector('#qc-wheel') as HTMLElement;
@@ -1852,7 +2066,7 @@ export class GameHUD {
       if (dock) dock.style.display = inParty ? 'flex' : 'none';
 
       if (dockMic) {
-        dockMic.textContent = voice.isMicOn ? '🎙️' : '🔇';
+        dockMic.innerHTML = GameHUD.glyph(voice.isMicOn ? 'mic' : 'micOff');
         dockMic.style.opacity = voice.isMicOn ? '1' : '0.5';
       }
       if (dockSpk) {
@@ -1861,12 +2075,12 @@ export class GameHUD {
         dockSpk.title = voice.lastError || voice.status;
         const live = voice.peerCount;
         dockSpk.innerHTML = !voice.isSpeakerOn
-          ? '🔈'
-          : `🎧${live > 0 ? `<span class="voice-dock-count">${live}</span>` : (voice.attemptedPeers > 0 ? '<span class="voice-dock-count">…</span>' : '')}`;
+          ? GameHUD.glyph('headsetOff')
+          : `${GameHUD.glyph('headset')}${live > 0 ? `<span class="voice-dock-count">${live}</span>` : (voice.attemptedPeers > 0 ? '<span class="voice-dock-count">…</span>' : '')}`;
         dockSpk.style.opacity = voice.isSpeakerOn ? '1' : '0.5';
       }
       if (micBtn) {
-        micBtn.textContent = voice.isMicOn ? '🎙️ ON' : '🎙️ MUTED';
+        micBtn.innerHTML = `${GameHUD.glyph(voice.isMicOn ? 'mic' : 'micOff')} ${voice.isMicOn ? 'ON' : 'MUTED'}`;
         micBtn.style.opacity = voice.isMicOn ? '1' : '0.55';
       }
       if (voiceBtn) {
@@ -1876,11 +2090,12 @@ export class GameHUD {
         // failure that matters.
         const live = voice.peerCount;
         const trying = voice.attemptedPeers;
-        const label = !voice.isSpeakerOn ? '🎧 OFF'
-          : live > 0 ? `🎧 ${live}`
-          : trying > 0 ? '🎧 …'
-          : '🎧 ON';
-        voiceBtn.textContent = label;
+        const mark = GameHUD.glyph(voice.isSpeakerOn ? 'headset' : 'headsetOff');
+        const label = !voice.isSpeakerOn ? 'OFF'
+          : live > 0 ? String(live)
+          : trying > 0 ? '…'
+          : 'ON';
+        voiceBtn.innerHTML = `${mark} ${label}`;
         voiceBtn.style.opacity = voice.isSpeakerOn ? '1' : '0.55';
         voiceBtn.title = live > 0
           ? `Talking with ${live} in the party`
@@ -1988,9 +2203,9 @@ export class GameHUD {
         tooltipPopup.innerHTML = `
           <div class="tooltip-skill-name">${skill.name}</div>
           <div class="tooltip-badges-row">
-            <span>🔹 ${skill.manaCost} MP</span>
-            <span>⏱️ ${skill.cooldown}s CD</span>
-            <span>⚔️ ${Math.round(skill.damageMultiplier * 100)}% DMG</span>
+            <span>${GameHUD.glyph('orb')} ${skill.manaCost} MP</span>
+            <span>${GameHUD.glyph('clock')} ${skill.cooldown}s CD</span>
+            <span>${GameHUD.glyph('sword')} ${Math.round(skill.damageMultiplier * 100)}% DMG</span>
           </div>
           <div class="tooltip-desc">${skill.description}</div>
         `;
@@ -2300,7 +2515,7 @@ export class GameHUD {
 
     const powerText = this.container.querySelector('#hud-power');
     if (powerText) {
-      const value = `⚡ ${this.engine.computePower().toLocaleString()}`;
+      const value = `${GameHUD.glyph('spark')} ${this.engine.computePower().toLocaleString()}`;
       if (powerText.textContent !== value) powerText.textContent = value;
     }
 
@@ -2346,7 +2561,7 @@ export class GameHUD {
         qNameEl.textContent = topQ.quest.title;
         qListEl.innerHTML = topQ.objectives.map(obj => `
           <div style="color: ${obj.isCompleted ? '#4ade80' : '#cbd5e1'};">
-            ${obj.isCompleted ? '☑️' : '◻️'} ${obj.description} (${obj.currentCount}/${obj.requiredCount})
+            ${GameHUD.glyph(obj.isCompleted ? 'check' : 'box')} ${obj.description} (${obj.currentCount}/${obj.requiredCount})
           </div>
         `).join('');
       } else {
@@ -2463,8 +2678,8 @@ export class GameHUD {
 
     const rows: string[] = [];
     const stats: Array<[string, string, number]> = [
-      ['⚔️', 'ATK', 1], ['🛡️', 'DEF', 1], ['❤️', 'HP', 1],
-      ['🔷', 'MP', 1], ['⚡', 'CRIT', 100], ['💨', 'SPD', 1],
+      [GameHUD.glyph('sword'), 'ATK', 1], [GameHUD.glyph('shield'), 'DEF', 1], [GameHUD.glyph('heart'), 'HP', 1],
+      [GameHUD.glyph('orb'), 'MP', 1], [GameHUD.glyph('spark'), 'CRIT', 100], [GameHUD.glyph('wind'), 'SPD', 1],
     ];
     const keys = ['atk', 'def', 'hp', 'mp', 'crit', 'speed'];
 
@@ -2515,12 +2730,12 @@ export class GameHUD {
     // Stat bonuses breakdown
     const statChips: string[] = [];
     if (item.stats) {
-      if (item.stats.atk) statChips.push(`<span class="stat-chip">⚔️ +${item.stats.atk} ATK</span>`);
-      if (item.stats.def) statChips.push(`<span class="stat-chip">🛡️ +${item.stats.def} DEF</span>`);
-      if (item.stats.hp) statChips.push(`<span class="stat-chip">❤️ +${item.stats.hp} HP</span>`);
-      if (item.stats.mp) statChips.push(`<span class="stat-chip">🔷 +${item.stats.mp} MP</span>`);
-      if (item.stats.crit) statChips.push(`<span class="stat-chip">⚡ +${Math.round(item.stats.crit * 100)}% CRIT</span>`);
-      if (item.stats.speed) statChips.push(`<span class="stat-chip">💨 +${item.stats.speed} SPD</span>`);
+      if (item.stats.atk) statChips.push(`<span class="stat-chip">${GameHUD.glyph('sword')} +${item.stats.atk} ATK</span>`);
+      if (item.stats.def) statChips.push(`<span class="stat-chip">${GameHUD.glyph('shield')} +${item.stats.def} DEF</span>`);
+      if (item.stats.hp) statChips.push(`<span class="stat-chip">${GameHUD.glyph('heart')} +${item.stats.hp} HP</span>`);
+      if (item.stats.mp) statChips.push(`<span class="stat-chip">${GameHUD.glyph('orb')} +${item.stats.mp} MP</span>`);
+      if (item.stats.crit) statChips.push(`<span class="stat-chip">${GameHUD.glyph('spark')} +${Math.round(item.stats.crit * 100)}% CRIT</span>`);
+      if (item.stats.speed) statChips.push(`<span class="stat-chip">${GameHUD.glyph('wind')} +${item.stats.speed} SPD</span>`);
     }
     // Against what you are already wearing.
     //
@@ -2533,11 +2748,11 @@ export class GameHUD {
       : '';
 
     if (item.consumableEffect) {
-      if (item.consumableEffect.type === 'heal_hp') statChips.push(`<span class="stat-chip">❤️ Heals +${item.consumableEffect.value} HP</span>`);
-      if (item.consumableEffect.type === 'heal_mp') statChips.push(`<span class="stat-chip">🔷 Restores +${item.consumableEffect.value} MP</span>`);
-      if (item.consumableEffect.type === 'buff_atk') statChips.push(`<span class="stat-chip">⚔️ +${Math.round((item.consumableEffect.value - 1) * 100)}% ATK (${item.consumableEffect.duration || 10}s)</span>`);
-      if (item.consumableEffect.type === 'buff_speed') statChips.push(`<span class="stat-chip">💨 +${Math.round((item.consumableEffect.value - 1) * 100)}% SPD (${item.consumableEffect.duration || 10}s)</span>`);
-      if (item.consumableEffect.type === 'revive') statChips.push(`<span class="stat-chip">✨ Revives with ${item.consumableEffect.value} HP</span>`);
+      if (item.consumableEffect.type === 'heal_hp') statChips.push(`<span class="stat-chip">${GameHUD.glyph('heart')} Heals +${item.consumableEffect.value} HP</span>`);
+      if (item.consumableEffect.type === 'heal_mp') statChips.push(`<span class="stat-chip">${GameHUD.glyph('orb')} Restores +${item.consumableEffect.value} MP</span>`);
+      if (item.consumableEffect.type === 'buff_atk') statChips.push(`<span class="stat-chip">${GameHUD.glyph('sword')} +${Math.round((item.consumableEffect.value - 1) * 100)}% ATK (${item.consumableEffect.duration || 10}s)</span>`);
+      if (item.consumableEffect.type === 'buff_speed') statChips.push(`<span class="stat-chip">${GameHUD.glyph('wind')} +${Math.round((item.consumableEffect.value - 1) * 100)}% SPD (${item.consumableEffect.duration || 10}s)</span>`);
+      if (item.consumableEffect.type === 'revive') statChips.push(`<span class="stat-chip">${GameHUD.glyph('spark')} Revives with ${item.consumableEffect.value} HP</span>`);
     }
 
     pane.innerHTML = `
