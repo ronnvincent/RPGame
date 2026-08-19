@@ -55,6 +55,17 @@ const run = async () => {
     /showRunSummary\(\s*'DUNGEON CLEARED'/.test(game) && /showRunSummary\('DEFEATED'/.test(game));
   check('a missing teammate does not hold up the card', /setTimeout\(draw, 900\)/.test(game));
 
+  // --- One panel at a time at the end of a run ----------------------------
+  // The summary and the victory gateway both opened on a clear, so two panels
+  // sat on screen together, one half behind the other, and neither said which
+  // to answer first.
+  check('the gateway waits for the summary to be dismissed',
+    /const openGateway = \(\) =>/.test(game) && /this\.runSummary\.onClose = openGateway/.test(game));
+  check('rematch goes straight back in without asking where next',
+    /onRematch = \(\) => this\.loadDungeon\(this\.currentDungeonIndex, true\)/.test(game));
+  check('and a defeat cannot inherit the gateway from the last clear',
+    /this\.runSummary\.onClose = null/.test(game));
+
   // --- Bringing people pays ---------------------------------------------
   check('party size scales EXP', /PARTY_EXP_PER_MEMBER/.test(engine) && /\(members - 1\) \* SideViewEngine\.PARTY_EXP_PER_MEMBER/.test(engine));
   check('and the bonus is visible when it applies', /% party\)/.test(engine));

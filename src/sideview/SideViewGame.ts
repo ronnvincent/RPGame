@@ -730,6 +730,13 @@ export class SideViewGame {
    */
   private showRunSummary(title: string, subtitle: string, canRematch: boolean) {
     if (!this.engine) return;
+    // Cleared, defeated and abandoned runs all end here, so whatever the last
+    // one wired up has to be cleared first - otherwise CONTINUE after a defeat
+    // would open the victory gateway from the clear before it.
+    if (this.runSummary) {
+      this.runSummary.onClose = null;
+      this.runSummary.onRematch = null;
+    }
     const e = this.engine;
 
     if (network.isPartied) {
@@ -785,77 +792,89 @@ export class SideViewGame {
     );
 
     // If final Void Nexus dungeon cleared
-    if (dungeon.id === 'void_nexus') {
-      this.dialogue?.showDialogue({
-        speakerName: 'Elder Justinian',
-        speakerTitle: 'Sage of Aethelgard',
-        portraitIcon: '🧙‍♂️',
-        sentences: [
-          "Elder Justinian: 🌟 THE VOID OVERLORD HAS FALLEN! 🌟",
-          "Elder Justinian: The Five Primordial Runes are reunited in radiance! Peace returns to Aethelgard!",
-          "Elder Justinian: You have proven yourself as the True Champion of the Realm!"
-        ],
-        options: [
-          {
-            label: 'Return to Town Sanctuary',
-            icon: '🏰',
-            type: 'custom',
-            onSelect: () => this.loadTownHub(true)
-          },
-          {
-            label: 'Enter Endless Celestial Arena',
-            icon: '⭐',
-            type: 'custom',
-            onSelect: () => this.onSelectLocation('endless_arena')
-          }
-        ]
-      });
-      return;
-    }
+    // The gateway is the question "where next", and it only makes sense once
+    // you have read what just happened. Both used to open together, so a
+    // cleared dungeon put two panels on screen at the same time - one of them
+    // half behind the other - and neither said which to answer first.
+    const openGateway = () => {
+      if (dungeon.id === 'void_nexus') {
+        this.dialogue?.showDialogue({
+          speakerName: 'Elder Justinian',
+          speakerTitle: 'Sage of Aethelgard',
+          portraitIcon: '🧙‍♂️',
+          sentences: [
+            "Elder Justinian: 🌟 THE VOID OVERLORD HAS FALLEN! 🌟",
+            "Elder Justinian: The Five Primordial Runes are reunited in radiance! Peace returns to Aethelgard!",
+            "Elder Justinian: You have proven yourself as the True Champion of the Realm!"
+          ],
+          options: [
+            {
+              label: 'Return to Town Sanctuary',
+              icon: '🏰',
+              type: 'custom',
+              onSelect: () => this.loadTownHub(true)
+            },
+            {
+              label: 'Enter Endless Celestial Arena',
+              icon: '⭐',
+              type: 'custom',
+              onSelect: () => this.onSelectLocation('endless_arena')
+            }
+          ]
+        });
+        return;
+      }
 
-    setTimeout(() => {
-      this.dialogue?.showDialogue({
-        speakerName: 'Victory Portal',
-        speakerTitle: 'Realm Gateway',
-        portraitIcon: '🌀',
-        sentences: [
-          `You have successfully cleansed ${dungeon.name}!`,
-          "Would you like to return to Eldermoor Town to turn in quests, or advance to the next realm?"
-        ],
-        options: [
-          {
-            label: 'Return to Town Hub [T]',
-            icon: '🏰',
-            type: 'custom',
-            onSelect: () => {
-              this.dialogue?.close();
-              this.loadTownHub(true);
-            }
-          },
-          {
-            label: 'Advance to Next Dungeon ➔',
-            icon: '⚔️',
-            type: 'custom',
-            onSelect: () => {
-              this.dialogue?.close();
-              const nextDungeon = DUNGEONS[this.currentDungeonIndex + 1];
-              if (!nextDungeon) {
+      setTimeout(() => {
+        this.dialogue?.showDialogue({
+          speakerName: 'Victory Portal',
+          speakerTitle: 'Realm Gateway',
+          portraitIcon: '🌀',
+          sentences: [
+            `You have successfully cleansed ${dungeon.name}!`,
+            "Would you like to return to Eldermoor Town to turn in quests, or advance to the next realm?"
+          ],
+          options: [
+            {
+              label: 'Return to Town Hub [T]',
+              icon: '🏰',
+              type: 'custom',
+              onSelect: () => {
+                this.dialogue?.close();
                 this.loadTownHub(true);
-                return;
               }
-              const requiredLevel = nextDungeon.minLevel || 1;
-              if (this.engine!.player.level < requiredLevel) {
-                audio.playClick();
-                this.hud?.showToast(`Lv. ${requiredLevel} Required for ${nextDungeon.name}!`);
-                this.loadTownHub(true);
-                return;
+            },
+            {
+              label: 'Advance to Next Dungeon ➔',
+              icon: '⚔️',
+              type: 'custom',
+              onSelect: () => {
+                this.dialogue?.close();
+                const nextDungeon = DUNGEONS[this.currentDungeonIndex + 1];
+                if (!nextDungeon) {
+                  this.loadTownHub(true);
+                  return;
+                }
+                const requiredLevel = nextDungeon.minLevel || 1;
+                if (this.engine!.player.level < requiredLevel) {
+                  audio.playClick();
+                  this.hud?.showToast(`Lv. ${requiredLevel} Required for ${nextDungeon.name}!`);
+                  this.loadTownHub(true);
+                  return;
+                }
+                this.loadDungeon(this.currentDungeonIndex + 1, true);
               }
-              this.loadDungeon(this.currentDungeonIndex + 1, true);
             }
-          }
-        ]
-      });
-    }, 2800);
+          ]
+        });
+      }, 2800);
+    };
+
+    // Rematch goes straight back in, so it never asks where to go next.
+    if (this.runSummary) {
+      this.runSummary.onClose = openGateway;
+      this.runSummary.onRematch = () => this.loadDungeon(this.currentDungeonIndex, true);
+    }
   }
 
   /** Say a canned line: shown over our own head at once, and sent to the party. */
