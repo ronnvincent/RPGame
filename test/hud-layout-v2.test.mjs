@@ -47,8 +47,18 @@ check('a lull inside a fight does not dim the HUD',
 check('town is always calm', /if \(this\.isTownMode\) return 0/.test(engine));
 
 check('the HUD carries that level as a class', /hud-calm|hud-alert|hud-boss/.test(hud));
-check('readouts dim further than controls do', /hud-calm .player-status-panel[\s\S]{0,220}opacity: 0\.38/.test(hud)
-  && /hud-calm .skills-hotbar[\s\S]{0,120}opacity: 0\.72/.test(hud));
+// Compare the two values rather than pin them: the depth is a taste call that
+// has already been retuned once, but "readouts step back further than controls"
+// is the rule, and a control that looks disabled is worse than a busy screen.
+const opacityAfter = (marker) => {
+  const i = hud.indexOf(marker);
+  const m = i === -1 ? null : hud.slice(i, i + 300).match(/opacity: ([0-9.]+)/);
+  return m ? Number(m[1]) : NaN;
+};
+const calmReadouts = opacityAfter('.hud-calm .player-status-panel');
+const calmControls = opacityAfter('.hud-calm .skills-hotbar');
+check(`readouts dim further than controls do (${calmReadouts} vs ${calmControls})`,
+  calmReadouts < calmControls);
 check('coming back is faster than fading out',
   /hud-alert .player-status-panel[\s\S]{0,240}transition: opacity 0\.08s/.test(hud));
 check('the class is only written when it changes, or the fade never runs',
@@ -78,6 +88,41 @@ check('slots are placed individually, which is what makes it a ring',
   /\.hotbar-slot\[data-skill-idx="5"\] \{[^}]*bottom: calc/.test(hud));
 check('the potion joins the ring where there is no joystick to sit beside',
   /@media \(hover: hover\) and \(pointer: fine\) and \(min-width: 861px\)/.test(hud));
+
+// --- Anything you can press has to say so --------------------------------
+// #game-hud-overlay is pointer-events: none and every interactive piece has to
+// hand it back. The menu did not, so it opened, looked correct, and not one
+// button in it could be pressed - including CLOSE. Confirmed by hit test in the
+// browser: the point at the centre of CLOSE now resolves to CLOSE.
+const ruleBody = (selector) => {
+  const needle = '      ' + selector + ' {';
+  const i = hud.indexOf(needle);
+  if (i === -1) return '';
+  const close = hud.indexOf(String.fromCharCode(10) + '      }', i);
+  return hud.slice(i, close === -1 ? i + 400 : close);
+};
+['.pause-back', '.qc-wheel'].forEach(sel =>
+  check(`${sel} takes pointer events back from the overlay`,
+    /pointer-events: auto/.test(ruleBody(sel))));
+
+// --- Movement is not a skill ---------------------------------------------
+// Jump, dash and talk were threaded through the skill arc - jump came within
+// 5px of a skill - so one thumb had two unrelated kinds of action in one shape.
+// Measured after the move: at 812x375, 667x375 and 568x320 the tightest pair is
+// two skills in the arc, and nothing overlaps.
+const offsetOf = (cls) => {
+  const i = hud.indexOf('        .' + cls + ' {');
+  const m = hud.slice(i, i + 260).match(/right: calc\(([0-9]+)px/);
+  return m ? Number(m[1]) : NaN;
+};
+const utility = ['jump-touch-btn', 'dash-touch-btn', 'touch-talk-btn'].map(offsetOf);
+check('the utility buttons share one column', new Set(utility).size === 1 && Number.isFinite(utility[0]));
+check('and that column is clear of the skill arc, which reaches 191px',
+  utility[0] > 191 + 58);
+
+// --- Stepping back, not vanishing ----------------------------------------
+check(`a calm HUD is still readable (readouts at ${calmReadouts})`,
+  calmReadouts >= 0.6 && calmReadouts < 1);
 
 // --- The party rail -----------------------------------------------------
 check('allies have a rail', /ally-rail/.test(hud) && /paintAllyRail/.test(hud));

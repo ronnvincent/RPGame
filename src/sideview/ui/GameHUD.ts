@@ -346,6 +346,10 @@ export class GameHUD {
         position: absolute; inset: 0; z-index: 110;
         display: flex; align-items: center; justify-content: center;
         background: rgba(6, 5, 10, 0.78);
+        /* The HUD root is pointer-events: none and every interactive piece has
+           to hand it back. Without this the menu opened and looked right and
+           not one button in it could be pressed - including CLOSE. */
+        pointer-events: auto;
       }
 
       .pause-panel {
@@ -460,15 +464,18 @@ export class GameHUD {
          controls dim far less than the readouts - a button you are about to
          press should not look disabled - and nothing here changes hit testing,
          so a dimmed control is still exactly as tappable. */
+      /* Stepping back, not disappearing. 0.38 was deep enough that the cards
+         could not be read at a glance, which is worse than the crowding it was
+         meant to relieve. */
       .hud-calm .player-status-panel,
       .hud-calm .mini-quest-tracker,
       .hud-calm .hud-top-right,
       .hud-calm .voice-dock {
-        opacity: 0.38;
+        opacity: 0.68;
       }
       .hud-calm .skills-hotbar,
       .hud-calm .mobile-controls-wrapper {
-        opacity: 0.72;
+        opacity: 0.88;
       }
 
       .player-status-panel,
@@ -1081,6 +1088,7 @@ export class GameHUD {
       .qc-wheel {
         position: absolute;
         display: none;
+        pointer-events: auto;
         flex-direction: column;
         gap: 5px;
         z-index: 70;
@@ -1415,18 +1423,23 @@ export class GameHUD {
         }
 
         /* Inner Arc: Jump and Dash (Radius 95px) */
+        /* Jump, dash and talk sat threaded through the skill arc - jump came
+           within 5px of a skill button - so the right thumb had two unrelated
+           kinds of action mixed into one shape. They are their own column now,
+           left of the arc, which is where this genre puts its utility buttons.
+           Ordered by how often they are pressed, nearest thumb first. */
         .jump-touch-btn {
           width: 54px;
           height: 54px;
-          bottom: calc(124px + env(safe-area-inset-bottom));
-          right: calc(78px + env(safe-area-inset-right));
+          bottom: calc(28px + env(safe-area-inset-bottom));
+          right: calc(268px + env(safe-area-inset-right));
           font-size: 9px;
         }
         .dash-touch-btn {
           width: 50px;
           height: 50px;
-          bottom: calc(73px + env(safe-area-inset-bottom));
-          right: calc(129px + env(safe-area-inset-right));
+          bottom: calc(92px + env(safe-area-inset-bottom));
+          right: calc(268px + env(safe-area-inset-right));
           font-size: 8.5px;
         }
 
@@ -1434,8 +1447,8 @@ export class GameHUD {
         .touch-talk-btn {
           width: 50px;
           height: 50px;
-          bottom: calc(220px + env(safe-area-inset-bottom));
-          right: calc(166px + env(safe-area-inset-right));
+          bottom: calc(156px + env(safe-area-inset-bottom));
+          right: calc(268px + env(safe-area-inset-right));
           font-size: 8.5px;
         }
       }
