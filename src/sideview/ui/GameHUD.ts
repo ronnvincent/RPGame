@@ -1058,6 +1058,23 @@ export class GameHUD {
         pointer-events: auto;
       }
 
+      /* Touch controls are for touch.
+         Neither of these had a display rule, so on a desktop the joystick,
+         TALK, JUMP and DASH were drawn on top of a layout that already has
+         keys for all four - two full control schemes on screen at once. That
+         is a large part of what made one screen feel crammed. They come back
+         below, on devices whose primary input is a finger or whose window is
+         small enough to be using the touch hotbar anyway. */
+      .mobile-joystick-area,
+      .mobile-action-hub {
+        display: none;
+      }
+
+      @media (hover: none) and (pointer: coarse), (max-width: 860px) {
+        .mobile-joystick-area { display: block; }
+        .mobile-action-hub { display: flex; }
+      }
+
       /* The quick chat menu. Sits above the dock it opens from, and is built
          from the shared line table so the wire ids and the labels cannot drift
          apart. */
@@ -2672,8 +2689,10 @@ export class GameHUD {
 
     const powerText = this.container.querySelector('#hud-power');
     if (powerText) {
+      // innerHTML, not textContent: the value carries a glyph, and assigning
+      // markup as text printed the whole <svg ...> tag across the plate.
       const value = `${GameHUD.glyph('spark')} ${this.engine.computePower().toLocaleString()}`;
-      if (powerText.textContent !== value) powerText.textContent = value;
+      if (powerText.innerHTML !== value) powerText.innerHTML = value;
     }
 
     // Town Return button

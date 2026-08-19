@@ -64,9 +64,20 @@ check(`every glyph asked for is one that exists (${allUsed.length} used, ${unkno
   unknown.length === 0);
 if (unknown.length) console.log('        unknown:', unknown.join(', '));
 
-// A glyph is markup, so it must never be assigned as text.
-check('no glyph is written into textContent, where it would show as source',
-  !/textContent\s*=\s*[^;]*GameHUD\.glyph/.test(hud));
+// A glyph is markup, so it must never be assigned as text. This shipped once:
+// the Power chip built its string into a variable first, so a check for
+// `textContent = ...glyph...` on one line saw nothing, and the whole <svg> tag
+// printed across the status plate. Follow the variable.
+const glyphVars = new Set(
+  [...hud.matchAll(/(?:const|let)\s+([a-zA-Z_$][\w$]*)\s*=\s*[^;]*GameHUD\.glyph/g)].map(m => m[1]),
+);
+const leaked = [...glyphVars].filter(v =>
+  new RegExp('textContent\\s*=\\s*' + v + '\\b').test(hud));
+check(
+  `no glyph reaches textContent, directly or through a variable (${glyphVars.size} carriers checked)`,
+  !/textContent\s*=\s*[^;]*GameHUD\.glyph/.test(hud) && leaked.length === 0,
+);
+if (leaked.length) console.log('        leaked via:', leaked.join(', '));
 
 // --- Real art paths are real -------------------------------------------
 const art = [...hud.matchAll(/src="(\/assets\/[^"]+\.png)"/g)].map(m => m[1]);

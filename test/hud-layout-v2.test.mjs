@@ -54,6 +54,18 @@ check('coming back is faster than fading out',
 check('the class is only written when it changes, or the fade never runs',
   /if \(this\.threatClass === cls\) return;/.test(hud));
 
+// --- Two control schemes were on screen at once -------------------------
+// The joystick, TALK, JUMP and DASH had no display rule anywhere, so on a
+// desktop they were drawn on top of a layout that already has keys for all
+// four. Verified in the browser: hidden at 1280x800, shown at 812x375.
+const gateAt = hud.indexOf('Touch controls are for touch.');
+check('touch controls are hidden by default', gateAt !== -1
+  && /\.mobile-joystick-area,\s*\n\s*\.mobile-action-hub \{\s*\n\s*display: none;/.test(hud));
+check('and come back for a finger, or a window small enough to need them',
+  /@media \(hover: none\) and \(pointer: coarse\), \(max-width: 860px\)/.test(hud));
+check('the gate sits below both base rules, or the cascade would undo it',
+  gateAt > hud.indexOf('.mobile-action-hub {\n        position: absolute;'));
+
 // --- The party rail -----------------------------------------------------
 check('allies have a rail', /ally-rail/.test(hud) && /paintAllyRail/.test(hud));
 check('it shows their health', /ally-hp-fill/.test(hud));
