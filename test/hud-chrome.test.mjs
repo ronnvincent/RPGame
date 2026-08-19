@@ -16,6 +16,7 @@ import { readFileSync, existsSync } from 'node:fs';
 const hud = readFileSync('src/sideview/ui/GameHUD.ts', 'utf8');
 const game = readFileSync('src/sideview/SideViewGame.ts', 'utf8');
 const map = readFileSync('src/sideview/ui/WorldMapUI.ts', 'utf8');
+const dungeons = readFileSync('src/sideview/dungeons/DungeonManager.ts', 'utf8');
 
 let failures = 0;
 const check = (l, c) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${l}`); if (!c) failures++; };
@@ -136,8 +137,8 @@ const strayHud = [...hud.matchAll(/(worldMapUI|coopLobby)\?\.open\(/g)];
 check(`no screen is opened outside that route (${strayGame.length + strayHud.length} strays)`,
   strayGame.length === 0 && strayHud.length === 0);
 
-check('the map asks for the lobby rather than opening it itself',
-  /this\.onOpenLobby\?\.\(\)/.test(map) && !/coopLobby/.test(map));
+check('the map knows nothing about the lobby at all',
+  !/coopLobby/.test(map) && !/onOpenLobby/.test(map));
 
 // --- The menu gets out of the way ---------------------------------------
 // Each tile handler closed the menu itself, or forgot to, and four of the six
@@ -153,6 +154,27 @@ const navTiles = [...menu.matchAll(/<button class="pause-tile"(?! data-keeps-men
 check(`and every other tile takes it down (${navTiles.length} navigate)`, navTiles.length >= 5);
 check('no navigation tile is marked exempt by mistake',
   !keeps.some(id => /inv|quest|rank|town|map|skills/.test(id)));
+
+// --- A run starts from one screen ---------------------------------------
+// SOLO and CO-OP sat on every world map card, so the same choice was spelled
+// out a dozen times and the level gate lived on each copy. The map is a place
+// to read about where you are going; the run starts from the menu.
+check('the map no longer launches runs', !/SOLO/.test(map) && !/CO-OP/.test(map));
+check('and shows the state instead', /wm-state/.test(map));
+check('but the town is still travelled to from there', /isUnlocked && isTown/.test(map));
+
+check('there is one launcher', /toggle-play-btn/.test(hud) && /play-back/.test(hud));
+check('it offers both ways to play', /data-mode="solo"/.test(hud) && /data-mode="party"/.test(hud));
+check('solo enters directly', /onSelectLocation\(d\.id, true\)/.test(hud));
+check('multiplayer opens a lobby for the run that was picked',
+  /network\.createLobby\(d\.id, d\.minLevel/.test(hud) && /showScreen\('lobby'\)/.test(hud));
+
+// The gate moved with the buttons. Losing it would let anyone walk into a run
+// eight levels above them, which is the bug the gate was written for.
+check('the level gate came with it', /lvl >= \(d\.minLevel \|\| 1\)/.test(hud));
+check('story order is still enforced', /sideContent\) \|\| i <= cleared/.test(hud));
+check('and a locked run says what it needs', /Needs Lv\./.test(hud) && /Clear the previous run first/.test(hud));
+check('the launcher closes with the other panels', /'#play-back'/.test(hud));
 
 console.log(failures ? `\nHUD CHROME FAILURES: ${failures}\n` : '\nHUD CHROME OK\n');
 process.exitCode = failures ? 1 : 0;

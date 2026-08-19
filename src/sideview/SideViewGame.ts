@@ -179,7 +179,6 @@ export class SideViewGame {
 
     // Party lobby. Closes itself and enters the dungeon when the host starts.
     this.coopLobby = new CoopLobbyUI(this.container, () => {});
-    this.worldMap.onOpenLobby = () => this.showScreen('lobby');
 
     this.runSummary = new RunSummaryUI(this.container);
     this.runSummary.onRematch = () => this.loadDungeon(this.currentDungeonIndex, true);

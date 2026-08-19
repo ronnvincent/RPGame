@@ -22,6 +22,7 @@ import { network } from '../network/NetworkManager';
 import { quests } from '../quests/QuestManager';
 import { QuestLogUI } from './QuestLogUI';
 import { WorldMapUI } from './WorldMapUI';
+import { DUNGEONS } from '../dungeons/DungeonManager';
 
 export class GameHUD {
   /**
@@ -384,6 +385,34 @@ export class GameHUD {
         font-size: 19px; letter-spacing: 3px; color: #ffd700;
         text-align: center; margin-bottom: 14px;
         text-shadow: 0 2px 6px rgba(0,0,0,0.9);
+      }
+
+      .play-modes { display: flex; gap: 8px; margin-bottom: 12px; }
+      .play-mode {
+        flex: 1; padding: 9px; cursor: pointer;
+        background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.14);
+        border-radius: 3px; color: #9b8a68;
+        font-family: 'Cinzel', serif; font-weight: 800;
+        font-size: 12px; letter-spacing: 1.2px;
+      }
+      .play-mode.is-on { color: #ffd700; border-color: #d4af37; background: rgba(212,175,55,0.16); }
+      .play-row {
+        display: flex; align-items: center; gap: 10px;
+        padding: 9px 10px; margin-bottom: 6px;
+        background: rgba(0,0,0,0.3);
+        border: 1px solid rgba(255,255,255,0.1); border-radius: 3px;
+      }
+      .play-meta { flex: 1; min-width: 0; }
+      .play-name { font-size: 12.5px; font-weight: 800; color: #f3e6c8; }
+      .play-sub { font-size: 10.5px; color: #8a9099; }
+      .play-go {
+        flex: none; padding: 7px 14px; cursor: pointer;
+        background: rgba(212,175,55,0.2); border: 1px solid #d4af37; border-radius: 3px;
+        color: #ffd700; font-weight: 800; font-size: 10.5px; letter-spacing: 0.8px;
+      }
+      .play-go:disabled {
+        opacity: 0.4; cursor: default;
+        border-color: rgba(255,255,255,0.16); color: #8a7b5c; background: rgba(0,0,0,0.25);
       }
 
       .sk-points { text-align: center; font-size: 12px; color: #c9b48a; margin-bottom: 12px; }
@@ -1965,6 +1994,26 @@ export class GameHUD {
            One point per level, five to a skill, +12% damage each. All of that
            was computed, saved and loaded already; there was simply nowhere to
            spend a point, so they accumulated and did nothing. -->
+      <!-- Where a run begins.
+           This used to be two buttons on every card of the world map, so the
+           same choice was spelled out a dozen times and the level gate lived on
+           each copy. One screen: pick how you are playing, then pick where. -->
+      <div class="pause-back" id="play-back" style="display:none">
+        <div class="pause-panel">
+          <div class="pause-title">START A RUN</div>
+          <div class="play-modes">
+            <button class="play-mode is-on" data-mode="solo">SOLO</button>
+            <button class="play-mode" data-mode="party">MULTIPLAYER</button>
+          </div>
+          <div class="pause-label" id="play-hint">Choose where to go</div>
+          <div id="play-list"></div>
+          <div class="pause-foot">
+            <span class="pause-id">Locked runs show what they need</span>
+            <button class="pause-close" id="play-close-btn">CLOSE</button>
+          </div>
+        </div>
+      </div>
+
       <div class="pause-back" id="skills-back" style="display:none">
         <div class="pause-panel">
           <div class="pause-title">SKILLS</div>
@@ -1992,6 +2041,9 @@ export class GameHUD {
               </button>
               <button class="pause-tile" id="toggle-rank-btn" title="Power Rankings">
                 <img src="/assets/ui_sprites/icons/Ac_Medal01.png" alt="" /><span>Rankings</span>
+              </button>
+              <button class="pause-tile" id="toggle-play-btn">
+                <img src="/assets/ui_sprites/icons/S_Sword01.png" alt="" /><span>Start a Run</span>
               </button>
               <button class="pause-tile" id="toggle-skills-btn">
                 <img src="/assets/ui_sprites/icons/S_Buff01.png" alt="" /><span>Skills</span>
@@ -2281,6 +2333,69 @@ export class GameHUD {
     // The menu. Everything that used to sit in the top right lives here now,
     // so this one button has to open it and Escape has to close it - the two
     // gestures a player will try without being told.
+    // The run launcher. The gate that used to live on each world map card
+    // lives here instead: story dungeons open in order, side content opens on
+    // level alone, and a run you cannot enter says what it needs.
+    const playBack = this.container.querySelector('#play-back') as HTMLElement;
+    let playMode: 'solo' | 'party' = 'solo';
+    const paintPlay = () => {
+      const list = this.container.querySelector('#play-list');
+      if (!list || !this.engine) return;
+      const lvl = this.engine.player.level || 1;
+      const cleared = this.engine.player.maxDungeonCleared || 0;
+      list.innerHTML = DUNGEONS.map((d, i) => {
+        const inOrder = Boolean((d as any).sideContent) || i <= cleared;
+        const levelMet = lvl >= (d.minLevel || 1);
+        const open = inOrder && levelMet;
+        const why = !inOrder ? 'Clear the previous run first' : `Needs Lv. ${d.minLevel || 1}`;
+        return `
+          <div class="play-row">
+            <div class="play-meta">
+              <div class="play-name">${d.name}</div>
+              <div class="play-sub">${open ? `Lv. ${d.minLevel || 1}+` : why}</div>
+            </div>
+            <button class="play-go" data-idx="${i}" ${open ? '' : 'disabled'}>GO</button>
+          </div>`;
+      }).join('');
+      list.querySelectorAll('.play-go').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const idx = Number((btn as HTMLElement).dataset.idx);
+          const d = DUNGEONS[idx];
+          if (!d) return;
+          if (playBack) playBack.style.display = 'none';
+          audio.playTeleport();
+          if (playMode === 'solo') {
+            this.game?.onSelectLocation(d.id, true);
+          } else {
+            network.createLobby(d.id, d.minLevel || 1, () => {}, () => {});
+            this.game?.showScreen('lobby');
+          }
+        });
+      });
+    };
+
+    this.container.querySelectorAll('.play-mode').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        playMode = (btn as HTMLElement).dataset.mode === 'party' ? 'party' : 'solo';
+        this.container.querySelectorAll('.play-mode').forEach(b => b.classList.remove('is-on'));
+        btn.classList.add('is-on');
+      });
+    });
+
+    this.container.querySelector('#toggle-play-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      paintPlay();
+      if (playBack) playBack.style.display = 'flex';
+    });
+    this.container.querySelector('#play-close-btn')?.addEventListener('click', () => {
+      if (playBack) playBack.style.display = 'none';
+    });
+    playBack?.addEventListener('click', (e) => {
+      if (e.target === playBack) playBack.style.display = 'none';
+    });
+
     const skillsBack = this.container.querySelector('#skills-back') as HTMLElement;
     const paintSkills = () => {
       if (!skillsBack || !this.engine) return;
@@ -3262,7 +3377,7 @@ export class GameHUD {
    * behind a map or a lobby.
    */
   public closePanels() {
-    ['#pause-back', '#skills-back'].forEach((sel) => {
+    ['#pause-back', '#skills-back', '#play-back'].forEach((sel) => {
       const el = this.container.querySelector(sel) as HTMLElement | null;
       if (el) el.style.display = 'none';
     });

@@ -26,7 +26,6 @@ export class WorldMapUI {
   private modalEl: HTMLElement | null = null;
   private onSelectLocation: (locationId: string, isHost?: boolean) => void;
   /** Opens the party lobby once a co-op lobby has been created. */
-  public onOpenLobby: (() => void) | null = null;
 
   public static LOCATIONS: WorldMapLocation[] = [
     {
@@ -294,27 +293,23 @@ export class WorldMapUI {
               ${!isUnlocked ? '🔒 ' + lockReason : 'VISIT ➔'}
             </button>
           ` : `
-            <div style="display: flex; gap: 6px;">
-              <button class="travel-btn dialogue-btn ${isUnlocked ? 'dialogue-btn-quest' : ''}" style="padding: 6px 10px; font-size: 11px; font-weight: 800; white-space: nowrap;" ${!isUnlocked ? 'disabled' : ''}>
-                ${!isUnlocked ? '🔒 ' + lockReason : 'SOLO'}
-              </button>
-              <button class="coop-btn dialogue-btn" style="padding: 6px 10px; font-size: 11px; font-weight: 800; white-space: nowrap;" ${!isUnlocked ? 'disabled' : ''}>
-                ${!isUnlocked ? '🔒' : 'CO-OP 🌐'}
-              </button>
+            <!-- The map is a place to read about where you are going, not the
+                 place you launch from. Two buttons on every card meant the same
+                 decision was made in a dozen places; a run starts from one
+                 screen now, reached from the menu. -->
+            <div class="wm-state ${isUnlocked ? 'is-open' : ''}">
+              ${isUnlocked ? 'UNLOCKED' : lockReason}
             </div>
           `}
         </div>
       `;
 
-      if (isUnlocked) {
+      // The town is still travelled to from here; it is not a run.
+      if (isUnlocked && isTown) {
         card.querySelector('.travel-btn')?.addEventListener('click', () => {
           audio.playTeleport();
           this.close();
-          this.onSelectLocation(loc.id); // Solo mode
-        });
-        card.querySelector('.coop-btn')?.addEventListener('click', () => {
-          audio.playTeleport();
-          this.showMatchmakingOverlay(loc.id);
+          this.onSelectLocation(loc.id);
         });
       }
 
@@ -347,24 +342,6 @@ export class WorldMapUI {
    * the first accepted invite and had a Cancel button that nulled the socket,
    * leaving it with no listeners. Both are gone - CoopLobbyUI owns this now.
    */
-  private showMatchmakingOverlay(locationId: string) {
-    // Already in a party? Then show it. This used to create a lobby every time
-    // the CO-OP button was pressed, so leaving the panel and coming back tore
-    // down the room you were in and opened a fresh one - the party you had
-    // assembled simply disappeared.
-    if (network.room) {
-      this.onOpenLobby?.();
-      return;
-    }
-
-    const hostDungeon = DUNGEONS.find((d) => d.id === locationId);
-    network.createLobby(locationId, hostDungeon?.minLevel ?? 1, () => {}, () => {
-      // dungeon_start: the host launched the run.
-      this.close();
-      this.onSelectLocation(locationId, network.isHost);
-    });
-    this.onOpenLobby?.();
-  }
 
 
   public close() {
