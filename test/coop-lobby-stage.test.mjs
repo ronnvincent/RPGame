@@ -34,6 +34,8 @@ const waitFor = (s, ev, ms = T(2000)) => new Promise(res => {
 const lobby = readFileSync('src/sideview/ui/CoopLobbyUI.ts', 'utf8');
 const synergy = readFileSync('src/sideview/network/PartySynergy.ts', 'utf8');
 const mobileCss = readFileSync('src/sideview/ui/MobileUI.ts', 'utf8');
+const net = readFileSync('src/sideview/network/NetworkManager.ts', 'utf8');
+const game = readFileSync('src/sideview/SideViewGame.ts', 'utf8');
 
 const run = async () => {
   console.log('\n=== LOBBY STAGE ===\n');
@@ -74,6 +76,22 @@ const run = async () => {
   check('and there are four of them', /for \(let i = 0; i < max - 1; i\+\+\)/.test(lobby));
   check('yours is marked so you can find it', /cl-crest\.is-me/.test(lobby));
   check('the cards keep their width instead of collapsing', /flex: none;/.test(lobby));
+
+  // --- Somebody is always listening for the start --------------------------
+  // The start handler was set only by createLobby and by an accepted invite.
+  // Quick join deliberately passes none, so anyone who had not been invited yet
+  // this session had it null: the host pressed START, the rest of the party
+  // entered the dungeon, and that player sat in the lobby watching nothing.
+  check('there is a standing dungeon-start handler', /public onDungeonStart\(/.test(net));
+  check('and it is registered once at startup, not per invite',
+    /mod\.network\.onDungeonStart\(/.test(game));
+  check('so quick join can pass none without leaving nobody to receive it',
+    /if \(data\?\.roomId\) this\.acceptInvite\(data\.roomId\);/.test(net)
+    && /if \(onStart\) this\.onDungeonStartCb = onStart;/.test(net));
+
+  // Power moves when you equip or forge, while the level stands still.
+  check('a power change alone still reaches the party cards',
+    /this\.profile\.power === profile\.power/.test(net));
 
   // --- Composition means something ---------------------------------------
   check('a party of one gets no bonus', /present\.length < 2\) return NO_SYNERGY/.test(synergy));

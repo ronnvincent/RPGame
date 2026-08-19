@@ -435,7 +435,12 @@ export class NetworkManager {
    * the profile, and this pushes it again whenever the level actually changes.
    */
   public updateProfile(profile: LocalProfile) {
-    const same = this.profile.level === profile.level && this.profile.classId === profile.classId;
+    // Power belongs in this comparison. It changes on equipping and forging
+    // while the level stands still, so leaving it out meant a party card showed
+    // whatever power you had the last time you levelled up.
+    const same = this.profile.level === profile.level
+      && this.profile.classId === profile.classId
+      && this.profile.power === profile.power;
     this.profile = profile;
     if (same) return;
     this.socket?.emit('profile_update', profile);
@@ -549,6 +554,20 @@ export class NetworkManager {
   public quickJoin() {
     if (!this.socket) this.connect();
     this.socket?.emit('quick_join');
+  }
+
+  /**
+   * The standing "the run has begun" handler.
+   *
+   * This used to be set only by createLobby and by an accepted invite, so quick
+   * join - which deliberately passes none, to avoid clobbering the invite one -
+   * left it null for anyone who had not been invited yet this session. The host
+   * pressed START and the packet arrived with nobody listening: the rest of the
+   * party entered the dungeon and that player sat in the lobby. Registered once
+   * at startup, there is always somebody to receive it.
+   */
+  public onDungeonStart(cb: (roomData: any) => void) {
+    this.onDungeonStartCb = cb;
   }
 
   public onPartySupport(cb: (payload: any) => void) {

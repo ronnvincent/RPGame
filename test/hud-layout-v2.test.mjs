@@ -145,7 +145,8 @@ check('and every tile is styled by one class', (menuBlock.match(/class="pause-ti
 // --- Town does not dim ---------------------------------------------------
 // The threat level in town is always 0, so the HUD sat stepped back the whole
 // time you were in the one place you stand around reading it.
-check('town is exempt from the fade', /isTownMode \? 'hud-alert'/.test(hud));
+check('town is exempt from the fade, in a state of its own', /isTownMode \? 'hud-town'/.test(hud) && /\.hud-town \.player-status-panel/.test(hud));
+check('and the state is cleared with the others', /'hud-boss', 'hud-town'/.test(hud));
 
 // --- The party rail -----------------------------------------------------
 check('allies have a rail', /ally-rail/.test(hud) && /paintAllyRail/.test(hud));

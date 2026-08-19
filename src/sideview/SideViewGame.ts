@@ -374,6 +374,13 @@ export class SideViewGame {
         };
       });
 
+      // Registered once, so every way into a run - invite, quick join, or the
+      // host's own START - has a listener when the packet lands.
+      mod.network.onDungeonStart((roomData: any) => {
+        this.worldMap?.close();
+        this.onSelectLocation(roomData.dungeonId, mod.network.isHost);
+      });
+
       mod.network.onQuickChat((payload) => {
         if (!this.engine || !payload?.socketId) return;
         this.engine.showChatBubble(payload.socketId, payload.lineId);
@@ -607,6 +614,9 @@ export class SideViewGame {
     // A fresh tally per run, and one rescue per run: entering the dungeon is
     // where both are reset, not clearing it.
     this.engine.resetRunStats();
+    // Teammate reports were only cleared when a summary was drawn, so leaving a
+    // dungeon without clearing or dying carried their rows into the next run.
+    this.partyStats = {};
 
     const prevDungeonIndex = this.currentDungeonIndex;
     this.currentDungeonIndex = dungeonIndex % DUNGEONS.length;

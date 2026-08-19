@@ -504,6 +504,8 @@ export class GameHUD {
 
       /* Coming back has to be instant - a fade-in you can watch is a fade-in
          that arrives after the hit that needed it. */
+      .hud-town .player-status-panel,
+      .hud-town .skills-hotbar,
       .hud-alert .player-status-panel,
       .hud-boss .player-status-panel,
       .hud-alert .skills-hotbar,
@@ -875,6 +877,9 @@ export class GameHUD {
       }
 
       /* Desktop & Mobile Hotbar with Sprite Buttons */
+      /* Superseded by the skill ring further down, which is in this same sheet
+         and therefore wins. Kept as the shape to fall back to if the ring is
+         ever reverted - it is not reachable as written. */
       .skills-hotbar {
         position: absolute;
         bottom: 12px;
@@ -3112,13 +3117,16 @@ export class GameHUD {
     // the entire time you were in the one place you actually stand around
     // reading it. The fade exists to clear the view during a fight; in town
     // there is nothing competing with it.
-    const cls = this.engine.isTownMode ? 'hud-alert'
+    // Town gets its own class rather than borrowing 'alert'. Nothing is alert
+    // about standing in a town, and a future change to the alert styling would
+    // have silently reached in here.
+    const cls = this.engine.isTownMode ? 'hud-town'
       : level === 2 ? 'hud-boss'
       : level === 1 ? 'hud-alert'
       : 'hud-calm';
     if (this.threatClass === cls) return;
     this.threatClass = cls;
-    this.container.classList.remove('hud-calm', 'hud-alert', 'hud-boss');
+    this.container.classList.remove('hud-calm', 'hud-alert', 'hud-boss', 'hud-town');
     this.container.classList.add(cls);
   }
 

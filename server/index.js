@@ -441,47 +441,64 @@ async function friendUuidsOf(uuid) {
 /** Friend list with live presence, pulled from the connected-player registry. */
 async function buildFriendList(uuid) {
   const uuids = await friendUuidsOf(uuid);
-  const entries = [];
-  for (const fid of uuids) {
+  if (!uuids.length) return [];
+
+  // One query for the whole list.
+  //
+  // This ran a lookup per friend, every time the list was refreshed, purely to
+  // read a name and a level. Small lists hid it; it is still a round trip per
+  // friend per refresh, and the same rows can be fetched at once.
+  const saved = new Map();
+  const needed = uuids.filter((fid) => {
     const live = playersByUuid[fid];
-    let base = live;
-    // The level used to come only from the live socket, and a socket carries one
-    // only after that player has sent it. An offline friend - or one who simply
-    // had not opened a lobby yet - therefore read as Lv 1. Same bug the
-    // leaderboard had, same fix: the save is the source of truth for level.
-    let savedLevel = 0;
-    if (!base || typeof live.level !== 'number') {
-      if (hasDB()) {
-        try {
-          const r = await pool.query(
-            `SELECT username, short_id,
-                    COALESCE(NULLIF(save_data->'playerState'->>'level', '')::int, NULLIF(power_level, 0), 1) AS saved_level
-               FROM users WHERE uuid = $1`,
-            [fid]
-          );
-          if (r.rows.length) {
-            savedLevel = Number(r.rows[0].saved_level) || 0;
-            if (!base) base = { uuid: fid, name: r.rows[0].username, shortId: r.rows[0].short_id };
-          }
-        } catch { /* fall through to the placeholder below */ }
-      } else {
+    return !live || typeof live.level !== 'number';
+  });
+
+  if (needed.length) {
+    if (hasDB()) {
+      try {
+        const r = await pool.query(
+          `SELECT uuid, username, short_id,
+                  COALESCE(NULLIF(save_data->'playerState'->>'level', '')::int, NULLIF(power_level, 0), 1) AS saved_level
+             FROM users WHERE uuid = ANY($1)`,
+          [needed]
+        );
+        r.rows.forEach((row) => saved.set(row.uuid, {
+          name: row.username,
+          shortId: row.short_id,
+          level: Number(row.saved_level) || 0,
+        }));
+      } catch { /* fall through to the placeholders below */ }
+    } else {
+      needed.forEach((fid) => {
         const rec = memUsers.get(fid);
-        if (rec) {
-          savedLevel = Number(rec.save_data?.playerState?.level) || Number(rec.power_level) || 0;
-          if (!base) base = { uuid: fid, name: rec.username, shortId: rec.short_id };
-        }
-      }
+        if (rec) saved.set(fid, {
+          name: rec.username,
+          shortId: rec.short_id,
+          level: Number(rec.save_data?.playerState?.level) || Number(rec.power_level) || 0,
+        });
+      });
     }
-    entries.push({
-      uuid: fid,
-      name: base?.name || 'Adventurer',
-      shortId: base?.shortId || '',
-      classId: live?.classId || null,
-      level: Number(live?.level) || savedLevel || 1,
-      online: !!(live && live.socketId),
-      inParty: !!(live && live.room)
-    });
   }
+
+  const entries = uuids.map((fid) => {
+    const live = playersByUuid[fid];
+    const stored = saved.get(fid);
+    // The level came only from the live socket, and a socket carries one only
+    // after that player has sent it. An offline friend - or one who simply had
+    // not opened a lobby yet - therefore read as Lv 1. Same bug the leaderboard
+    // had, same fix: the save is the source of truth for level.
+    return {
+      uuid: fid,
+      name: live?.name || stored?.name || 'Adventurer',
+      shortId: live?.shortId || stored?.shortId || '',
+      classId: live?.classId || null,
+      level: Number(live?.level) || stored?.level || 1,
+      online: !!(live && live.socketId),
+      inParty: !!(live && live.room),
+    };
+  });
+
   entries.sort((a, b) => (b.online ? 1 : 0) - (a.online ? 1 : 0) || a.name.localeCompare(b.name));
   return entries;
 }
