@@ -120,6 +120,21 @@ const run = async () => {
   check('key caps are hidden where there is no keyboard',
     /@media \(hover: none\) and \(pointer: coarse\) \{[\s\S]{0,120}\.cl-key b \{ display: none; \}/.test(lobby));
 
+  // --- Everyone stands in their own card ----------------------------------
+  // heroIdleSrc took no argument and always answered for the local player, so a
+  // teammate fell back to a small class mark while yours had a character in it.
+  // The class travels with the lobby packet - it was simply never asked for.
+  check('a teammate gets a character too', lobby.includes('heroIdleSrc(m.classId)'));
+  check('and the idle loop advances every card, not just the first',
+    lobby.includes("querySelectorAll('.cl-hero-img')"));
+  check('each card carries its own class for that', lobby.includes('data-class="${m.classId'));
+  check('a class with no sprite set still falls back to its mark',
+    lobby.includes('if (!set) return null;'));
+
+  // A phone has nothing to press ESC or ENTER with.
+  check('the footer actions are real buttons on touch',
+    /@media \(hover: none\)[\s\S]{0,700}\.cl-key \{[\s\S]{0,200}border-radius: 4px;/.test(lobby));
+
   // --- Composition means something ---------------------------------------
   check('a party of one gets no bonus', /present\.length < 2\) return NO_SYNERGY/.test(synergy));
   check('the strongest bonus applies rather than a stack', /Read in order, best first/.test(synergy));

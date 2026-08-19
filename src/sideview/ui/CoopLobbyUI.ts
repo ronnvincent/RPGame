@@ -99,9 +99,13 @@ export class CoopLobbyUI {
     // screen; the walk cycle is what makes the lobby feel like the game.
     this.idleTimer = window.setInterval(() => {
       this.idleFrame++;
-      const img = this.root?.querySelector('.cl-hero-img') as HTMLImageElement | null;
-      const src = this.heroIdleSrc();
-      if (img && src) img.src = src;
+      // Every card, each on its own class's frame count - querySelector took
+      // the first one, so only the leftmost character ever animated.
+      this.root?.querySelectorAll('.cl-hero-img').forEach((el) => {
+        const img = el as HTMLImageElement;
+        const next = this.heroIdleSrc(img.getAttribute('data-class'));
+        if (next) img.src = next;
+      });
     }, 110);
   }
 
@@ -125,11 +129,20 @@ export class CoopLobbyUI {
   }
 
   /** Current frame of the idle loop, wrapped to whatever the class actually has. */
-  private heroIdleSrc(): string | null {
-    const cls = this.myClassId();
+  /**
+   * The current idle frame for any class, not just ours.
+   *
+   * This took no argument and always answered for the local player, so a
+   * teammate's card fell back to a small class mark while yours had a
+   * character standing in it - the cards were not the same kind of thing.
+   * Returns null for a class with no sprite set, and the caller falls back.
+   */
+  private heroIdleSrc(classId?: string | null): string | null {
+    const cls = classId ?? this.myClassId();
     if (!cls) return null;
     const set = HERO_SPRITES[cls];
-    const frames = set?.anims?.idle || 1;
+    if (!set) return null;
+    const frames = set.anims?.idle || 1;
     return heroFrame(cls, 'idle', this.idleFrame % frames);
   }
 
@@ -254,12 +267,17 @@ export class CoopLobbyUI {
     const accent = cls?.themeColor || '#6b7280';
     const state = m.isHost ? 'LEADER' : m.ready ? 'READY' : 'WAITING';
     const mine = m.socketId === network.socket?.id;
-    const art = mine && heroSrc
-      ? `<img class="cl-hero-img" src="${heroSrc}" alt="" />`
+    // Everyone stands in their own card. The class travels with the lobby
+    // packet, so a teammate's sprite is as available as ours - it was simply
+    // never asked for. data-class lets the idle loop advance each one on its
+    // own frame count.
+    const src = mine ? (heroSrc ?? this.heroIdleSrc(m.classId)) : this.heroIdleSrc(m.classId);
+    const art = src
+      ? `<img class="cl-hero-img" data-class="${m.classId || ''}" src="${src}" alt="" />`
       : icon ? `<img src="${icon}" alt="" />` : '';
     return `
       <div class="cl-crest filled ${mine ? 'is-me' : ''} ${m.ready ? 'is-ready' : ''}" style="--accent:${accent}">
-        <div class="cl-crest-art ${mine ? 'cl-crest-hero' : ''}">${art}</div>
+        <div class="cl-crest-art ${src ? 'cl-crest-hero' : ''}">${art}</div>
         <div class="cl-crest-name">${m.name}${m.online ? '' : ' <i>(offline)</i>'}</div>
         <div class="cl-crest-meta">Lv ${m.level} &middot; ${cls ? cls.name : 'Choosing'}</div>
         ${m.power ? `<div class="cl-crest-power">${m.power.toLocaleString()} PWR</div>` : ''}
@@ -718,10 +736,24 @@ export class CoopLobbyUI {
          tappable, so only the label is worth showing there. */
       @media (hover: none) and (pointer: coarse) {
         .cl-key b { display: none; }
-        .cl-key { gap: 0; padding: 8px 14px; font-weight: 700; }
-        .cl-start:not(:disabled), .cl-ready {
-          border: 1px solid currentColor; border-radius: 3px;
+        /* Every footer action becomes a real target, not a line of text with a
+           key cap next to it. A phone has nothing to press ESC or ENTER with,
+           so these are the only way to leave or start from one. */
+        .cl-key {
+          gap: 0;
+          padding: 10px 18px;
+          font-weight: 800;
+          font-size: 12.5px;
+          border: 1px solid rgba(255,255,255,0.28);
+          border-radius: 4px;
+          background: rgba(255,255,255,0.06);
         }
+        .cl-key:active { background: rgba(255,255,255,0.14); }
+        .cl-start:not(:disabled), .cl-ready {
+          border-color: currentColor;
+          background: rgba(212, 175, 55, 0.16);
+        }
+        .cl-foot { gap: 10px; padding: 10px 14px 12px; }
       }
       .cl-start:not(:disabled) { color: #ffd98a; }
       .cl-start:not(:disabled) b { border-color: #caa04a; color: #ffd98a; }
