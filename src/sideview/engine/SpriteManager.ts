@@ -22,7 +22,7 @@ import { ITEM_DATABASE } from '../items/ItemDatabase';
 import { HERO_SPRITES, HERO_FPS, heroFrame, attackAnimFor } from './HeroSprites';
 import { MAPS, MapLayer, MapGround, MapFloor, LEGACY_FLOORS, POLY_SHEETS, POLY_PROPS } from './MapLibrary';
 
-type BattleTheme = 'catacombs' | 'crypt' | 'inferno' | 'void' | 'town' | 'swamp' | 'mountain' | 'underwater' | 'caves';
+type BattleTheme = 'catacombs' | 'crypt' | 'inferno' | 'void' | 'town' | 'swamp' | 'mountain' | 'underwater' | 'caves' | 'sunlit_vale' | 'emerald_ridge' | 'castle_approach';
 
 /**
  * Monster sheets, measured by tools/measure-mob-frames.mjs.

@@ -111,7 +111,7 @@ export interface DungeonDefinition {
   waves: DungeonWave[];
 }
 
-export type BattleTheme = 'catacombs' | 'crypt' | 'inferno' | 'void' | 'town' | 'swamp' | 'mountain' | 'underwater' | 'caves';
+export type BattleTheme = 'catacombs' | 'crypt' | 'inferno' | 'void' | 'town' | 'swamp' | 'mountain' | 'underwater' | 'caves' | 'sunlit_vale' | 'emerald_ridge' | 'castle_approach';
 
 export const DUNGEONS: DungeonDefinition[] = [
   // --- 1. GOBLIN CATACOMBS ---
@@ -396,6 +396,105 @@ export const DUNGEONS: DungeonDefinition[] = [
         waveNumber: 3,
         enemies: [
           { name: 'Gallet Forge Overlord', type: 'boss', icon: '👑', color: '#c2410c', maxHp: 4600, atk: 90, def: 48, speed: 3.4, expReward: 3500, goldReward: 2470, width: 88, height: 90, count: 1, phases: 3 }
+        ]
+      }
+    ]
+  },
+
+  // --- 10. SUNLIT VALE ---
+  {
+    id: 'sunlit_vale',
+    sideContent: true,
+    minLevel: 4,
+    name: 'Sunlit Vale',
+    subtitle: 'Open meadows where bandit warbands drill in the daylight.',
+    theme: 'sunlit_vale',
+    backgroundGradient: ['#8fd3f4', '#2e6f8e'],
+    platformColor: '#3f6212',
+    ambientParticles: '#bef264',
+    waves: [
+      {
+        waveNumber: 1,
+        enemies: [
+          { name: 'Vale Raider', type: 'mob', icon: '🗡', color: '#84cc16', maxHp: 520, atk: 40, def: 16, speed: 4.2, expReward: 190, goldReward: 120, width: 42, height: 50, count: 4 }
+        ]
+      },
+      {
+        waveNumber: 2,
+        enemies: [
+          { name: 'Warband Archer', type: 'mob', icon: '🏹', color: '#a3e635', maxHp: 470, atk: 46, def: 14, speed: 4.6, expReward: 210, goldReward: 135, width: 42, height: 50, count: 4 }
+        ]
+      },
+      {
+        waveNumber: 3,
+        enemies: [
+          { name: 'Warband Chief Hadrik', type: 'boss', icon: '👑', color: '#65a30d', maxHp: 3200, atk: 68, def: 34, speed: 3.6, expReward: 2200, goldReward: 1500, width: 88, height: 90, count: 1, phases: 2 }
+        ]
+      }
+    ]
+  },
+
+  // --- 11. EMERALD RIDGE ---
+  {
+    id: 'emerald_ridge',
+    sideContent: true,
+    minLevel: 8,
+    name: 'Emerald Ridge',
+    subtitle: 'High green ridges patrolled by beasts that hunt in packs.',
+    theme: 'emerald_ridge',
+    backgroundGradient: ['#7ec8e3', '#1f5f6b'],
+    platformColor: '#166534',
+    ambientParticles: '#4ade80',
+    waves: [
+      {
+        waveNumber: 1,
+        enemies: [
+          { name: 'Ridge Prowler', type: 'mob', icon: '🐺', color: '#22c55e', maxHp: 780, atk: 58, def: 24, speed: 4.8, expReward: 320, goldReward: 190, width: 42, height: 50, count: 5 }
+        ]
+      },
+      {
+        waveNumber: 2,
+        enemies: [
+          { name: 'Crag Shaman', type: 'mob', icon: '🔮', color: '#34d399', maxHp: 700, atk: 66, def: 20, speed: 3.9, expReward: 350, goldReward: 210, width: 42, height: 50, count: 3 }
+        ]
+      },
+      {
+        waveNumber: 3,
+        enemies: [
+          { name: 'Alpha Greymane', type: 'boss', icon: '👑', color: '#15803d', maxHp: 4200, atk: 84, def: 44, speed: 4.0, expReward: 3000, goldReward: 2100, width: 88, height: 90, count: 1, phases: 2 }
+        ]
+      }
+    ]
+  },
+
+  // --- 12. CASTLE APPROACH ---
+  {
+    id: 'castle_approach',
+    sideContent: true,
+    minLevel: 12,
+    name: 'Castle Approach',
+    subtitle: 'The long climb to a keep that has not opened its gates in an age.',
+    theme: 'castle_approach',
+    backgroundGradient: ['#86c5da', '#20465c'],
+    platformColor: '#475569',
+    ambientParticles: '#e2e8f0',
+    waves: [
+      {
+        waveNumber: 1,
+        enemies: [
+          { name: 'Gate Sentinel', type: 'mob', icon: '🛡', color: '#94a3b8', maxHp: 1050, atk: 74, def: 34, speed: 3.8, expReward: 470, goldReward: 280, width: 42, height: 50, count: 5 }
+        ]
+      },
+      {
+        waveNumber: 2,
+        enemies: [
+          { name: 'Siege Adept', type: 'mob', icon: '⚔', color: '#cbd5e1', maxHp: 950, atk: 82, def: 28, speed: 4.4, expReward: 500, goldReward: 300, width: 42, height: 50, count: 4 }
+        ]
+      },
+      {
+        waveNumber: 3,
+        enemies: [
+          { name: 'Castellan Mordred', type: 'boss', icon: '👑', color: '#64748b', maxHp: 5400, atk: 100, def: 54, speed: 4.2, expReward: 4200, goldReward: 2900, width: 88, height: 90, count: 1, phases: 2 }
         ]
       }
     ]

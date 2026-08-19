@@ -133,6 +133,7 @@ export interface MapGround {
 }
 
 const POLY = '/assets/maps/PolyStyle';
+const PLX = '/assets/maps/parallax2d';
 const FOREST = '/assets/maps/forest-blue';
 const ANCIENT = '/assets/maps/ancient-forest';
 const EDER = '/assets/maps/eder-forest';
@@ -410,10 +411,73 @@ export const MAPS: Record<string, MapTheme> = {
     floor: { top: '#3a5730', body: '#111a10' }
   },
 
+
+  // The dragon's lair. Not volcanic art - the pack has none - but a night sky
+  // over a lit keep is the most dangerous-looking scene in it, and the fire
+  // belongs to the boss rather than the backdrop.
+  inferno: {
+    sky: '#0b0a1f',
+    // Inline rather than referencing LEGACY_FLOORS, which is declared below
+    // this table. The magma tones the theme has always used.
+    floor: { top: '#7a2a14', body: '#180705' },
+    layers: [
+      { src: `${PLX}/bg2/layer09_Sky.png`, scroll: 0.02, anchor: 'fill' },
+      { src: `${PLX}/bg2/layer08_Stars_1.png`, scroll: 0.05, anchor: 'fill' },
+      { src: `${PLX}/bg2/layer07_Stars_2.png`, scroll: 0.08, anchor: 'fill' },
+      { src: `${PLX}/bg2/layer06_Stars_3.png`, scroll: 0.11, anchor: 'fill' },
+      { src: `${PLX}/bg2/layer03_Clouds_3.png`, scroll: 0.16, anchor: 'fill' },
+      { src: `${PLX}/bg2/layer02_Clouds_2.png`, scroll: 0.24, anchor: 'fill' },
+      { src: `${PLX}/bg2/layer01_Clouds_1.png`, scroll: 0.34, anchor: 'fill' },
+      { src: `${PLX}/bg2/layer05_Castle.png`, scroll: 0.55, anchor: 'fill' },
+      { src: `${PLX}/bg2/layer04_Path.png`, scroll: 0.9, anchor: 'fill' },
+    ],
+  },
+
+  // Three new runs, so the game does not end at four.
+  sunlit_vale: {
+    sky: '#8fd3f4',
+    groundLine: 0.7972,
+    layers: [
+      { src: `${PLX}/bg1/layer06_sky.png`, scroll: 0.02, anchor: 'fill' },
+      { src: `${PLX}/bg1/layer05_rocks.png`, scroll: 0.12, anchor: 'fill' },
+      { src: `${PLX}/bg1/layer04_clouds.png`, scroll: 0.2, anchor: 'fill' },
+      { src: `${PLX}/bg1/layer03_trees.png`, scroll: 0.45, anchor: 'fill' },
+      { src: `${PLX}/bg1/layer02_cake.png`, scroll: 0.7, anchor: 'fill' },
+      { src: `${PLX}/bg1/layer01_ground.png`, scroll: 1.0, anchor: 'fill' },
+    ],
+  },
+
+  emerald_ridge: {
+    sky: '#7ec8e3',
+    groundLine: 0.8306,
+    layers: [
+      { src: `${PLX}/bg3/layer07_Sky.png`, scroll: 0.02, anchor: 'fill' },
+      { src: `${PLX}/bg3/layer06_Rocks.png`, scroll: 0.1, anchor: 'fill' },
+      { src: `${PLX}/bg3/layer05_Clouds.png`, scroll: 0.18, anchor: 'fill' },
+      { src: `${PLX}/bg3/layer04_Hills_2.png`, scroll: 0.3, anchor: 'fill' },
+      { src: `${PLX}/bg3/layer03_Hills_1.png`, scroll: 0.45, anchor: 'fill' },
+      { src: `${PLX}/bg3/layer02_Trees.png`, scroll: 0.68, anchor: 'fill' },
+      { src: `${PLX}/bg3/layer01_Ground.png`, scroll: 1.0, anchor: 'fill' },
+    ],
+  },
+
+  castle_approach: {
+    sky: '#86c5da',
+    groundLine: 0.7972,
+    layers: [
+      { src: `${PLX}/bg4/layer07_Sky.png`, scroll: 0.02, anchor: 'fill' },
+      { src: `${PLX}/bg4/layer06_Rocks.png`, scroll: 0.1, anchor: 'fill' },
+      { src: `${PLX}/bg4/layer05_Hills.png`, scroll: 0.2, anchor: 'fill' },
+      { src: `${PLX}/bg4/layer04_Clouds.png`, scroll: 0.28, anchor: 'fill' },
+      { src: `${PLX}/bg4/layer03_Hills_Castle.png`, scroll: 0.45, anchor: 'fill' },
+      { src: `${PLX}/bg4/layer02_Trees_rocks.png`, scroll: 0.7, anchor: 'fill' },
+      { src: `${PLX}/bg4/layer01_Ground.png`, scroll: 1.0, anchor: 'fill' },
+    ],
+  },
 };
 
 /** Themes still on the old hand-written renderer. */
-export const THEMES_WITHOUT_ART = ['inferno'];
+export const THEMES_WITHOUT_ART: string[] = [];
 
 /**
  * Floors for themes still drawn by the legacy hand-written branch.

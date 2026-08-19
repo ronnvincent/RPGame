@@ -141,7 +141,40 @@ export class WorldMapUI {
       description: 'Infinite scaling trial against empowered dimensional waves for legendary records.',
       bossName: 'Continuous Scaling Waves',
       bgImage: '/assets/GothicVania-town-files/GothicVania-town-files/PNG/environment/layers/background.png'
-    }
+    },
+    {
+      id: 'sunlit_vale',
+      name: 'Sunlit Vale',
+      actTitle: 'Bonus Zone: Open Meadows',
+      recommendedLevel: 4,
+      icon: '/assets/ui_sprites/icons/I_Leaf.png',
+      color: '#84cc16',
+      description: 'Open meadows where bandit warbands drill in the daylight.',
+      bossName: 'Warband Chief Hadrik',
+      bgImage: '/assets/maps/parallax2d/bg1/layer06_sky.png'
+    },
+    {
+      id: 'emerald_ridge',
+      name: 'Emerald Ridge',
+      actTitle: 'Bonus Zone: High Ridges',
+      recommendedLevel: 8,
+      icon: '/assets/ui_sprites/icons/I_Jade.png',
+      color: '#22c55e',
+      description: 'High green ridges patrolled by beasts that hunt in packs.',
+      bossName: 'Alpha Greymane',
+      bgImage: '/assets/maps/parallax2d/bg3/layer07_Sky.png'
+    },
+    {
+      id: 'castle_approach',
+      name: 'Castle Approach',
+      actTitle: 'Bonus Zone: The Long Climb',
+      recommendedLevel: 12,
+      icon: '/assets/ui_sprites/icons/I_Key01.png',
+      color: '#94a3b8',
+      description: 'The long climb to a keep that has not opened its gates in an age.',
+      bossName: 'Castellan Mordred',
+      bgImage: '/assets/maps/parallax2d/bg4/layer07_Sky.png'
+    },
   ];
 
   constructor(parent: HTMLElement, onSelectLocation: (locationId: string, isHost?: boolean) => void) {
