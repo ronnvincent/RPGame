@@ -18,7 +18,7 @@ const LOCAL_ORIGINS = [
   'http://127.0.0.1:4173',
 ];
 const DEPLOYED_BROWSER_ORIGINS = [
-  'https://rpg-game-three.vercel.app',
+  'https://rp-game-three.vercel.app',
 ];
 const configuredOrigins = String(process.env.CORS_ORIGINS || '')
   .split(',')
@@ -38,7 +38,7 @@ const isSafeBrowserOrigin = (origin) => {
     const isLocal = parsed.protocol === 'http:'
       && (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1');
     const isProjectPreview = parsed.protocol === 'https:'
-      && /^rpg-game-three-[a-z0-9-]+\.vercel\.app$/i.test(parsed.hostname);
+      && /^rp-game-three-[a-z0-9-]+\.vercel\.app$/i.test(parsed.hostname);
     return (isLocal || isProjectPreview)
       && parsed.username === ''
       && parsed.password === ''

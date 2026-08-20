@@ -235,16 +235,16 @@ test('CORS is an exact allowlist', async () => {
   const allowed = await json('/', { origin: ALLOWED_ORIGIN });
   assert.equal(allowed.response.headers.get('access-control-allow-origin'), ALLOWED_ORIGIN);
 
-  const production = await json('/', { origin: 'https://rpg-game-three.vercel.app' });
+  const production = await json('/', { origin: 'https://rp-game-three.vercel.app' });
   assert.equal(
     production.response.headers.get('access-control-allow-origin'),
-    'https://rpg-game-three.vercel.app'
+    'https://rp-game-three.vercel.app'
   );
 
-  const preview = await json('/', { origin: 'https://rpg-game-three-fix-login-4tvon.vercel.app' });
+  const preview = await json('/', { origin: 'https://rp-game-three-fix-login-4tvon.vercel.app' });
   assert.equal(
     preview.response.headers.get('access-control-allow-origin'),
-    'https://rpg-game-three-fix-login-4tvon.vercel.app'
+    'https://rp-game-three-fix-login-4tvon.vercel.app'
   );
 
   const denied = await json('/', { origin: 'https://evil.test' });
@@ -252,7 +252,7 @@ test('CORS is an exact allowlist', async () => {
 });
 
 test('guest registration preflight returns the browser CORS contract', async () => {
-  const origin = 'https://rpg-game-three.vercel.app';
+  const origin = 'https://rp-game-three.vercel.app';
   const response = await fetch(`${URL}/api/register_guest`, {
     method: 'OPTIONS',
     headers: {
