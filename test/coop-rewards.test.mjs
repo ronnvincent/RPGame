@@ -77,7 +77,7 @@ const run = async () => {
   await new Promise(r => setTimeout(r, T(250)));
 
   const lobbied = waitFor(a, 'lobby_update', T(2500));
-  a.emit('create_lobby', { dungeonId: 'crypt_damned', minLevel: 1, ...A });
+  a.emit('create_lobby', { dungeonId: 'goblin_catacombs', minLevel: 999, ...A });
   const lobby = await lobbied;
   const roomId = lobby?.roomId || lobby?.room?.roomId;
   const joined = waitFor(a, 'lobby_update', T(2500));

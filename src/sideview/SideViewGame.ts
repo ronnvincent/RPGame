@@ -10,6 +10,8 @@ import { CharacterSelectUI } from './ui/CharacterSelectUI';
 import { GameHUD } from './ui/GameHUD';
 import { DUNGEONS, DungeonDefinition, spawnWaveEnemies } from './dungeons/DungeonManager';
 import { audio } from './engine/AudioManager';
+import { canvasDprForQuality } from './engine/RenderResolution';
+import type { VfxQuality } from './engine/ParticleSystem';
 import { network } from './network/NetworkManager';
 import { sprites } from './engine/SpriteManager';
 import { TownHub } from './town/TownHub';
@@ -20,6 +22,32 @@ import { CoopDebugOverlay } from './ui/CoopDebugOverlay';
 import { CoopLobbyUI } from './ui/CoopLobbyUI';
 import { RunSummaryUI, SummaryRow } from './ui/RunSummaryUI';
 import { installMobileStyles, findScrollable } from './ui/MobileUI';
+import {
+  InputAction,
+  InputActionEvent,
+  InputAccessibilityPreferences,
+  InputContext,
+  InputController,
+  PointerBindingOptions,
+  skillIndexForAction,
+} from './input';
+
+/** Single source of truth for discrete keyboard-to-skill routing. */
+export function skillIndexForInput(code: string): number | null {
+  switch (code) {
+    case 'Digit1': return 0;
+    case 'Digit2': return 1;
+    case 'Digit3':
+    case 'KeyR': return 2;
+    case 'Digit4':
+    case 'KeyF': return 3;
+    case 'Digit5':
+    case 'KeyZ': return 4;
+    case 'Digit6':
+    case 'KeyX': return 5;
+    default: return null;
+  }
+}
 
 export class SideViewGame {
   private container: HTMLElement;
@@ -43,13 +71,19 @@ export class SideViewGame {
   private lastTime: number = 0;
   private isRunning: boolean = false;
   private animationFrameId: number | null = null;
-  private keysPressed: { [key: string]: boolean } = {};
-  public touchMoveDir: number = 0;
+  /** One stable callback avoids allocating a new bound function every frame. */
+  private readonly boundGameLoop = (timestamp: number) => this.gameLoop(timestamp);
+  public readonly input: InputController;
+  private inputListenersReady = false;
   /** Guest-side watchdog: timestamp of the last host state packet we saw. */
   private lastEnemySyncAt: number = 0;
   private lastResyncRequestAt: number = 0;
+  /** Profile power is UI/network metadata, not a 60 Hz simulation system. */
+  private networkProfileRefreshTimer = 0;
   /** Device pixel ratio the canvas backing store is sized for. */
   private dpr: number = 1;
+  /** Canvas resolution follows adaptive VFX quality, but only at tier changes. */
+  private renderResolutionQuality: VfxQuality = 'high';
   /** Viewport size in CSS pixels - the world's coordinate space. */
   private viewWidth: number = 960;
   private viewHeight: number = 540;
@@ -73,6 +107,16 @@ export class SideViewGame {
     this.container.style.overflow = 'hidden';
     this.container.style.touchAction = 'none';
     this.container.appendChild(this.canvas);
+
+    this.input = new InputController({
+      storage: typeof localStorage === 'undefined' ? null : localStorage,
+      context: () => this.resolveInputContext(),
+      onAction: event => this.handleInputAction(event),
+      reducedMotionDefault: typeof window.matchMedia === 'function'
+        && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+      deadzone: 0.2,
+    });
+    this.input.applyAccessibility(this.container);
 
     installMobileStyles();
 
@@ -114,7 +158,13 @@ export class SideViewGame {
     // Back the canvas at device resolution so pixel art stays sharp on phones
     // and retina displays, but keep world coordinates in CSS pixels so layout
     // and pointer input need no remapping.
-    const dpr = Math.min(window.devicePixelRatio || 1, 3);
+    const coarsePointer = typeof window.matchMedia === 'function'
+      && window.matchMedia('(pointer: coarse)').matches;
+    const dpr = canvasDprForQuality(
+      window.devicePixelRatio || 1,
+      coarsePointer,
+      this.renderResolutionQuality,
+    );
     this.dpr = dpr;
     this.viewWidth = width;
     this.viewHeight = height;
@@ -137,6 +187,15 @@ export class SideViewGame {
     }
   }
 
+  /** Avoid per-frame canvas resizes: resize only when adaptive quality changes tier. */
+  private syncRenderResolution() {
+    if (!this.engine) return;
+    const quality = this.engine.particles.getVfxQuality();
+    if (quality === this.renderResolutionQuality) return;
+    this.renderResolutionQuality = quality;
+    this.handleResize();
+  }
+
   public startGame(selectedClass: CharacterClass, saveData: any = null) {
     this.engine = new SideViewEngine(selectedClass);
     this.engine.groundY = this.viewHeight - 90;
@@ -146,7 +205,8 @@ export class SideViewGame {
     this.engine.onRunLost = () => this.onRunLost();
 
     this.engine.particles.warmVfx();
-    audio.warmSounds();
+    this.engine.particles.warmSkillVfx(selectedClass.skills);
+    audio.warmSounds(selectedClass.skills);
     
     if (saveData) {
       this.engine.loadSaveData(saveData);
@@ -195,6 +255,9 @@ export class SideViewGame {
           console.log('[NET] Received remote_player_skill:', { socketId, skillIndex, classId, x, y, facing, isTownMode, skillDamage });
         }
         if (!this.engine) return;
+        // A late packet from the previous scene must not draw a dungeon
+        // ultimate over town (or mutate the town avatar as if it were fighting).
+        if (Boolean(isTownMode) !== Boolean(this.engine.isTownMode)) return;
 
         const remoteP = mod.network.remotePlayers[socketId] || {
           name: 'Player',
@@ -334,16 +397,25 @@ export class SideViewGame {
       });
 
       // Role changes are server-driven; a fresh guest pulls state immediately.
-      // A heal or buff cast by anyone in the party lands on everyone in it.
+      // Party-wide support omits a target. Targeted support is still relayed
+      // to the whole room, so only the selected socket applies it.
       mod.network.onPartySupport((payload: any) => {
         if (!this.engine || !payload) return;
         if (payload.kind === 'heal') {
-          this.engine.applyPartyHeal(Number(payload.amount) || 0, payload.casterName);
+          if (!payload.targetSocketId || payload.targetSocketId === mod.network.mySocketId) {
+            const percent = Number(payload.percent);
+            if (Number.isFinite(percent) && percent > 0) {
+              this.engine.applyPartyPercentHeal(percent, payload.casterName);
+            } else {
+              this.engine.applyPartyHeal(Number(payload.amount) || 0, payload.casterName);
+            }
+          }
         } else if (payload.kind === 'revive') {
           // Targeted: the relay goes to the whole room, so only the person who
           // was actually picked up should stand up.
           if (payload.targetSocketId && payload.targetSocketId === mod.network.mySocketId) {
-            this.engine.acceptRevive(payload.casterName);
+            const percent = Number(payload.percent);
+            this.engine.acceptRevive(payload.casterName, Number.isFinite(percent) && percent > 0 ? percent : undefined);
           }
         } else if (payload.kind === 'loot') {
           this.hud?.showToast?.(`${payload.casterName} found ${payload.itemName}!`);
@@ -354,6 +426,12 @@ export class SideViewGame {
             payload.stat,
             Number(payload.multiplier) || 1,
             Number(payload.duration) || 0,
+            payload.casterName,
+            payload.socketId
+          );
+        } else if (payload.kind === 'cleanse') {
+          this.engine.applyPartyCleanse(
+            Math.max(1, Math.trunc(Number(payload.count) || 1)),
             payload.casterName
           );
         }
@@ -403,6 +481,13 @@ export class SideViewGame {
         }
       });
 
+      // Only the selected guest receives this server-verified host packet. The
+      // engine rechecks scene/role and owns defence, shield, i-frames and death.
+      mod.network.onPlayerDamage((payload) => {
+        if (!this.engine || this.engine.isHost) return;
+        this.engine.applyNetworkPlayerDamage(payload);
+      });
+
       mod.network.listenForEnemyHit((hitData) => {
         if (!this.engine) return;
         const enemy = this.engine.enemies.find(e => e.id === hitData.enemyId) || this.engine.enemies[parseInt(hitData.enemyId)];
@@ -444,11 +529,12 @@ export class SideViewGame {
     if (this.isRunning) return;
     this.isRunning = true;
     this.lastTime = performance.now();
-    this.animationFrameId = requestAnimationFrame((t) => this.gameLoop(t));
+    this.animationFrameId = requestAnimationFrame(this.boundGameLoop);
   }
 
   public stop() {
     this.isRunning = false;
+    this.input.router.clear();
     if (this.animationFrameId !== null) {
       cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = null;
@@ -466,7 +552,7 @@ export class SideViewGame {
     if (!this.engine) return;
     const lostLoot = this.engine.droppedLoots.length;
 
-    this.hud?.showToast('💀 DEFEATED - returning to Eldermoor');
+    this.hud?.showToast('DEFEATED - returning to Eldermoor');
     if (lostLoot > 0) {
       window.setTimeout(() => this.hud?.showToast(`${lostLoot} unclaimed item${lostLoot > 1 ? 's' : ''} left behind`), 1800);
     }
@@ -488,6 +574,7 @@ export class SideViewGame {
 
   public loadTownHub(broadcastParty: boolean = true) {
     if (!this.engine) return;
+    this.engine.cancelDelayedCombatTasks();
     this.waveActive = false;
     this.engine.isTownMode = true;
     this.engine.enemies = [];
@@ -498,7 +585,7 @@ export class SideViewGame {
     this.engine.player.vy = 0;
     this.engine.setBattleTheme('catacombs');
     audio.playTownBGM();
-    this.hud?.showToast('🏰 Arrived at Haven of Eldermoor');
+    this.hud?.showToast('Arrived at Haven of Eldermoor');
 
     if (broadcastParty) {
       Promise.resolve({ network }).then(mod => {
@@ -799,7 +886,7 @@ export class SideViewGame {
     
     const dungeon = DUNGEONS[this.currentDungeonIndex];
     audio.playFanfare();
-    this.engine.particles.addFloatingText(this.engine.player.x, this.engine.player.y - 60, '🏆 DUNGEON CLEARED! 🏆', '#ffd700', true, 28);
+    this.engine.particles.addFloatingText(this.engine.player.x, this.engine.player.y - 60, 'DUNGEON CLEARED!', '#ffd700', true, 28);
 
     this.showRunSummary(
       'DUNGEON CLEARED',
@@ -817,16 +904,16 @@ export class SideViewGame {
         this.dialogue?.showDialogue({
           speakerName: 'Elder Justinian',
           speakerTitle: 'Sage of Aethelgard',
-          portraitIcon: '🧙‍♂️',
+          portraitIcon: '/assets/ui_sprites/icons/I_Scroll.png',
           sentences: [
-            "Elder Justinian: 🌟 THE VOID OVERLORD HAS FALLEN! 🌟",
+            "Elder Justinian: The Void Overlord has fallen!",
             "Elder Justinian: The Five Primordial Runes are reunited in radiance! Peace returns to Aethelgard!",
             "Elder Justinian: You have proven yourself as the True Champion of the Realm!"
           ],
           options: [
             {
               label: 'Return to Town Sanctuary',
-              icon: '🏰',
+              icon: '/assets/ui_sprites/icons/I_Map.png',
               type: 'custom',
               onSelect: () => this.loadTownHub(true)
             },
@@ -845,7 +932,7 @@ export class SideViewGame {
         this.dialogue?.showDialogue({
           speakerName: 'Victory Portal',
           speakerTitle: 'Realm Gateway',
-          portraitIcon: '🌀',
+          portraitIcon: '/assets/ui_sprites/icons/I_Crystal01.png',
           sentences: [
             `You have successfully cleansed ${dungeon.name}!`,
             "Would you like to return to Eldermoor Town to turn in quests, or advance to the next realm?"
@@ -853,7 +940,7 @@ export class SideViewGame {
           options: [
             {
               label: 'Return to Town Hub [T]',
-              icon: '🏰',
+              icon: '/assets/ui_sprites/icons/I_Map.png',
               type: 'custom',
               onSelect: () => {
                 this.dialogue?.close();
@@ -861,8 +948,8 @@ export class SideViewGame {
               }
             },
             {
-              label: 'Advance to Next Dungeon ➔',
-              icon: '⚔️',
+              label: 'Advance to Next Dungeon',
+              icon: '/assets/ui_sprites/icons/S_Sword01.png',
               type: 'custom',
               onSelect: () => {
                 this.dialogue?.close();
@@ -943,117 +1030,198 @@ export class SideViewGame {
     }
   }
 
-  private setupInputListeners() {
-    window.addEventListener('keydown', (e) => {
-      this.keysPressed[e.code] = true;
+  /** Current control context. Gameplay actions cannot leak through a modal. */
+  private resolveInputContext(): InputContext {
+    if (this.dialogue?.isOpen || this.coopLobby?.isOpen || this.hud?.isInputBlocking()) return 'menu';
+    if (this.container.querySelector(
+      '.world-map-modal, .quest-log-modal, .lb-backdrop, .rs-back, .dialogue-modal-backdrop',
+    )) return 'menu';
+    return 'gameplay';
+  }
 
-      if (!this.engine) return;
+  private handleInputAction(event: InputActionEvent): void {
+    if (event.phase !== 'pressed' || !this.engine) return;
 
-      // Dialogue advance or close with Space / Enter
-      if (this.dialogue?.isOpen) {
-        if (e.code === 'Space' || e.code === 'Enter' || e.code === 'KeyE') {
-          this.dialogue.advanceText();
-          return;
-        }
-      }
+    const skillIndex = skillIndexForAction(event.action);
+    if (skillIndex !== null) {
+      this.engine.castSkill(skillIndex);
+      return;
+    }
 
-      // NPC Interaction: KeyE
-      if (e.code === 'KeyE') {
+    switch (event.action) {
+      case 'basicAttack':
+        if (!this.engine.isTownMode) this.engine.castSkill(0);
+        break;
+      case 'interact':
         this.interactWithActiveNpc();
-      }
-
-      // Quick heal. On the keyboard for the same reason it is on the hotbar:
-      // it has to be reachable without leaving the fight.
-      if (e.code === 'KeyQ') {
+        break;
+      case 'quickHeal': {
         const result = this.engine.quickHeal();
         if (result === 'none') this.hud?.showToast('No healing potions');
         else if (result === 'full') this.hud?.showToast('Already at full health');
+        else if (result === 'blocked') this.hud?.showToast('Cannot heal while downed');
+        this.hud?.refreshPotionSlot();
+        break;
       }
-
-      // Quest Log toggle: KeyJ
-      if (e.code === 'KeyJ') {
+      case 'jump':
+        this.engine.jumpPlayer(this.input.router.isHeld('moveDown'));
+        break;
+      case 'dash':
+        this.engine.dashPlayer();
+        break;
+      case 'questLog':
         this.hud?.questLogUI?.toggle();
-      }
-
-      // World Map toggle: KeyM
-      if (e.code === 'KeyM') {
-        this.showScreen('map');
-      }
-
-      // Return to Town: KeyT
-      if (e.code === 'KeyT') {
+        break;
+      case 'worldMap':
+        if (this.container.querySelector('.world-map-modal')) this.worldMap?.close();
+        else this.showScreen('map');
+        break;
+      case 'returnTown':
         audio.playTeleport();
         this.loadTownHub();
-      }
+        break;
+      case 'menuToggle':
+        this.hud?.togglePauseMenu();
+        break;
+      case 'menuCancel':
+        // The lobby owns Escape and has its own close/leave confirmation.
+        if (this.coopLobby?.isOpen) break;
+        if (this.container.querySelector('.world-map-modal')) this.worldMap?.close();
+        else if (this.container.querySelector('.quest-log-modal')) this.hud?.questLogUI?.close();
+        else if (this.container.querySelector('.rs-back')) this.runSummary?.close();
+        else this.hud?.closeTopInputPanel();
+        break;
+      case 'menuConfirm':
+        if (this.dialogue?.isOpen) this.dialogue.advanceText();
+        else this.hud?.navigateMenu('confirm');
+        break;
+      case 'menuUp':
+      case 'menuDown':
+      case 'menuLeft':
+      case 'menuRight':
+        this.hud?.navigateMenu(event.action.slice(4).toLowerCase() as 'up' | 'down' | 'left' | 'right');
+        break;
+      case 'chatToggle':
+        this.hud?.toggleQuickChat();
+        break;
+      case 'chatCancel':
+        this.hud?.closeQuickChat();
+        break;
+      // Text fields keep their native Enter behavior. The action exists so a
+      // future network chat composer can subscribe without bypassing contexts.
+      case 'chatSubmit':
+      case 'moveLeft':
+      case 'moveRight':
+      case 'moveDown':
+        break;
+    }
+  }
 
-      // Jump / Drop-Through: W, Space, ArrowUp
-      if (e.code === 'Space' || e.code === 'KeyW' || e.code === 'ArrowUp') {
-        const isHoldingDown = Boolean(this.keysPressed['KeyS'] || this.keysPressed['ArrowDown']);
-        this.engine.jumpPlayer(isHoldingDown);
-      }
-
-      // Dash: ShiftLeft, ShiftRight, KeyC
-      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyC') {
-        this.engine.dashPlayer();
-      }
-
-      // Skills: 1-6 or Q, E, R, F, Z, X
-      if (e.code === 'Digit1' || e.code === 'KeyQ') this.engine.castSkill(0);
-      if (e.code === 'Digit2') this.engine.castSkill(1);
-      if (e.code === 'Digit3' || e.code === 'KeyR') this.engine.castSkill(2);
-      if (e.code === 'Digit4' || e.code === 'KeyF') this.engine.castSkill(3);
-      if (e.code === 'Digit5' || e.code === 'KeyZ') this.engine.castSkill(4);
-      if (e.code === 'Digit6' || e.code === 'KeyX') this.engine.castSkill(5);
+  private setupInputListeners() {
+    if (this.inputListenersReady) return;
+    this.inputListenersReady = true;
+    this.input.start(window);
+    // Canvas attack remains mouse/pen only. Touch players use the large attack
+    // button, so laying a finger on the world cannot fire through the HUD.
+    this.input.bindElement(this.canvas, 'basicAttack', {
+      pointerTypes: ['mouse', 'pen'],
+      mouseButton: 0,
     });
-
-    window.addEventListener('keyup', (e) => {
-      this.keysPressed[e.code] = false;
-    });
-
-    // Mouse Left Click for Primary Skill or Dialogue Advance
-    this.canvas.addEventListener('mousedown', (e) => {
-      if (e.button === 0) {
-        if (this.dialogue?.isOpen) {
-          this.dialogue.advanceText();
-        } else if (this.engine && !this.engine.isTownMode) {
-          this.engine.castSkill(0);
-        }
-      }
+    // The same physical canvas gesture means "next" while dialogue owns the
+    // input context. Exactly one of these two actions is accepted at a time.
+    this.input.bindElement(this.canvas, 'menuConfirm', {
+      pointerTypes: ['mouse', 'pen'],
+      mouseButton: 0,
     });
   }
 
-  /** Held state of the on-screen revive button. */
-  public touchReviveHeld = false;
+  /** Compatibility bridge for the existing HUD while movement is normalized. */
+  public get touchMoveDir(): number {
+    return this.input.router.moveAxis();
+  }
+
+  public set touchMoveDir(value: number) {
+    this.input.router.setAxis('touch:joystick', value);
+  }
+
+  /** Compatibility bridge for hold-to-revive. */
+  public get touchReviveHeld(): boolean {
+    return this.input.router.isHeld('interact');
+  }
+
+  public set touchReviveHeld(held: boolean) {
+    const token = 'touch:revive';
+    if (held) this.input.press('interact', 'touch', token);
+    else this.input.release('interact', 'touch', token);
+  }
+
+  /** HUD adapter: one semantic action regardless of pointer implementation. */
+  public bindInputAction(element: HTMLElement, action: InputAction, options: PointerBindingOptions = {}): () => void {
+    return this.input.bindElement(element, action, options);
+  }
+
+  public triggerInputAction(action: InputAction): boolean {
+    return this.input.tap(action, 'ui');
+  }
+
+  public inputBindingLabel(action: InputAction, device: 'keyboard' | 'gamepad' = 'keyboard'): string {
+    return this.input.bindingLabel(action, device);
+  }
+
+  public remapInput(
+    device: 'keyboard' | 'gamepad',
+    action: InputAction,
+    binding: string | number,
+    replaceConflict = false,
+  ) {
+    return device === 'keyboard'
+      ? this.input.remap(device, action, String(binding), replaceConflict ? 'replace' : 'reject')
+      : this.input.remap(device, action, Number(binding), replaceConflict ? 'replace' : 'reject');
+  }
+
+  public setInputAccessibility(patch: Partial<InputAccessibilityPreferences>) {
+    return this.input.setAccessibility(patch, this.container);
+  }
+
   /** Duration of the frame just run, for input that accumulates over time. */
   private lastFrameDt = 0;
 
   private processContinuousInput() {
     if (!this.engine) return;
-    let dir = this.touchMoveDir;
-    if (this.keysPressed['KeyA'] || this.keysPressed['ArrowLeft']) dir -= 1;
-    if (this.keysPressed['KeyD'] || this.keysPressed['ArrowRight']) dir += 1;
-    this.engine.movePlayer(Math.max(-1, Math.min(1, dir)));
+    this.engine.movePlayer(this.input.router.moveAxis());
 
     // Reviving shares the interact key with talking to an NPC - there are no
     // NPCs in a dungeon, so the two never compete. Held, not tapped: a rescue
     // that costs nothing is not a rescue.
-    const holding = Boolean(this.keysPressed['KeyE'] || this.touchReviveHeld);
+    const holding = this.input.router.isHeld('interact');
     this.engine.updateRevive(this.lastFrameDt, holding);
   }
 
   private gameLoop(timestamp: number) {
     if (!this.engine || !this.isRunning) return;
-    this.animationFrameId = requestAnimationFrame(this.gameLoop.bind(this));
+    this.animationFrameId = requestAnimationFrame(this.boundGameLoop);
 
-    const dt = Math.min((timestamp - this.lastTime) / 1000, 0.1);
+    const rawDt = Math.max(0, (timestamp - this.lastTime) / 1000);
+    const dt = Math.min(rawDt, 0.1);
     this.lastFrameDt = dt;
     this.lastTime = timestamp;
 
     try {
+      this.input.refreshContext();
+      this.input.pollGamepads();
       this.processContinuousInput();
+      const preferences = this.input.preferences.snapshot();
 
       if (this.engine) {
+        this.engine.setVisualPreferences(preferences);
+        // Quality decisions use wall-clock frame cost, not ultimate-slowed
+        // simulation time, otherwise the busiest effects masquerade as fast.
+        this.engine.particles.recordFrameTime(rawDt * 1000);
+        this.syncRenderResolution();
         this.engine.update(dt);
+        // Smooth network snapshots into render positions once per active
+        // frame. Rendering reads these interpolated coordinates directly.
+        network.updateRemotePlayers(dt);
 
         // In Town Mode: update NPC proximity + Portal auto-detection
         if (this.engine.isTownMode && this.townHub) {
@@ -1125,8 +1293,12 @@ export class SideViewGame {
         }
 
         this.hud?.update();
-        this.refreshNetworkProfile();
-        this.coopDebug?.update(dt, this.engine, this.currentWaveIndex, this.currentDungeonIndex);
+        this.networkProfileRefreshTimer -= dt;
+        if (this.networkProfileRefreshTimer <= 0) {
+          this.networkProfileRefreshTimer = 0.5;
+          this.refreshNetworkProfile();
+        }
+        this.coopDebug?.update(rawDt, this.engine, this.currentWaveIndex, this.currentDungeonIndex);
       }
 
       // Render Canvas. Draw in CSS-pixel space scaled up to the device-pixel
@@ -1135,6 +1307,11 @@ export class SideViewGame {
       this.ctx.imageSmoothingEnabled = false;
       this.ctx.clearRect(0, 0, this.viewWidth, this.viewHeight);
       if (this.engine) {
+        if (!preferences.screenShake) {
+          this.engine.particles.screenShakeTime = 0;
+          this.engine.particles.screenShakeMagnitude = 0;
+        }
+        if (!preferences.screenFlashes) this.engine.particles.screenFlashes.length = 0;
         this.engine.render(this.ctx, this.viewWidth, this.viewHeight);
       }
     } catch (err) {

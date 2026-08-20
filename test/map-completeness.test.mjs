@@ -17,9 +17,10 @@ let failures = 0;
 
 // Themes the engine can actually select, read from the union type so a new one
 // cannot be added to the game and quietly skipped here.
-const src = readFileSync('src/sideview/engine/SpriteManager.ts', 'utf8');
-const line = src.split('\n').find((l) => l.startsWith('type BattleTheme'));
-const themes = [...line.matchAll(/'([a-z]+)'/g)].map((m) => m[1]);
+const src = readFileSync('src/sideview/dungeons/DungeonManager.ts', 'utf8');
+const line = src.split('\n').find((l) => l.startsWith('export type BattleTheme'));
+if (!line) throw new Error('BattleTheme union was not found in DungeonManager.ts');
+const themes = [...line.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
 
 console.log(`themes the engine can select: ${themes.length}`);
 

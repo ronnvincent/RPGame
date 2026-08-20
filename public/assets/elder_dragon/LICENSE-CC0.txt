@@ -1,0 +1,7 @@
+Dragon (fully animated), OpenGameArt submission
+Source: https://opengameart.org/content/dragon-fully-animated
+License: CC0-1.0
+Canonical license: https://creativecommons.org/publicdomain/zero/1.0/
+
+The source submission identifies the dragon as CC0. This local notice records
+the provenance of the already bundled animation frames.

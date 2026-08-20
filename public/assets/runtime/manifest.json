@@ -1,0 +1,423 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-20",
+  "policy": {
+    "allowedLicenses": [
+      "CC0-1.0"
+    ],
+    "allowedAssetExtensions": [
+      ".png"
+    ],
+    "budgets": {
+      "totalBytes": 700000,
+      "perFileBytes": 150000,
+      "byPreloadTier": {
+        "core": 50000,
+        "zone": 25000,
+        "on-demand": 600000
+      }
+    }
+  },
+  "packs": [
+    {
+      "id": "kenney-fantasy-ui-borders",
+      "title": "Fantasy UI Borders",
+      "creator": "Kenney",
+      "version": "1.0",
+      "sourceUrl": "https://kenney.nl/assets/fantasy-ui-borders",
+      "retrieval": {
+        "date": "2026-08-20",
+        "method": "official-download",
+        "archiveFile": "kenney_fantasy-ui-borders.zip",
+        "archiveBytes": 358780,
+        "archiveSha256": "59532da3bd61195a425585455b40baa6cbf1eda8227c42adcef31a535a737769"
+      },
+      "license": {
+        "spdx": "CC0-1.0",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "attributionRequired": false,
+        "noticePath": "/assets/runtime/licenses/kenney-fantasy-ui-borders-CC0-1.0.txt"
+      },
+      "selectedAssetGroups": [
+        "fantasy-ui-panels",
+        "fantasy-ui-dividers"
+      ]
+    },
+    {
+      "id": "kenney-input-prompts-pixel",
+      "title": "Input Prompts Pixel",
+      "creator": "Kenney",
+      "version": "1.0",
+      "sourceUrl": "https://kenney.nl/assets/input-prompts-pixel",
+      "retrieval": {
+        "date": "2026-08-20",
+        "method": "official-download",
+        "archiveFile": "kenney_input-prompts-pixel.zip",
+        "archiveBytes": 327336,
+        "archiveSha256": "64478174064b77e9c0ebb8271fd38af598cec922650157ce1e564df1272575cc"
+      },
+      "license": {
+        "spdx": "CC0-1.0",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "attributionRequired": false,
+        "noticePath": "/assets/runtime/licenses/kenney-input-prompts-pixel-CC0-1.0.txt"
+      },
+      "selectedAssetGroups": [
+        "pixel-input-prompts"
+      ]
+    },
+    {
+      "id": "kenney-ui-pack-pixel-adventure",
+      "title": "UI Pack - Pixel Adventure",
+      "creator": "Kenney",
+      "version": "2.0",
+      "sourceUrl": "https://kenney.nl/assets/ui-pack-pixel-adventure",
+      "retrieval": {
+        "date": "2026-08-20",
+        "method": "official-download",
+        "archiveFile": "kenney_ui-pack-pixel-adventure.zip",
+        "archiveBytes": 317032,
+        "archiveSha256": "0b0ed4802ebcfff5e44e370f394baa1d751862a5a4a7612ac4ce84e85faa0627"
+      },
+      "license": {
+        "spdx": "CC0-1.0",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "attributionRequired": false,
+        "noticePath": "/assets/runtime/licenses/kenney-ui-pack-pixel-adventure-CC0-1.0.txt"
+      },
+      "selectedAssetGroups": [
+        "pixel-adventure-ui-large",
+        "pixel-adventure-ui-small"
+      ]
+    },
+    {
+      "id": "kenney-pixel-platformer",
+      "title": "Pixel Platformer",
+      "creator": "Kenney",
+      "version": "1.2",
+      "sourceUrl": "https://kenney.nl/assets/pixel-platformer",
+      "retrieval": {
+        "date": "2026-08-20",
+        "method": "official-download",
+        "archiveFile": "kenney_pixel-platformer.zip",
+        "archiveBytes": 260312,
+        "archiveSha256": "d01a196dbe3cc964e00d83ba3b987df62f332dc9260c9f941b4fbcc9047130f4"
+      },
+      "license": {
+        "spdx": "CC0-1.0",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "attributionRequired": false,
+        "noticePath": "/assets/runtime/licenses/kenney-pixel-platformer-CC0-1.0.txt"
+      },
+      "selectedAssetGroups": [
+        "pixel-platformer-terrain",
+        "pixel-platformer-backgrounds"
+      ]
+    },
+    {
+      "id": "kenney-particle-pack",
+      "title": "Particle Pack",
+      "creator": "Kenney",
+      "version": "1.1",
+      "sourceUrl": "https://kenney.nl/assets/particle-pack",
+      "retrieval": {
+        "date": "2026-08-20",
+        "method": "official-download",
+        "archiveFile": "kenney_particle-pack.zip",
+        "archiveBytes": 15001764,
+        "archiveSha256": "b631d4b07f7002549fdcf155f01141ad482f79f3440e4e301eed49ce5f1d8958"
+      },
+      "license": {
+        "spdx": "CC0-1.0",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "attributionRequired": false,
+        "noticePath": "/assets/runtime/licenses/kenney-particle-pack-CC0-1.0.txt"
+      },
+      "selectedAssetGroups": [
+        "combat-particles"
+      ]
+    },
+    {
+      "id": "luizmelo-monsters-creatures-fantasy-2",
+      "title": "Monsters Creatures Fantasy 2",
+      "creator": "Luiz Melo",
+      "version": "2026-08-20",
+      "sourceUrl": "https://luizmelo.itch.io/monsters-creatures-fantasy-2",
+      "retrieval": {
+        "date": "2026-08-20",
+        "method": "official-download",
+        "archiveFile": "luizmelo-monsters-creatures-fantasy-2.zip",
+        "archiveBytes": 72251,
+        "archiveSha256": "781c7e1003dd179ba56c72c0099fbda301f4571c99552e0a916332f3d33e4b7e"
+      },
+      "license": {
+        "spdx": "CC0-1.0",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "attributionRequired": false,
+        "noticePath": "/assets/runtime/licenses/luizmelo-monsters-creatures-fantasy-2-CC0-1.0.txt"
+      },
+      "selectedAssetGroups": [
+        "fantasy-2-bat",
+        "fantasy-2-mimic",
+        "fantasy-2-rat",
+        "fantasy-2-slime"
+      ]
+    },
+    {
+      "id": "opengameart-pixel-wolf",
+      "title": "Pixel Wolf",
+      "creator": "alizard",
+      "version": "2019-04-01",
+      "sourceUrl": "https://opengameart.org/content/pixel-wolf",
+      "retrieval": {
+        "date": "2026-08-20",
+        "method": "official-direct-download",
+        "directFiles": [
+          {
+            "assetPath": "/assets/runtime/monsters/opengameart-pixel-wolf/wolf-run.png",
+            "downloadUrl": "https://opengameart.org/sites/default/files/wolf_run.png",
+            "bytes": 1811,
+            "sha256": "21482877247fa214159d55d43f0dd82a2ce96229c65e1342788554ba8e540a63"
+          },
+          {
+            "assetPath": "/assets/runtime/monsters/opengameart-pixel-wolf/wolf-tail.png",
+            "downloadUrl": "https://opengameart.org/sites/default/files/wolf_tail.png",
+            "bytes": 1005,
+            "sha256": "2d2e02c1537704b348943b44907c7b5f030f98bb8845c354392eb4c08caa4f7c"
+          }
+        ]
+      },
+      "license": {
+        "spdx": "CC0-1.0",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "attributionRequired": false,
+        "noticePath": "/assets/runtime/licenses/opengameart-pixel-wolf-CC0-1.0.txt"
+      },
+      "selectedAssetGroups": [
+        "pixel-wolf-canines"
+      ]
+    }
+  ],
+  "assetGroups": [
+    {
+      "id": "fantasy-ui-panels",
+      "packId": "kenney-fantasy-ui-borders",
+      "category": "ui",
+      "preload": "core",
+      "role": "Modular dark fantasy frames for HUD cards, dialogs, menus, and inventory panels.",
+      "sourceSelection": "PNG/Default/Panel/panel-000.png through panel-031.png",
+      "pixelArt": true,
+      "files": [
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-000.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-001.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-002.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-003.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-004.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-005.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-006.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-007.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-008.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-009.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-010.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-011.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-012.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-013.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-014.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-015.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-016.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-017.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-018.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-019.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-020.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-021.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-022.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-023.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-024.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-025.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-026.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-027.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-028.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-029.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-030.png",
+        "/assets/runtime/ui/fantasy-borders/default-panel/panel-031.png"
+      ]
+    },
+    {
+      "id": "fantasy-ui-dividers",
+      "packId": "kenney-fantasy-ui-borders",
+      "category": "ui",
+      "preload": "core",
+      "role": "Decorative separators for quest cards, stats, shops, and pause screens.",
+      "sourceSelection": "PNG/Default/Divider/divider-000.png through divider-005.png",
+      "pixelArt": true,
+      "files": [
+        "/assets/runtime/ui/fantasy-borders/default-divider/divider-000.png",
+        "/assets/runtime/ui/fantasy-borders/default-divider/divider-001.png",
+        "/assets/runtime/ui/fantasy-borders/default-divider/divider-002.png",
+        "/assets/runtime/ui/fantasy-borders/default-divider/divider-003.png",
+        "/assets/runtime/ui/fantasy-borders/default-divider/divider-004.png",
+        "/assets/runtime/ui/fantasy-borders/default-divider/divider-005.png"
+      ]
+    },
+    {
+      "id": "pixel-adventure-ui-large",
+      "packId": "kenney-ui-pack-pixel-adventure",
+      "category": "ui",
+      "preload": "core",
+      "role": "Large thick-outline UI atlas for buttons, slots, bars, cards, and dialog chrome.",
+      "sourceSelection": "Tilesheets/Large tiles/Thick outline/tilemap.png",
+      "pixelArt": true,
+      "files": [
+        "/assets/runtime/ui/pixel-adventure/large-thick-outline.png"
+      ]
+    },
+    {
+      "id": "pixel-adventure-ui-small",
+      "packId": "kenney-ui-pack-pixel-adventure",
+      "category": "ui",
+      "preload": "core",
+      "role": "Small thick-outline UI atlas for compact HUD controls and status elements.",
+      "sourceSelection": "Tilesheets/Small tiles/Thick outline/tilemap.png",
+      "pixelArt": true,
+      "files": [
+        "/assets/runtime/ui/pixel-adventure/small-thick-outline.png"
+      ]
+    },
+    {
+      "id": "pixel-input-prompts",
+      "packId": "kenney-input-prompts-pixel",
+      "category": "ui",
+      "preload": "core",
+      "role": "Pixel keyboard, mouse, and controller prompts for tutorials and contextual controls.",
+      "sourceSelection": "Tilemap/tilemap.png",
+      "pixelArt": true,
+      "files": [
+        "/assets/runtime/ui/input-prompts/pixel-prompts.png"
+      ]
+    },
+    {
+      "id": "pixel-platformer-terrain",
+      "packId": "kenney-pixel-platformer",
+      "category": "maps",
+      "preload": "zone",
+      "role": "Terrain, platform, grounding, foliage, prop, and decoration tiles for side-view maps.",
+      "sourceSelection": "Tilemap/tilemap.png",
+      "pixelArt": true,
+      "files": [
+        "/assets/runtime/maps/pixel-platformer/terrain.png"
+      ]
+    },
+    {
+      "id": "pixel-platformer-backgrounds",
+      "packId": "kenney-pixel-platformer",
+      "category": "maps",
+      "preload": "zone",
+      "role": "Background tiles for layered map composition and lightweight parallax scenes.",
+      "sourceSelection": "Tilemap/tilemap-backgrounds.png",
+      "pixelArt": true,
+      "files": [
+        "/assets/runtime/maps/pixel-platformer/backgrounds.png"
+      ]
+    },
+    {
+      "id": "combat-particles",
+      "packId": "kenney-particle-pack",
+      "category": "vfx",
+      "preload": "on-demand",
+      "role": "Tintable transparent textures for melee slashes, spells, fire, smoke, sparks, and impact rings.",
+      "sourceSelection": "PNG (Transparent): circle_01, fire_01, magic_01, slash_01, smoke_03, spark_01",
+      "pixelArt": false,
+      "files": [
+        "/assets/runtime/vfx/particles/circle.png",
+        "/assets/runtime/vfx/particles/fire.png",
+        "/assets/runtime/vfx/particles/magic.png",
+        "/assets/runtime/vfx/particles/slash.png",
+        "/assets/runtime/vfx/particles/smoke.png",
+        "/assets/runtime/vfx/particles/spark.png"
+      ]
+    },
+    {
+      "id": "fantasy-2-bat",
+      "packId": "luizmelo-monsters-creatures-fantasy-2",
+      "category": "monsters",
+      "preload": "on-demand",
+      "role": "Animated flying monster family for bats, imps, harpies, and wisps.",
+      "sourceSelection": "Bat attack, death, fall, fly-to-fall, fly, and hurt animation strips.",
+      "pixelArt": true,
+      "files": [
+        "/assets/runtime/monsters/luizmelo-fantasy-2/bat/attack.png",
+        "/assets/runtime/monsters/luizmelo-fantasy-2/bat/death.png",
+        "/assets/runtime/monsters/luizmelo-fantasy-2/bat/fall.png",
+        "/assets/runtime/monsters/luizmelo-fantasy-2/bat/fly-to-fall.png",
+        "/assets/runtime/monsters/luizmelo-fantasy-2/bat/fly.png",
+        "/assets/runtime/monsters/luizmelo-fantasy-2/bat/hurt.png"
+      ]
+    },
+    {
+      "id": "fantasy-2-mimic",
+      "packId": "luizmelo-monsters-creatures-fantasy-2",
+      "category": "monsters",
+      "preload": "on-demand",
+      "role": "Animated treasure mimic family for forge and celestial encounters.",
+      "sourceSelection": "All Mimic animation strips from the official archive.",
+      "pixelArt": true,
+      "files": [
+        "/assets/runtime/monsters/luizmelo-fantasy-2/mimic/attack-1.png",
+        "/assets/runtime/monsters/luizmelo-fantasy-2/mimic/attack-2.png",
+        "/assets/runtime/monsters/luizmelo-fantasy-2/mimic/death.png",
+        "/assets/runtime/monsters/luizmelo-fantasy-2/mimic/hurt.png",
+        "/assets/runtime/monsters/luizmelo-fantasy-2/mimic/idle-closed.png",
+        "/assets/runtime/monsters/luizmelo-fantasy-2/mimic/idle-open.png",
+        "/assets/runtime/monsters/luizmelo-fantasy-2/mimic/idle-transformed.png",
+        "/assets/runtime/monsters/luizmelo-fantasy-2/mimic/opening.png",
+        "/assets/runtime/monsters/luizmelo-fantasy-2/mimic/transform.png",
+        "/assets/runtime/monsters/luizmelo-fantasy-2/mimic/walk.png"
+      ]
+    },
+    {
+      "id": "fantasy-2-rat",
+      "packId": "luizmelo-monsters-creatures-fantasy-2",
+      "category": "monsters",
+      "preload": "on-demand",
+      "role": "Animated low-profile rat family for tunnels, fields, and siege camps.",
+      "sourceSelection": "Rat bite, hurt, idle, death, and run animation strips.",
+      "pixelArt": true,
+      "files": [
+        "/assets/runtime/monsters/luizmelo-fantasy-2/rat/attack-bite.png",
+        "/assets/runtime/monsters/luizmelo-fantasy-2/rat/hurt.png",
+        "/assets/runtime/monsters/luizmelo-fantasy-2/rat/idle.png",
+        "/assets/runtime/monsters/luizmelo-fantasy-2/rat/rat-death.png",
+        "/assets/runtime/monsters/luizmelo-fantasy-2/rat/run.png"
+      ]
+    },
+    {
+      "id": "fantasy-2-slime",
+      "packId": "luizmelo-monsters-creatures-fantasy-2",
+      "category": "monsters",
+      "preload": "on-demand",
+      "role": "Animated slime family with complete combat and death states.",
+      "sourceSelection": "Slime attack, death, hurt, idle, and walk animation strips.",
+      "pixelArt": true,
+      "files": [
+        "/assets/runtime/monsters/luizmelo-fantasy-2/slime/attack.png",
+        "/assets/runtime/monsters/luizmelo-fantasy-2/slime/death.png",
+        "/assets/runtime/monsters/luizmelo-fantasy-2/slime/hurt.png",
+        "/assets/runtime/monsters/luizmelo-fantasy-2/slime/idle.png",
+        "/assets/runtime/monsters/luizmelo-fantasy-2/slime/walk.png"
+      ]
+    },
+    {
+      "id": "pixel-wolf-canines",
+      "packId": "opengameart-pixel-wolf",
+      "category": "monsters",
+      "preload": "on-demand",
+      "role": "Species-correct animated wolf and hound family for canine encounters.",
+      "sourceSelection": "Official wolf run and tail-idle PNG strips (5 and 2 frames at 66 x 66).",
+      "pixelArt": true,
+      "files": [
+        "/assets/runtime/monsters/opengameart-pixel-wolf/wolf-run.png",
+        "/assets/runtime/monsters/opengameart-pixel-wolf/wolf-tail.png"
+      ]
+    }
+  ]
+}

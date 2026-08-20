@@ -84,7 +84,7 @@ const run = async () => {
 
   // The invite gate reads that same level, so it must not refuse an eligible friend.
   const lobbyReady = waitFor(a, 'lobby_update', T(2500));
-  a.emit('create_lobby', { dungeonId: 'crypt_damned', minLevel: 9, ...A });
+  a.emit('create_lobby', { dungeonId: 'dragon_lair', minLevel: 1, ...A });
   await lobbyReady;
   const blocked = waitFor(b, 'invite_blocked', T(900));
   const invited = new Promise(res => a.emit('send_invite', { targetShortId: B.shortId, ...A }, res));

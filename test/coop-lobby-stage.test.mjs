@@ -147,7 +147,7 @@ const run = async () => {
   await new Promise(r => setTimeout(r, T(300)));
 
   const made = waitFor(a, 'lobby_update', T(2500));
-  a.emit('create_lobby', { dungeonId: 'crypt_damned', minLevel: 9, ...HOST });
+  a.emit('create_lobby', { dungeonId: 'dragon_lair', minLevel: 1, ...HOST });
   const room = await made;
   const roomId = room?.roomId || room?.room?.roomId;
   check('a party can be opened', !!roomId);

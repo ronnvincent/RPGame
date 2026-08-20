@@ -6,7 +6,7 @@
     <title>Side-View Action RPG - 10 Hero Classes & Dungeons</title>
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -63,27 +63,45 @@
         overscroll-behavior: none;
       }
 
-      /* Dismissable / Orientation Warning for Mobile Devices */
+      /* Mobile portrait is a hard gate: the game root is not visible or
+         interactive until the viewport is genuinely landscape. JavaScript
+         applies the same state for mobile browsers whose media-query support
+         is incomplete. */
       #orientation-rotate-shield {
         display: none;
         position: fixed;
         inset: 0;
         z-index: 999999;
-        background: radial-gradient(circle at center, #1c1428 0%, #08060c 100%);
+        min-width: 100vw;
+        min-height: 100vh;
+        min-height: 100dvh;
+        background:
+          radial-gradient(circle at 50% 42%, rgba(107, 74, 146, 0.34), transparent 38%),
+          linear-gradient(145deg, #17101f 0%, #08060c 58%, #030407 100%);
         flex-direction: column;
         align-items: center;
         justify-content: center;
         text-align: center;
-        padding: 24px;
+        gap: 12px;
+        padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
         color: #f8fafc;
         user-select: none;
         touch-action: manipulation;
+        pointer-events: auto;
       }
 
-      @media screen and (max-width: 600px) and (orientation: portrait) {
+      #orientation-rotate-shield[hidden] { display: none !important; }
+      html[data-landscape-blocked="true"] #orientation-rotate-shield { display: flex !important; }
+      html[data-landscape-blocked="true"] #rpg { visibility: hidden; pointer-events: none; }
+
+      /* This blocks the first paint on normal phones/tablets, before the module
+         has loaded. The runtime detector handles iPad desktop UA and fallbacks. */
+      @media screen and (max-width: 1100px) and (orientation: portrait) and (pointer: coarse),
+             screen and (max-width: 1100px) and (orientation: portrait) and (hover: none) {
         #orientation-rotate-shield {
           display: flex !important;
         }
+        #rpg { visibility: hidden; pointer-events: none; }
       }
 
       .rotate-phone-anim {
@@ -91,7 +109,7 @@
         height: 64px;
         border: 4px solid #ffd700;
         border-radius: 12px;
-        margin-bottom: 20px;
+        margin-bottom: 8px;
         animation: rotateDevice 2.2s infinite ease-in-out;
         box-shadow: 0 0 25px rgba(255, 215, 0, 0.5);
         position: relative;
@@ -135,32 +153,52 @@
       .rotate-desc {
         font-size: 13px;
         color: #cbd5e1;
-        max-width: 320px;
+        max-width: 380px;
         line-height: 1.5;
         font-weight: 600;
-        margin-bottom: 18px;
+        margin: 0;
+      }
+
+      .rotate-action {
+        min-width: min(300px, 82vw);
+        min-height: 48px;
+        margin-top: 6px;
+        padding: 11px 18px;
+        border: 1px solid rgba(255, 215, 0, 0.82);
+        border-radius: 6px;
+        color: #181007;
+        background: linear-gradient(#ffe89a, #d9a82d);
+        box-shadow: inset 0 0 0 2px rgba(255,255,255,.22), 0 6px 20px rgba(0,0,0,.48);
+        font: 900 .9rem/1 'Cinzel', serif;
+        letter-spacing: .04em;
+      }
+
+      .rotate-status {
+        min-height: 2.8em;
+        max-width: 400px;
+        margin: 0;
+        color: #dacfb9;
+        font-size: 12px;
+        line-height: 1.4;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .rotate-phone-anim { animation: none; transform: rotate(90deg); }
       }
     </style>
   </head>
   <body>
     <!-- Landscape Orientation Guide -->
-    <div id="orientation-rotate-shield">
-      <div class="rotate-phone-anim"></div>
-      <h2 class="rotate-title">LANDSCAPE MODE</h2>
-      <p class="rotate-desc">For the best Action RPG experience, please rotate your device to <strong>Landscape Mode</strong>.</p>
+    <div id="orientation-rotate-shield" role="dialog" aria-modal="true" aria-labelledby="orientation-title" aria-describedby="orientation-description orientation-lock-status">
+      <div class="rotate-phone-anim" aria-hidden="true"></div>
+      <h2 class="rotate-title" id="orientation-title">LANDSCAPE REQUIRED</h2>
+      <p class="rotate-desc" id="orientation-description">This side-scrolling RPG only plays in landscape. Turn off Portrait Orientation Lock if needed, then rotate your phone or tablet.</p>
+      <button class="rotate-action" id="orientation-enable-btn" type="button">Fullscreen &amp; Rotate</button>
+      <p class="rotate-status" id="orientation-lock-status" role="status" aria-live="polite">Tap the button to let supported browsers enter fullscreen and request landscape.</p>
     </div>
 
     <div id="rpg"></div>
-    <script>
-      // Seamlessly trigger Fullscreen on user interaction
-      const enterFs = () => {
-        if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
-          document.documentElement.requestFullscreen().catch(() => {});
-        }
-      };
-      window.addEventListener('pointerdown', enterFs, { once: true });
-      window.addEventListener('touchstart', enterFs, { once: true });
-    </script>
+    <script src="/env.js"></script>
     <script type="module" src="./src/standalone.ts"></script>
   </body>
 </html>

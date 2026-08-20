@@ -65,6 +65,14 @@ export class UltimateDirector {
     this.onImpact = onImpact;
   }
 
+  /** Drop a queued cinematic payload on scene change, death, or downed state. */
+  public cancel() {
+    this.phase = 'idle';
+    this.t = 0;
+    this.line = '';
+    this.onImpact = null;
+  }
+
   /** @param realDt unscaled seconds - the director must not slow itself. */
   public update(realDt: number) {
     if (this.phase === 'idle') return;

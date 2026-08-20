@@ -359,15 +359,60 @@ export const VFX: Record<string, VfxDef> = {
 
 export type VfxId = keyof typeof VFX;
 
+/**
+ * The only catalogue effects worth fetching before the first fight. They are
+ * small, shared by every class, and cover the basic hit feedback shown most
+ * often. Class signatures and ultimates stay on demand.
+ */
+export const COMMON_BOOT_VFX_IDS = [
+  'fx_hit_big',
+  'fx_spark_a',
+  'hit_small',
+  'hit_spark',
+] as const;
+
+/** Distinct image paths required by one catalogue definition. */
+export function vfxImagePaths(defOrId: VfxDef | string): string[] {
+  const def = typeof defOrId === 'string' ? VFX[defOrId] : defOrId;
+  if (!def) return [];
+  if (def.layout.kind === 'frames') return [...new Set(def.layout.paths)];
+  return def.src ? [def.src] : [];
+}
+
+/** Distinct paths for a deliberately small set of effects. */
+export function imagePathsForVfxIds(ids: readonly string[]): string[] {
+  const paths = new Set<string>();
+  for (const id of ids) {
+    for (const path of vfxImagePaths(id)) paths.add(path);
+  }
+  return [...paths];
+}
+
+export interface WarmableSkillVisual {
+  vfx: {
+    cast?: string;
+    projectile?: string;
+    impact?: string;
+    ultimate?: string;
+  };
+}
+
+/** Only the selected class's authored cast/projectile/impact/ultimate sheets. */
+export function vfxIdsForSkills(skills: readonly WarmableSkillVisual[]): string[] {
+  const ids = new Set<string>();
+  for (const skill of skills) {
+    const { cast, projectile, impact, ultimate } = skill.vfx;
+    if (cast && VFX[cast]) ids.add(cast);
+    if (projectile && VFX[projectile]) ids.add(projectile);
+    if (impact && VFX[impact]) ids.add(impact);
+    if (ultimate && VFX[ultimate]) ids.add(ultimate);
+  }
+  return [...ids];
+}
+
 /** Every distinct image path in the catalogue, for background warming. */
 export function allVfxImagePaths(): string[] {
   const set = new Set<string>();
-  for (const def of Object.values(VFX)) {
-    if (def.layout.kind === 'frames') {
-      for (const p of def.layout.paths) set.add(p);
-    } else if (def.src) {
-      set.add(def.src);
-    }
-  }
+  for (const def of Object.values(VFX)) for (const path of vfxImagePaths(def)) set.add(path);
   return [...set];
 }

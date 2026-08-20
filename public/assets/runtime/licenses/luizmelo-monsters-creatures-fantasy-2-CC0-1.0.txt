@@ -1,0 +1,8 @@
+Monsters Creatures Fantasy 2 by Luiz Melo
+Official source: https://luizmelo.itch.io/monsters-creatures-fantasy-2
+License: CC0-1.0
+Canonical license: https://creativecommons.org/publicdomain/zero/1.0/
+Attribution required: no
+
+Retrieved through the official itch.io download flow on 2026-08-20.
+Only the Bat, Mimic, Rat, and Slime animation PNG files are included.

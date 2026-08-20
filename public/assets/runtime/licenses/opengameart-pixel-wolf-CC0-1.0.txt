@@ -1,0 +1,17 @@
+Asset: Pixel Wolf
+Creator: alizard
+Official source: https://opengameart.org/content/pixel-wolf
+Official direct files:
+- https://opengameart.org/sites/default/files/wolf_run.png
+- https://opengameart.org/sites/default/files/wolf_tail.png
+
+License: CC0-1.0
+License URL: https://creativecommons.org/publicdomain/zero/1.0/
+Attribution required: No (the source page says attribution is not needed).
+
+Retrieved from the official OpenGameArt file host on 2026-08-20.
+Only the run and tail-idle PNG strips used by the runtime were retained.
+
+Local file verification:
+- wolf-run.png: 1811 bytes; SHA-256 21482877247fa214159d55d43f0dd82a2ce96229c65e1342788554ba8e540a63
+- wolf-tail.png: 1005 bytes; SHA-256 2d2e02c1537704b348943b44907c7b5f030f98bb8845c354392eb4c08caa4f7c

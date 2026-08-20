@@ -8,6 +8,13 @@
  * both screens show the same thing by construction.
  */
 
+import {
+  isSkillId,
+  SKILL_IDENTITY_MATRIX,
+  type SkillMechanics,
+  type SkillVisualIdentity,
+} from '../combat/SkillMechanics';
+
 /**
  * Sprite effects a skill plays. All ids must exist in VfxLibrary (validated by
  * `npm run test:vfx`).
@@ -26,6 +33,8 @@ export interface SkillVfx {
     shake?: number;
     flash?: string;
   };
+  /** Unique, class-coloured visual grammar used even when sprite flashes are disabled. */
+  identity: SkillVisualIdentity;
 }
 
 export interface SkillDefinition {
@@ -46,6 +55,8 @@ export interface SkillDefinition {
   sfx: 'light_slash' | 'heavy_slash' | 'fire' | 'ice' | 'lightning' | 'holy' | 'dark' | 'heal' | 'dash';
   /** Id in SfxLibrary. Falls back to the generic `sfx` profile when absent. */
   sound?: string;
+  /** Typed delivery, hit-budget, payload, movement and summon behavior. */
+  mechanics: SkillMechanics;
   /** Restores HP to the caster instead of dealing damage. */
   heals?: boolean;
   isUltimate?: boolean;
@@ -55,6 +66,14 @@ export interface SkillDefinition {
     duration: number;
   };
 }
+
+type SkillSeed = Omit<SkillDefinition, 'mechanics' | 'vfx'> & {
+  vfx: Omit<SkillVfx, 'identity'>;
+};
+
+type CharacterClassSeed = Omit<CharacterClass, 'skills'> & {
+  skills: SkillSeed[];
+};
 
 export interface CharacterClass {
   id: string;
@@ -77,7 +96,7 @@ export interface CharacterClass {
   skills: SkillDefinition[];
 }
 
-export const CHARACTER_CLASSES: CharacterClass[] = [
+const CHARACTER_CLASS_SEEDS: CharacterClassSeed[] = [
   // 1. WARRIOR
   {
     id: 'warrior',
@@ -199,7 +218,7 @@ export const CHARACTER_CLASSES: CharacterClass[] = [
       { id: 'n_2', name: 'Life Drain', key: '2', icon: '🩸', iconImage: '/assets/rpg-icons/32x32/potion_03e.png', description: 'Siphon vital energy from target, dealing 160% dark burst damage.', cooldown: 4.0, manaCost: 12, damageMultiplier: 1.6, damageType: 'dark', range: 240, aoeRadius: 30, castTime: 0.2, vfx: { cast: 'fx_magic_b', impact: 'fx_burst_d' }, sfx: 'dark', sound: 'dark_drain' },
       { id: 'n_3', name: 'Summon Skeleton', key: '3', icon: '🦴', iconImage: '/assets/rpg-icons/32x32/bone01a.png', description: 'Summon an animated friendly Skeleton minion to the battlefield that advances and auto-attacks nearby enemies.', cooldown: 8.0, manaCost: 12, damageMultiplier: 1.2, damageType: 'dark', range: 100, aoeRadius: 80, castTime: 0.3, vfx: { cast: 'fx_bloom_b', impact: 'fx_magic_c' }, sfx: 'dark', sound: 'summon' },
       { id: 'n_4', name: 'Curse of Frailty', key: '4', icon: '🕯️', iconImage: '/assets/rpg-icons/32x32/spellbook_01a.png', description: 'Cast a dark hex on all enemies, reducing their defense by 40% for 7 seconds.', cooldown: 9.6, manaCost: 0, damageMultiplier: 0.8, damageType: 'dark', range: 200, aoeRadius: 130, castTime: 0.2, vfx: { cast: 'fx_wave_c', impact: 'fx_star_d' }, sfx: 'dark', sound: 'dark_curse' },
-      { id: 'n_5', name: 'Corpse Explosion', key: '5', icon: '💥', iconImage: '/assets/rpg-icons/32x32/crystal_01d.png', description: 'Detonate dark energy beneath defeated enemies, dealing 240% catastrophic area damage.', cooldown: 6.0, manaCost: 28, damageMultiplier: 2.4, damageType: 'dark', range: 220, aoeRadius: 100, castTime: 0.25, vfx: { cast: 'fx_explosion_big', impact: 'fx_burst_a', screen: { shake: 12 } }, sfx: 'fire', sound: 'dark_plague' },
+      { id: 'n_5', name: 'Corpse Explosion', key: '5', icon: '💥', iconImage: '/assets/rpg-icons/32x32/crystal_01d.png', description: 'Detonate recent corpses and split 240% total dark damage across their blast zones.', cooldown: 6.0, manaCost: 28, damageMultiplier: 2.4, damageType: 'dark', range: 220, aoeRadius: 100, castTime: 0.25, vfx: { cast: 'fx_explosion_big', impact: 'fx_burst_a', screen: { shake: 12 } }, sfx: 'fire', sound: 'dark_plague' },
       { id: 'n_6', name: 'Death Nova', key: '6', icon: '☠️', iconImage: '/assets/rpg-icons/32x32/gem_01g.png', description: 'Rip open the gates of hell, summoning a legion of spectral reapers that sweep across the field for 750% damage.', cooldown: 26.0, manaCost: 70, damageMultiplier: 7.5, damageType: 'dark', range: 350, aoeRadius: 220, castTime: 0.5, vfx: { cast: 'fx_spiral_d', impact: 'fx_flare_a', screen: { shake: 26, flash: '#5c6bc0' }, ultimate: 'ult_spell_death_001' }, sfx: 'dark', sound: 'ult_dark', isUltimate: true }
     ]
   },
@@ -288,3 +307,22 @@ export const CHARACTER_CLASSES: CharacterClass[] = [
     ]
   }
 ];
+
+/**
+ * Attach the canonical mechanics/identity contract in one place. This also
+ * makes a missing or misspelled skill id fail immediately during development.
+ */
+export const CHARACTER_CLASSES: CharacterClass[] = CHARACTER_CLASS_SEEDS.map(characterClass => ({
+  ...characterClass,
+  skills: characterClass.skills.map(skill => {
+    if (!isSkillId(skill.id)) throw new Error(`Unknown skill id: ${skill.id}`);
+    const identity = SKILL_IDENTITY_MATRIX[skill.id];
+    return {
+      ...skill,
+      description: identity.description,
+      damageMultiplier: identity.damageMultiplier ?? skill.damageMultiplier,
+      mechanics: identity.mechanics,
+      vfx: { ...skill.vfx, identity: identity.visual },
+    };
+  }),
+}));

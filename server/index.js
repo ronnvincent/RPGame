@@ -1,11 +1,43 @@
 const express = require('express');
 const http = require('http');
+const crypto = require('crypto');
 const { Server } = require('socket.io');
 const cors = require('cors');
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+app.set('trust proxy', 1);
+
+// Configure the exact browser origins that may call the API/socket server:
+//   CORS_ORIGINS=https://game.example.com,https://preview.example.com
+// Local origins stay available for development. Production deliberately does
+// not fall back to "*"; deployments must name their browser origin(s).
+const LOCAL_ORIGINS = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:4173',
+  'http://127.0.0.1:4173',
+];
+const configuredOrigins = String(process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
+const ALLOWED_ORIGINS = new Set(configuredOrigins.length ? configuredOrigins : LOCAL_ORIGINS);
+const corsOrigin = (origin, callback) => {
+  // Native apps, curl, health checks and same-origin requests send no Origin.
+  if (!origin || ALLOWED_ORIGINS.has(origin)) return callback(null, true);
+  return callback(new Error('Origin is not allowed by CORS'));
+};
+const corsOptions = {
+  origin: corsOrigin,
+  methods: ['GET', 'POST', 'PUT', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: false,
+  maxAge: 86400,
+};
+
+app.use(cors(corsOptions));
+// Saves can be sizeable, but an unbounded JSON parser is an easy memory DoS.
+app.use(express.json({ limit: process.env.MAX_SAVE_BYTES || '2mb' }));
 
 const { Pool } = require('pg');
 
@@ -23,7 +55,23 @@ const pool = new Pool({
  * path cannot be reached there.
  */
 const HAS_DB = Boolean(process.env.DATABASE_URL);
-const memUsers = new Map(); // uuid -> { username, password, short_id, uuid, save_data }
+const memUsers = new Map(); // uuid -> { username, password(hash), short_id, uuid, save_data }
+
+// Production/database deployments require a signed session by default. A
+// database-free local server remains compatible with the existing CLI co-op
+// tests; set AUTH_REQUIRED=true to exercise the strict path locally.
+const AUTH_REQUIRED = process.env.AUTH_REQUIRED
+  ? process.env.AUTH_REQUIRED !== 'false'
+  : (HAS_DB || process.env.NODE_ENV === 'production');
+const SESSION_TTL_SECONDS = Math.min(
+  60 * 60 * 24 * 30,
+  Math.max(60 * 5, Number(process.env.SESSION_TTL_SECONDS) || 60 * 60 * 24 * 7)
+);
+const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+
+if (!process.env.SESSION_SECRET) {
+  console.warn('SESSION_SECRET is not set; sessions will be invalidated when this server restarts.');
+}
 
 if (!HAS_DB) {
   console.warn('Running without a database: guest accounts live in memory for this process only.');
@@ -76,78 +124,271 @@ app.get('/', (req, res) => {
 
 // ----------------- HTTP API ENDPOINTS -----------------
 
+const PASSWORD_PREFIX = 'scrypt';
+const PASSWORD_KEY_BYTES = 64;
+const SCRYPT_OPTIONS = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
+
 function generateRandomPassword() {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  let pwd = '';
-  for(let i=0; i<8; i++) pwd += chars.charAt(Math.floor(Math.random() * chars.length));
-  return pwd;
+  // 72 bits of crypto randomness, shown exactly once when the guest is made.
+  return crypto.randomBytes(9).toString('base64url');
 }
 
-app.post('/api/register_guest', async (req, res) => {
-  const { username, shortId, uuid } = req.body;
-  if (!username || !shortId || !uuid) {
-    return res.status(400).json({ error: 'Missing fields' });
+/** Display names are rendered in several legacy innerHTML templates. Keep one
+ * server policy for every account/socket entry point until those consumers are
+ * migrated to textContent. */
+function safeDisplayName(value) {
+  if (typeof value !== 'string') return null;
+  const name = value.trim();
+  if (name.length < 3 || name.length > 32) return null;
+  if (/[\u0000-\u001f\u007f<>&"'`]/.test(name)) return null;
+  return name;
+}
+
+function hashPassword(password) {
+  return new Promise((resolve, reject) => {
+    const salt = crypto.randomBytes(16);
+    crypto.scrypt(password, salt, PASSWORD_KEY_BYTES, SCRYPT_OPTIONS, (error, key) => {
+      if (error) return reject(error);
+      resolve(`${PASSWORD_PREFIX}$${salt.toString('base64url')}$${key.toString('base64url')}`);
+    });
+  });
+}
+
+function verifyPassword(password, stored) {
+  if (typeof password !== 'string' || typeof stored !== 'string') return Promise.resolve(false);
+  if (!stored.startsWith(`${PASSWORD_PREFIX}$`)) {
+    // Migration path for accounts created before password hashing. The caller
+    // replaces this value with a hash immediately after a successful login.
+    const supplied = Buffer.from(password);
+    const legacy = Buffer.from(stored);
+    return Promise.resolve(supplied.length === legacy.length && crypto.timingSafeEqual(supplied, legacy));
   }
+
+  const [, saltText, hashText] = stored.split('$');
+  if (!saltText || !hashText) return Promise.resolve(false);
+  let salt;
+  let expected;
+  try {
+    salt = Buffer.from(saltText, 'base64url');
+    expected = Buffer.from(hashText, 'base64url');
+  } catch {
+    return Promise.resolve(false);
+  }
+  if (salt.length !== 16 || expected.length !== PASSWORD_KEY_BYTES) return Promise.resolve(false);
+  return new Promise((resolve, reject) => {
+    crypto.scrypt(password, salt, expected.length, SCRYPT_OPTIONS, (error, key) => {
+      if (error) return reject(error);
+      resolve(key.length === expected.length && crypto.timingSafeEqual(key, expected));
+    });
+  });
+}
+
+function base64urlJson(value) {
+  return Buffer.from(JSON.stringify(value)).toString('base64url');
+}
+
+function signSession(user) {
+  const now = Math.floor(Date.now() / 1000);
+  const displayName = safeDisplayName(user.username);
+  if (!displayName) throw new Error('Unsafe stored display name');
+  const payload = base64urlJson({
+    sub: user.uuid,
+    name: displayName,
+    shortId: user.short_id,
+    iat: now,
+    exp: now + SESSION_TTL_SECONDS,
+  });
+  const signature = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+  return `${payload}.${signature}`;
+}
+
+function verifySession(token) {
+  if (typeof token !== 'string' || token.length > 4096) return null;
+  const [payloadText, signatureText] = token.split('.');
+  if (!payloadText || !signatureText) return null;
+  const expected = crypto.createHmac('sha256', SESSION_SECRET).update(payloadText).digest();
+  let supplied;
+  try {
+    supplied = Buffer.from(signatureText, 'base64url');
+  } catch {
+    return null;
+  }
+  if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) return null;
+
+  try {
+    const claims = JSON.parse(Buffer.from(payloadText, 'base64url').toString('utf8'));
+    if (!claims || typeof claims.sub !== 'string' || claims.sub.length > 128) return null;
+    if (!Number.isFinite(claims.exp) || claims.exp <= Math.floor(Date.now() / 1000)) return null;
+    return { uuid: claims.sub, name: claims.name, shortId: claims.shortId };
+  } catch {
+    return null;
+  }
+}
+
+function bearerToken(req) {
+  const match = /^Bearer\s+(.+)$/i.exec(String(req.headers.authorization || ''));
+  return match ? match[1] : null;
+}
+
+function authenticateRequest(req, res, next) {
+  const auth = verifySession(bearerToken(req));
+  if (auth) {
+    req.auth = auth;
+    return next();
+  }
+  if (!AUTH_REQUIRED) return next();
+  return res.status(401).json({ error: 'Authentication required' });
+}
+
+// Small per-process protection for the expensive registration/login paths.
+// A shared store can replace this if the backend is later scaled horizontally.
+const httpAuthBuckets = new Map();
+const HTTP_AUTH_WINDOW_MS = 60_000;
+const HTTP_AUTH_LIMIT = 12;
+
+function limitAuthRequests(req, res, next) {
+  const now = Date.now();
+  const key = `${req.ip}:${req.path}`;
+  let bucket = httpAuthBuckets.get(key);
+  if (!bucket || now - bucket.startedAt >= HTTP_AUTH_WINDOW_MS) {
+    bucket = { startedAt: now, count: 0 };
+    httpAuthBuckets.set(key, bucket);
+  }
+  bucket.count++;
+  if (bucket.count > HTTP_AUTH_LIMIT) {
+    const retrySeconds = Math.max(1, Math.ceil((HTTP_AUTH_WINDOW_MS - (now - bucket.startedAt)) / 1000));
+    res.set('Retry-After', String(retrySeconds));
+    return res.status(429).json({ error: 'Too many authentication attempts' });
+  }
+
+  if (httpAuthBuckets.size > 5000) {
+    for (const [bucketKey, entry] of httpAuthBuckets) {
+      if (now - entry.startedAt >= HTTP_AUTH_WINDOW_MS) httpAuthBuckets.delete(bucketKey);
+    }
+  }
+  return next();
+}
+
+function cleanIdentity(body = {}) {
+  const username = safeDisplayName(body.username);
+  const shortId = typeof body.shortId === 'string' ? body.shortId.trim().toUpperCase() : '';
+  const uuid = typeof body.uuid === 'string' ? body.uuid.trim() : '';
+  if (!username) return null;
+  if (!/^[A-Z0-9]{4,16}$/.test(shortId)) return null;
+  if (!/^[A-Za-z0-9_-]{8,128}$/.test(uuid)) return null;
+  return { username, shortId, uuid };
+}
+
+app.post('/api/register_guest', limitAuthRequests, async (req, res) => {
+  const identity = cleanIdentity(req.body);
+  if (!identity) return res.status(400).json({ error: 'Invalid account fields' });
+  const { username, shortId, uuid } = identity;
 
   try {
     const password = generateRandomPassword();
+    const passwordHash = await hashPassword(password);
 
     if (!HAS_DB) {
       const existing = memUsers.get(uuid);
       if (existing) {
-        return res.json({ success: true, username: existing.username, password: existing.password });
+        // Never reveal a credential again. The old endpoint returned the
+        // stored password to anyone who knew an account UUID.
+        return res.status(409).json({ error: 'Account already exists. Sign in instead.' });
       }
-      memUsers.set(uuid, { username, password, short_id: shortId, uuid, save_data: null });
-      return res.json({ success: true, username, password });
+      const user = { username, password: passwordHash, short_id: shortId, uuid, save_data: null };
+      memUsers.set(uuid, user);
+      return res.status(201).json({ success: true, username, shortId, uuid, password, token: signSession(user) });
     }
 
-    // Check if user exists (fallback if they re-click guest)
-    const existing = await pool.query('SELECT * FROM users WHERE uuid = $1', [uuid]);
+    // UUID, display name and short id are all unique identities.
+    const existing = await pool.query(
+      'SELECT uuid FROM users WHERE uuid = $1 OR LOWER(username) = LOWER($2) OR UPPER(short_id) = UPPER($3) LIMIT 1',
+      [uuid, username, shortId]
+    );
     if (existing.rows.length > 0) {
-       return res.json({ 
-         success: true, 
-         username: existing.rows[0].username, 
-         password: existing.rows[0].password 
-       });
+      return res.status(409).json({ error: 'Account already exists. Sign in instead.' });
     }
 
     await pool.query(
       'INSERT INTO users (username, password, short_id, uuid) VALUES ($1, $2, $3, $4)',
-      [username, password, shortId, uuid]
+      [username, passwordHash, shortId, uuid]
     );
 
-    res.json({ success: true, username, password });
+    const user = { username, short_id: shortId, uuid };
+    res.status(201).json({ success: true, username, shortId, uuid, password, token: signSession(user) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Database error' });
   }
 });
 
-app.post('/api/login', async (req, res) => {
-  const { username, password } = req.body;
+app.post('/api/login', limitAuthRequests, async (req, res) => {
+  const username = typeof req.body?.username === 'string' ? req.body.username.trim() : '';
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
+  if (!username || username.length > 32 || !password || password.length > 256) {
+    return res.status(400).json({ error: 'Invalid credentials' });
+  }
   try {
     if (!HAS_DB) {
-      const user = [...memUsers.values()].find((u) => u.username === username && u.password === password);
-      if (!user) return res.status(401).json({ error: 'Invalid credentials' });
-      return res.json({ success: true, uuid: user.uuid, shortId: user.short_id, name: user.username });
+      const user = [...memUsers.values()].find((u) => u.username.toLowerCase() === username.toLowerCase());
+      if (!user || !(await verifyPassword(password, user.password))) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+      if (!safeDisplayName(user.username)) {
+        return res.status(409).json({ error: 'This legacy display name must be changed before login.' });
+      }
+      if (!user.password.startsWith(`${PASSWORD_PREFIX}$`)) user.password = await hashPassword(password);
+      return res.json({
+        success: true,
+        uuid: user.uuid,
+        shortId: user.short_id,
+        name: user.username,
+        token: signSession(user),
+      });
     }
 
-    const result = await pool.query('SELECT * FROM users WHERE username = $1 AND password = $2', [username, password]);
+    const result = await pool.query('SELECT * FROM users WHERE LOWER(username) = LOWER($1) LIMIT 1', [username]);
     if (result.rows.length > 0) {
       const user = result.rows[0];
-      res.json({ success: true, uuid: user.uuid, shortId: user.short_id, name: user.username });
-    } else {
-      res.status(401).json({ error: 'Invalid credentials' });
+      if (await verifyPassword(password, user.password)) {
+        if (!safeDisplayName(user.username)) {
+          return res.status(409).json({ error: 'This legacy display name must be changed before login.' });
+        }
+        if (!user.password.startsWith(`${PASSWORD_PREFIX}$`)) {
+          const migrated = await hashPassword(password);
+          await pool.query('UPDATE users SET password = $1 WHERE uuid = $2 AND password = $3', [migrated, user.uuid, user.password]);
+          user.password = migrated;
+        }
+        return res.json({
+          success: true,
+          uuid: user.uuid,
+          shortId: user.short_id,
+          name: user.username,
+          token: signSession(user),
+        });
+      }
     }
+    res.status(401).json({ error: 'Invalid credentials' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Database error' });
   }
 });
 
-app.post('/api/save', async (req, res) => {
-  const { uuid, saveData, power, className, level } = req.body;
-  const score = Math.max(0, Math.round(Number(power) || 0));
+app.post('/api/save', authenticateRequest, async (req, res) => {
+  const requestedUuid = typeof req.body?.uuid === 'string' ? req.body.uuid : '';
+  const uuid = req.auth?.uuid || requestedUuid;
+  if (!uuid) return res.status(401).json({ error: 'Authentication required' });
+  if (req.auth && requestedUuid && requestedUuid !== req.auth.uuid) {
+    return res.status(403).json({ error: 'Cannot write another account save' });
+  }
+  const { saveData, power, className, level } = req.body;
+  if (!saveData || typeof saveData !== 'object' || Array.isArray(saveData)) {
+    return res.status(400).json({ error: 'Invalid save data' });
+  }
+  const score = Math.min(2_000_000_000, Math.max(0, Math.round(Number(power) || 0)));
+  const safeClassName = typeof className === 'string' ? className.slice(0, 40) : null;
+  const safeLevel = Math.min(10000, Math.max(1, Math.round(Number(level) || 1)));
 
   // Power rides along with the save rather than having an endpoint of its own:
   // it is derived from exactly the state being written, so two calls could
@@ -157,17 +398,20 @@ app.post('/api/save', async (req, res) => {
     if (rec) {
       rec.save_data = saveData;
       rec.power = score;
-      rec.power_class = className || rec.power_class;
-      rec.power_level = Number(level) || rec.power_level || 1;
+      rec.power_class = safeClassName || rec.power_class;
+      rec.power_level = safeLevel || rec.power_level || 1;
     }
-    return res.json({ success: Boolean(rec) });
+    return rec
+      ? res.json({ success: true })
+      : res.status(404).json({ success: false, msg: 'Account not found' });
   }
 
   try {
-    await pool.query(
+    const result = await pool.query(
       'UPDATE users SET save_data = $1, power = $2, power_class = COALESCE($3, power_class), power_level = COALESCE($4, power_level) WHERE uuid = $5',
-      [JSON.stringify(saveData), score, className || null, Number(level) || null, uuid]
+      [JSON.stringify(saveData), score, safeClassName, safeLevel, uuid]
     );
+    if (!result.rowCount) return res.status(404).json({ success: false, msg: 'Account not found' });
     res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -246,16 +490,21 @@ app.get('/api/leaderboard', async (req, res) => {
   }
 });
 
-app.get('/api/load/:uuid', async (req, res) => {
+app.get('/api/load/:uuid', authenticateRequest, async (req, res) => {
+  const uuid = req.auth?.uuid || req.params.uuid;
+  if (!uuid) return res.status(401).json({ error: 'Authentication required' });
+  if (req.auth && req.params.uuid !== req.auth.uuid) {
+    return res.status(403).json({ error: 'Cannot read another account save' });
+  }
   if (!HAS_DB) {
-    const rec = memUsers.get(req.params.uuid);
+    const rec = memUsers.get(uuid);
     return res.json(rec && rec.save_data
       ? { success: true, saveData: rec.save_data }
       : { success: false, msg: 'No save found' });
   }
 
   try {
-    const result = await pool.query('SELECT save_data FROM users WHERE uuid = $1', [req.params.uuid]);
+    const result = await pool.query('SELECT save_data FROM users WHERE uuid = $1', [uuid]);
     if (result.rows.length > 0 && result.rows[0].save_data) {
       res.json({ success: true, saveData: result.rows[0].save_data });
     } else {
@@ -269,20 +518,19 @@ app.get('/api/load/:uuid', async (req, res) => {
 
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: {
-    origin: "*", // allow any origin since client is on vercel/github pages
-    methods: ["GET", "POST"]
-  }
+  cors: corsOptions,
+  maxHttpBufferSize: 256 * 1024,
 });
 
 // ----------------- STATE -----------------
-// Player records are keyed by uuid so that they survive a socket reconnect
-// (mobile browsers get a brand new socket.id on screen lock / network switch).
-// `players` is a secondary index from the CURRENT socket id to the same record.
-const players = {};        // socketId -> record
-const playersByUuid = {};  // uuid     -> record (canonical)
-const rooms = {};          // roomId   -> { dungeonId, hostUuid, members: [uuid], started }
-const reconnectTimers = {}; // uuid    -> setTimeout handle
+// Account identity and in-game actor identity are deliberately separate. Two
+// browsers signed into one account are two actors in a room, while saves and
+// friendships still belong to the one authenticated account UUID.
+const players = {};          // socketId -> actor record
+const playersByActor = {};   // actorId  -> canonical actor record
+const actorIdsByUuid = {};    // account UUID -> Set<actorId>
+const rooms = {};            // roomId -> { dungeonId, hostActorId, members: [actorId], started }
+const reconnectTimers = {};  // actorId -> setTimeout handle
 
 // How long a disconnected player keeps their slot in a room before we evict them.
 const RECONNECT_GRACE_MS = 45000;
@@ -290,15 +538,57 @@ const RECONNECT_GRACE_MS = 45000;
 // Party size. Was hard-capped at 2; the lobby now supports a full squad.
 const MAX_PARTY = 4;
 
-function socketIdFor(uuid) {
-  const rec = playersByUuid[uuid];
+// Server-owned access requirements. Clients may display these values but may
+// not lower them when creating a public lobby.
+const DUNGEON_MIN_LEVELS = Object.freeze({
+  goblin_catacombs: 1,
+  venomous_swamp: 3,
+  sunlit_vale: 4,
+  undead_crypt: 5,
+  twilight_peaks: 6,
+  emerald_ridge: 8,
+  dragon_lair: 9,
+  sunken_abyss: 10,
+  gallet_depths: 12,
+  castle_approach: 13,
+  void_nexus: 14,
+  endless_arena: 16,
+});
+
+function socketIdForActor(actorId) {
+  const rec = playersByActor[actorId];
   return rec && rec.socketId ? rec.socketId : null;
+}
+
+function accountRecords(uuid) {
+  return [...(actorIdsByUuid[uuid] || [])]
+    .map(actorId => playersByActor[actorId])
+    .filter(Boolean);
+}
+
+function liveAccountRecord(uuid) {
+  return accountRecords(uuid).find(rec => rec.socketId) || accountRecords(uuid)[0] || null;
+}
+
+function rememberActor(rec) {
+  playersByActor[rec.actorId] = rec;
+  if (!actorIdsByUuid[rec.uuid]) actorIdsByUuid[rec.uuid] = new Set();
+  actorIdsByUuid[rec.uuid].add(rec.actorId);
+}
+
+function forgetActor(rec) {
+  if (!rec) return;
+  delete playersByActor[rec.actorId];
+  const ids = actorIdsByUuid[rec.uuid];
+  if (!ids) return;
+  ids.delete(rec.actorId);
+  if (!ids.size) delete actorIdsByUuid[rec.uuid];
 }
 
 function memberRecords(roomId) {
   const room = rooms[roomId];
   if (!room) return [];
-  return room.members.map(uuid => playersByUuid[uuid]).filter(Boolean);
+  return room.members.map(actorId => playersByActor[actorId]).filter(Boolean);
 }
 
 // Role is server-owned. Every membership change re-broadcasts it so a client
@@ -306,12 +596,12 @@ function memberRecords(roomId) {
 function broadcastRoles(roomId) {
   const room = rooms[roomId];
   if (!room) return;
-  room.members.forEach(uuid => {
-    const sid = socketIdFor(uuid);
+  room.members.forEach(actorId => {
+    const sid = socketIdForActor(actorId);
     if (sid) {
       io.to(sid).emit('role_assign', {
         roomId,
-        isHost: uuid === room.hostUuid,
+        isHost: actorId === room.hostActorId,
         dungeonId: room.dungeonId
       });
     }
@@ -330,18 +620,21 @@ function buildLobbyState(roomId) {
     dungeonId: room.dungeonId,
     maxPlayers: MAX_PARTY,
     started: room.started,
-    members: room.members.map(uuid => {
-      const rec = playersByUuid[uuid] || {};
+    members: room.members.map(actorId => {
+      const rec = playersByActor[actorId] || {};
       return {
-        uuid,
+        // Do not expose the account UUID in a public party snapshot. The UI
+        // only needs a stable actor key and the current socket id.
+        uuid: actorId,
+        actorId,
         socketId: rec.socketId || null,
         name: rec.name || 'Adventurer',
         shortId: rec.shortId || '',
         classId: rec.classId || null,
         level: rec.level || 1,
         power: rec.power || 0,
-        ready: uuid === room.hostUuid ? true : !!room.ready[uuid],
-        isHost: uuid === room.hostUuid,
+        ready: actorId === room.hostActorId ? true : !!room.ready[actorId],
+        isHost: actorId === room.hostActorId,
         online: !!rec.socketId
       };
     })
@@ -351,8 +644,8 @@ function buildLobbyState(roomId) {
 function broadcastLobby(roomId) {
   const state = buildLobbyState(roomId);
   if (!state) return;
-  for (const uuid of rooms[roomId].members) {
-    const sid = socketIdFor(uuid);
+  for (const actorId of rooms[roomId].members) {
+    const sid = socketIdForActor(actorId);
     if (sid) io.to(sid).emit('lobby_state', state);
   }
 }
@@ -450,7 +743,7 @@ async function buildFriendList(uuid) {
   // friend per refresh, and the same rows can be fetched at once.
   const saved = new Map();
   const needed = uuids.filter((fid) => {
-    const live = playersByUuid[fid];
+    const live = liveAccountRecord(fid);
     return !live || typeof live.level !== 'number';
   });
 
@@ -482,7 +775,7 @@ async function buildFriendList(uuid) {
   }
 
   const entries = uuids.map((fid) => {
-    const live = playersByUuid[fid];
+    const live = liveAccountRecord(fid);
     const stored = saved.get(fid);
     // The level came only from the live socket, and a socket carries one only
     // after that player has sent it. An offline friend - or one who simply had
@@ -521,10 +814,11 @@ async function broadcastPresence(uuid) {
 }
 
 async function pushFriendList(uuid) {
-  const sid = socketIdFor(uuid);
-  if (!sid) return;
   try {
-    io.to(sid).emit('friends_list', { friends: await buildFriendList(uuid) });
+    const payload = { friends: await buildFriendList(uuid) };
+    for (const rec of accountRecords(uuid)) {
+      if (rec.socketId) io.to(rec.socketId).emit('friends_list', payload);
+    }
   } catch (e) {
     console.error('[FRIENDS] push failed:', e.message);
   }
@@ -533,21 +827,25 @@ async function pushFriendList(uuid) {
 /** Members carry their class and level so the lobby can draw proper cards. */
 function applyProfile(p, data) {
   if (!p || !data) return;
-  if (data.classId) p.classId = data.classId;
-  if (typeof data.level === 'number') p.level = data.level;
-  if (typeof data.power === 'number') p.power = data.power;
+  if (typeof data.classId === 'string' && /^[a-z0-9_-]{1,32}$/i.test(data.classId)) p.classId = data.classId;
+  if (Number.isFinite(data.level)) p.level = Math.min(10000, Math.max(1, Math.round(data.level)));
+  if (Number.isFinite(data.power)) p.power = Math.min(2_000_000_000, Math.max(0, Math.round(data.power)));
 }
 
-function removeMemberFromRoom(uuid, roomId) {
+function removeMemberFromRoom(actorId, roomId) {
   const room = rooms[roomId];
   if (!room) return;
 
-  room.members = room.members.filter(id => id !== uuid);
-  if (room.ready) delete room.ready[uuid];
+  room.members = room.members.filter(id => id !== actorId);
+  if (room.ready) delete room.ready[actorId];
 
-  const rec = playersByUuid[uuid];
+  const rec = playersByActor[actorId];
   if (rec) {
-    io.to(roomId).emit('player_left', { socketId: rec.socketId, uuid, name: rec.name });
+    io.to(roomId).emit('player_left', {
+      socketId: rec.socketId || rec.lastSocketId || null,
+      actorId,
+      name: rec.name,
+    });
     rec.room = null;
   }
 
@@ -558,41 +856,198 @@ function removeMemberFromRoom(uuid, roomId) {
   }
 
   // Promote a surviving member if the host is the one who left.
-  if (room.hostUuid === uuid) {
-    room.hostUuid = room.members[0];
-    console.log(`[ROOM] ${roomId} host migrated to ${playersByUuid[room.hostUuid]?.name}`);
+  if (room.hostActorId === actorId) {
+    room.hostActorId = room.members[0];
+    console.log(`[ROOM] ${roomId} host migrated to ${playersByActor[room.hostActorId]?.name}`);
   }
   broadcastRoles(roomId);
   broadcastLobby(roomId);
 }
 
+function socketToken(socket) {
+  const authToken = socket.handshake.auth && socket.handshake.auth.token;
+  if (typeof authToken === 'string') return authToken;
+  const match = /^Bearer\s+(.+)$/i.exec(String(socket.handshake.headers.authorization || ''));
+  return match ? match[1] : null;
+}
+
+io.use((socket, next) => {
+  const auth = verifySession(socketToken(socket));
+  if (auth) {
+    socket.data.auth = auth;
+    return next();
+  }
+  if (AUTH_REQUIRED) return next(new Error('Authentication required'));
+  socket.data.auth = null;
+  return next();
+});
+
+const RATE_LIMITS = {
+  register_player: [5, 10_000],
+  create_lobby: [3, 10_000],
+  accept_invite: [6, 10_000],
+  send_invite: [10, 10_000],
+  friend_invite: [10, 10_000],
+  browse_lobbies: [10, 5_000],
+  quick_join: [6, 5_000],
+  lobby_ready: [12, 5_000],
+  lobby_start: [5, 5_000],
+  profile_update: [20, 5_000],
+  player_move: [40, 1000],
+  player_skill: [20, 1000],
+  damage_enemy: [120, 1000],
+  enemy_hit: [120, 1000],
+  enemy_sync: [15, 1000],
+  wave_sync: [6, 1000],
+  enemy_died: [64, 1000],
+  player_damage: [48, 1000],
+  request_full_sync: [3, 3000],
+  full_sync: [3, 3000],
+  voice_signal: [80, 1000],
+  voice_join: [5, 5_000],
+  party_support: [12, 1000],
+  party_stats: [5, 10_000],
+  party_ping: [5, 1000],
+  party_chat: [4, 3000],
+};
+
+function isPayloadWithin(value, maxBytes = 64 * 1024) {
+  try {
+    return Buffer.byteLength(JSON.stringify(value ?? null), 'utf8') <= maxBytes;
+  } catch {
+    return false;
+  }
+}
+
+function finiteNumber(value, min, max) {
+  return Number.isFinite(value) && value >= min && value <= max;
+}
+
+function safeId(value, max = 128) {
+  return typeof value === 'string' && value.length > 0 && value.length <= max && /^[A-Za-z0-9:_-]+$/.test(value);
+}
+
+function safeEntityId(value, max = 160) {
+  return typeof value === 'string'
+    && value.length > 0
+    && value.length <= max
+    && !/[\u0000-\u001f\u007f]/.test(value);
+}
+
+function sanitizePlayerDamageStatus(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const kinds = new Set(['slow', 'poison', 'burn', 'stun']);
+  if (!kinds.has(value.kind)) return null;
+
+  const maxDuration = value.kind === 'stun' ? 2.5 : 8;
+  if (!finiteNumber(value.duration, 0.1, maxDuration)) return null;
+  if (!finiteNumber(value.magnitude, 0, value.kind === 'slow' ? 0.8 : 1)) return null;
+
+  const damageOverTime = value.kind === 'poison' || value.kind === 'burn';
+  if (damageOverTime) {
+    if (!finiteNumber(value.tickInterval, 0.25, 2)) return null;
+    if (!finiteNumber(value.rawTickDamage, 1, 100_000)) return null;
+  } else if (value.tickInterval !== undefined || value.rawTickDamage !== undefined) {
+    return null;
+  }
+
+  return {
+    kind: value.kind,
+    duration: value.duration,
+    magnitude: value.magnitude,
+    tickInterval: damageOverTime ? value.tickInterval : undefined,
+    rawTickDamage: damageOverTime ? value.rawTickDamage : undefined,
+  };
+}
+
+function socketIdentity(socket, data = {}) {
+  const auth = socket.data.auth;
+  const uuid = auth?.uuid || (safeId(data.uuid) ? data.uuid : '');
+  const nameSource = auth?.name || data.name;
+  const shortSource = auth?.shortId || data.shortId;
+  const name = safeDisplayName(nameSource);
+  const shortId = typeof shortSource === 'string' ? shortSource.trim().toUpperCase().slice(0, 16) : '';
+  if (!uuid || !name || !/^[A-Z0-9]{4,16}$/.test(shortId)) return null;
+
+  const requestedActor = typeof data.actorId === 'string' ? data.actorId.trim() : '';
+  const actorId = safeId(requestedActor)
+    ? requestedActor
+    : `legacy_${crypto.createHash('sha256').update(uuid).digest('hex').slice(0, 24)}`;
+  return { uuid, name, shortId, actorId };
+}
+
+function isRoomHost(p) {
+  const room = p?.room ? rooms[p.room] : null;
+  return !!room && room.hostActorId === p.actorId;
+}
+
 io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`);
 
+  // Reject oversized or abusive packets before any individual event handler
+  // allocates/copies them. Socket.IO's transport cap is a second line of defence.
+  socket.data.rateBuckets = new Map();
+  socket.use(([event, ...args], next) => {
+    if (typeof event !== 'string' || event.length > 64 || !isPayloadWithin(args[0], 256 * 1024)) {
+      socket.emit('protocol_error', { event: String(event).slice(0, 64), reason: 'invalid_payload' });
+      return;
+    }
+    const [limit, windowMs] = RATE_LIMITS[event] || [60, 1000];
+    const now = Date.now();
+    const bucket = socket.data.rateBuckets.get(event);
+    if (!bucket || now - bucket.startedAt >= windowMs) {
+      socket.data.rateBuckets.set(event, { startedAt: now, count: 1 });
+      return next();
+    }
+    bucket.count++;
+    if (bucket.count > limit) {
+      socket.emit('protocol_error', { event, reason: 'rate_limited' });
+      return;
+    }
+    return next();
+  });
+
   // When a player joins the server with their guest info.
-  // This doubles as the reconnect path: if we already know this uuid we
+  // This doubles as the reconnect path: if we already know this actor we
   // re-point the record at the new socket and put it back into its room.
-  socket.on('register_player', (data) => {
-    // Coming online is news to everyone who has you on their list.
-    if (data && data.uuid) setTimeout(() => broadcastPresence(data.uuid), 0);
-    if (!data || !data.uuid) return;
+  function registerIdentity(data = {}) {
+    const identity = socketIdentity(socket, data);
+    if (!identity) return null;
+    setTimeout(() => broadcastPresence(identity.uuid), 0);
 
-    const existing = playersByUuid[data.uuid];
-
+    const existing = playersByActor[identity.actorId];
     if (existing) {
+      // An actor id can only ever belong to the account that first registered it.
+      if (existing.uuid !== identity.uuid) return null;
       // Cancel any pending eviction - they made it back in time.
-      if (reconnectTimers[data.uuid]) {
-        clearTimeout(reconnectTimers[data.uuid]);
-        delete reconnectTimers[data.uuid];
+      if (reconnectTimers[identity.actorId]) {
+        clearTimeout(reconnectTimers[identity.actorId]);
+        delete reconnectTimers[identity.actorId];
       }
 
-      // Retire the stale socket index entry and adopt the new socket.
-      if (existing.socketId && players[existing.socketId] === existing) {
-        delete players[existing.socketId];
+      // Retire the stale socket index entry and tell peers to drop that old
+      // render key before the replacement starts broadcasting movement.
+      const oldSocketId = existing.socketId;
+      if (oldSocketId && oldSocketId !== socket.id) {
+        if (existing.room) {
+          socket.to(existing.room).emit('player_left', {
+            socketId: oldSocketId,
+            actorId: existing.actorId,
+            name: existing.name,
+          });
+        }
+        if (players[oldSocketId] === existing) delete players[oldSocketId];
+        const oldSocket = io.sockets.sockets.get(oldSocketId);
+        if (oldSocket) {
+          if (existing.room) oldSocket.leave(existing.room);
+          oldSocket.emit('session_replaced', { actorId: existing.actorId });
+          oldSocket.disconnect(true);
+        }
+        existing.lastSocketId = oldSocketId;
       }
       existing.socketId = socket.id;
-      existing.name = data.name || existing.name;
-      existing.shortId = data.shortId || existing.shortId;
+      existing.name = identity.name;
+      existing.shortId = identity.shortId;
       applyProfile(existing, data);
       players[socket.id] = existing;
 
@@ -604,7 +1059,7 @@ io.on('connection', (socket) => {
         socket.emit('room_rejoined', {
           roomId: existing.room,
           dungeonId: room.dungeonId,
-          isHost: existing.uuid === room.hostUuid
+          isHost: existing.actorId === room.hostActorId
         });
         broadcastRoles(existing.room);
         console.log(`[AUTH] ${existing.name} rejoined room ${existing.room} on socket ${socket.id}`);
@@ -612,59 +1067,56 @@ io.on('connection', (socket) => {
         existing.room = null;
         console.log(`[AUTH] Re-registered ${existing.name} (${existing.shortId}) on socket ${socket.id}`);
       }
-      return;
+      return existing;
     }
 
     const record = {
-      uuid: data.uuid,
-      name: data.name,
-      shortId: data.shortId,
+      uuid: identity.uuid,
+      actorId: identity.actorId,
+      name: identity.name,
+      shortId: identity.shortId,
       socketId: socket.id,
-      room: null
+      lastSocketId: null,
+      room: null,
+      sceneId: 'town',
+      isTownMode: true,
     };
     applyProfile(record, data);
     players[socket.id] = record;
-    playersByUuid[data.uuid] = record;
+    rememberActor(record);
     // Local lookup so friend-by-ID works without a database attached.
-    if (data.shortId) {
-      memUsersByShortId.set(String(data.shortId).toUpperCase(), {
-        uuid: data.uuid, name: data.name, shortId: data.shortId
+    if (record.shortId) {
+      memUsersByShortId.set(record.shortId, {
+        uuid: record.uuid, name: record.name, shortId: record.shortId
       });
     }
-    console.log(`[AUTH] Registered ${data.name} (${data.shortId}) on socket ${socket.id}`);
+    console.log(`[AUTH] Registered ${record.name} (${record.shortId}) actor ${record.actorId} on socket ${socket.id}`);
+    return record;
+  }
+
+  socket.on('register_player', (data = {}) => {
+    if (!registerIdentity(data)) socket.emit('protocol_error', { event: 'register_player', reason: 'invalid_identity' });
   });
 
   // Adopts a socket that emitted a lobby packet before (or instead of) register_player.
   function ensureRegistered(data) {
     if (players[socket.id]) return players[socket.id];
-    if (!data || !data.uuid || !data.name || !data.shortId) return null;
-
-    const existing = playersByUuid[data.uuid];
-    if (existing) {
-      if (existing.socketId && players[existing.socketId] === existing) {
-        delete players[existing.socketId];
-      }
-      existing.socketId = socket.id;
-      players[socket.id] = existing;
-      console.log(`[AUTH-FALLBACK] Re-adopted ${data.name} via lobby packet`);
-      return existing;
-    }
-
-    const record = { uuid: data.uuid, name: data.name, shortId: data.shortId, socketId: socket.id, room: null };
-    players[socket.id] = record;
-    playersByUuid[data.uuid] = record;
-    console.log(`[AUTH-FALLBACK] Registered ${data.name} via lobby packet`);
-    return record;
+    return registerIdentity(data || {});
   }
 
   // Create Lobby
-  socket.on('create_lobby', (data) => {
+  socket.on('create_lobby', (data = {}) => {
     console.log(`[LOBBY] create_lobby requested by socket ${socket.id}`);
     const p = ensureRegistered(data);
 
     if (!p) {
        console.error(`[LOBBY] ERROR: Player not found for socket ${socket.id} during create_lobby!`);
        return;
+    }
+    const canonicalMinLevel = DUNGEON_MIN_LEVELS[data.dungeonId];
+    if (!Number.isInteger(canonicalMinLevel)) {
+      socket.emit('lobby_error', { msg: 'Invalid dungeon.' });
+      return;
     }
 
     // Refuse to split an existing party. The World Map auto-opens near the town
@@ -681,7 +1133,7 @@ io.on('connection', (socket) => {
     // Alone in a stale room - tear it down cleanly before opening a new one.
     if (current) {
       socket.leave(p.room);
-      removeMemberFromRoom(p.uuid, p.room);
+      removeMemberFromRoom(p.actorId, p.room);
     }
 
     applyProfile(p, data);
@@ -692,9 +1144,9 @@ io.on('connection', (socket) => {
       // Sent by the host's client from the dungeon definition, so there is one
       // source of truth for the requirement rather than a copy here that can
       // fall behind.
-      minLevel: Number(data.minLevel) || 1,
-      hostUuid: p.uuid,
-      members: [p.uuid],
+      minLevel: canonicalMinLevel,
+      hostActorId: p.actorId,
+      members: [p.actorId],
       ready: {},
       started: false
     };
@@ -747,9 +1199,9 @@ io.on('connection', (socket) => {
         // outlive the socket, so counting the array alone advertised rooms
         // whose players had all left - and quick join walked straight into
         // one of those empty rooms instead of the party that was waiting.
-        room.members.some(uuid => playersByUuid[uuid]?.socketId))
+        room.members.some(actorId => playersByActor[actorId]?.socketId))
       .map(([roomId, room]) => {
-        const host = playersByUuid[room.hostUuid];
+        const host = playersByActor[room.hostActorId];
         return {
           roomId,
           dungeonId: room.dungeonId,
@@ -791,6 +1243,11 @@ io.on('connection', (socket) => {
     const p = players[socket.id];
     if (!p) return;
 
+    if (typeof data.shortId !== 'string' || !/^[A-Z0-9]{4,16}$/i.test(data.shortId)) {
+      socket.emit('friend_error', { msg: 'Invalid player ID.' });
+      return;
+    }
+
     const target = await lookupByShortId(data.shortId);
     if (!target) {
       socket.emit('friend_error', { msg: 'No player with that ID.' });
@@ -816,7 +1273,7 @@ io.on('connection', (socket) => {
 
   socket.on('friend_remove', async (data = {}) => {
     const p = players[socket.id];
-    if (!p || !data.uuid) return;
+    if (!p || !safeId(data.uuid)) return;
     try {
       await removeFriendship(p.uuid, data.uuid);
     } catch (e) {
@@ -836,20 +1293,23 @@ io.on('connection', (socket) => {
     }
     const room = rooms[p.room];
     if (!room) return;
+    if (!safeId(data.uuid)) return;
     if (room.members.length >= MAX_PARTY) {
       socket.emit('friend_error', { msg: 'Party is full.' });
       return;
     }
 
-    const sid = socketIdFor(data.uuid);
-    if (!sid) {
+    const targets = accountRecords(data.uuid).filter(rec => rec.socketId);
+    if (!targets.length) {
       socket.emit('friend_error', { msg: 'That friend is offline.' });
       return;
     }
-    io.to(sid).emit('invite_received', {
-      fromName: p.name,
-      dungeonId: room.dungeonId,
-      roomId: p.room
+    targets.forEach(target => {
+      io.to(target.socketId).emit('invite_received', {
+        fromName: p.name,
+        dungeonId: room.dungeonId,
+        roomId: p.room
+      });
     });
     socket.emit('friend_error', { msg: 'Invite sent!' });
   });
@@ -860,7 +1320,7 @@ io.on('connection', (socket) => {
     if (!p || !p.room) return;
     const room = rooms[p.room];
     if (!room || room.started) return;
-    room.ready[p.uuid] = !!data.ready;
+    room.ready[p.actorId] = !!data.ready;
     broadcastLobby(p.room);
   });
 
@@ -871,26 +1331,32 @@ io.on('connection', (socket) => {
     const room = rooms[p.room];
     if (!room) return;
 
-    if (p.uuid !== room.hostUuid) {
+    if (p.actorId !== room.hostActorId) {
       socket.emit('lobby_error', { msg: 'Only the party leader can start.' });
       return;
     }
-    const notReady = room.members.filter(u => u !== room.hostUuid && !room.ready[u]);
+    const notReady = room.members.filter(actorId => actorId !== room.hostActorId && !room.ready[actorId]);
     if (notReady.length > 0) {
       socket.emit('lobby_error', { msg: 'Not everyone is ready yet.' });
       return;
     }
 
     room.started = true;
+    room.members.forEach(actorId => {
+      const member = playersByActor[actorId];
+      if (!member) return;
+      member.sceneId = room.dungeonId;
+      member.isTownMode = false;
+    });
     const roster = buildLobbyState(p.room).members;
-    room.members.forEach(uuid => {
-      const sid = socketIdFor(uuid);
+    room.members.forEach(actorId => {
+      const sid = socketIdForActor(actorId);
       if (sid) {
         io.to(sid).emit('dungeon_start', {
           roomId: p.room,
           dungeonId: room.dungeonId,
           players: roster,
-          isHost: uuid === room.hostUuid
+          isHost: actorId === room.hostActorId
         });
       }
     });
@@ -903,13 +1369,13 @@ io.on('connection', (socket) => {
     if (!p || !p.room) return;
     const roomId = p.room;
     socket.leave(roomId);
-    removeMemberFromRoom(p.uuid, roomId);
+    removeMemberFromRoom(p.actorId, roomId);
     socket.emit('lobby_left', {});
     if (rooms[roomId]) broadcastLobby(roomId);
   });
 
   // Send Invite
-  socket.on('send_invite', (data, callback) => {
+  socket.on('send_invite', (data = {}, callback) => {
     console.log(`[INVITE] send_invite requested by socket ${socket.id} for target ${data.targetShortId}`);
     const p = ensureRegistered(data);
 
@@ -921,11 +1387,16 @@ io.on('connection', (socket) => {
 
     const room = rooms[p.room];
     if (!room) return;
+    const targetShortId = typeof data.targetShortId === 'string' ? data.targetShortId.trim().toUpperCase() : '';
+    if (!/^[A-Z0-9]{4,16}$/.test(targetShortId)) {
+      if (typeof callback === 'function') callback({ success: false, msg: 'Invalid player ID.' });
+      return;
+    }
 
     // Records are keyed by uuid, so each player appears once regardless of
     // how many stale sockets they left behind.
-    const targets = Object.values(playersByUuid).filter(
-      player => player.shortId === data.targetShortId && player.uuid !== p.uuid && player.socketId
+    const targets = Object.values(playersByActor).filter(
+      player => player.shortId === targetShortId && player.uuid !== p.uuid && player.socketId
     );
 
     if (targets.length === 0) {
@@ -964,11 +1435,15 @@ io.on('connection', (socket) => {
   });
 
   // Accept Invite
-  socket.on('accept_invite', (data) => {
+  socket.on('accept_invite', (data = {}) => {
     console.log(`[INVITE] accept_invite requested by socket ${socket.id}`);
     const p = ensureRegistered(data);
 
     if (!p) return;
+    if (!safeId(data.roomId, 128)) {
+      socket.emit('invite_error', { msg: 'Invalid lobby.' });
+      return;
+    }
 
     const room = rooms[data.roomId];
     if (!room) {
@@ -976,7 +1451,20 @@ io.on('connection', (socket) => {
       return;
     }
 
-    const alreadyMember = room.members.includes(p.uuid);
+    // A socket may belong to exactly one gameplay room. Previously accepting a
+    // second invite joined the Socket.IO room without removing the first,
+    // leaking combat/voice packets between two parties.
+    const previousRoom = p.room ? rooms[p.room] : null;
+    if (previousRoom && p.room !== data.roomId) {
+      socket.emit('invite_error', { msg: 'Leave your current party before joining another.' });
+      return;
+    }
+    if (p.room && !previousRoom) {
+      socket.leave(p.room);
+      p.room = null;
+    }
+
+    const alreadyMember = room.members.includes(p.actorId);
     if (room.started && !alreadyMember) {
       socket.emit('invite_error', { msg: 'That run has already started.' });
       return;
@@ -1000,7 +1488,7 @@ io.on('connection', (socket) => {
 
     // Join the LOBBY. The run no longer auto-starts here - the host launches it
     // with lobby_start once everyone has readied up.
-    if (!alreadyMember) room.members.push(p.uuid);
+    if (!alreadyMember) room.members.push(p.actorId);
     p.room = data.roomId;
     socket.join(data.roomId);
 
@@ -1018,9 +1506,9 @@ io.on('connection', (socket) => {
     if (!room) return;
 
     // The host does not need to ask itself.
-    if (p.uuid === room.hostUuid) return;
+    if (p.actorId === room.hostActorId) return;
 
-    const hostSid = socketIdFor(room.hostUuid);
+    const hostSid = socketIdForActor(room.hostActorId);
     if (hostSid) {
       io.to(hostSid).emit('request_full_sync', { requesterId: socket.id });
     }
@@ -1031,43 +1519,69 @@ io.on('connection', (socket) => {
     const p = players[socket.id];
     if (!p || !p.room) return;
     const room = rooms[p.room];
-    if (!room || p.uuid !== room.hostUuid) return;
+    if (!room || p.actorId !== room.hostActorId) return;
+    if (!Array.isArray(data.enemies) || data.enemies.length > 128) return;
+    if (!Number.isInteger(data.waveIndex) || data.waveIndex < 0 || data.waveIndex > 100000) return;
+    if (!Number.isInteger(data.dungeonIndex) || data.dungeonIndex < 0 || data.dungeonIndex > 10000) return;
+    if (!safeId(data.dungeonId, 64)) return;
 
     const requesterId = data.requesterId;
-    if (requesterId && players[requesterId]) {
-      io.to(requesterId).emit('full_sync', data);
-    } else {
-      socket.to(p.room).emit('full_sync', data);
-    }
+    const requester = requesterId && players[requesterId];
+    if (!requester || requester.room !== p.room || requester.actorId === p.actorId) return;
+    io.to(requesterId).emit('full_sync', {
+      requesterId,
+      waveIndex: data.waveIndex,
+      dungeonIndex: data.dungeonIndex,
+      dungeonId: data.dungeonId,
+      enemies: data.enemies,
+    });
   });
 
 
   // Sync Events
-  socket.on('enemy_sync', (data) => {
+  socket.on('enemy_sync', (data = {}) => {
     const p = players[socket.id];
-    if (p && p.room) {
-      socket.to(p.room).emit('enemy_sync', data);
-    }
+    if (!isRoomHost(p)) return;
+    if (!Array.isArray(data.enemies) || data.enemies.length > 128) return;
+    if (!Number.isInteger(data.waveIndex) || data.waveIndex < 0 || data.waveIndex > 100000) return;
+    if (data.dungeonIndex !== undefined && (!Number.isInteger(data.dungeonIndex) || data.dungeonIndex < 0 || data.dungeonIndex > 10000)) return;
+    if (data.dungeonId !== undefined && !safeId(data.dungeonId, 64)) return;
+    if (!data.enemies.every(enemy => enemy && typeof enemy === 'object' && !Array.isArray(enemy))) return;
+    socket.to(p.room).emit('enemy_sync', {
+      enemies: data.enemies,
+      waveIndex: data.waveIndex,
+      dungeonIndex: data.dungeonIndex,
+      dungeonId: data.dungeonId,
+    });
   });
 
-  socket.on('wave_sync', (data) => {
+  socket.on('wave_sync', (data = {}) => {
     const p = players[socket.id];
-    if (p && p.room) {
-      socket.to(p.room).emit('wave_sync', data);
-    }
+    if (!isRoomHost(p)) return;
+    if (!Number.isInteger(data.waveIndex) || data.waveIndex < 0 || data.waveIndex > 100000) return;
+    socket.to(p.room).emit('wave_sync', { waveIndex: data.waveIndex, cleared: data.cleared === true });
   });
 
-  socket.on('enemy_died', (data) => {
+  socket.on('enemy_died', (data = {}) => {
     const p = players[socket.id];
-    if (p && p.room) {
-      socket.to(p.room).emit('enemy_died', data);
-    }
+    if (!isRoomHost(p)) return;
+    if (!safeEntityId(String(data.id ?? '')) || !isPayloadWithin(data, 32 * 1024)) return;
+    socket.to(p.room).emit('enemy_died', data);
   });
 
-  socket.on('damage_enemy', (data) => {
+  socket.on('damage_enemy', (data = {}) => {
     const p = players[socket.id];
-    if (p && p.room) {
-      socket.to(p.room).emit('damage_enemy', data);
+    if (!p || !p.room || isRoomHost(p)) return;
+    if (!safeEntityId(String(data.enemyId ?? ''))) return;
+    if (!finiteNumber(data.damage, 0, 1_000_000) || !finiteNumber(data.facing, -1, 1)) return;
+    const room = rooms[p.room];
+    const hostSid = room && socketIdForActor(room.hostActorId);
+    if (hostSid) {
+      io.to(hostSid).emit('damage_enemy', {
+        enemyId: String(data.enemyId),
+        damage: Math.round(data.damage),
+        facing: data.facing < 0 ? -1 : 1,
+      });
     }
   });
 
@@ -1085,7 +1599,7 @@ io.on('connection', (socket) => {
 
     // Tell the newcomer who is already talking, so it can offer to each.
     const peers = (rooms[p.room]?.members || [])
-      .map(uuid => playersByUuid[uuid])
+      .map(actorId => playersByActor[actorId])
       .filter(m => m && m.voice && m.socketId && m.socketId !== socket.id)
       .map(m => ({ socketId: m.socketId, name: m.name }));
     socket.emit('voice_peers', { peers });
@@ -1095,7 +1609,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('voice_signal', (data = {}) => {
-    if (!data.to) return;
+    const p = players[socket.id];
+    const target = safeId(data.to, 128) ? players[data.to] : null;
+    if (!p || !p.room || !p.voice || !target || !target.voice || target.room !== p.room) return;
+    if (!data.signal || typeof data.signal !== 'object' || !isPayloadWithin(data.signal, 32 * 1024)) return;
     io.to(data.to).emit('voice_signal', { from: socket.id, signal: data.signal });
   });
 
@@ -1108,21 +1625,68 @@ io.on('connection', (socket) => {
 
   // Support effects reach the whole party. A heal or a shield that only ever
   // helped the caster made the support classes pointless in co-op.
-  socket.on('party_support', (data) => {
+  socket.on('party_support', (data = {}) => {
     const p = players[socket.id];
-    if (p && p.room) {
-      socket.to(p.room).emit('remote_party_support', { socketId: socket.id, ...data });
-    }
+    const kinds = new Set(['heal', 'buff', 'cleanse', 'downed', 'revive', 'loot']);
+    const buffStats = new Set([
+      'atk',
+      'def',
+      'speed',
+      'crit',
+      'attackSpeed',
+      'damageReduction',
+      'shield',
+      'airMobility',
+      'deathPrevention',
+    ]);
+    if (!p || !p.room || !kinds.has(data.kind) || !isPayloadWithin(data, 8 * 1024)) return;
+
+    const targetSocketId = safeId(data.targetSocketId, 128) && players[data.targetSocketId]?.room === p.room
+      ? data.targetSocketId
+      : undefined;
+    const validPercent = finiteNumber(data.percent, 0.01, 1);
+    if (data.kind === 'heal' && !finiteNumber(data.amount, 1, 100_000) && !validPercent) return;
+    if (data.kind === 'buff' && (
+      !buffStats.has(data.stat)
+      || !finiteNumber(data.multiplier, 0.1, 3)
+      || !finiteNumber(data.duration, 0.1, 30)
+    )) return;
+    if (data.kind === 'cleanse' && !finiteNumber(data.count, 1, 5)) return;
+    if (data.kind === 'revive' && !targetSocketId) return;
+
+    const payload = {
+      socketId: socket.id,
+      kind: data.kind,
+      amount: finiteNumber(data.amount, 1, 100_000) ? data.amount : undefined,
+      percent: validPercent ? data.percent : undefined,
+      count: finiteNumber(data.count, 1, 5) ? Math.round(data.count) : undefined,
+      stat: buffStats.has(data.stat) ? data.stat : undefined,
+      multiplier: finiteNumber(data.multiplier, 0.1, 3) ? data.multiplier : undefined,
+      duration: finiteNumber(data.duration, 0.1, 30) ? data.duration : undefined,
+      casterName: p.name,
+      targetSocketId,
+      itemName: typeof data.itemName === 'string' ? data.itemName.slice(0, 80) : undefined,
+      rarity: typeof data.rarity === 'string' ? data.rarity.slice(0, 24) : undefined,
+    };
+    socket.to(p.room).emit('remote_party_support', payload);
   });
 
   // Each client tallies only its own blows, so the party summary is assembled
   // from everyone reporting their own. Relayed untouched - the server has no
   // view of combat and no reason to arbitrate it.
-  socket.on('party_stats', (data) => {
+  socket.on('party_stats', (data = {}) => {
     const p = players[socket.id];
-    if (p && p.room) {
-      socket.to(p.room).emit('remote_party_stats', { socketId: socket.id, ...data });
-    }
+    if (!p || !p.room) return;
+    const stat = value => Math.min(2_000_000_000, Math.max(0, Math.round(Number(value) || 0)));
+    socket.to(p.room).emit('remote_party_stats', {
+      socketId: socket.id,
+      name: p.name,
+      classId: typeof data.classId === 'string' ? data.classId.slice(0, 32) : undefined,
+      damageDealt: stat(data.damageDealt),
+      damageTaken: stat(data.damageTaken),
+      kills: stat(data.kills),
+      revives: stat(data.revives),
+    });
   });
 
   // Quick chat carries an id, never typed text, so there is nothing here to
@@ -1138,34 +1702,72 @@ io.on('connection', (socket) => {
   socket.on('party_ping', (data = {}) => {
     const p = players[socket.id];
     if (!p || !p.room) return;
-    if (typeof data.x !== 'number' || typeof data.y !== 'number') return;
+    if (!finiteNumber(data.x, -10_000_000, 10_000_000) || !finiteNumber(data.y, -10_000_000, 10_000_000)) return;
     socket.to(p.room).emit('remote_party_ping', { socketId: socket.id, x: data.x, y: data.y });
   });
 
-  socket.on('player_skill', (data) => {
+  socket.on('player_skill', (data = {}) => {
     const p = players[socket.id];
-    if (p && p.room) {
-      socket.to(p.room).emit('remote_player_skill', {
-        socketId: socket.id,
-        ...data
-      });
-    }
+    if (!p || !p.room) return;
+    if (!Number.isInteger(data.skillIndex) || data.skillIndex < 0 || data.skillIndex > 16) return;
+    if (!safeId(data.classId, 32)) return;
+    if (!finiteNumber(data.x, -10_000_000, 10_000_000) || !finiteNumber(data.y, -10_000_000, 10_000_000)) return;
+    if (!finiteNumber(data.facing, -1, 1)) return;
+    if (data.skillDamage !== undefined && !finiteNumber(data.skillDamage, 0, 1_000_000)) return;
+    socket.to(p.room).emit('remote_player_skill', {
+      socketId: socket.id,
+      skillIndex: data.skillIndex,
+      classId: data.classId,
+      x: data.x,
+      y: data.y,
+      facing: data.facing < 0 ? -1 : 1,
+      isTownMode: data.isTownMode === true,
+      skillDamage: data.skillDamage,
+    });
   });
 
-  socket.on('player_move', (data) => {
+  socket.on('player_move', (data = {}) => {
     const p = players[socket.id];
-    if (p && p.room) {
-      // Broadcast to everyone else in the room
-      socket.to(p.room).emit('remote_player_move', {
-        socketId: socket.id,
-        ...data
-      });
-    }
+    if (!p || !p.room) return;
+    if (!finiteNumber(data.x, -10_000_000, 10_000_000) || !finiteNumber(data.y, -10_000_000, 10_000_000)) return;
+    if (!finiteNumber(data.facing, -1, 1)) return;
+    const classId = safeId(data.classId, 32) ? data.classId : (p.classId || 'knight');
+    const animState = typeof data.animState === 'string' && /^[a-z0-9_-]{1,32}$/i.test(data.animState)
+      ? data.animState
+      : 'idle';
+    const room = rooms[p.room];
+    if (!room) return;
+    const isTownMode = data.isTownMode === true;
+    const sceneId = isTownMode
+      ? 'town'
+      : (data.sceneId === undefined
+          ? room.dungeonId
+          : (safeId(data.sceneId, 64) && data.sceneId === room.dungeonId ? data.sceneId : null));
+    if (!sceneId) return;
+    p.isTownMode = isTownMode;
+    p.sceneId = sceneId;
+    socket.to(p.room).emit('remote_player_move', {
+      socketId: socket.id,
+      classId,
+      name: p.name,
+      x: data.x,
+      y: data.y,
+      facing: data.facing < 0 ? -1 : 1,
+      isGrounded: data.isGrounded === true,
+      isAttacking: data.isAttacking === true,
+      animState,
+      isTownMode,
+      sceneId,
+      downed: data.downed === true,
+      hpPct: finiteNumber(data.hpPct, 0, 100) ? Math.round(data.hpPct) : 100,
+    });
   });
 
   socket.on('party_return_town', (data = {}) => {
     const p = players[socket.id];
     if (p && p.room) {
+      p.sceneId = 'town';
+      p.isTownMode = true;
       const room = rooms[p.room];
       const payload = (data && typeof data === 'object') ? data : {};
       io.to(p.room).emit('party_return_town', {
@@ -1173,24 +1775,36 @@ io.on('connection', (socket) => {
         // Only the host leaving the dungeon should drag the party back to town.
         // Without this, any member's town packet - including the sender's own
         // echo - yanked everyone out of the run.
-        fromHost: !!room && p.uuid === room.hostUuid,
-        x: typeof payload.x === 'number' ? payload.x : undefined,
-        y: typeof payload.y === 'number' ? payload.y : undefined,
-        facing: typeof payload.facing === 'number' ? payload.facing : 1,
-        animState: payload.animState || 'idle',
+        fromHost: !!room && p.actorId === room.hostActorId,
+        x: finiteNumber(payload.x, -10_000_000, 10_000_000) ? payload.x : undefined,
+        y: finiteNumber(payload.y, -10_000_000, 10_000_000) ? payload.y : undefined,
+        facing: finiteNumber(payload.facing, -1, 1) && payload.facing < 0 ? -1 : 1,
+        animState: typeof payload.animState === 'string' ? payload.animState.slice(0, 32) : 'idle',
         isTownMode: payload.isTownMode !== false,
-        classId: payload.classId,
-        name: payload.name || p.name
+        classId: safeId(payload.classId, 32) ? payload.classId : p.classId,
+        name: p.name
       });
     }
   });
 
-  socket.on('party_next_dungeon', (data) => {
+  socket.on('party_next_dungeon', (data = {}) => {
     const p = players[socket.id];
-    if (p && p.room) {
-      // Broadcast to other party members only (not echoing back to host)
-      socket.to(p.room).emit('party_next_dungeon', data);
-    }
+    if (!isRoomHost(p)) return;
+    if (!safeId(data.dungeonId, 64) || !Number.isInteger(data.dungeonIndex) || data.dungeonIndex < 0 || data.dungeonIndex > 10000) return;
+    if (!Object.hasOwn(DUNGEON_MIN_LEVELS, data.dungeonId)) return;
+    const room = rooms[p.room];
+    if (!room) return;
+    room.dungeonId = data.dungeonId;
+    room.members.forEach(actorId => {
+      const member = playersByActor[actorId];
+      if (!member) return;
+      member.sceneId = data.dungeonId;
+      member.isTownMode = false;
+    });
+    socket.to(p.room).emit('party_next_dungeon', {
+      dungeonId: data.dungeonId,
+      dungeonIndex: data.dungeonIndex,
+    });
   });
 
   // Explicit, intentional exit - no grace period.
@@ -1199,15 +1813,73 @@ io.on('connection', (socket) => {
     if (p && p.room) {
       const roomId = p.room;
       socket.leave(roomId);
-      removeMemberFromRoom(p.uuid, roomId);
+      removeMemberFromRoom(p.actorId, roomId);
     }
   });
 
-  socket.on('enemy_hit', (data) => {
+  socket.on('enemy_hit', (data = {}) => {
     const p = players[socket.id];
-    if (p && p.room) {
-      socket.to(p.room).emit('enemy_hit', data);
+    if (!isRoomHost(p)) return;
+    if (!safeEntityId(String(data.enemyId ?? ''))) return;
+    if (!finiteNumber(data.damage, 0, 1_000_000) || !finiteNumber(data.newHp, -1_000_000, 1_000_000)) return;
+    if (!finiteNumber(data.knockbackDir, -1, 1)) return;
+    socket.to(p.room).emit('enemy_hit', {
+      enemyId: String(data.enemyId),
+      damage: Math.round(data.damage),
+      isCrit: data.isCrit === true,
+      knockbackDir: data.knockbackDir < 0 ? -1 : 1,
+      newHp: Math.round(data.newHp),
+    });
+  });
+
+  // Enemy AI belongs to the room host. It sends raw attack power to exactly
+  // one remote target; that target still resolves its own defence, shield,
+  // i-frames, death prevention, and downed state locally.
+  socket.on('player_damage', (data = {}) => {
+    const p = players[socket.id];
+    if (!isRoomHost(p) || !p.room || !isPayloadWithin(data, 4 * 1024)) return;
+    const room = rooms[p.room];
+    if (!room || !room.started || p.isTownMode || p.sceneId !== room.dungeonId) return;
+
+    const targetSocketId = safeId(data.targetSocketId, 128) ? data.targetSocketId : null;
+    const target = targetSocketId ? players[targetSocketId] : null;
+    if (
+      !target
+      || target.room !== p.room
+      || target.actorId === room.hostActorId
+      || target.socketId !== targetSocketId
+      || target.isTownMode
+      || target.sceneId !== p.sceneId
+    ) return;
+
+    if (!safeId(data.hitId, 96)) return;
+    if (!finiteNumber(data.rawDamage, 1, 250_000)) return;
+    if (!finiteNumber(data.sourceX, -10_000_000, 10_000_000)) return;
+    if (data.knockbackDir !== -1 && data.knockbackDir !== 1) return;
+    if (data.isTownMode !== false || data.sceneId !== p.sceneId) return;
+
+    const status = data.status === undefined ? undefined : sanitizePlayerDamageStatus(data.status);
+    if (data.status !== undefined && !status) return;
+
+    const now = Date.now();
+    const seen = socket.data.playerDamageHitIds || new Map();
+    socket.data.playerDamageHitIds = seen;
+    for (const [hitId, receivedAt] of seen) {
+      if (now - receivedAt > 15_000) seen.delete(hitId);
     }
+    if (seen.has(data.hitId)) return;
+    seen.set(data.hitId, now);
+    while (seen.size > 512) seen.delete(seen.keys().next().value);
+
+    io.to(targetSocketId).emit('player_damage', {
+      hitId: data.hitId,
+      rawDamage: data.rawDamage,
+      sourceX: data.sourceX,
+      knockbackDir: data.knockbackDir,
+      isTownMode: false,
+      sceneId: p.sceneId,
+      status,
+    });
   });
 
   // Unintentional drop - hold the slot open so a reconnecting mobile client
@@ -1230,24 +1902,46 @@ io.on('connection', (socket) => {
 
     // A newer socket may already have adopted this record (fast reconnect).
     if (p.socketId !== socket.id) return;
+    p.lastSocketId = socket.id;
     p.socketId = null;
 
     if (!p.room) {
-      delete playersByUuid[p.uuid];
+      forgetActor(p);
       return;
     }
 
     const roomId = p.room;
-    io.to(roomId).emit('player_disconnected', { uuid: p.uuid, name: p.name });
+    io.to(roomId).emit('player_disconnected', {
+      socketId: socket.id,
+      actorId: p.actorId,
+      name: p.name,
+    });
+
+    // Do not freeze the whole run for the reconnect grace period. Keep the
+    // disconnected actor's member slot so it can return, but immediately move
+    // authority to the first connected survivor. A returning former host is a
+    // guest unless authority later migrates back through a real departure.
+    const room = rooms[roomId];
+    if (room && room.hostActorId === p.actorId) {
+      const successor = room.members.find(actorId =>
+        actorId !== p.actorId && playersByActor[actorId]?.socketId
+      );
+      if (successor) {
+        room.hostActorId = successor;
+        console.log(`[ROOM] ${roomId} authority migrated immediately to ${playersByActor[successor]?.name}`);
+        broadcastRoles(roomId);
+        broadcastLobby(roomId);
+      }
+    }
     console.log(`[ROOM] ${p.name} dropped from ${roomId}; holding slot for ${RECONNECT_GRACE_MS / 1000}s`);
 
-    reconnectTimers[p.uuid] = setTimeout(() => {
-      delete reconnectTimers[p.uuid];
-      const current = playersByUuid[p.uuid];
+    reconnectTimers[p.actorId] = setTimeout(() => {
+      delete reconnectTimers[p.actorId];
+      const current = playersByActor[p.actorId];
       // They came back on a new socket - nothing to clean up.
       if (!current || current.socketId) return;
-      removeMemberFromRoom(p.uuid, roomId);
-      delete playersByUuid[p.uuid];
+      removeMemberFromRoom(p.actorId, roomId);
+      forgetActor(p);
     }, RECONNECT_GRACE_MS);
   });
 });

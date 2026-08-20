@@ -1,0 +1,5 @@
+// Node's native TypeScript loader does not apply extension discovery to ESM
+// imports. Existing source-level validation imports ClassDefinitions.ts
+// directly, so this exact-path bridge keeps the production/bundler specifier
+// extensionless while forwarding Node to the typed implementation.
+export * from './SkillMechanics.ts';

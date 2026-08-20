@@ -1,6 +1,8 @@
 import { SideViewGame } from './sideview/SideViewGame';
+import { getGameApiBase } from './sideview/config/RuntimeConfig';
 import { installMobileStyles } from './sideview/ui/MobileUI';
-import { installAutoFullscreen } from './sideview/ui/Fullscreen';
+import { installLandscapeMode, LANDSCAPE_READY_EVENT } from './sideview/ui/Fullscreen';
+import { installRpgUiTheme } from './sideview/ui/RpgUiTheme';
 
 function generateShortId() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No I, O, 0, 1
@@ -20,10 +22,12 @@ function generateUUID() {
 }
 
 function showLoginScreen(mountPoint: HTMLElement) {
-  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  const API_URL = isLocal ? 'http://localhost:3001/api' : 'https://rpgame-production-3453.up.railway.app/api';
+  const API_URL = getGameApiBase();
 
   const overlay = document.createElement('div');
+  overlay.className = 'rpg-screen';
+  overlay.setAttribute('role', 'main');
+  overlay.setAttribute('aria-labelledby', 'login-title');
   overlay.style.position = 'fixed';
   overlay.style.inset = '0';
   overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.85)';
@@ -37,6 +41,9 @@ function showLoginScreen(mountPoint: HTMLElement) {
   overlay.style.fontFamily = "'Cinzel', 'Outfit', sans-serif";
 
   const box = document.createElement('div');
+  box.className = 'rpg-panel rpg-stack';
+  box.setAttribute('role', 'form');
+  box.setAttribute('aria-describedby', 'login-help login-error');
   box.style.background = "url('/assets/kenney-rpg-ui/panel_brown.png') repeat";
   box.style.backgroundSize = "100% 100%";
   box.style.padding = 'clamp(18px, 6vw, 40px)';
@@ -49,12 +56,18 @@ function showLoginScreen(mountPoint: HTMLElement) {
   box.style.overflowY = 'auto';
 
   const title = document.createElement('h2');
+  title.id = 'login-title';
+  title.className = 'rpg-title';
   title.innerText = 'AETHELGARD LOGIN';
   title.style.margin = '0 0 20px 0';
   title.style.textShadow = '2px 2px 4px #000';
 
   const userIn = document.createElement('input');
+  userIn.id = 'login-username';
+  userIn.className = 'rpg-input';
   userIn.type = 'text';
+  userIn.autocomplete = 'username';
+  userIn.setAttribute('aria-describedby', 'login-help login-error');
   userIn.placeholder = 'Username / Adventurer Name';
   userIn.style.width = '100%';
   userIn.style.padding = '10px';
@@ -67,8 +80,18 @@ function showLoginScreen(mountPoint: HTMLElement) {
   userIn.style.outline = 'none';
   userIn.maxLength = 16;
 
+  const userLabel = document.createElement('label');
+  userLabel.className = 'rpg-field';
+  userLabel.htmlFor = userIn.id;
+  userLabel.textContent = 'Adventurer name';
+  userLabel.appendChild(userIn);
+
   const passIn = document.createElement('input');
+  passIn.id = 'login-password';
+  passIn.className = 'rpg-input';
   passIn.type = 'password';
+  passIn.autocomplete = 'current-password';
+  passIn.setAttribute('aria-describedby', 'login-help login-error');
   passIn.placeholder = 'Password (Leave blank for Guest)';
   passIn.style.width = '100%';
   passIn.style.padding = '10px';
@@ -80,7 +103,20 @@ function showLoginScreen(mountPoint: HTMLElement) {
   passIn.style.color = '#fff';
   passIn.style.outline = 'none';
 
+  const passLabel = document.createElement('label');
+  passLabel.className = 'rpg-field';
+  passLabel.htmlFor = passIn.id;
+  passLabel.textContent = 'Password';
+  passLabel.appendChild(passIn);
+
+  const helpText = document.createElement('p');
+  helpText.id = 'login-help';
+  helpText.className = 'rpg-help';
+  helpText.textContent = 'Returning adventurers enter both fields. New adventurers choose a name, then create a guest account.';
+
   const loginBtn = document.createElement('button');
+  loginBtn.className = 'rpg-button rpg-button--primary';
+  loginBtn.type = 'button';
   loginBtn.innerText = 'LOGIN';
   loginBtn.style.background = "url('/assets/kenney-rpg-ui/buttonRound_blue.png') no-repeat center center";
   loginBtn.style.backgroundSize = "100% 100%";
@@ -94,6 +130,8 @@ function showLoginScreen(mountPoint: HTMLElement) {
   loginBtn.style.marginBottom = '10px';
 
   const guestBtn = document.createElement('button');
+  guestBtn.className = 'rpg-button';
+  guestBtn.type = 'button';
   guestBtn.innerText = 'PLAY AS GUEST';
   guestBtn.style.background = '#4a2c11';
   guestBtn.style.border = '2px solid #fff';
@@ -105,6 +143,10 @@ function showLoginScreen(mountPoint: HTMLElement) {
   guestBtn.style.width = '100%';
 
   const errorText = document.createElement('p');
+  errorText.id = 'login-error';
+  errorText.className = 'rpg-error';
+  errorText.setAttribute('role', 'status');
+  errorText.setAttribute('aria-live', 'polite');
   errorText.style.color = '#ff6b6b';
   errorText.style.fontSize = '12px';
   errorText.style.marginTop = '10px';
@@ -119,6 +161,8 @@ function showLoginScreen(mountPoint: HTMLElement) {
     }
     
     loginBtn.innerText = 'Logging in...';
+    loginBtn.disabled = true;
+    guestBtn.disabled = true;
     try {
       const res = await fetch(`${API_URL}/login`, {
         method: 'POST',
@@ -130,6 +174,7 @@ function showLoginScreen(mountPoint: HTMLElement) {
         localStorage.setItem('playerName', data.name);
         localStorage.setItem('playerUUID', data.uuid);
         localStorage.setItem('playerShortId', data.shortId);
+        if (data.token) localStorage.setItem('playerSessionToken', data.token);
         document.body.removeChild(overlay);
         startGame(mountPoint);
       } else {
@@ -139,6 +184,8 @@ function showLoginScreen(mountPoint: HTMLElement) {
       errorText.innerText = 'Failed to connect to server.';
     }
     loginBtn.innerText = 'LOGIN';
+    loginBtn.disabled = false;
+    guestBtn.disabled = false;
   };
 
   guestBtn.onclick = async () => {
@@ -149,6 +196,8 @@ function showLoginScreen(mountPoint: HTMLElement) {
     }
 
     guestBtn.innerText = 'Creating account...';
+    loginBtn.disabled = true;
+    guestBtn.disabled = true;
     try {
       const uuid = generateUUID();
       const shortId = generateShortId();
@@ -161,29 +210,51 @@ function showLoginScreen(mountPoint: HTMLElement) {
       const data = await res.json();
 
       if (data.success) {
-        localStorage.setItem('playerName', username);
-        localStorage.setItem('playerUUID', uuid);
-        localStorage.setItem('playerShortId', shortId);
+        localStorage.setItem('playerName', data.username || username);
+        localStorage.setItem('playerUUID', data.uuid || uuid);
+        localStorage.setItem('playerShortId', data.shortId || shortId);
+        if (data.token) localStorage.setItem('playerSessionToken', data.token);
 
         // Show credentials overlay
         box.innerHTML = '';
         box.style.width = 'min(400px, 92vw)';
         const okTitle = document.createElement('h2');
-        okTitle.innerText = 'ACCOUNT CREATED!';
+        okTitle.className = 'rpg-title';
+        okTitle.innerText = 'ACCOUNT CREATED';
         okTitle.style.color = '#4ade80';
         okTitle.style.marginBottom = '20px';
 
-        const okMsg = document.createElement('p');
-        okMsg.innerHTML = `Your account was successfully registered.<br/><br/>
-        <strong style="color:#fff">Username:</strong> <span style="color:#ffd700">${username}</span><br/>
-        <strong style="color:#fff">Password:</strong> <span style="color:#ffd700">${data.password}</span><br/><br/>
-        <span style="color:#ef4444; font-size: 14px;">Screenshot this! You will need this password to login on other devices.</span>`;
+        const okMsg = document.createElement('div');
+        okMsg.className = 'rpg-stack';
+        const successCopy = document.createElement('p');
+        successCopy.className = 'rpg-help';
+        successCopy.textContent = 'Your adventurer account is ready. Save these credentials before continuing.';
+        const credentials = document.createElement('dl');
+        credentials.className = 'rpg-card';
+        credentials.style.cssText = 'display:grid;grid-template-columns:auto 1fr;gap:8px 12px;padding:12px;text-align:left;';
+        const addCredential = (label: string, value: unknown) => {
+          const term = document.createElement('dt');
+          const description = document.createElement('dd');
+          term.className = 'rpg-label';
+          term.textContent = label;
+          description.style.cssText = 'margin:0;color:var(--rpg-gold-bright);font-weight:900;overflow-wrap:anywhere;user-select:text;';
+          description.textContent = String(value ?? '');
+          credentials.append(term, description);
+        };
+        addCredential('Username', data.username || username);
+        addCredential('Password', data.password);
+        const warning = document.createElement('p');
+        warning.className = 'rpg-error';
+        warning.textContent = 'Save or screenshot this password. It is required to sign in on another device.';
+        okMsg.append(successCopy, credentials, warning);
         okMsg.style.fontFamily = "'Outfit', sans-serif";
         okMsg.style.marginBottom = '20px';
         okMsg.style.lineHeight = '1.5';
 
         const okBtn = document.createElement('button');
-        okBtn.innerText = 'I HAVE SAVED IT ➔';
+        okBtn.className = 'rpg-button rpg-button--primary';
+        okBtn.type = 'button';
+        okBtn.innerText = 'I Have Saved It';
         okBtn.style.background = "url('/assets/kenney-rpg-ui/buttonRound_blue.png') no-repeat center center";
         okBtn.style.backgroundSize = "100% 100%";
         okBtn.style.border = 'none';
@@ -206,16 +277,26 @@ function showLoginScreen(mountPoint: HTMLElement) {
       errorText.innerText = 'Failed to connect to server.';
     }
     guestBtn.innerText = 'PLAY AS GUEST';
+    loginBtn.disabled = false;
+    guestBtn.disabled = false;
   };
 
+  [userIn, passIn].forEach(input => input.addEventListener('keydown', event => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    loginBtn.click();
+  }));
+
   box.appendChild(title);
-  box.appendChild(userIn);
-  box.appendChild(passIn);
+  box.appendChild(userLabel);
+  box.appendChild(passLabel);
+  box.appendChild(helpText);
   box.appendChild(loginBtn);
   box.appendChild(guestBtn);
   box.appendChild(errorText);
   overlay.appendChild(box);
   document.body.appendChild(overlay);
+  userIn.focus({ preventScroll: true });
 }
 
 function startGame(mountPoint: HTMLElement) {
@@ -228,6 +309,7 @@ function startGame(mountPoint: HTMLElement) {
 
 function initGame() {
   // Applies to the login screen as well, not just the game UI.
+  installRpgUiTheme();
   installMobileStyles();
   const mountPoint = document.getElementById('rpg') || document.body;
   if (!mountPoint) return;
@@ -236,20 +318,33 @@ function initGame() {
   const existingUUID = localStorage.getItem('playerUUID');
 
   const existingShortId = localStorage.getItem('playerShortId');
-  if (!existingName || !existingUUID || !existingShortId) {
+  const existingSession = localStorage.getItem('playerSessionToken');
+  // Accounts created before authenticated sessions must log in once so the
+  // browser can receive a signed token; a bare UUID is no longer authority.
+  if (!existingName || !existingUUID || !existingShortId || !existingSession) {
     showLoginScreen(mountPoint);
   } else {
     startGame(mountPoint);
   }
 }
 
-if (document.readyState === 'loading') {
-  window.addEventListener('DOMContentLoaded', initGame);
-} else {
+// Install the gate before booting any login/game UI. On mobile portrait this
+// keeps the mount inert and defers construction, so no renderer or game input
+// starts behind the rotate dialog. A physical rotation is the iOS fallback;
+// supported browsers additionally request fullscreen + orientation lock from
+// the first explicit player action.
+const landscapeMode = installLandscapeMode();
+let gameInitialized = false;
+const initWhenLandscape = () => {
+  if (gameInitialized || landscapeMode.isBlocked() || document.readyState === 'loading') return;
+  gameInitialized = true;
+  window.removeEventListener(LANDSCAPE_READY_EVENT, initWhenLandscape);
   initGame();
-}
+};
 
-// Phones reach fullscreen on the player's first tap, whatever that tap was for.
-// A page cannot ask for it on load - every browser refuses a request that did
-// not come from a gesture.
-installAutoFullscreen();
+window.addEventListener(LANDSCAPE_READY_EVENT, initWhenLandscape);
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', initWhenLandscape, { once: true });
+} else {
+  initWhenLandscape();
+}

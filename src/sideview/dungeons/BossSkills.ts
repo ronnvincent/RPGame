@@ -6,7 +6,7 @@
  * and nothing in the engine ever read either - so the scaffolding for this
  * existed while every fight played out identically.
  *
- * Each boss gets two, and no effect is shared between any of them: sixteen
+ * Each boss gets two, and no effect is shared between any of them: twenty-two
  * distinct ids, so no two bosses read the same way in play. Effects are drawn
  * from the existing catalogue rather than new art.
  */
@@ -73,6 +73,22 @@ export const BOSS_SKILLS: Record<string, BossSkill[]> = {
   'Gallet Forge Overlord': [
     { name: 'Molten Hammer', vfx: 'explosion_wide', damage: 1.8, cooldown: 7.5, kind: 'slam', telegraph: 0.8, colour: '#fb923c' },
     { name: 'Forge Sparks', vfx: 'sparks_magic', damage: 1.0, cooldown: 4.5, kind: 'volley', telegraph: 0.4, colour: '#fdba74' },
+  ],
+  'Warband Chief Hadrik': [
+    { name: 'Pikebreaker Charge', vfx: 'fx_thrust_a', damage: 1.5, cooldown: 6.0, kind: 'beam', telegraph: 0.65, colour: '#84cc16' },
+    { name: 'Warband Quake', vfx: 'charged_energy', damage: 1.8, cooldown: 8.0, kind: 'nova', telegraph: 0.85, colour: '#a3e635' },
+  ],
+  'Alpha Greymane': [
+    { name: 'Moonfang Rush', vfx: 'spark_trail', damage: 1.45, cooldown: 5.5, kind: 'beam', telegraph: 0.55, colour: '#22c55e' },
+    { name: 'Packlord Cyclone', vfx: 'dark_swirl', damage: 1.75, cooldown: 7.5, kind: 'nova', telegraph: 0.75, colour: '#16a34a' },
+  ],
+  'Castellan Mordred': [
+    { name: 'Blacksteel Decree', vfx: 'ray_mono', damage: 1.65, cooldown: 6.0, kind: 'beam', telegraph: 0.65, colour: '#94a3b8' },
+    { name: 'Citadel Ruin', vfx: 'energy_field', damage: 2.0, cooldown: 8.5, kind: 'slam', telegraph: 1.0, colour: '#64748b' },
+  ],
+  'Celestial Arbiter': [
+    { name: 'Astral Verdict', vfx: 'ult_lightning_strike_001', damage: 2.05, cooldown: 8.5, kind: 'slam', telegraph: 1.0, colour: '#fde68a' },
+    { name: 'Constellation Divide', vfx: 'waveform', damage: 1.55, cooldown: 6.0, kind: 'beam', telegraph: 0.65, colour: '#c4b5fd' },
   ],
 };
 

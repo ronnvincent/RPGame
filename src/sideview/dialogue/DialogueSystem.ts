@@ -7,6 +7,8 @@
 import { audio } from '../engine/AudioManager';
 import { quests } from '../quests/QuestManager';
 import { QuestDefinition } from '../quests/QuestDefinitions';
+import { installRpgUiTheme } from '../ui/RpgUiTheme';
+import { installModalFocusTrap, safeLocalAssetPath } from '../ui/UiSafety';
 
 export interface DialogueOption {
   label: string;
@@ -36,9 +38,11 @@ export class DialogueSystem {
   private isTyping: boolean = false;
   private typeTimer: any = null;
   private currentPayload: DialoguePayload | null = null;
+  private releaseFocus: (() => void) | null = null;
   public isOpen: boolean = false;
 
   constructor(parent: HTMLElement) {
+    installRpgUiTheme();
     this.container = parent;
     this.injectStyles();
   }
@@ -76,7 +80,7 @@ export class DialogueSystem {
         background-size: 100% 100%;
         border-style: solid;
         border-width: 14px;
-        border-image: url('/assets/kenney-rpg-ui/panel_brown.png') 14 fill repeat;
+        border-image: url('/assets/runtime/ui/fantasy-borders/default-panel/panel-000.png') 16 fill / 14px / 0 stretch;
         box-shadow: 0 12px 35px rgba(0, 0, 0, 0.85);
         padding: 12px 16px 14px 16px;
         display: flex;
@@ -140,6 +144,21 @@ export class DialogueSystem {
         image-rendering: pixelated;
       }
 
+      .dialogue-portrait img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        image-rendering: pixelated;
+        border-radius: 4px;
+      }
+
+      .dialogue-portrait-mark {
+        color: #fef3c7;
+        font: 900 17px/1 'Cinzel', serif;
+        letter-spacing: .04em;
+        text-shadow: 0 2px #000;
+      }
+
       .dialogue-text-body {
         flex: 1;
         font-size: 15px;
@@ -186,6 +205,20 @@ export class DialogueSystem {
       .dialogue-btn:active {
         background-image: url('/assets/kenney-rpg-ui/buttonLong_brown_pressed.png');
         transform: translateY(1px);
+      }
+
+      .dialogue-btn:focus-visible {
+        outline: 3px solid #fff0a8;
+        outline-offset: 3px;
+      }
+
+      .dialogue-option-icon {
+        width: 20px;
+        height: 20px;
+        object-fit: contain;
+        image-rendering: pixelated;
+        vertical-align: middle;
+        margin-right: 5px;
       }
 
       .dialogue-btn-quest {
@@ -328,6 +361,18 @@ export class DialogueSystem {
           min-height: 80px;
         }
       }
+
+      @media (pointer: coarse) {
+        .dialogue-btn { min-height: 48px; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .dialogue-modal-backdrop, .dialogue-box-frame, .prologue-overlay,
+        .prologue-scroll, .boss-intro-banner {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
     `;
     document.head.appendChild(style);
   }
@@ -339,21 +384,34 @@ export class DialogueSystem {
     this.currentSentenceIndex = 0;
 
     this.modalEl = document.createElement('div');
-    this.modalEl.className = 'dialogue-modal-backdrop';
+    this.modalEl.className = 'dialogue-modal-backdrop rpg-screen';
+    this.modalEl.setAttribute('role', 'dialog');
+    this.modalEl.setAttribute('aria-modal', 'true');
+    this.modalEl.setAttribute('aria-labelledby', 'dialogue-speaker-name');
+    this.modalEl.tabIndex = -1;
 
     const box = document.createElement('div');
-    box.className = 'dialogue-box-frame';
+    box.className = 'dialogue-box-frame rpg-panel';
 
     // Header
     const header = document.createElement('div');
     header.className = 'dialogue-header-row';
-    header.innerHTML = `
-      <div>
-        <span class="dialogue-speaker-name">${payload.speakerName}</span>
-        ${payload.speakerTitle ? `<span class="dialogue-speaker-title">${payload.speakerTitle}</span>` : ''}
-      </div>
-      <div style="font-size: 11px; color: #94a3b8; font-weight: 600;">[Space / Click to Advance]</div>
-    `;
+    const speaker = document.createElement('div');
+    const speakerName = document.createElement('span');
+    speakerName.className = 'dialogue-speaker-name';
+    speakerName.id = 'dialogue-speaker-name';
+    speakerName.textContent = String(payload.speakerName || 'Unknown Speaker');
+    speaker.appendChild(speakerName);
+    if (payload.speakerTitle) {
+      const speakerTitle = document.createElement('span');
+      speakerTitle.className = 'dialogue-speaker-title';
+      speakerTitle.textContent = String(payload.speakerTitle);
+      speaker.appendChild(speakerTitle);
+    }
+    const advanceHint = document.createElement('div');
+    advanceHint.className = 'rpg-help';
+    advanceHint.textContent = 'Space or click to advance';
+    header.append(speaker, advanceHint);
 
     // Content
     const content = document.createElement('div');
@@ -361,15 +419,30 @@ export class DialogueSystem {
 
     const portrait = document.createElement('div');
     portrait.className = 'dialogue-portrait';
-    if (payload.portraitIcon && payload.portraitIcon.startsWith('/')) {
-      portrait.innerHTML = `<img src="${payload.portraitIcon}" style="width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; border-radius: 4px;" />`;
+    const portraitPath = safeLocalAssetPath(payload.portraitIcon);
+    if (portraitPath) {
+      const portraitImage = document.createElement('img');
+      portraitImage.src = portraitPath;
+      portraitImage.alt = '';
+      portrait.appendChild(portraitImage);
     } else {
-      portrait.innerHTML = payload.portraitIcon || '🧙‍♂️';
+      const portraitMark = document.createElement('span');
+      portraitMark.className = 'dialogue-portrait-mark';
+      portraitMark.setAttribute('aria-hidden', 'true');
+      portraitMark.textContent = String(payload.speakerName || 'NPC')
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map(part => part[0])
+        .join('')
+        .toUpperCase() || 'NPC';
+      portrait.appendChild(portraitMark);
     }
 
     const textBody = document.createElement('div');
     textBody.className = 'dialogue-text-body';
     textBody.id = 'dialogue-active-text';
+    textBody.setAttribute('aria-atomic', 'true');
 
     content.appendChild(portrait);
     content.appendChild(textBody);
@@ -393,11 +466,20 @@ export class DialogueSystem {
     this.container.appendChild(this.modalEl);
 
     this.renderCurrentSentence();
+    box.addEventListener('keydown', (event) => {
+      if (event.code !== 'Space' || (event.target as HTMLElement).closest('button, input, select, textarea')) return;
+      event.preventDefault();
+      this.advanceText();
+    });
+    this.releaseFocus = installModalFocusTrap(this.modalEl, {
+      onEscape: () => this.close(),
+      initialFocus: actions.querySelector<HTMLElement>('button') || this.modalEl,
+    });
   }
 
   private renderCurrentSentence() {
     if (!this.currentPayload) return;
-    const textEl = document.getElementById('dialogue-active-text');
+    const textEl = this.modalEl?.querySelector<HTMLElement>('#dialogue-active-text');
     if (!textEl) return;
 
     this.fullText = this.currentPayload.sentences[this.currentSentenceIndex] || '';
@@ -407,6 +489,17 @@ export class DialogueSystem {
     if (this.typeTimer) clearInterval(this.typeTimer);
 
     this.updateActionButtons();
+
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+      || document.documentElement.dataset.rpgReducedMotion === 'true';
+    if (reducedMotion) {
+      this.currentText = this.fullText;
+      this.charIndex = this.fullText.length;
+      this.isTyping = false;
+      textEl.textContent = this.fullText;
+      this.updateActionButtons();
+      return;
+    }
 
     this.typeTimer = setInterval(() => {
       if (this.charIndex < this.fullText.length) {
@@ -431,7 +524,7 @@ export class DialogueSystem {
       // Skip typing to end of sentence
       this.isTyping = false;
       if (this.typeTimer) clearInterval(this.typeTimer);
-      const textEl = document.getElementById('dialogue-active-text');
+      const textEl = this.modalEl?.querySelector<HTMLElement>('#dialogue-active-text');
       if (textEl) textEl.textContent = this.fullText;
       this.updateActionButtons();
       return;
@@ -444,14 +537,15 @@ export class DialogueSystem {
     } else {
       // At last sentence: if no custom options, close
       if (!this.currentPayload.options || this.currentPayload.options.length === 0) {
+        const onComplete = this.currentPayload.onComplete;
         this.close();
-        if (this.currentPayload.onComplete) this.currentPayload.onComplete();
+        onComplete?.();
       }
     }
   }
 
   private updateActionButtons() {
-    const actionsEl = document.getElementById('dialogue-actions-container');
+    const actionsEl = this.modalEl?.querySelector<HTMLElement>('#dialogue-actions-container');
     if (!actionsEl || !this.currentPayload) return;
     actionsEl.innerHTML = '';
 
@@ -460,7 +554,8 @@ export class DialogueSystem {
     if (!isLastSentence) {
       const nextBtn = document.createElement('button');
       nextBtn.className = 'dialogue-btn';
-      nextBtn.innerHTML = 'Next ⏩';
+      nextBtn.type = 'button';
+      nextBtn.textContent = 'Next';
       nextBtn.onclick = () => this.advanceText();
       actionsEl.appendChild(nextBtn);
       return;
@@ -474,11 +569,16 @@ export class DialogueSystem {
         if (opt.type === 'accept_quest') btnClass += ' dialogue-btn-quest';
         if (opt.type === 'turn_in_quest') btnClass += ' dialogue-btn-turnin';
         btn.className = btnClass;
-        let iconHtml = opt.icon || '';
-        if (opt.icon && opt.icon.startsWith('/')) {
-            iconHtml = `<img src="${opt.icon}" style="width: 20px; height: 20px; image-rendering: pixelated; vertical-align: middle;" />`;
+        btn.type = 'button';
+        const iconPath = safeLocalAssetPath(opt.icon);
+        if (iconPath) {
+          const icon = document.createElement('img');
+          icon.className = 'dialogue-option-icon';
+          icon.src = iconPath;
+          icon.alt = '';
+          btn.appendChild(icon);
         }
-        btn.innerHTML = `${iconHtml} ${opt.label}`;
+        btn.appendChild(document.createTextNode(String(opt.label || 'Continue')));
         btn.onclick = () => {
           if (opt.onSelect) opt.onSelect();
           if (opt.type === 'close') this.close();
@@ -488,10 +588,12 @@ export class DialogueSystem {
     } else {
       const closeBtn = document.createElement('button');
       closeBtn.className = 'dialogue-btn';
-      closeBtn.innerHTML = 'Close ✕';
+      closeBtn.type = 'button';
+      closeBtn.textContent = 'Close';
       closeBtn.onclick = () => {
+        const onComplete = this.currentPayload?.onComplete;
         this.close();
-        if (this.currentPayload?.onComplete) this.currentPayload.onComplete();
+        onComplete?.();
       };
       actionsEl.appendChild(closeBtn);
     }
@@ -499,6 +601,10 @@ export class DialogueSystem {
 
   public close() {
     if (this.typeTimer) clearInterval(this.typeTimer);
+    this.typeTimer = null;
+    const releaseFocus = this.releaseFocus;
+    this.releaseFocus = null;
+    releaseFocus?.();
     if (this.modalEl && this.modalEl.parentNode) {
       this.modalEl.parentNode.removeChild(this.modalEl);
     }
@@ -528,13 +634,18 @@ export class DialogueSystem {
 
     let currentSlide = 0;
     const overlay = document.createElement('div');
-    overlay.className = 'prologue-overlay';
+    overlay.className = 'prologue-overlay rpg-screen';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-labelledby', 'prologue-title');
+    overlay.tabIndex = -1;
 
     const scroll = document.createElement('div');
-    scroll.className = 'prologue-scroll';
+    scroll.className = 'prologue-scroll rpg-panel';
 
     const titleEl = document.createElement('h2');
     titleEl.className = 'prologue-title';
+    titleEl.id = 'prologue-title';
 
     const bodyEl = document.createElement('p');
     bodyEl.className = 'prologue-body';
@@ -544,12 +655,14 @@ export class DialogueSystem {
 
     const nextBtn = document.createElement('button');
     nextBtn.className = 'dialogue-btn dialogue-btn-quest';
+    nextBtn.type = 'button';
     nextBtn.style.padding = '10px 24px';
     nextBtn.style.fontSize = '14px';
-    nextBtn.textContent = 'Continue ➔';
+    nextBtn.textContent = 'Continue';
 
     const skipBtn = document.createElement('button');
     skipBtn.className = 'dialogue-btn';
+    skipBtn.type = 'button';
     skipBtn.style.padding = '10px 20px';
     skipBtn.textContent = 'Skip Intro';
 
@@ -567,7 +680,7 @@ export class DialogueSystem {
       titleEl.textContent = slides[currentSlide].title;
       bodyEl.textContent = slides[currentSlide].body;
       if (currentSlide === slides.length - 1) {
-        nextBtn.textContent = 'Enter Eldermoor ⚔️';
+        nextBtn.textContent = 'Enter Eldermoor';
       }
     };
 
@@ -582,13 +695,19 @@ export class DialogueSystem {
 
     skipBtn.onclick = () => finish();
 
+    let releaseFocus: () => void = () => undefined;
     const finish = () => {
       audio.playQuestAccept();
+      releaseFocus();
       if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
       onFinish();
     };
 
     updateSlide();
+    releaseFocus = installModalFocusTrap(overlay, {
+      onEscape: finish,
+      initialFocus: nextBtn,
+    });
   }
 
   /**
@@ -597,11 +716,17 @@ export class DialogueSystem {
   public showBossBanner(bossName: string, bossTitle: string) {
     const banner = document.createElement('div');
     banner.className = 'boss-intro-banner';
-    banner.innerHTML = `
-      <div style="font-size: 13px; letter-spacing: 3px; font-weight: 800; color: #fef08a; text-transform: uppercase;">⚠️ WARNING: BOSS APPROACHING ⚠️</div>
-      <div style="font-size: 24px; font-weight: 900; letter-spacing: 2px; color: #ffffff; text-shadow: 0 0 15px rgba(255, 50, 50, 0.9); margin-top: 4px;">${bossName}</div>
-      <div style="font-size: 13px; color: #fca5a5; font-style: italic; margin-top: 2px;">"${bossTitle}"</div>
-    `;
+    banner.setAttribute('role', 'status');
+    const warning = document.createElement('div');
+    warning.style.cssText = 'font-size:13px;letter-spacing:3px;font-weight:800;color:#fef08a;text-transform:uppercase';
+    warning.textContent = 'Warning: Boss Approaching';
+    const name = document.createElement('div');
+    name.style.cssText = 'font-size:24px;font-weight:900;letter-spacing:2px;color:#fff;text-shadow:0 0 15px rgba(255,50,50,.9);margin-top:4px';
+    name.textContent = String(bossName || 'Unknown Boss');
+    const title = document.createElement('div');
+    title.style.cssText = 'font-size:13px;color:#fca5a5;font-style:italic;margin-top:2px';
+    title.textContent = String(bossTitle || 'A dangerous foe has appeared');
+    banner.append(warning, name, title);
     this.container.appendChild(banner);
     audio.playSlash('heavy', 0.6);
 

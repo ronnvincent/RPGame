@@ -1,0 +1,11 @@
+Particle Pack (1.1)
+
+Created by Kenney Vleugels (https://www.kenney.nl)
+Additional filter template credits in the source pack: Indigo Ray, Craig Nisbet,
+Zoltan Erdokovy, Heliagon, ThreeDee, Killst4r, and Tim2501.
+
+License: Creative Commons Zero v1.0 Universal (CC0-1.0)
+https://creativecommons.org/publicdomain/zero/1.0/
+
+These assets may be used in personal and commercial projects.
+Crediting Kenney or https://www.kenney.nl is appreciated but is not required.

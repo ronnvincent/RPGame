@@ -1,5 +1,7 @@
 import { io, Socket } from 'socket.io-client';
+import { getGameServerOrigin } from '../config/RuntimeConfig';
 import { PlayerState } from '../engine/SideViewEngine';
+import { PayloadCadence, quantizeNetworkCoordinate, smoothNetworkCoordinate } from './NetworkCadence';
 
 /** An open party shown in the browser. */
 export interface OpenLobby {
@@ -31,15 +33,44 @@ export interface RemotePlayerState {
   isAttacking: boolean;
   animState: string;
   isTownMode?: boolean;
+  /** Canonical combat scene stamped by the server (`town` or a dungeon id). */
+  sceneId?: string;
   /** Down and bleeding out, waiting for someone to reach them. */
   downed?: boolean;
   /** Their health as a fraction, so the ally rail can show it. */
   hpPct?: number;
   /** Skill slot of their current swing, for attack animation variety. */
   lastSkillIndex?: number;
+  /** Latest authoritative packet; render coordinates ease toward these. */
+  targetX?: number;
+  targetY?: number;
+}
+
+export type PlayerDamageStatusKind = 'slow' | 'poison' | 'burn' | 'stun';
+
+/** Optional, host-authored enemy status carried with one authoritative hit. */
+export interface PlayerDamageStatus {
+  kind: PlayerDamageStatusKind;
+  duration: number;
+  magnitude: number;
+  tickInterval?: number;
+  rawTickDamage?: number;
+}
+
+/** Host -> server -> one guest. The recipient resolves its own mitigation. */
+export interface PlayerDamagePacket {
+  hitId: string;
+  rawDamage: number;
+  sourceX: number;
+  knockbackDir: -1 | 1;
+  isTownMode: boolean;
+  sceneId: string;
+  status?: PlayerDamageStatus;
 }
 
 export interface LobbyMember {
+  actorId?: string;
+  /** Stable public actor key; it is not the private account UUID. */
   uuid: string;
   socketId: string | null;
   name: string;
@@ -111,7 +142,11 @@ export class NetworkManager {
   public isHost: boolean = true;
 
   private readonly debugKey = 'rpg_debug_multiplayer';
+  private readonly actorStorageKey = 'multiplayerActorId';
+  private readonly actorOwnerStorageKey = 'multiplayerActorAccount';
   private handlersRegistered = false;
+  /** Stationary players send a heartbeat instead of twenty identical packets a second. */
+  private readonly movementCadence = new PayloadCadence(500);
 
   /** Lightweight counters read by the co-op debug overlay. */
   public stats = {
@@ -139,6 +174,7 @@ export class NetworkManager {
   private onEnemyDiedCb: ((data: any) => void) | null = null;
   private onDamageEnemyCb: ((enemyId: string, damage: number, facing: number) => void) | null = null;
   private onEnemyHitCb: ((data: { enemyId: string, damage: number, isCrit: boolean, knockbackDir: number, newHp: number }) => void) | null = null;
+  private onPlayerDamageCb: ((data: PlayerDamagePacket) => void) | null = null;
   private onFullSyncRequestCb: ((requesterId: string) => void) | null = null;
   private onFullSyncCb: ((snapshot: FullSyncSnapshot) => void) | null = null;
   private onRoleChangeCb: ((isHost: boolean) => void) | null = null;
@@ -181,6 +217,7 @@ export class NetworkManager {
     if (this.room === roomId) return;
     this.room = roomId;
     this.remotePlayers = {};
+    this.movementCadence.reset();
   }
 
   private setRole(isHost: boolean, source: string) {
@@ -193,14 +230,36 @@ export class NetworkManager {
     this.onRoleChangeCb?.(isHost);
   }
 
+  /** One actor per browser/device. Account UUID remains shared for saves and
+   * friends, but two devices logged into one account must not collapse into a
+   * single party member. */
+  private getActorId(): string {
+    const accountUuid = localStorage.getItem('playerUUID') || '';
+    const existing = localStorage.getItem(this.actorStorageKey);
+    const existingOwner = localStorage.getItem(this.actorOwnerStorageKey);
+    if (existing && /^[A-Za-z0-9:_-]{8,128}$/.test(existing) && (!existingOwner || existingOwner === accountUuid)) {
+      if (!existingOwner && accountUuid) localStorage.setItem(this.actorOwnerStorageKey, accountUuid);
+      return existing;
+    }
+    const random = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
+    const actorId = `actor_${random}`;
+    localStorage.setItem(this.actorStorageKey, actorId);
+    if (accountUuid) localStorage.setItem(this.actorOwnerStorageKey, accountUuid);
+    return actorId;
+  }
+
   public connect() {
     if (this.socket) return;
 
     // Automatically switch between Localhost and Railway Live Server
-    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    const SERVER_URL = isLocal ? 'http://localhost:3001' : 'https://rpgame-production-3453.up.railway.app';
+    const SERVER_URL = getGameServerOrigin();
 
-    this.socket = io(SERVER_URL);
+    const token = localStorage.getItem('playerSessionToken');
+    this.socket = io(SERVER_URL, {
+      auth: token ? { token } : {},
+    });
     this.registerHandlers();
   }
 
@@ -209,7 +268,13 @@ export class NetworkManager {
     const name = localStorage.getItem('playerName');
     const shortId = localStorage.getItem('playerShortId');
     if (uuid && name && shortId) {
-      this.socket?.emit('register_player', { uuid, name, shortId, ...this.profile });
+      this.socket?.emit('register_player', {
+        uuid,
+        actorId: this.getActorId(),
+        name,
+        shortId,
+        ...this.profile,
+      });
     }
   }
 
@@ -230,6 +295,22 @@ export class NetworkManager {
       if (this.room) {
         this.socket?.emit('request_full_sync');
       }
+    });
+
+    this.socket.on('connect_error', (error) => {
+      console.warn('[NET] Connection failed:', error.message);
+      if (/authentication required/i.test(error.message)) {
+        // An expired/revoked token must not leave the game looking connected
+        // while cloud saves and party events are being rejected silently.
+        localStorage.removeItem('playerSessionToken');
+        this.onLobbyErrorCb?.('Your session expired. Please sign in again.');
+      }
+    });
+
+    this.socket.on('session_replaced', () => {
+      this.setRoom(null);
+      this.setRole(true, 'session_replaced');
+      this.onLobbyErrorCb?.('This game session continued in another tab or connection.');
     });
 
     this.socket.on('room_rejoined', (data) => {
@@ -256,22 +337,32 @@ export class NetworkManager {
           isGrounded: data.isGrounded, isAttacking: data.isAttacking,
           animState: data.animState || 'idle',
           isTownMode: !!data.isTownMode,
+          sceneId: typeof data.sceneId === 'string' ? data.sceneId : undefined,
           // Both of these were sent but never applied on arrival, so a downed
           // teammate looked like a teammate standing still and the marker over
           // them never drew.
           downed: !!data.downed,
-          hpPct: typeof data.hpPct === 'number' ? data.hpPct : 100
+          hpPct: typeof data.hpPct === 'number' ? data.hpPct : 100,
+          targetX: data.x,
+          targetY: data.y
         };
       } else {
         existing.classId = data.classId;
         existing.name = data.name || existing.name;
-        existing.x = data.x;
-        existing.y = data.y;
+        const environmentChanged = existing.isTownMode !== !!data.isTownMode;
+        const discontinuity = Math.hypot(data.x - existing.x, data.y - existing.y) >= 420;
+        existing.targetX = data.x;
+        existing.targetY = data.y;
+        if (environmentChanged || discontinuity) {
+          existing.x = data.x;
+          existing.y = data.y;
+        }
         existing.facing = data.facing;
         existing.isGrounded = data.isGrounded;
         existing.isAttacking = data.isAttacking;
         existing.animState = data.animState || 'idle';
         existing.isTownMode = !!data.isTownMode;
+        existing.sceneId = typeof data.sceneId === 'string' ? data.sceneId : existing.sceneId;
         existing.downed = !!data.downed;
         if (typeof data.hpPct === 'number') existing.hpPct = data.hpPct;
       }
@@ -279,6 +370,12 @@ export class NetworkManager {
 
     this.socket.on('player_left', (data) => {
       delete this.remotePlayers[data.socketId];
+    });
+
+    // A disconnected actor keeps its room slot during the mobile reconnect
+    // grace period, but its old socket id must stop rendering immediately.
+    this.socket.on('player_disconnected', (data) => {
+      if (data?.socketId) delete this.remotePlayers[data.socketId];
     });
 
     this.socket.on('lobby_update', (data) => {
@@ -416,6 +513,13 @@ export class NetworkManager {
       this.onEnemyHitCb?.(data);
     });
 
+    // This channel is server-targeted: only the selected guest receives it,
+    // and only a room host is allowed to originate it.
+    this.socket.on('player_damage', (data: PlayerDamagePacket) => {
+      this.debug('IN', 'player_damage', data);
+      this.onPlayerDamageCb?.(data);
+    });
+
     this.socket.on('request_full_sync', (data) => {
       this.debug('IN', 'request_full_sync', data);
       this.onFullSyncRequestCb?.(data?.requesterId);
@@ -457,7 +561,15 @@ export class NetworkManager {
     const shortId = localStorage.getItem('playerShortId');
     // The requirement travels with the lobby rather than being duplicated in a
     // second table on the server, which could then drift from the dungeons.
-    this.socket?.emit('create_lobby', { dungeonId, minLevel, uuid, name, shortId, ...this.profile });
+    this.socket?.emit('create_lobby', {
+      dungeonId,
+      minLevel,
+      uuid,
+      actorId: this.getActorId(),
+      name,
+      shortId,
+      ...this.profile,
+    });
   }
 
   public invitePlayer(targetShortId: string, onResponse: (msg: string, success: boolean) => void) {
@@ -465,7 +577,13 @@ export class NetworkManager {
     const uuid = localStorage.getItem('playerUUID');
     const name = localStorage.getItem('playerName');
     const shortId = localStorage.getItem('playerShortId');
-    this.socket?.emit('send_invite', { targetShortId, uuid, name, shortId }, (response: { success: boolean, msg: string }) => {
+    this.socket?.emit('send_invite', {
+      targetShortId,
+      uuid,
+      actorId: this.getActorId(),
+      name,
+      shortId,
+    }, (response: { success: boolean, msg: string }) => {
       onResponse(response.msg, response.success);
     });
   }
@@ -483,7 +601,14 @@ export class NetworkManager {
     const uuid = localStorage.getItem('playerUUID');
     const name = localStorage.getItem('playerName');
     const shortId = localStorage.getItem('playerShortId');
-    this.socket?.emit('accept_invite', { roomId, uuid, name, shortId, ...this.profile });
+    this.socket?.emit('accept_invite', {
+      roomId,
+      uuid,
+      actorId: this.getActorId(),
+      name,
+      shortId,
+      ...this.profile,
+    });
   }
 
   public listenForInvites(onInviteReceived: (inviteData: { fromName: string, dungeonId: string, roomId: string }) => void) {
@@ -502,7 +627,19 @@ export class NetworkManager {
    * Support skills only ever touched the caster, so a priest healing in a party
    * healed nobody who needed it.
    */
-  public sendPartySupport(payload: { kind: 'heal' | 'buff' | 'downed' | 'revive' | 'loot'; amount?: number; stat?: string; multiplier?: number; duration?: number; casterName?: string; targetSocketId?: string; itemName?: string; rarity?: string }) {
+  public sendPartySupport(payload: {
+    kind: 'heal' | 'buff' | 'cleanse' | 'downed' | 'revive' | 'loot';
+    amount?: number;
+    percent?: number;
+    count?: number;
+    stat?: string;
+    multiplier?: number;
+    duration?: number;
+    casterName?: string;
+    targetSocketId?: string;
+    itemName?: string;
+    rarity?: string;
+  }) {
     this.socket?.emit('party_support', payload);
   }
 
@@ -605,24 +742,47 @@ export class NetworkManager {
     this.onSkillCb = onSkill;
   }
 
-  public sendPlayerMove(playerState: any, groundY: number, isAttacking: boolean = false, isTownMode: boolean = false) {
+  public sendPlayerMove(
+    playerState: any,
+    groundY: number,
+    isAttacking: boolean = false,
+    isTownMode: boolean = false,
+    sceneId: string = isTownMode ? 'town' : 'goblin_catacombs',
+  ) {
     if (!this.socket || !this.room) return;
-    this.socket.emit('player_move', {
+    const payload = {
       classId: playerState.characterClass ? playerState.characterClass.id : 'knight',
-      name: localStorage.getItem('playerName') || 'Player',
-      x: playerState.x,
-      y: this.toNetworkY(playerState.y, groundY),
+      // Quarter-pixel quantization is below visible sprite precision but keeps
+      // tiny floating-point drift from defeating duplicate suppression.
+      x: quantizeNetworkCoordinate(playerState.x),
+      y: quantizeNetworkCoordinate(this.toNetworkY(playerState.y, groundY)),
       facing: playerState.facing,
       isGrounded: playerState.isGrounded,
       isAttacking,
       animState: playerState.animState || 'idle',
       isTownMode: Boolean(isTownMode),
+      sceneId,
       // Teammates need to see you are down, not merely standing still.
       downed: Boolean(playerState.downed),
       // Rounded to whole percent: this rides every move packet, and nobody can
       // read the difference between 61% and 61.4% on a sliver four pixels tall.
       hpPct: Math.max(0, Math.min(100, Math.round((playerState.hp / Math.max(1, playerState.maxHp)) * 100)))
-    });
+    };
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    if (!this.movementCadence.shouldSend(JSON.stringify(payload), now)) return;
+    this.socket.emit('player_move', payload);
+  }
+
+  /** Smooth 20 Hz packets for rendering without delaying teleports/zone changes. */
+  public updateRemotePlayers(dt: number): void {
+    for (const player of Object.values(this.remotePlayers)) {
+      if (typeof player.targetX === 'number') {
+        player.x = smoothNetworkCoordinate(player.x, player.targetX, dt);
+      }
+      if (typeof player.targetY === 'number') {
+        player.y = smoothNetworkCoordinate(player.y, player.targetY, dt);
+      }
+    }
   }
 
   public sendPartyReturnTown(playerState: PlayerState, groundY: number) {
@@ -845,6 +1005,18 @@ export class NetworkManager {
   public listenForEnemyHit(onHit: (data: { enemyId: string, damage: number, isCrit: boolean, knockbackDir: number, newHp: number }) => void) {
     if (!this.socket) this.connect();
     this.onEnemyHitCb = onHit;
+  }
+
+  /** Host-authored enemy damage sent to exactly one remote party member. */
+  public sendPlayerDamage(targetSocketId: string, payload: PlayerDamagePacket) {
+    if (!this.socket || !this.room || !this.isHost) return;
+    this.socket.emit('player_damage', { targetSocketId, ...payload });
+  }
+
+  /** Receive damage that the server has verified came from the current host. */
+  public onPlayerDamage(onDamage: (data: PlayerDamagePacket) => void) {
+    if (!this.socket) this.connect();
+    this.onPlayerDamageCb = onDamage;
   }
 
   // ================= FULL SNAPSHOT =================

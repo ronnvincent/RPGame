@@ -3,6 +3,7 @@
  */
 
 import { ItemData, getRandomLoot } from '../items/ItemDatabase';
+import { getZoneSpawnLayout } from '../maps/ZoneContent';
 
 /**
  * Monster health multiplier applied at spawn.
@@ -49,6 +50,10 @@ export interface EnemyStats {
   /** A promoted rank-and-file monster: tougher, richer, and marked. */
   isElite?: boolean;
   specialAttackTimer?: number;
+  /** Current telegraphed boss action, exposed for the accessible boss HUD. */
+  bossCastName?: string;
+  bossCastTimer?: number;
+  bossCastDuration?: number;
 }
 
 
@@ -111,7 +116,7 @@ export interface DungeonDefinition {
   waves: DungeonWave[];
 }
 
-export type BattleTheme = 'catacombs' | 'crypt' | 'inferno' | 'void' | 'town' | 'swamp' | 'mountain' | 'underwater' | 'caves' | 'sunlit_vale' | 'emerald_ridge' | 'castle_approach';
+export type BattleTheme = 'catacombs' | 'crypt' | 'inferno' | 'void' | 'town' | 'swamp' | 'mountain' | 'underwater' | 'caves' | 'sunlit_vale' | 'emerald_ridge' | 'castle_approach' | 'endless';
 
 export const DUNGEONS: DungeonDefinition[] = [
   // --- 1. GOBLIN CATACOMBS ---
@@ -128,7 +133,8 @@ export const DUNGEONS: DungeonDefinition[] = [
       {
         waveNumber: 1,
         enemies: [
-          { name: 'Green Slime', type: 'mob', icon: '/assets/ui_sprites/icons/I_Crystal01.png', color: '#4caf50', maxHp: 80, atk: 12, def: 5, speed: 2.2, expReward: 42, goldReward: 19, width: 36, height: 32, count: 4 }
+          { name: 'Green Slime', type: 'mob', icon: '/assets/ui_sprites/icons/I_Crystal01.png', color: '#4caf50', maxHp: 80, atk: 12, def: 5, speed: 2.2, expReward: 42, goldReward: 19, width: 36, height: 32, count: 4 },
+          { name: 'Tunnel Rat', type: 'mob', icon: '/assets/ui_sprites/icons/I_Bone.png', color: '#795548', maxHp: 72, atk: 14, def: 4, speed: 3.4, expReward: 45, goldReward: 22, width: 38, height: 28, count: 2 }
         ]
       },
       {
@@ -389,7 +395,8 @@ export const DUNGEONS: DungeonDefinition[] = [
       {
         waveNumber: 2,
         enemies: [
-          { name: 'Molten Sentry', type: 'elite', icon: '🛡️', color: '#ea580c', maxHp: 1200, atk: 70, def: 40, speed: 2.4, expReward: 616, goldReward: 351, width: 60, height: 70, count: 2 }
+          { name: 'Molten Sentry', type: 'elite', icon: '🛡️', color: '#ea580c', maxHp: 1200, atk: 70, def: 40, speed: 2.4, expReward: 616, goldReward: 351, width: 60, height: 70, count: 2 },
+          { name: 'Forge Mimic', type: 'mob', icon: '/assets/ui_sprites/icons/I_Chest01.png', color: '#f59e0b', maxHp: 620, atk: 55, def: 32, speed: 2.8, expReward: 280, goldReward: 170, width: 52, height: 44, count: 2 }
         ]
       },
       {
@@ -416,7 +423,8 @@ export const DUNGEONS: DungeonDefinition[] = [
       {
         waveNumber: 1,
         enemies: [
-          { name: 'Vale Raider', type: 'mob', icon: '🗡', color: '#84cc16', maxHp: 520, atk: 40, def: 16, speed: 4.2, expReward: 190, goldReward: 120, width: 42, height: 50, count: 4 }
+          { name: 'Vale Raider', type: 'mob', icon: '🗡', color: '#84cc16', maxHp: 520, atk: 40, def: 16, speed: 4.2, expReward: 190, goldReward: 120, width: 42, height: 50, count: 4 },
+          { name: 'Vale Rat', type: 'mob', icon: '/assets/ui_sprites/icons/I_Bone.png', color: '#a16207', maxHp: 440, atk: 38, def: 12, speed: 5.0, expReward: 175, goldReward: 105, width: 44, height: 34, count: 2 }
         ]
       },
       {
@@ -449,7 +457,8 @@ export const DUNGEONS: DungeonDefinition[] = [
       {
         waveNumber: 1,
         enemies: [
-          { name: 'Ridge Prowler', type: 'mob', icon: '🐺', color: '#22c55e', maxHp: 780, atk: 58, def: 24, speed: 4.8, expReward: 320, goldReward: 190, width: 42, height: 50, count: 5 }
+          { name: 'Ridge Prowler', type: 'mob', icon: '🐺', color: '#22c55e', maxHp: 780, atk: 58, def: 24, speed: 4.8, expReward: 320, goldReward: 190, width: 42, height: 50, count: 5 },
+          { name: 'Emerald Wisp', type: 'mob', icon: '/assets/ui_sprites/icons/I_Crystal01.png', color: '#86efac', maxHp: 590, atk: 62, def: 16, speed: 4.6, expReward: 300, goldReward: 180, width: 38, height: 38, count: 2 }
         ]
       },
       {
@@ -482,7 +491,8 @@ export const DUNGEONS: DungeonDefinition[] = [
       {
         waveNumber: 1,
         enemies: [
-          { name: 'Gate Sentinel', type: 'mob', icon: '🛡', color: '#94a3b8', maxHp: 1050, atk: 74, def: 34, speed: 3.8, expReward: 470, goldReward: 280, width: 42, height: 50, count: 5 }
+          { name: 'Gate Sentinel', type: 'mob', icon: '🛡', color: '#94a3b8', maxHp: 1050, atk: 74, def: 34, speed: 3.8, expReward: 470, goldReward: 280, width: 42, height: 50, count: 5 },
+          { name: 'Siege Rat', type: 'mob', icon: '/assets/ui_sprites/icons/I_Bone.png', color: '#78716c', maxHp: 860, atk: 68, def: 24, speed: 5.0, expReward: 430, goldReward: 250, width: 46, height: 36, count: 2 }
         ]
       },
       {
@@ -511,7 +521,7 @@ export const DUNGEONS: DungeonDefinition[] = [
     endless: true,
     name: 'Endless Celestial Arena',
     subtitle: 'Infinite trial against progressively empowered dimensional waves.',
-    theme: 'void',
+    theme: 'endless',
     backgroundGradient: ['#120c24', '#040208'],
     platformColor: '#2e1c4a',
     ambientParticles: '#facc15',
@@ -520,6 +530,25 @@ export const DUNGEONS: DungeonDefinition[] = [
         waveNumber: 1,
         enemies: [
           { name: 'Nether Stalker', type: 'mob', icon: '👤', color: '#a855f7', maxHp: 400, atk: 48, def: 20, speed: 4.0, expReward: 210, goldReward: 130, width: 42, height: 50, count: 5 }
+        ]
+      },
+      {
+        waveNumber: 2,
+        enemies: [
+          { name: 'Celestial Mimic', type: 'mob', icon: '/assets/ui_sprites/icons/I_Chest01.png', color: '#facc15', maxHp: 520, atk: 55, def: 28, speed: 2.8, expReward: 280, goldReward: 175, width: 52, height: 44, count: 3 },
+          { name: 'Rift Bat', type: 'mob', icon: '/assets/ui_sprites/icons/I_BatWing.png', color: '#c084fc', maxHp: 360, atk: 50, def: 14, speed: 4.8, expReward: 225, goldReward: 145, width: 42, height: 34, count: 3 }
+        ]
+      },
+      {
+        waveNumber: 3,
+        enemies: [
+          { name: 'Starforged Sentinel', type: 'elite', icon: '/assets/ui_sprites/icons/W_Sword001.png', color: '#93c5fd', maxHp: 1450, atk: 78, def: 46, speed: 3.0, expReward: 760, goldReward: 480, width: 62, height: 74, count: 2 }
+        ]
+      },
+      {
+        waveNumber: 4,
+        enemies: [
+          { name: 'Celestial Arbiter', type: 'boss', icon: '/assets/ui_sprites/icons/I_Crystal01.png', color: '#fde68a', maxHp: 6200, atk: 108, def: 58, speed: 4.0, expReward: 4800, goldReward: 3400, width: 92, height: 98, count: 1, phases: 3 }
         ]
       }
     ]
@@ -592,31 +621,45 @@ export function spawnWaveEnemies(
   if (!wave) return [];
 
   const instances: EnemyInstance[] = [];
-  const safePadding = Math.min(260, Math.max(170, arenaWidth * 0.16));
-  const lanes = Math.max(4, Math.min(9, Math.floor(arenaWidth / 280)));
-  const laneWidth = Math.max(58, (arenaWidth - safePadding * 2) / lanes);
+  const spawnLayout = getZoneSpawnLayout(dungeon.theme, waveIndex, arenaWidth);
+  const authoredEnemySpawns = spawnLayout.enemies.filter(
+    x => Math.abs(x - playerX) >= spawnLayout.minimumSeparation,
+  );
+  // A party may have crossed the arena before the next wave begins. Prefer
+  // authored anchors that are still outside the local player's safety ring;
+  // if a very narrow custom arena filters all of them, retain the authored
+  // order and apply the safety correction below instead of inventing random
+  // lanes at runtime.
+  const spawnPool = authoredEnemySpawns.length > 0
+    ? authoredEnemySpawns
+    : spawnLayout.enemies;
   let spawnOffsetIndex = 0;
-  const seededValue = waveIndex + arenaWidth * 0.1 + playerX;
 
   wave.enemies.forEach((enemyTemplate) => {
     for (let i = 0; i < enemyTemplate.count; i++) {
       // Bosses and elites are already special; only the rank and file are
       // promoted, and never the whole wave.
       const isElite = enemyTemplate.type === 'mob' && Math.random() < ELITE_SPAWN_CHANCE;
-      const spawnSide = ((spawnOffsetIndex + i + Math.floor(playerX)) + Math.floor(seededValue)) % 2 === 0 ? 1 : -1;
-      const laneIndex = (spawnOffsetIndex + i) % lanes;
-      const laneJitter = ((spawnOffsetIndex + i * 17) * 11) % laneWidth;
-      let x = spawnSide === 1
-        ? (arenaWidth - safePadding - laneWidth * 0.5 - laneIndex * laneWidth + laneJitter)
-        : (safePadding + laneWidth * 0.5 + laneIndex * laneWidth - laneJitter);
-      x = Math.max(safePadding, Math.min(arenaWidth - safePadding, x));
+      const fallbackX = Math.max(120, Math.min(arenaWidth - 120, arenaWidth * 0.75));
+      const authoredX = enemyTemplate.type === 'boss'
+        ? spawnLayout.boss
+        : (spawnPool[spawnOffsetIndex % Math.max(1, spawnPool.length)] ?? fallbackX);
+      const repeatedPass = spawnPool.length > 0 ? Math.floor(spawnOffsetIndex / spawnPool.length) : 0;
+      const repeatedOffset = repeatedPass > 0
+        ? repeatedPass * 32 * (spawnOffsetIndex % 2 === 0 ? -1 : 1)
+        : 0;
+      let x = Math.max(120, Math.min(arenaWidth - 120, authoredX + repeatedOffset));
 
-      if (spawnSide === 1 && x < playerX + 220) {
-        x = Math.min(arenaWidth - safePadding, playerX + 240 + ((spawnOffsetIndex + i) * 24) % 110);
+      if (Math.abs(x - playerX) < spawnLayout.minimumSeparation) {
+        const roomOnRight = arenaWidth - 120 - playerX;
+        const roomOnLeft = playerX - 120;
+        const direction = roomOnRight >= spawnLayout.minimumSeparation || roomOnRight >= roomOnLeft ? 1 : -1;
+        x = Math.max(
+          120,
+          Math.min(arenaWidth - 120, playerX + direction * spawnLayout.minimumSeparation),
+        );
       }
-      if (spawnSide === -1 && x > playerX - 220) {
-        x = Math.max(safePadding, playerX - 240 - ((spawnOffsetIndex + i) * 24) % 110);
-      }
+      const spawnSide = x >= playerX ? 1 : -1;
 
       const baseDelay = enemyTemplate.type === 'boss'
         ? 0

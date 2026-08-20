@@ -21,13 +21,14 @@ const mapSrc = readFileSync('src/sideview/ui/WorldMapUI.ts', 'utf8');
 const DUNGEONS = [];
 const lines = dungeonSrc.split('\n');
 for (let i = 0; i < lines.length; i++) {
-  const idMatch = lines[i].match(/^    id: '([a-z_]+)',$/);
+  const idMatch = lines[i].trim().match(/^id: '([a-z_]+)',$/);
   if (!idMatch) continue;
   let minLevel;
-  for (let k = i + 1; k < Math.min(i + 6, lines.length); k++) {
-    const lv = lines[k].match(/^    minLevel: (\d+),$/);
+  for (let k = i + 1; k < Math.min(i + 8, lines.length); k++) {
+    const candidate = lines[k].trim();
+    const lv = candidate.match(/^minLevel: (\d+),$/);
     if (lv) { minLevel = Number(lv[1]); break; }
-    if (/^    id: '/.test(lines[k])) break;
+    if (/^id: '/.test(candidate)) break;
   }
   DUNGEONS.push({ id: idMatch[1], minLevel });
 }

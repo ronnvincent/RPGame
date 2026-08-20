@@ -21,8 +21,20 @@
 import { ITEM_DATABASE } from '../items/ItemDatabase';
 import { HERO_SPRITES, HERO_FPS, heroFrame, attackAnimFor } from './HeroSprites';
 import { MAPS, MapLayer, MapGround, MapFloor, LEGACY_FLOORS, POLY_SHEETS, POLY_PROPS } from './MapLibrary';
-
-type BattleTheme = 'catacombs' | 'crypt' | 'inferno' | 'void' | 'town' | 'swamp' | 'mountain' | 'underwater' | 'caves' | 'sunlit_vale' | 'emerald_ridge' | 'castle_approach';
+import type { BattleTheme } from '../dungeons/DungeonManager';
+import {
+  getEnemyVisualAssetPaths,
+  resolveEnemyVisual,
+  type EnemyMobState,
+  type EnemyVisualProfile,
+} from '../maps/EnemyVisualRegistry';
+import {
+  getVisibleZoneDecorations,
+  getZoneContent,
+  getZonePreloadPaths,
+  type LandmarkKind,
+  type ZonePlane,
+} from '../maps/ZoneContent';
 
 /**
  * Monster sheets, measured by tools/measure-mob-frames.mjs.
@@ -86,7 +98,44 @@ const MOB_FRAMES: Record<string, {
 };
 
 export class SpriteManager {
-  private images: { [key: string]: HTMLImageElement } = {};
+  /**
+   * Browser image budget. A VFX frame folder can contain dozens of PNGs, so a
+   * visit to every zone must not leave every decoded frame resident forever.
+   * Retained (currently playing) effects may temporarily exceed the ceiling;
+   * they are evicted as soon as their final frame finishes.
+   */
+  public static readonly MAX_RESIDENT_IMAGES = 256;
+  public static readonly MAX_DECODED_IMAGE_PIXELS = 24_000_000;
+  public static readonly MAX_DECODED_IMAGE_BYTES = SpriteManager.MAX_DECODED_IMAGE_PIXELS * 4;
+
+  private readonly imageSources = new Map<string, string>();
+  private readonly imageCache = new Map<string, {
+    image: HTMLImageElement;
+    lastUsed: number;
+    state: 'loading' | 'ready' | 'error';
+  }>();
+  private readonly retainedSources = new Map<string, number>();
+  private cacheClock = 0;
+  private imageRequests = 0;
+  private imageEvictions = 0;
+  private imageHighWater = 0;
+  private decodedHighWaterPixels = 0;
+  private readonly backgroundWarmQueue: string[] = [];
+  private readonly backgroundWarmQueued = new Set<string>();
+  private backgroundWarmScheduled = false;
+  private effectsQuality: 'high' | 'medium' | 'low' = 'high';
+
+  /**
+   * Existing renderer branches index `this.images[key]` directly. Keep that
+   * API, but resolve the registered key lazily instead of allocating every
+   * image in the constructor.
+   */
+  private readonly images: { [key: string]: HTMLImageElement | undefined } = new Proxy(
+    Object.create(null) as { [key: string]: HTMLImageElement | undefined },
+    {
+      get: (_target, property) => typeof property === 'string' ? this.getImage(property) : undefined,
+    },
+  );
   private priestessIdleImgs: HTMLImageElement[] = [];
   private priestessWalkImgs: HTMLImageElement[] = [];
   private priestessAtkImgs: HTMLImageElement[] = [];
@@ -99,30 +148,13 @@ export class SpriteManager {
   private animTimer: number = 0;
   /** Per-class attack playback clock, restarted whenever a new swing begins. */
   private atkClock: Record<string, { start: number; prev: number }> = {};
-  private pendingLoads: number = 0;
 
   constructor() {
     this.preloadAll();
-  }
-
-  private startLoadCycle() {
-    this.pendingLoads += 1;
-  }
-
-  private finishLoadCycle() {
-    this.pendingLoads = Math.max(0, this.pendingLoads - 1);
-    if (this.pendingLoads <= 0) {
-      this.isLoaded = true;
-    }
-  }
-
-  private createTrackedImage(src: string): HTMLImageElement {
-    const img = new Image();
-    this.startLoadCycle();
-    img.onload = () => this.finishLoadCycle();
-    img.onerror = () => this.finishLoadCycle();
-    img.src = src;
-    return img;
+    // preloadAll now registers a catalogue; it intentionally performs no
+    // network I/O. First-use renderers have procedural/ground fallbacks while
+    // their requested image is loading.
+    this.isLoaded = true;
   }
 
   /**
@@ -132,12 +164,81 @@ export class SpriteManager {
    * exist further down the class and silently broke every path-based lookup.
    */
   public getImage(keyOrSrc: string): HTMLImageElement | undefined {
-    if (this.images[keyOrSrc]) return this.images[keyOrSrc];
-    if (keyOrSrc.startsWith('/') || keyOrSrc.startsWith('http') || keyOrSrc.startsWith('data:')) {
-      this.addImage(keyOrSrc, keyOrSrc);
-      return this.images[keyOrSrc];
+    const src = this.imageSources.get(keyOrSrc)
+      ?? (this.isAssetPath(keyOrSrc) ? keyOrSrc : undefined);
+    if (!src) return undefined;
+
+    const cached = this.imageCache.get(src);
+    if (cached) {
+      cached.lastUsed = ++this.cacheClock;
+      return cached.image;
     }
-    return undefined;
+
+    const image = new Image();
+    const record = {
+      image,
+      lastUsed: ++this.cacheClock,
+      state: 'loading' as const,
+    } as {
+      image: HTMLImageElement;
+      lastUsed: number;
+      state: 'loading' | 'ready' | 'error';
+    };
+    const markReady = () => {
+      record.state = 'ready';
+      this.decodedHighWaterPixels = Math.max(this.decodedHighWaterPixels, this.decodedImagePixels());
+      this.enforceImageBudget();
+    };
+    image.onload = () => {
+      // Loading and decoding are separate browser costs. Waiting for decode()
+      // keeps the first drawImage call from paying a synchronous decode spike.
+      const decode = typeof image.decode === 'function' ? image.decode() : null;
+      if (decode && typeof decode.then === 'function') decode.then(markReady, markReady);
+      else markReady();
+    };
+    image.onerror = () => { record.state = 'error'; };
+    this.imageCache.set(src, record);
+    this.imageRequests += 1;
+    this.imageHighWater = Math.max(this.imageHighWater, this.imageCache.size);
+    image.src = src;
+    this.enforceImageBudget();
+    return image;
+  }
+
+  private isAssetPath(value: string): boolean {
+    return value.startsWith('/') || value.startsWith('http') || value.startsWith('data:');
+  }
+
+  private enforceImageBudget() {
+    while (
+      this.imageCache.size > SpriteManager.MAX_RESIDENT_IMAGES
+      || this.decodedImagePixels() > SpriteManager.MAX_DECODED_IMAGE_PIXELS
+    ) {
+      let candidate: string | undefined;
+      let oldest = Number.POSITIVE_INFINITY;
+      for (const [src, record] of this.imageCache) {
+        if ((this.retainedSources.get(src) || 0) > 0) continue;
+        if (record.lastUsed < oldest) {
+          oldest = record.lastUsed;
+          candidate = src;
+        }
+      }
+      // Every over-budget image belongs to an active effect. Let it finish;
+      // releasePaths() will immediately bring the cache back under budget.
+      if (!candidate) break;
+      this.imageCache.delete(candidate);
+      this.imageEvictions += 1;
+    }
+  }
+
+  private decodedImagePixels(): number {
+    let pixels = 0;
+    for (const record of this.imageCache.values()) {
+      if (record.state === 'ready' || (record.image.complete && record.image.naturalWidth > 0)) {
+        pixels += record.image.naturalWidth * record.image.naturalHeight;
+      }
+    }
+    return pixels;
   }
 
   /**
@@ -146,17 +247,278 @@ export class SpriteManager {
    * holding up the loading screen - but they are usually resident well before
    * the player reaches a fight.
    */
-  public warmPaths(paths: string[]) {
-    for (const src of paths) {
-      if (this.images[src]) continue;
-      const img = new Image();
-      img.src = src;
-      this.images[src] = img;
+  public warmPaths(paths: readonly string[]) {
+    for (const src of new Set(paths)) this.getImage(src);
+  }
+
+  /**
+   * Warm a larger transition/class set in small idle-sized batches. This keeps
+   * selected content ahead of first use without recreating the old warm-all
+   * boot burst or decoding dozens of sheets in one frame.
+   */
+  public warmPathsIncrementally(paths: readonly string[], batchSize = 4) {
+    for (const src of new Set(paths)) {
+      if (this.imageCache.has(src) || this.backgroundWarmQueued.has(src)) continue;
+      this.backgroundWarmQueued.add(src);
+      this.backgroundWarmQueue.push(src);
+    }
+    if (this.backgroundWarmScheduled || this.backgroundWarmQueue.length === 0) return;
+    this.backgroundWarmScheduled = true;
+
+    const drain = () => {
+      const count = Math.max(1, Math.min(8, Math.floor(batchSize)));
+      for (let index = 0; index < count && this.backgroundWarmQueue.length; index += 1) {
+        const src = this.backgroundWarmQueue.shift();
+        if (!src) break;
+        this.backgroundWarmQueued.delete(src);
+        this.getImage(src);
+      }
+      if (this.backgroundWarmQueue.length > 0) window.setTimeout(drain, 16);
+      else this.backgroundWarmScheduled = false;
+    };
+
+    const requestIdle = (window as typeof window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+    }).requestIdleCallback;
+    if (requestIdle) requestIdle(drain, { timeout: 80 });
+    else window.setTimeout(drain, 0);
+  }
+
+  /** ParticleSystem lowers expensive sprite filters alongside adaptive VFX. */
+  public setEffectsQuality(quality: 'high' | 'medium' | 'low') {
+    this.effectsQuality = quality;
+  }
+
+  /** Keep active multi-frame VFX resident until their animation completes. */
+  public retainPaths(paths: readonly string[]) {
+    for (const src of new Set(paths)) {
+      this.retainedSources.set(src, (this.retainedSources.get(src) || 0) + 1);
+      this.getImage(src);
     }
   }
 
+  public releasePaths(paths: readonly string[]) {
+    for (const src of new Set(paths)) {
+      const count = this.retainedSources.get(src) || 0;
+      if (count <= 1) this.retainedSources.delete(src);
+      else this.retainedSources.set(src, count - 1);
+    }
+    this.enforceImageBudget();
+  }
+
+  public arePathsReady(paths: readonly string[]): boolean {
+    return paths.length > 0 && paths.every((path) => {
+      const record = this.imageCache.get(path);
+      return record?.state === 'ready';
+    });
+  }
+
+  /** Runtime counters used by the performance HUD/tests without exposing maps. */
+  public getPerformanceMetrics() {
+    let ready = 0;
+    let loading = 0;
+    let failed = 0;
+    for (const record of this.imageCache.values()) {
+      if (record.state === 'ready') ready += 1;
+      else if (record.state === 'error') failed += 1;
+      else loading += 1;
+    }
+    return {
+      registeredKeys: this.imageSources.size,
+      residentImages: this.imageCache.size,
+      retainedImages: this.retainedSources.size,
+      readyImages: ready,
+      loadingImages: loading,
+      failedImages: failed,
+      imageRequests: this.imageRequests,
+      evictions: this.imageEvictions,
+      highWaterImages: this.imageHighWater,
+      residentBudget: SpriteManager.MAX_RESIDENT_IMAGES,
+      decodedImagePixels: this.decodedImagePixels(),
+      decodedHighWaterPixels: this.decodedHighWaterPixels,
+      decodedImageBudgetPixels: SpriteManager.MAX_DECODED_IMAGE_PIXELS,
+      decodedImageBytes: this.decodedImagePixels() * 4,
+      decodedHighWaterBytes: this.decodedHighWaterPixels * 4,
+      decodedImageBudgetBytes: SpriteManager.MAX_DECODED_IMAGE_BYTES,
+      backgroundWarmQueued: this.backgroundWarmQueue.length,
+      effectsQuality: this.effectsQuality,
+    } as const;
+  }
+
+  /** Load only the art needed by the enemy family about to enter the arena. */
+  public warmEnemyVisual(mobType: string) {
+    this.warmPaths(getEnemyVisualAssetPaths(mobType));
+  }
+
+  /** Load the small authored overlay for one zone without expanding boot load. */
+  public warmZoneContent(theme: BattleTheme) {
+    this.warmPaths(getZonePreloadPaths(theme));
+  }
+
+  /**
+   * Draw one camera-culled authored zone plane. SideViewEngine can call the
+   * background planes before entities and the foreground plane afterwards.
+   */
+  public drawZoneContentPlane(
+    ctx: CanvasRenderingContext2D,
+    theme: BattleTheme,
+    plane: ZonePlane,
+    cameraX: number,
+    viewportWidth: number,
+    groundY: number,
+  ) {
+    const content = getZoneContent(theme);
+    for (const decoration of getVisibleZoneDecorations(theme, plane, cameraX, viewportWidth)) {
+      const x = Math.round(decoration.screenX);
+      const y = Math.round(groundY - decoration.yOffsetFromGround - decoration.height);
+
+      if (decoration.landmark) {
+        this.drawZoneLandmark(
+          ctx,
+          decoration.landmark,
+          x,
+          y,
+          decoration.width,
+          decoration.height,
+          content.grade.overlay,
+          decoration.alpha,
+        );
+        continue;
+      }
+
+      if (!decoration.asset || !decoration.rect) continue;
+      const image = this.images[decoration.asset];
+      if (!image) {
+        // Register lazily and skip one frame; it does not become a tracked boot
+        // dependency and cannot hold the loading screen open.
+        this.warmPaths([decoration.asset]);
+        continue;
+      }
+      if (!image.complete || !image.naturalWidth) continue;
+
+      ctx.save();
+      ctx.globalAlpha = decoration.alpha;
+      ctx.imageSmoothingEnabled = false;
+      if (decoration.flipX) {
+        ctx.translate(x + decoration.width, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(
+          image,
+          decoration.rect.sx,
+          decoration.rect.sy,
+          decoration.rect.sw,
+          decoration.rect.sh,
+          0,
+          y,
+          decoration.width,
+          decoration.height,
+        );
+      } else {
+        ctx.drawImage(
+          image,
+          decoration.rect.sx,
+          decoration.rect.sy,
+          decoration.rect.sw,
+          decoration.rect.sh,
+          x,
+          y,
+          decoration.width,
+          decoration.height,
+        );
+      }
+      ctx.restore();
+    }
+  }
+
+  private drawZoneLandmark(
+    ctx: CanvasRenderingContext2D,
+    kind: LandmarkKind,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    accent: string,
+    alpha: number,
+  ) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(x, y);
+    const dark = '#17131d';
+    const stone = '#443c4d';
+    ctx.fillStyle = dark;
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = Math.max(3, width * 0.018);
+
+    if (kind === 'volcano') {
+      ctx.beginPath();
+      ctx.moveTo(width * 0.05, height);
+      ctx.lineTo(width * 0.4, height * 0.26);
+      ctx.lineTo(width * 0.6, height * 0.26);
+      ctx.lineTo(width * 0.95, height);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(width * 0.4, height * 0.29);
+      ctx.quadraticCurveTo(width * 0.5, height * 0.38, width * 0.6, height * 0.29);
+      ctx.stroke();
+    } else if (kind === 'void-rift' || kind === 'celestial-ring') {
+      ctx.beginPath();
+      ctx.ellipse(width * 0.5, height * 0.5, width * 0.31, height * 0.44, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha *= 0.45;
+      ctx.lineWidth *= 2.4;
+      ctx.stroke();
+    } else if (kind === 'vale-windmill') {
+      ctx.fillRect(width * 0.38, height * 0.35, width * 0.24, height * 0.65);
+      ctx.fillStyle = stone;
+      ctx.beginPath();
+      ctx.moveTo(width * 0.31, height * 0.37);
+      ctx.lineTo(width * 0.5, height * 0.1);
+      ctx.lineTo(width * 0.69, height * 0.37);
+      ctx.closePath();
+      ctx.fill();
+      ctx.translate(width * 0.5, height * 0.42);
+      for (let index = 0; index < 4; index += 1) {
+        ctx.rotate(Math.PI / 2);
+        ctx.fillStyle = accent;
+        ctx.fillRect(-width * 0.035, -height * 0.37, width * 0.07, height * 0.34);
+      }
+    } else if (kind === 'root-tunnel' || kind === 'crypt-gate' || kind === 'coral-gate' || kind === 'forge-furnace') {
+      ctx.fillStyle = stone;
+      ctx.beginPath();
+      ctx.moveTo(width * 0.14, height);
+      ctx.lineTo(width * 0.14, height * 0.46);
+      ctx.quadraticCurveTo(width * 0.5, height * 0.02, width * 0.86, height * 0.46);
+      ctx.lineTo(width * 0.86, height);
+      ctx.lineTo(width * 0.68, height);
+      ctx.lineTo(width * 0.68, height * 0.5);
+      ctx.quadraticCurveTo(width * 0.5, height * 0.26, width * 0.32, height * 0.5);
+      ctx.lineTo(width * 0.32, height);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else if (kind === 'bog-shrine' || kind === 'druid-stones') {
+      for (const offset of [0.18, 0.42, 0.68]) {
+        ctx.fillStyle = stone;
+        ctx.fillRect(width * offset, height * (0.26 + offset * 0.18), width * 0.14, height * (0.74 - offset * 0.18));
+      }
+      ctx.strokeRect(width * 0.12, height * 0.18, width * 0.76, height * 0.74);
+    } else {
+      // Keeps, watchtowers, and castle gates share one modular silhouette.
+      ctx.fillStyle = stone;
+      ctx.fillRect(width * 0.18, height * 0.34, width * 0.64, height * 0.66);
+      ctx.fillRect(width * 0.08, height * 0.2, width * 0.22, height * 0.8);
+      ctx.fillRect(width * 0.7, height * 0.2, width * 0.22, height * 0.8);
+      ctx.fillStyle = accent;
+      ctx.fillRect(width * 0.44, height * 0.62, width * 0.12, height * 0.38);
+      ctx.strokeRect(width * 0.08, height * 0.2, width * 0.84, height * 0.8);
+    }
+
+    ctx.restore();
+  }
+
   private addImage(key: string, src: string) {
-    this.images[key] = this.createTrackedImage(src);
+    this.imageSources.set(key, src);
   }
 
   private addToGroup(
@@ -165,22 +527,13 @@ export class SpriteManager {
     start: number,
     end: number
   ) {
+    // These legacy groups have no runtime reader today. Register their paths
+    // for future keyed access without fetching hundreds of unused prop frames.
     const list: HTMLImageElement[] = [];
     for (let i = start; i <= end; i++) {
-      list.push(this.createTrackedImage(srcBuilder(i)));
+      this.addImage(`${groupKey}:${i}`, srcBuilder(i));
     }
     this.spriteGroups[groupKey] = list;
-  }
-
-  private addToArray(
-    target: HTMLImageElement[],
-    srcBuilder: (index: number) => string,
-    start: number,
-    end: number
-  ) {
-    for (let i = start; i <= end; i++) {
-      target.push(this.createTrackedImage(srcBuilder(i)));
-    }
   }
 
   private preloadAll() {
@@ -598,12 +951,8 @@ export class SpriteManager {
       }
     });
 
-    // Preload Water Priestess frames (288x128)
-    this.addToArray(this.priestessIdleImgs, (i) => `/assets/priestess/png/01_idle/idle_${i}.png`, 1, 8);
-    this.addToArray(this.priestessWalkImgs, (i) => `/assets/priestess/png/02_walk/walk_${i}.png`, 1, 10);
-    this.addToArray(this.priestessAtkImgs, (i) => `/assets/priestess/png/07_1_atk/1_atk_${i}.png`, 1, 7);
-    this.addToArray(this.priestessHealImgs, (i) => `/assets/priestess/png/11_heal/heal_${i}.png`, 1, 12);
-    this.addToArray(this.priestessDeathImgs, (i) => `/assets/priestess/png/14_death/death_${i}.png`, 1, 16);
+    // The Water Priestess array renderer is superseded by HERO_SPRITES, whose
+    // current frame is resolved on demand by drawElementalsHero.
 
     // Preload Elder Dragon Companion (Fully Animated from OpenGameArt)
     for (let i = 1; i <= 40; i++) {
@@ -708,8 +1057,8 @@ export class SpriteManager {
       this.addImage(`reaper_walk_${i}`, `/assets/reaper/sprites/Walk/Bringer-of-Death_Walk_${i}.png`);
     }
 
-    // Preload Chest Opening Frames (8 frames)
-    this.addToArray(this.chestOpenImgs, (i) => `/assets/treasure-hunters/Merchant Ship/Sprites/Chest/Unlocked/${i}.png`, 1, 8);
+    // Chest frames are registered below as th_chest_unlocked_set:* and remain
+    // lazy until an authored scene actually displays one.
 
     // Preload richer Treasure Hunter environmental groups for battleground variety
     this.addToGroup(
@@ -1115,27 +1464,27 @@ export class SpriteManager {
 
     // 1. Priest (Water Priestess 288x128 - Divine Holy Cleric)
     if (cid === 'priest') {
-      ctx.filter = 'drop-shadow(0 0 10px rgba(254, 240, 138, 0.9))';
+      if (this.effectsQuality === 'high') ctx.filter = 'drop-shadow(0 0 10px rgba(254, 240, 138, 0.9))';
       this.drawPriestessHero(ctx, x, y, state, facing, attackTimer);
     }
     // 2. Paladin (Medieval King 155x155)
     else if (cid === 'paladin') {
-      ctx.filter = 'drop-shadow(0 0 10px rgba(251, 191, 36, 0.9))';
+      if (this.effectsQuality === 'high') ctx.filter = 'drop-shadow(0 0 10px rgba(251, 191, 36, 0.9))';
       this.drawKingHero(ctx, x, y, state, facing, attackTimer);
     }
     // 3. Berserker (Medieval Warrior 2 150x150 - War Axes)
     else if (cid === 'berserker') {
-      ctx.filter = 'drop-shadow(0 0 8px rgba(239, 68, 68, 0.85))';
+      if (this.effectsQuality === 'high') ctx.filter = 'drop-shadow(0 0 8px rgba(239, 68, 68, 0.85))';
       this.drawBerserkerHero(ctx, x, y, state, facing, attackTimer);
     }
     // 4. Dragoon (Medieval Warrior 3 135x135 - Halberd & Polearm Spearman)
     else if (cid === 'dragoon') {
-      ctx.filter = 'drop-shadow(0 0 8px rgba(56, 189, 248, 0.85))';
+      if (this.effectsQuality === 'high') ctx.filter = 'drop-shadow(0 0 8px rgba(56, 189, 248, 0.85))';
       this.drawDragoonHero(ctx, x, y, state, facing, attackTimer);
     }
     // 5. Warrior (Hero Knight 180x180 - Full Plate Greatsword)
     else if (cid === 'warrior') {
-      ctx.filter = 'drop-shadow(0 0 6px rgba(244, 180, 27, 0.5)) contrast(1.2)';
+      if (this.effectsQuality === 'high') ctx.filter = 'drop-shadow(0 0 6px rgba(244, 180, 27, 0.5)) contrast(1.2)';
       this.drawKnightHero(ctx, x, y, state, facing, attackTimer);
     }
     // 6. Archer (Huntress 150x150)
@@ -1148,17 +1497,17 @@ export class SpriteManager {
     }
     // 8. Necromancer (Evil Wizard 150x150)
     else if (cid === 'necromancer') {
-      ctx.filter = 'drop-shadow(0 0 10px rgba(168, 85, 247, 0.8))';
+      if (this.effectsQuality === 'high') ctx.filter = 'drop-shadow(0 0 10px rgba(168, 85, 247, 0.8))';
       this.drawEvilWizardHero(ctx, x, y, state, facing, attackTimer);
     }
     // 9. Mage (Wizard Pack 231x190)
     else if (cid === 'mage') {
-      ctx.filter = 'drop-shadow(0 0 10px rgba(59, 130, 246, 0.8))';
+      if (this.effectsQuality === 'high') ctx.filter = 'drop-shadow(0 0 10px rgba(59, 130, 246, 0.8))';
       this.drawWizardHero(ctx, x, y, state, facing, attackTimer);
     }
     // 10. Assassin (High Forest Rogue 80x80)
     else {
-      ctx.filter = 'drop-shadow(0 0 8px rgba(192, 132, 252, 0.8)) hue-rotate(275deg) saturate(1.8)';
+      if (this.effectsQuality === 'high') ctx.filter = 'drop-shadow(0 0 8px rgba(192, 132, 252, 0.8)) hue-rotate(275deg) saturate(1.8)';
       this.drawForestHero(ctx, x, y, state, facing, attackTimer);
     }
 
@@ -1275,7 +1624,7 @@ export class SpriteManager {
     }
 
     const img = this.images[imgKey];
-    if (!img) return;
+    if (!img || !img.complete || !img.naturalWidth || !img.naturalHeight) return;
 
     const frameW = 135;
     const frameH = 135;
@@ -1353,7 +1702,7 @@ export class SpriteManager {
     }
 
     const img = this.images[imgKey];
-    if (!img) return;
+    if (!img || !img.complete || !img.naturalWidth || !img.naturalHeight) return;
 
     const frameW = 180;
     const frameH = 180;
@@ -1431,7 +1780,7 @@ export class SpriteManager {
     }
 
     const img = this.images[imgKey];
-    if (!img) return;
+    if (!img || !img.complete || !img.naturalWidth || !img.naturalHeight) return;
 
     const frameW = 150;
     const frameH = 150;
@@ -1509,7 +1858,7 @@ export class SpriteManager {
     }
 
     const img = this.images[imgKey];
-    if (!img) return;
+    if (!img || !img.complete || !img.naturalWidth || !img.naturalHeight) return;
 
     const frameW = 155;
     const frameH = 155;
@@ -1587,7 +1936,7 @@ export class SpriteManager {
     }
 
     const img = this.images[imgKey];
-    if (!img) return;
+    if (!img || !img.complete || !img.naturalWidth || !img.naturalHeight) return;
 
     const frameW = 150;
     const frameH = 150;
@@ -1665,7 +2014,7 @@ export class SpriteManager {
     }
 
     const img = this.images[imgKey];
-    if (!img) return;
+    if (!img || !img.complete || !img.naturalWidth || !img.naturalHeight) return;
 
     const frameW = 200;
     const frameH = 200;
@@ -1738,7 +2087,7 @@ export class SpriteManager {
     }
 
     const img = this.images[imgKey];
-    if (!img) return;
+    if (!img || !img.complete || !img.naturalWidth || !img.naturalHeight) return;
 
     const frameW = 150;
     const frameH = 150;
@@ -1816,7 +2165,7 @@ export class SpriteManager {
     }
 
     const img = this.images[imgKey];
-    if (!img) return;
+    if (!img || !img.complete || !img.naturalWidth || !img.naturalHeight) return;
 
     const frameW = 231;
     const frameH = 190;
@@ -1904,7 +2253,7 @@ export class SpriteManager {
     }
 
     const img = this.images[imgKey];
-    if (!img) return;
+    if (!img || !img.complete || !img.naturalWidth || !img.naturalHeight) return;
 
     const scale = 1.20;
     const destW = frameW * scale;
@@ -1953,6 +2302,15 @@ export class SpriteManager {
     hitStun: number = 0
   ) {
     const lower = mobType.toLowerCase();
+
+    // Dungeon enemies use an exact, licensed visual registry. Keyword
+    // fallbacks below remain only for legacy/free-roam names that are not part
+    // of a dungeon definition.
+    const registeredVisual = resolveEnemyVisual(mobType);
+    if (registeredVisual) {
+      this.drawRegisteredEnemyVisual(ctx, x, y, registeredVisual, state, facing, isBoss, hitStun);
+      return;
+    }
 
     // 0. Epic Boss: NightBorne Lord of Darkness
     if (lower.includes('nightborne') || lower.includes('lich') || lower.includes('dragon') || (isBoss && lower.includes('malakar'))) {
@@ -2043,7 +2401,7 @@ export class SpriteManager {
     }
 
     const img = this.images[imgKey];
-    if (!img) return;
+    if (!img || !img.complete || !img.naturalWidth || !img.naturalHeight) return;
 
     const currentFrame = Math.floor(this.animTimer * fps) % frameCount;
 
@@ -2074,6 +2432,179 @@ export class SpriteManager {
       destH
     );
 
+    ctx.restore();
+  }
+
+  private drawRegisteredEnemyVisual(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    visual: EnemyVisualProfile,
+    state: EnemyMobState,
+    facing: number,
+    isBoss: boolean,
+    hitStun: number,
+  ) {
+    if (visual.renderer === 'runtime-strip') {
+      this.drawRuntimeStripEnemy(ctx, x, y, visual, state, facing, isBoss, hitStun);
+      return;
+    }
+
+    if (visual.renderer === 'fantasy-one') {
+      this.drawFantasyMob(
+        ctx,
+        x,
+        y,
+        visual.variant as 'skel' | 'gob' | 'eye' | 'mush',
+        state,
+        facing,
+        isBoss,
+        hitStun,
+      );
+      return;
+    }
+
+    if (visual.renderer === 'hero') {
+      this.drawBorrowedHeroEnemy(ctx, x, y, visual, state, facing, isBoss, hitStun);
+      return;
+    }
+
+    this.drawFrameSequenceEnemy(ctx, x, y, visual, state, facing, isBoss, hitStun);
+  }
+
+  private drawRuntimeStripEnemy(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    visual: EnemyVisualProfile,
+    state: EnemyMobState,
+    facing: number,
+    isBoss: boolean,
+    hitStun: number,
+  ) {
+    const frameInfo = visual.frame;
+    if (!frameInfo || !visual.animations) return;
+
+    const animationName = state === 'dead'
+      ? 'dead'
+      : state === 'hit' || hitStun > 0
+      ? 'hit'
+      : state === 'attack'
+      ? 'attack'
+      : state === 'walk' || state === 'run'
+      ? 'move'
+      : 'idle';
+    const animation = visual.animations[animationName] || visual.animations.idle;
+    if (!animation) return;
+
+    const image = this.images[animation.src];
+    if (!image) {
+      this.warmPaths(visual.requiredAssets);
+      return;
+    }
+    if (!image.complete || !image.naturalWidth) return;
+
+    const raw = Math.floor(this.animTimer * animation.fps);
+    const frame = animationName === 'dead'
+      ? Math.min(animation.frames - 1, raw % (animation.frames * 3))
+      : raw % animation.frames;
+    const scale = isBoss ? (visual.bossScale || visual.scale * 1.75) : visual.scale;
+    const destinationWidth = frameInfo.width * scale;
+    const destinationHeight = frameInfo.height * scale;
+
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.translate(Math.round(x), Math.round(y));
+    if (facing < 0) ctx.scale(-1, 1);
+    if (hitStun > 0) ctx.filter = 'brightness(2.2) contrast(1.45)';
+    ctx.drawImage(
+      image,
+      frame * frameInfo.width,
+      0,
+      frameInfo.width,
+      frameInfo.height,
+      Math.round(-destinationWidth / 2 - frameInfo.centreOffset * scale),
+      Math.round(-(frameInfo.height - frameInfo.feetGap) * scale),
+      Math.round(destinationWidth),
+      Math.round(destinationHeight),
+    );
+    ctx.restore();
+  }
+
+  private drawFrameSequenceEnemy(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    visual: EnemyVisualProfile,
+    state: EnemyMobState,
+    facing: number,
+    isBoss: boolean,
+    hitStun: number,
+  ) {
+    if (visual.requiredAssets.length === 0) return;
+    const raw = Math.floor(this.animTimer * (state === 'attack' ? 12 : 8));
+    const index = state === 'dead'
+      ? Math.min(visual.requiredAssets.length - 1, raw)
+      : raw % visual.requiredAssets.length;
+    const src = visual.requiredAssets[index];
+    const image = this.images[src];
+    if (!image) {
+      this.warmPaths(visual.requiredAssets);
+      return;
+    }
+    if (!image.complete || !image.naturalWidth) return;
+
+    const scale = isBoss ? (visual.bossScale || visual.scale * 1.8) : visual.scale;
+    const isDragon = visual.variant === 'elder-dragon';
+    const feetGap = isDragon ? 98 : 0;
+    const centreOffset = isDragon ? 62.5 : 0;
+    const destinationWidth = image.naturalWidth * scale;
+    const destinationHeight = image.naturalHeight * scale;
+
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.translate(Math.round(x), Math.round(y));
+    if (facing < 0) ctx.scale(-1, 1);
+    if (hitStun > 0) ctx.filter = 'brightness(2.2) contrast(1.45)';
+    ctx.drawImage(
+      image,
+      Math.round(-destinationWidth / 2 - centreOffset * scale),
+      Math.round(-(image.naturalHeight - feetGap) * scale),
+      Math.round(destinationWidth),
+      Math.round(destinationHeight),
+    );
+    ctx.restore();
+  }
+
+  private drawBorrowedHeroEnemy(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    visual: EnemyVisualProfile,
+    state: EnemyMobState,
+    facing: number,
+    isBoss: boolean,
+    hitStun: number,
+  ) {
+    const heroState: 'idle' | 'run' | 'attack' | 'jump' | 'dead' = state === 'dead'
+      ? 'dead'
+      : state === 'attack'
+      ? 'attack'
+      : state === 'walk' || state === 'run'
+      ? 'run'
+      : 'idle';
+    const scale = isBoss ? (visual.bossScale || 1.3) : visual.scale;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+    if (hitStun > 0) ctx.filter = 'brightness(2.2) contrast(1.45)';
+    const attackTime = this.animTimer % 0.8;
+    if (visual.variant === 'knight') this.drawKnightHero(ctx, 0, 0, heroState, facing, attackTime);
+    else if (visual.variant === 'huntress') this.drawHuntressHero(ctx, 0, 0, heroState, facing, attackTime);
+    else if (visual.variant === 'evil-wizard') this.drawEvilWizardHero(ctx, 0, 0, heroState, facing, attackTime);
+    else if (visual.variant === 'berserker') this.drawBerserkerHero(ctx, 0, 0, heroState, facing, attackTime);
+    else if (visual.variant === 'dragoon') this.drawDragoonHero(ctx, 0, 0, heroState, facing, attackTime);
     ctx.restore();
   }
 
@@ -2373,7 +2904,7 @@ export class SpriteManager {
       const totalFrames = 7;
       const frameW = portalImg.naturalWidth / cols;   // 64
       const frameH = portalImg.naturalHeight / rows;  // 64
-      
+
       const frameIndex = Math.floor(this.animTimer * 10) % totalFrames;
       const col = frameIndex % cols;
       const row = Math.floor(frameIndex / cols);
@@ -3282,5 +3813,3 @@ export class SpriteManager {
 }
 
 export const sprites = new SpriteManager();
-
-

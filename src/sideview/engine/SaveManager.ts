@@ -1,6 +1,7 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { PlayerState } from './SideViewEngine';
 import { ItemData } from '../items/ItemDatabase';
+import { getGameApiBase } from '../config/RuntimeConfig';
 
 interface RpgSaveDB extends DBSchema {
   saveData: {
@@ -68,12 +69,15 @@ export class SaveManager {
 
       // 2. Sync to cloud
       if (uuid) {
-        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-        const API_URL = isLocal ? 'http://localhost:3001/api' : 'https://rpgame-production-3453.up.railway.app/api';
+        const API_URL = getGameApiBase();
+        const sessionToken = localStorage.getItem('playerSessionToken');
         
         fetch(`${API_URL}/save`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+          },
           // Power travels with the save it was computed from, so the
           // leaderboard can never show a figure for state the server does not
           // have.
@@ -113,10 +117,12 @@ export class SaveManager {
       // is how a full inventory disappeared on a restart.
       let cloud: any = null;
       if (uuid) {
-        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-        const API_URL = isLocal ? 'http://localhost:3001/api' : 'https://rpgame-production-3453.up.railway.app/api';
+        const API_URL = getGameApiBase();
         try {
-          const res = await fetch(`${API_URL}/load/${uuid}`);
+          const sessionToken = localStorage.getItem('playerSessionToken');
+          const res = await fetch(`${API_URL}/load/${uuid}`, {
+            headers: sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {},
+          });
           const body = await res.json();
           if (body.success && body.saveData) cloud = body.saveData;
         } catch {

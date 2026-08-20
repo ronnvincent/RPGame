@@ -54,12 +54,12 @@ const run = async () => {
   );
   check(
     'a downed player cannot move, jump, dash or cast',
-    (engine.match(/if \(this\.player\.downed\) return;/g) || []).length >= 3
-      && /if \(p\.downed\) return;/.test(engine),
+    (engine.match(/this\.player\.downed \|\| this\.playerStatusMagnitude\('stun'\)/g) || []).length >= 3
+      && /castSkillFromMechanics[\s\S]{0,260}p\.downed/.test(engine),
   );
   check(
     'and cannot be finished off while helpless',
-    /if \(p\.downed\) return;[\s\S]{0,200}iframeTimer > 0/.test(engine),
+    /applyIncomingPlayerDamage[\s\S]{0,700}p\.downed[\s\S]{0,160}iframeTimer > 0/.test(engine),
   );
   check(
     'the rescue is a hold, not a tap',
@@ -86,7 +86,7 @@ const run = async () => {
   await new Promise(r => setTimeout(r, T(250)));
 
   const lobbied = waitFor(a, 'lobby_update', T(2500));
-  a.emit('create_lobby', { dungeonId: 'crypt_damned', minLevel: 1, ...A });
+  a.emit('create_lobby', { dungeonId: 'goblin_catacombs', minLevel: 999, ...A });
   const lobby = await lobbied;
   const roomId = lobby?.roomId || lobby?.room?.roomId;
   check('a party exists to be rescued in', !!roomId);

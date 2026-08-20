@@ -4,22 +4,26 @@
  * Shows the live multiplayer state on screen so a desync can be read off both
  * devices at once instead of guessed at. Hidden unless explicitly enabled.
  *
- * Enable:  add ?coopdebug=1 to the URL, or run
- *          localStorage.setItem('rpg_debug_multiplayer','1') then reload.
- * Disable: ?coopdebug=0, or remove the key.
+ * Enable:  add ?coopdebug=1 or ?perfdebug=1 to the URL, or set the matching
+ *          localStorage debug key and reload.
+ * Disable: use the same query with value 0, or remove the key.
  */
 
 import { network } from '../network/NetworkManager';
 import { SideViewEngine } from '../engine/SideViewEngine';
 
 const KEY = 'rpg_debug_multiplayer';
+const PERFORMANCE_KEY = 'rpg_debug_performance';
 
 export function isCoopDebugEnabled(): boolean {
   try {
     const param = new URLSearchParams(window.location.search).get('coopdebug');
+    const performanceParam = new URLSearchParams(window.location.search).get('perfdebug');
     if (param === '1') localStorage.setItem(KEY, '1');
     if (param === '0') localStorage.removeItem(KEY);
-    return localStorage.getItem(KEY) === '1';
+    if (performanceParam === '1') localStorage.setItem(PERFORMANCE_KEY, '1');
+    if (performanceParam === '0') localStorage.removeItem(PERFORMANCE_KEY);
+    return localStorage.getItem(KEY) === '1' || localStorage.getItem(PERFORMANCE_KEY) === '1';
   } catch {
     return false;
   }
@@ -28,6 +32,8 @@ export function isCoopDebugEnabled(): boolean {
 export class CoopDebugOverlay {
   private el: HTMLDivElement | null = null;
   private accum = 0;
+  private frameTimeEmaMs = 1000 / 60;
+  private worstFrameMs = 0;
 
   constructor(parent: HTMLElement) {
     if (!isCoopDebugEnabled()) return;
@@ -48,6 +54,9 @@ export class CoopDebugOverlay {
   /** Called every frame; repaints a few times a second. */
   public update(dt: number, engine: SideViewEngine | null, waveIndex: number, dungeonIndex: number) {
     if (!this.el) return;
+    const frameMs = Math.max(0, Math.min(250, dt * 1000));
+    this.frameTimeEmaMs += (frameMs - this.frameTimeEmaMs) * 0.08;
+    this.worstFrameMs = Math.max(this.worstFrameMs, frameMs);
     this.accum += dt;
     if (this.accum < 0.2) return;
     this.accum = 0;
@@ -62,6 +71,14 @@ export class CoopDebugOverlay {
     // The two fields that matter most for the current class of bug.
     const role = network.isHost ? 'HOST' : 'GUEST';
     const mode = engine ? (engine.isTownMode ? 'TOWN' : 'DUNGEON') : '-';
+    const performance = engine?.particles.getPerformanceMetrics();
+    const fps = this.frameTimeEmaMs > 0 ? Math.min(999, 1000 / this.frameTimeEmaMs) : 0;
+    const quality = performance?.quality.effective || '-';
+    const activeVfx = performance?.active.spriteVfx || 0;
+    const activeParticles = performance?.active.particles || 0;
+    const residentImages = performance?.images.residentImages || 0;
+    const frameLine = `fps ${fps.toFixed(0)}  avg ${this.frameTimeEmaMs.toFixed(1)}ms  worst ${this.worstFrameMs.toFixed(1)}ms`;
+    this.worstFrameMs = 0;
 
     const remoteLines = remotes.length
       ? remotes.map(r =>
@@ -73,6 +90,8 @@ export class CoopDebugOverlay {
       `ROLE ${role}  (${s.lastRoleSource})\n` +
       `MODE ${mode}   D${dungeonIndex} W${waveIndex + 1}\n` +
       `room ${room}  sock ${sid}  conn ${network.socket?.connected ? 'y' : 'N'}\n` +
+      `${frameLine}\n` +
+      `vfx ${quality}  sprites ${activeVfx}  particles ${activeParticles}  images ${residentImages}\n` +
       `enemies ${alive}/${total}   syncs ${s.enemySyncCount}\n` +
       `skills  out ${s.skillsSent}  in ${s.skillsRecv}\n` +
       `dmg     sent ${s.lastDamageSent}  recv ${s.lastDamageRecv}  hit ${s.lastHitRecv}\n` +

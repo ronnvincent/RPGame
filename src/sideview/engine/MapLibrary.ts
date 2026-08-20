@@ -437,6 +437,7 @@ export const MAPS: Record<string, MapTheme> = {
   sunlit_vale: {
     sky: '#8fd3f4',
     groundLine: 0.7972,
+    floor: { top: '#6f8f3b', body: '#263718' },
     layers: [
       { src: `${PLX}/bg1/layer06_sky.png`, scroll: 0.02, anchor: 'fill' },
       { src: `${PLX}/bg1/layer05_rocks.png`, scroll: 0.12, anchor: 'fill' },
@@ -450,6 +451,7 @@ export const MAPS: Record<string, MapTheme> = {
   emerald_ridge: {
     sky: '#7ec8e3',
     groundLine: 0.8306,
+    floor: { top: '#3f7543', body: '#152719' },
     layers: [
       { src: `${PLX}/bg3/layer07_Sky.png`, scroll: 0.02, anchor: 'fill' },
       { src: `${PLX}/bg3/layer06_Rocks.png`, scroll: 0.1, anchor: 'fill' },
@@ -464,6 +466,7 @@ export const MAPS: Record<string, MapTheme> = {
   castle_approach: {
     sky: '#86c5da',
     groundLine: 0.7972,
+    floor: { top: '#68716d', body: '#242a2c' },
     layers: [
       { src: `${PLX}/bg4/layer07_Sky.png`, scroll: 0.02, anchor: 'fill' },
       { src: `${PLX}/bg4/layer06_Rocks.png`, scroll: 0.1, anchor: 'fill' },
@@ -472,6 +475,25 @@ export const MAPS: Record<string, MapTheme> = {
       { src: `${PLX}/bg4/layer03_Hills_Castle.png`, scroll: 0.45, anchor: 'fill' },
       { src: `${PLX}/bg4/layer02_Trees_rocks.png`, scroll: 0.7, anchor: 'fill' },
       { src: `${PLX}/bg4/layer01_Ground.png`, scroll: 1.0, anchor: 'fill' },
+    ],
+  },
+
+  // ---- Endless Celestial Arena ----
+  // This is an authored composition of the licensed star and castle layers,
+  // not a fallthrough to Void. ZoneContent adds its celestial-ring landmark,
+  // astral ledges, decorations, and hazard plan on top of this base.
+  endless: {
+    sky: '#08051a',
+    floor: { top: '#7668aa', body: '#17102d' },
+    layers: [
+      { src: `${PLX}/bg2/layer09_Sky.png`, scroll: 0.01, anchor: 'fill' },
+      { src: `${PLX}/bg2/layer08_Stars_1.png`, scroll: 0.035, anchor: 'fill', blend: 'screen', alpha: 0.95 },
+      { src: `${PLX}/bg2/layer07_Stars_2.png`, scroll: 0.07, anchor: 'fill', blend: 'screen', alpha: 0.75, drift: -2 },
+      { src: `${PLX}/bg2/layer06_Stars_3.png`, scroll: 0.12, anchor: 'fill', blend: 'screen', alpha: 0.6, drift: 3 },
+      { src: `${PLX}/bg4/layer06_Rocks.png`, scroll: 0.2, anchor: 'fill', alpha: 0.42 },
+      { src: `${PLX}/bg2/layer03_Clouds_3.png`, scroll: 0.28, anchor: 'fill', alpha: 0.45, drift: -5 },
+      { src: `${PLX}/bg2/layer05_Castle.png`, scroll: 0.48, anchor: 'fill', alpha: 0.72 },
+      { src: `${PLX}/bg2/layer04_Path.png`, scroll: 0.92, anchor: 'fill' },
     ],
   },
 };

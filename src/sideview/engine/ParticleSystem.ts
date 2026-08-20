@@ -7,8 +7,48 @@
 
 import { sprites } from './SpriteManager';
 import { SpriteSheet, AnimatedSprite, drawFrame } from './SpriteSheet';
-import { VFX, VfxDef, allVfxImagePaths } from './VfxLibrary';
-import { allMapImagePaths } from './MapLibrary';
+import {
+  VFX,
+  VfxDef,
+  COMMON_BOOT_VFX_IDS,
+  imagePathsForVfxIds,
+  vfxIdsForSkills,
+  vfxImagePaths,
+  type WarmableSkillVisual,
+} from './VfxLibrary';
+import type { SkillVisualIdentity, StatusApplication } from '../combat/SkillMechanics';
+
+/** Hard ceilings keep one noisy fight from creating a self-amplifying slow frame. */
+export const PARTICLE_BUDGETS = Object.freeze({
+  particles: 360,
+  floatingTexts: 48,
+  projectiles: 96,
+  spriteVfx: 14,
+  spellAnimations: 32,
+  shadowClones: 8,
+  summonedMinions: 16,
+  groundTraps: 24,
+  groundZones: 16,
+  omnislashLines: 24,
+  chainLightningArcs: 16,
+  screenFlashes: 4,
+  dragonAvatars: 2,
+  volcanicFissures: 16,
+  reaperAvatars: 2,
+  holyHammers: 12,
+  ghostTrails: 40,
+  particlePool: 360,
+  floatingTextPool: 48,
+  projectilePool: 96,
+});
+
+export type VfxQuality = 'high' | 'medium' | 'low';
+
+const VFX_QUALITY_PROFILES = Object.freeze({
+  high: { particleScale: 1, particles: 360, spriteVfx: 14, spellAnimations: 32, ghostTrails: 40, screenFlashes: 4, projectileTrailChance: 0.6 },
+  medium: { particleScale: 0.7, particles: 250, spriteVfx: 10, spellAnimations: 24, ghostTrails: 24, screenFlashes: 2, projectileTrailChance: 0.35 },
+  low: { particleScale: 0.45, particles: 160, spriteVfx: 7, spellAnimations: 16, ghostTrails: 10, screenFlashes: 1, projectileTrailChance: 0.16 },
+} as const);
 
 /** A catalogue effect currently playing at a world position. */
 interface SpriteVfxInstance {
@@ -22,6 +62,9 @@ interface SpriteVfxInstance {
   vx: number;
   vy: number;
   fadeOut: boolean;
+  paths: string[];
+  ready: boolean;
+  waitTime: number;
 }
 
 export interface Particle {
@@ -58,6 +101,8 @@ export interface ProjectileVFX {
   y: number;
   vx: number;
   vy: number;
+  previousX?: number;
+  previousY?: number;
   type: 'arrow' | 'fireball' | 'ice_shard' | 'lightning_orb' | 'dark_skull' | 'kunai' | 'dagger' | 'shuriken' | 'spear' | 'meteor' | 'energy_ball';
   targetX?: number;
   targetY?: number;
@@ -71,6 +116,45 @@ export interface ProjectileVFX {
   life: number;
   maxLife: number;
   rotation?: number;
+  originX?: number;
+  originY?: number;
+  maxDistance?: number;
+  completed?: boolean;
+  visualOnly?: boolean;
+  skillId?: string;
+  impactVfx?: string;
+  impactRow?: number;
+  impactScale?: number;
+  aoeRadius?: number;
+  statuses?: readonly StatusApplication[];
+  lifesteal?: number;
+  knockback?: number;
+  knockUp?: number;
+  identity?: SkillVisualIdentity;
+  castToken?: number;
+  /**
+   * Raw damage packets represented by one performance carrier. Keeping the
+   * packet boundaries lets combat preserve the authored multi-hit rounding
+   * and defence semantics without spawning feedback/network work per visual.
+   */
+  virtualHitDamages?: readonly number[];
+}
+
+export interface ProjectileCombatOptions {
+  maxDistance?: number;
+  visualOnly?: boolean;
+  skillId?: string;
+  impactVfx?: string;
+  impactRow?: number;
+  impactScale?: number;
+  aoeRadius?: number;
+  statuses?: readonly StatusApplication[];
+  lifesteal?: number;
+  knockback?: number;
+  knockUp?: number;
+  identity?: SkillVisualIdentity;
+  castToken?: number;
+  virtualHitDamages?: readonly number[];
 }
 
 export interface SpellAnimationFX {
@@ -125,6 +209,7 @@ export interface SummonedMinionEntity {
   hp: number;
   maxHp: number;
   type: 'skeleton' | 'dragon' | 'reaper' | 'nightborne';
+  visualOnly?: boolean;
 }
 
 export interface GroundTrapEntity {
@@ -137,6 +222,17 @@ export interface GroundTrapEntity {
   maxLife: number;
   trapType: 'poison' | 'explosive';
   isTriggered: boolean;
+  skillId?: string;
+  statuses?: readonly StatusApplication[];
+  cloudDamageTotal?: number;
+  visualOnly?: boolean;
+}
+
+export interface GroundTrapCombatOptions {
+  skillId?: string;
+  statuses?: readonly StatusApplication[];
+  cloudDamageTotal?: number;
+  visualOnly?: boolean;
 }
 
 export interface GroundZoneEntity {
@@ -150,6 +246,19 @@ export interface GroundZoneEntity {
   maxLife: number;
   zoneType: 'holy_consecration' | 'poison_cloud' | 'blizzard' | 'void_vortex' | 'sanctuary_ward';
   color: string;
+  skillId?: string;
+  statuses?: readonly StatusApplication[];
+  allyMitigation?: number;
+  allyHealPercentPerTick?: number;
+  tickInterval?: number;
+}
+
+export interface GroundZoneCombatOptions {
+  skillId?: string;
+  statuses?: readonly StatusApplication[];
+  allyMitigation?: number;
+  allyHealPercentPerTick?: number;
+  tickInterval?: number;
 }
 
 export interface OmnislashSlashLine {
@@ -254,6 +363,287 @@ export class ParticleSystem {
 
   public screenShakeTime: number = 0;
   public screenShakeMagnitude: number = 0;
+  private delayedTasks = new Set<number>();
+  private readonly particlePool: Particle[] = [];
+  private readonly floatingTextPool: FloatingText[] = [];
+  private readonly projectilePool: ProjectileVFX[] = [];
+  private reusedParticles = 0;
+  private particleOverwriteCursor = 0;
+  private reusedFloatingTexts = 0;
+  private reusedProjectiles = 0;
+  private hiddenUpdates = 0;
+  private vfxQuality: VfxQuality = 'high';
+  private reducedMotionOverride: boolean | null = null;
+  private frameTimeEmaMs = 1000 / 60;
+  private slowFrameStreak = 0;
+  private stableFrameStreak = 0;
+  private qualityTransitions = 0;
+
+  constructor() {
+    sprites.setEffectsQuality(this.effectiveVfxQuality());
+  }
+
+  private prefersReducedMotion(): boolean {
+    if (this.reducedMotionOverride !== null) return this.reducedMotionOverride;
+    if (typeof document !== 'undefined' && document.documentElement?.classList?.contains('input-reduced-motion')) {
+      return true;
+    }
+    return typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  private effectiveVfxQuality(): VfxQuality {
+    return this.prefersReducedMotion() ? 'low' : this.vfxQuality;
+  }
+
+  private qualityProfile() {
+    return VFX_QUALITY_PROFILES[this.effectiveVfxQuality()];
+  }
+
+  /** Cheap read for render-loop DPR policy without allocating the full metrics object. */
+  public getVfxQuality(): VfxQuality {
+    return this.effectiveVfxQuality();
+  }
+
+  /** Keep Canvas VFX aligned with the persisted input/accessibility settings. */
+  public setReducedMotion(enabled: boolean) {
+    const next = Boolean(enabled);
+    if (this.reducedMotionOverride === next) return;
+    this.reducedMotionOverride = next;
+    sprites.setEffectsQuality(this.effectiveVfxQuality());
+    if (next) {
+      this.screenShakeTime = 0;
+      this.screenShakeMagnitude = 0;
+      this.screenFlashes.length = 0;
+      this.ghostTrails.length = 0;
+      this.enforceBudgets();
+    }
+  }
+
+  private changeVfxQuality(next: VfxQuality) {
+    if (next === this.vfxQuality) return;
+    this.vfxQuality = next;
+    this.qualityTransitions += 1;
+    this.slowFrameStreak = 0;
+    this.stableFrameStreak = 0;
+    sprites.setEffectsQuality(this.effectiveVfxQuality());
+    this.enforceBudgets();
+  }
+
+  /** Feed wall-clock frame cost once per rendered frame from the game loop. */
+  public recordFrameTime(frameMs: number) {
+    if (!Number.isFinite(frameMs) || frameMs <= 0 || this.isDocumentHidden()) return;
+    sprites.setEffectsQuality(this.effectiveVfxQuality());
+    const bounded = Math.max(8, Math.min(80, frameMs));
+    this.frameTimeEmaMs += (bounded - this.frameTimeEmaMs) * 0.12;
+
+    const slow = bounded >= 27 || this.frameTimeEmaMs >= 22;
+    const stable = bounded <= 18.5 && this.frameTimeEmaMs <= 19;
+    this.slowFrameStreak = slow ? this.slowFrameStreak + 1 : Math.max(0, this.slowFrameStreak - 1);
+    this.stableFrameStreak = stable ? this.stableFrameStreak + 1 : 0;
+
+    if (this.slowFrameStreak >= 8) {
+      this.changeVfxQuality(this.vfxQuality === 'high' ? 'medium' : 'low');
+    } else if (this.stableFrameStreak >= 180) {
+      this.changeVfxQuality(this.vfxQuality === 'low' ? 'medium' : 'high');
+    }
+  }
+
+  private recycleParticle(particle: Particle) {
+    if (this.particlePool.length < PARTICLE_BUDGETS.particlePool) this.particlePool.push(particle);
+  }
+
+  private spawnParticle(properties: Particle) {
+    const particle = this.particlePool.pop();
+    if (particle) {
+      this.reusedParticles += 1;
+      // Optional rotation fields must not leak from the object's previous use.
+      delete particle.rotation;
+      delete particle.vRot;
+      Object.assign(particle, properties);
+    }
+    const next = particle || properties;
+    const budget = this.qualityProfile().particles;
+    if (this.particles.length < budget) {
+      this.particles.push(next);
+      return;
+    }
+
+    // O(1) overwrite at the disposable-particle ceiling. Array.shift moved up
+    // to 359 objects for every spark spawned during a crowded ultimate.
+    const index = this.particleOverwriteCursor % Math.max(1, this.particles.length);
+    const removed = this.particles[index];
+    this.particles[index] = next;
+    this.particleOverwriteCursor = (index + 1) % Math.max(1, budget);
+    if (removed !== next) this.recycleParticle(removed);
+  }
+
+  private recycleFloatingText(text: FloatingText) {
+    if (this.floatingTextPool.length < PARTICLE_BUDGETS.floatingTextPool) this.floatingTextPool.push(text);
+  }
+
+  private recycleProjectile(projectile: ProjectileVFX) {
+    if (this.projectilePool.length < PARTICLE_BUDGETS.projectilePool) this.projectilePool.push(projectile);
+  }
+
+  /**
+   * Enforce the shared render ceiling without allowing decoration to displace
+   * a damage carrier. When the list is crowded, the oldest visual-only entry
+   * is always the first sacrifice; gameplay only competes with gameplay.
+   */
+  private enforceProjectileBudget() {
+    while (this.projectiles.length > PARTICLE_BUDGETS.projectiles) {
+      const visualOnlyIndex = this.projectiles.findIndex(projectile => projectile.visualOnly);
+      const removeIndex = visualOnlyIndex >= 0 ? visualOnlyIndex : 0;
+      const [removed] = this.projectiles.splice(removeIndex, 1);
+      if (removed) this.recycleProjectile(removed);
+    }
+  }
+
+  /** Remove an active projectile through the same pool used by expiry/caps. */
+  public removeProjectileAt(index: number): ProjectileVFX | null {
+    if (!Number.isInteger(index) || index < 0 || index >= this.projectiles.length) return null;
+    const [removed] = this.projectiles.splice(index, 1);
+    if (!removed) return null;
+    this.recycleProjectile(removed);
+    return removed;
+  }
+
+  private trimOldest<T>(items: T[], budget: number, recycle?: (item: T) => void) {
+    while (items.length > budget) {
+      const removed = items.shift();
+      if (removed && recycle) recycle(removed);
+    }
+  }
+
+  private releaseSpriteVfx(vfx: SpriteVfxInstance) {
+    sprites.releasePaths(vfx.paths);
+  }
+
+  private enforceBudgets() {
+    const quality = this.qualityProfile();
+    this.trimOldest(this.particles, quality.particles, (item) => this.recycleParticle(item));
+    this.trimOldest(this.floatingTexts, PARTICLE_BUDGETS.floatingTexts, (item) => this.recycleFloatingText(item));
+    this.enforceProjectileBudget();
+    while (this.spriteVfx.length > quality.spriteVfx) {
+      const removed = this.spriteVfx.shift();
+      if (removed) this.releaseSpriteVfx(removed);
+    }
+    this.trimOldest(this.spellAnimations, quality.spellAnimations);
+    this.trimOldest(this.shadowClones, PARTICLE_BUDGETS.shadowClones);
+    this.trimOldest(this.summonedMinions, PARTICLE_BUDGETS.summonedMinions);
+    this.trimOldest(this.groundTraps, PARTICLE_BUDGETS.groundTraps);
+    this.trimOldest(this.groundZones, PARTICLE_BUDGETS.groundZones);
+    this.trimOldest(this.omnislashLines, PARTICLE_BUDGETS.omnislashLines);
+    this.trimOldest(this.chainLightningArcs, PARTICLE_BUDGETS.chainLightningArcs);
+    this.trimOldest(this.screenFlashes, quality.screenFlashes);
+    this.trimOldest(this.dragonAvatars, PARTICLE_BUDGETS.dragonAvatars);
+    this.trimOldest(this.volcanicFissures, PARTICLE_BUDGETS.volcanicFissures);
+    this.trimOldest(this.reaperAvatars, PARTICLE_BUDGETS.reaperAvatars);
+    this.trimOldest(this.holyHammers, PARTICLE_BUDGETS.holyHammers);
+    this.trimOldest(this.ghostTrails, quality.ghostTrails);
+  }
+
+  private isDocumentHidden(): boolean {
+    return typeof document !== 'undefined'
+      && (document.hidden === true || document.visibilityState === 'hidden');
+  }
+
+  /** Drop only disposable visuals; gameplay projectiles/zones/minions keep ticking. */
+  private reduceHiddenWork() {
+    this.hiddenUpdates += 1;
+    for (const particle of this.particles) this.recycleParticle(particle);
+    this.particles = [];
+    for (const text of this.floatingTexts) this.recycleFloatingText(text);
+    this.floatingTexts = [];
+    for (const vfx of this.spriteVfx) this.releaseSpriteVfx(vfx);
+    this.spriteVfx = [];
+    this.spellAnimations = [];
+    this.ghostTrails = [];
+    this.screenFlashes = [];
+  }
+
+  public getPerformanceMetrics() {
+    return {
+      active: {
+        particles: this.particles.length,
+        floatingTexts: this.floatingTexts.length,
+        projectiles: this.projectiles.length,
+        spriteVfx: this.spriteVfx.length,
+        sheetCache: this.sheetCache.size,
+        spellAnimations: this.spellAnimations.length,
+        shadowClones: this.shadowClones.length,
+        summonedMinions: this.summonedMinions.length,
+        groundTraps: this.groundTraps.length,
+        groundZones: this.groundZones.length,
+        ghostTrails: this.ghostTrails.length,
+      },
+      pools: {
+        particles: this.particlePool.length,
+        floatingTexts: this.floatingTextPool.length,
+        projectiles: this.projectilePool.length,
+      },
+      reused: {
+        particles: this.reusedParticles,
+        floatingTexts: this.reusedFloatingTexts,
+        projectiles: this.reusedProjectiles,
+      },
+      hiddenUpdates: this.hiddenUpdates,
+      quality: {
+        adaptive: this.vfxQuality,
+        effective: this.effectiveVfxQuality(),
+        frameTimeEmaMs: Number(this.frameTimeEmaMs.toFixed(2)),
+        transitions: this.qualityTransitions,
+      },
+      budgets: PARTICLE_BUDGETS,
+      effectiveBudgets: this.qualityProfile(),
+      images: sprites.getPerformanceMetrics(),
+    } as const;
+  }
+
+  /** Particle-owned sequences are cancelled alongside their combat scene. */
+  public cancelDelayedTasks() {
+    this.delayedTasks.forEach(handle => window.clearTimeout(handle));
+    this.delayedTasks.clear();
+    for (const vfx of this.spriteVfx) this.releaseSpriteVfx(vfx);
+    this.spriteVfx = [];
+  }
+
+  private scheduleTask(task: () => void, delayMs: number) {
+    const handle = window.setTimeout(() => {
+      this.delayedTasks.delete(handle);
+      task();
+    }, delayMs);
+    this.delayedTasks.add(handle);
+  }
+
+  /**
+   * Adds a lightweight palette/silhouette cue that remains readable when a
+   * sprite sheet is shared by several classes or screen flash is disabled.
+   */
+  public addSkillIdentityAccent(x: number, y: number, facing: number, identity: SkillVisualIdentity) {
+    const [primary, secondary, accent] = identity.palette;
+    const radial = /ring|radial|nova|aura|dome|ward|burst|crater|circle/.test(identity.silhouette);
+    const vertical = /pillar|column|meteor|hammer|rain|descending/.test(identity.silhouette);
+    const baseCount = radial ? 18 : 12;
+    const count = Math.max(5, Math.round(baseCount * this.qualityProfile().particleScale));
+    for (let i = 0; i < count; i++) {
+      const angle = radial ? (i / count) * Math.PI * 2 : (Math.random() - 0.5) * 0.9;
+      const speed = 1.3 + Math.random() * 2.3;
+      this.spawnParticle({
+        x: x + (vertical ? (Math.random() - 0.5) * 26 : 0),
+        y: y - 16 + (vertical ? Math.random() * 34 - 34 : 0),
+        vx: vertical ? (Math.random() - 0.5) * 0.5 : Math.cos(angle) * speed * (radial ? 1 : facing),
+        vy: vertical ? 2 + Math.random() * 2 : Math.sin(angle) * speed - 0.5,
+        size: 1.5 + Math.random() * 2.5,
+        color: i % 3 === 0 ? accent : i % 2 === 0 ? secondary : primary,
+        alpha: 0.9,
+        decay: 0.04 + Math.random() * 0.025,
+        type: identity.statusMarker === 'poison' ? 'poison' : identity.statusMarker === 'burn' ? 'fire' : 'spark',
+      });
+    }
+  }
 
   private isDrawableImage(img: HTMLImageElement | null | undefined): img is HTMLImageElement {
     return !!img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0;
@@ -293,6 +683,7 @@ export class ParticleSystem {
     animTimer: number = 0,
     color: string = '#60a5fa'
   ) {
+    if (this.effectiveVfxQuality() === 'low') return;
     this.ghostTrails.push({
       id: 'ghost_' + Math.random(),
       x,
@@ -312,6 +703,7 @@ export class ParticleSystem {
    * Screen Shake Effect
    */
   public triggerScreenShake(magnitude: number = 6, duration: number = 0.25) {
+    if (this.prefersReducedMotion()) return;
     // Shake is punctuation, not a state. Both values are damped AND capped:
     // callers ask for up to 26 magnitude over 1.4s, and because both fields
     // take the max of the incoming and current value, overlapping requests
@@ -332,6 +724,8 @@ export class ParticleSystem {
   }
 
   public addScreenFlash(color: string, initialAlpha: number = 0.8, decay: number = 0.05, invertColors: boolean = false) {
+    if (this.prefersReducedMotion()) return;
+    if (this.effectiveVfxQuality() === 'low' && this.screenFlashes.length > 0) return;
     this.screenFlashes.push({
       color,
       alpha: initialAlpha,
@@ -356,7 +750,7 @@ export class ParticleSystem {
     isCrit: boolean = false,
     fontSize: number = 18
   ) {
-    this.floatingTexts.push({
+    const properties: FloatingText = {
       id: `text_${Date.now()}_${Math.random()}`,
       x: x + (Math.random() * 20 - 10),
       y: y - 10,
@@ -368,7 +762,20 @@ export class ParticleSystem {
       life: 0,
       maxLife: isCrit ? 1.2 : 0.85,
       isCrit
-    });
+    };
+    const pooled = this.floatingTextPool.pop();
+    if (pooled) {
+      this.reusedFloatingTexts += 1;
+      Object.assign(pooled, properties);
+      this.floatingTexts.push(pooled);
+    } else {
+      this.floatingTexts.push(properties);
+    }
+    this.trimOldest(
+      this.floatingTexts,
+      PARTICLE_BUDGETS.floatingTexts,
+      (item) => this.recycleFloatingText(item),
+    );
   }
 
   // ----------------------------------------------------
@@ -390,13 +797,39 @@ export class ParticleSystem {
       maxLife: 2.2
     });
 
-    // Continuous expanding flame laser waves
-    for (let i = 0; i < 5; i++) {
-      setTimeout(() => {
+    // The avatar and six gameplay beam ticks carry the move. Secondary fire
+    // waves are quality-bounded so they do not add fifteen spell animations
+    // and 150 particles on top of the cinematic payload.
+    const initialQuality = this.effectiveVfxQuality();
+    const scheduledWaveCount = initialQuality === 'high' ? 3 : (initialQuality === 'medium' ? 2 : 1);
+    let lastExecutedWave = -1;
+    let groundExplosionSpawned = false;
+    const spawnGroundExplosion = (waveIndex: number) => {
+      if (groundExplosionSpawned || waveIndex < 0) return;
+      groundExplosionSpawned = true;
+      this.addGroundExplosion(x + facing * (120 + waveIndex * 80), y - 20, 2.2);
+    };
+    for (let i = 0; i < scheduledWaveCount; i++) {
+      this.scheduleTask(() => {
+        const quality = this.effectiveVfxQuality();
+        const allowedWaveCount = quality === 'high' ? 3 : (quality === 'medium' ? 2 : 1);
+        if (i >= allowedWaveCount) {
+          // A downgrade between callbacks must cancel the expensive wave while
+          // still preserving the move's single grounding impact.
+          spawnGroundExplosion(lastExecutedWave);
+          return;
+        }
         this.addFlameLash(x + facing * (100 + i * 80), y - 25, facing, 2.5 + i * 0.3);
-        this.addGroundExplosion(x + facing * (120 + i * 80), y - 20, 2.2);
-        this.addFireLine(x + facing * (80 + i * 70), y - 20, facing, 2.0);
-        this.addImpactBurst(x + facing * (100 + i * 80), y - 20, 30, '#ff3d00', 'fire');
+        if (quality === 'high') this.addFireLine(x + facing * (80 + i * 70), y - 20, facing, 2.0);
+        lastExecutedWave = i;
+        if (i === allowedWaveCount - 1 || i === scheduledWaveCount - 1) spawnGroundExplosion(i);
+        this.addImpactBurst(
+          x + facing * (100 + i * 80),
+          y - 20,
+          quality === 'high' ? 18 : (quality === 'medium' ? 10 : 6),
+          '#ff3d00',
+          'fire',
+        );
       }, i * 120);
     }
   }
@@ -410,7 +843,7 @@ export class ParticleSystem {
 
     // Chain of 5 volcanic ground fissures spreading forward
     for (let i = 0; i < 5; i++) {
-      setTimeout(() => {
+      this.scheduleTask(() => {
         const fissureX = x + facing * (60 + i * 75);
         this.volcanicFissures.push({
           id: `fissure_${Date.now()}_${i}`,
@@ -441,7 +874,7 @@ export class ParticleSystem {
     const cuts = 16;
 
     for (let i = 0; i < cuts; i++) {
-      setTimeout(() => {
+      this.scheduleTask(() => {
         const t = safeTargets[i % safeTargets.length];
         
         // Replace hardcoded lines with slash sprites
@@ -470,7 +903,9 @@ export class ParticleSystem {
     });
 
     // Massive black-hole void vortex at the center
-    this.addGroundZone(x + facing * 80, y, 220, 100, 6.0, 'void_vortex', '#a855f7');
+    // Presentation-only vortex. Skill potency is resolved by the engine's
+    // split hit budget, so the avatar must not inject a hidden 100-damage tick.
+    this.addGroundZone(x + facing * 80, y, 220, 0, 2.5, 'void_vortex', '#a855f7');
     this.addVortexEffect(x + facing * 80, y - 40, 2.4);
     this.addDarkPillar(x + facing * 80, y);
     this.addImpactBurst(x + facing * 80, y - 40, 40, '#a855f7', 'dark');
@@ -496,7 +931,7 @@ export class ParticleSystem {
 
     // Descending holy pillars across the area
     for (let i = -2; i <= 2; i++) {
-      setTimeout(() => {
+      this.scheduleTask(() => {
         this.addHolyPillar(x + i * 80, groundY);
         this.addImpactBurst(x + i * 80, groundY - 20, 25, '#fde047', 'holy');
         // Divine Light Effect
@@ -514,7 +949,7 @@ export class ParticleSystem {
 
     const safeTargets = targets.length > 0 ? targets : [{ x: playerX + 100, y: playerY }];
     for (let i = 0; i < 10; i++) {
-      setTimeout(() => {
+      this.scheduleTask(() => {
         const t = safeTargets[i % safeTargets.length];
         this.addSpellSlash(t.x, t.y - 15, i % 2 === 0 ? 1 : -1, 2.0, '#c084fc');
         this.addImpactBurst(t.x, t.y - 15, 20, '#c084fc', 'smoke');
@@ -532,7 +967,7 @@ export class ParticleSystem {
     this.addScreenFlash('#ef4444', 0.85, 0.035);
 
     for (let i = 0; i < 4; i++) {
-      setTimeout(() => {
+      this.scheduleTask(() => {
         const mx = targetX + (i - 1.5) * 110 + (facing * -70);
         this.addProjectile(
           mx,
@@ -562,7 +997,7 @@ export class ParticleSystem {
     this.addVortexEffect(x + facing * 80, y - 20, 2.0);
 
     for (let i = 0; i < 35; i++) {
-      setTimeout(() => {
+      this.scheduleTask(() => {
         this.addProjectile(
           x + (facing * 20),
           y - 12 + (Math.random() * 20 - 10),
@@ -589,7 +1024,7 @@ export class ParticleSystem {
     this.addFireSpin(x, y - 30, 2.6);
 
     for (let i = 0; i < 5; i++) {
-      setTimeout(() => {
+      this.scheduleTask(() => {
         const hitX = x + facing * (50 + i * 80);
         this.addGroundExplosion(hitX, y - 20, 2.2);
         this.addFlameLash(hitX, y - 20, facing, 2.2);
@@ -608,7 +1043,7 @@ export class ParticleSystem {
     this.addScreenFlash('#fef9c3', 0.95, 0.035);
 
     for (let i = -3; i <= 3; i++) {
-      setTimeout(() => {
+      this.scheduleTask(() => {
         const beamX = x + i * 90;
         this.addHolyCrystal(beamX, groundY - 40, 2.0);
         this.addHolyPillar(beamX, groundY);
@@ -654,7 +1089,13 @@ export class ParticleSystem {
     this.addSpellSlash(x, y - 20, facing, 1.5, '#4ade80');
   }
 
-  public spawnSkeletonMinion(x: number, y: number, damage: number, ownerSocketId?: string | null): SummonedMinionEntity {
+  public spawnSkeletonMinion(
+    x: number,
+    y: number,
+    damage: number,
+    ownerSocketId?: string | null,
+    visualOnly: boolean = false,
+  ): SummonedMinionEntity {
     this.addImpactBurst(x, y - 10, 25, '#c084fc', 'dark');
     this.addDarkPillar(x, y);
 
@@ -668,13 +1109,14 @@ export class ParticleSystem {
       facing: 1,
       state: 'idle',
       animTimer: 0,
-      attackCooldown: 0.5,
+      attackCooldown: visualOnly ? 999999 : 0.5,
       life: 0,
       maxLife: 15.0,
       damage,
       hp: 350,
       maxHp: 350,
-      type: 'skeleton'
+      type: 'skeleton',
+      visualOnly,
     };
     this.summonedMinions.push(minion);
     return minion;
@@ -770,7 +1212,13 @@ export class ParticleSystem {
     return minion;
   }
 
-  public addGroundTrap(x: number, y: number, trapType: 'poison' | 'explosive', damage: number) {
+  public addGroundTrap(
+    x: number,
+    y: number,
+    trapType: 'poison' | 'explosive',
+    damage: number,
+    options: GroundTrapCombatOptions = {},
+  ) {
     this.groundTraps.push({
       id: `trap_${Date.now()}_${Math.random()}`,
       x,
@@ -780,7 +1228,8 @@ export class ParticleSystem {
       life: 0,
       maxLife: 18.0,
       trapType,
-      isTriggered: false
+      isTriggered: false,
+      ...options,
     });
     this.addImpactBurst(x, y, 8, trapType === 'poison' ? '#4ade80' : '#f97316', 'spark');
   }
@@ -792,7 +1241,8 @@ export class ParticleSystem {
     damagePerTick: number,
     duration: number,
     zoneType: GroundZoneEntity['zoneType'],
-    color: string
+    color: string,
+    options: GroundZoneCombatOptions = {},
   ) {
     this.groundZones.push({
       id: `zone_${Date.now()}_${Math.random()}`,
@@ -802,9 +1252,13 @@ export class ParticleSystem {
       damagePerTick,
       tickTimer: 0,
       life: 0,
-      maxLife: duration,
+      // Small grace keeps the final advertised tick alive through the engine's
+      // update-then-collision order (e.g. 10 x 0.5s ticks in a 5s blizzard).
+      maxLife: duration + 0.05,
       zoneType,
-      color
+      color,
+      tickInterval: options.tickInterval ?? 0.5,
+      ...options,
     });
 
     if (zoneType === 'holy_consecration') {
@@ -871,6 +1325,7 @@ export class ParticleSystem {
   private spriteVfx: SpriteVfxInstance[] = [];
   private sheetCache: Map<string, SpriteSheet> = new Map();
   private vfxWarmed = false;
+  private static readonly MAX_SHEET_CACHE = 96;
 
   /**
    * @param row Colour row for palette sheets (one animation per row, nine
@@ -886,15 +1341,29 @@ export class ParticleSystem {
       }
       sheet = new SpriteSheet(def.src, layout, (src) => sprites.getImage(src));
       this.sheetCache.set(key, sheet);
+      if (this.sheetCache.size > ParticleSystem.MAX_SHEET_CACHE) {
+        const oldest = this.sheetCache.keys().next().value as string | undefined;
+        if (oldest !== undefined) this.sheetCache.delete(oldest);
+      }
     }
     return sheet;
   }
 
-  /** Loads every catalogue image in the background. Safe to call repeatedly. */
-  public warmVfx() {
-    if (this.vfxWarmed) return;
-    this.vfxWarmed = true;
-    sprites.warmPaths([...allVfxImagePaths(), ...allMapImagePaths()]);
+  /**
+   * Warm only the tiny, shared combat vocabulary. The old implementation
+   * fetched the complete VFX and map catalogues here (1,400+ PNGs).
+   */
+  public warmVfx(ids: readonly string[] = COMMON_BOOT_VFX_IDS) {
+    const isDefaultWarm = ids === COMMON_BOOT_VFX_IDS;
+    if (isDefaultWarm && this.vfxWarmed) return;
+    if (isDefaultWarm) this.vfxWarmed = true;
+    sprites.warmPaths(imagePathsForVfxIds(ids));
+  }
+
+  /** Warm only one selected class, spread across idle frames before first cast. */
+  public warmSkillVfx(skills: readonly WarmableSkillVisual[]) {
+    const ids = vfxIdsForSkills(skills);
+    sprites.warmPathsIncrementally(imagePathsForVfxIds(ids));
   }
 
   /**
@@ -917,11 +1386,18 @@ export class ParticleSystem {
     // Hard ceiling on concurrent effects. Each one is a large additive blit,
     // and an ultimate can queue several at once - without a cap a slow frame
     // lets them pile up and the next frame is slower still.
-    const MAX_SPRITE_VFX = 14;
-    if (this.spriteVfx.length >= MAX_SPRITE_VFX) {
-      this.spriteVfx.shift(); // drop the oldest, keep the newest readable
+    if (this.spriteVfx.length >= this.qualityProfile().spriteVfx) {
+      const removed = this.spriteVfx.shift();
+      if (removed) this.releaseSpriteVfx(removed);
     }
 
+    const paths = vfxImagePaths(def);
+    sprites.retainPaths(paths);
+    const ready = sprites.arePathsReady(paths);
+    if (!ready) {
+      // The first cast remains readable while its sprite sheet streams in.
+      this.addImpactBurst(x, y, 6, '#f8fafc', 'spark');
+    }
     const sheet = this.sheetFor(id, def, opts.row);
     this.spriteVfx.push({
       anim: new AnimatedSprite(sheet, { fps: def.fps, loop: false }),
@@ -932,21 +1408,38 @@ export class ParticleSystem {
       scale: def.scale * (opts.scale ?? 1) * ParticleSystem.VFX_SCALE,
       vx: opts.vx ?? 0,
       vy: opts.vy ?? 0,
-      fadeOut: opts.fadeOut ?? false
+      fadeOut: opts.fadeOut ?? false,
+      paths,
+      ready,
+      waitTime: 0,
     });
   }
 
   private updateSpriteVfx(dt: number) {
+    let activeCount = 0;
     for (const v of this.spriteVfx) {
+      if (!v.ready) {
+        v.waitTime += dt;
+        v.ready = sprites.arePathsReady(v.paths);
+        if (!v.ready) {
+          // A missing file cannot retain the whole animation forever.
+          if (v.waitTime < 2) this.spriteVfx[activeCount++] = v;
+          else this.releaseSpriteVfx(v);
+          continue;
+        }
+      }
       v.anim.update(dt);
       v.x += v.vx * dt;
       v.y += v.vy * dt;
+      if (v.anim.finished) this.releaseSpriteVfx(v);
+      else this.spriteVfx[activeCount++] = v;
     }
-    this.spriteVfx = this.spriteVfx.filter(v => !v.anim.finished);
+    this.spriteVfx.length = activeCount;
   }
 
   private drawSpriteVfx(ctx: CanvasRenderingContext2D) {
     for (const v of this.spriteVfx) {
+      if (!v.ready) continue;
       v.anim.draw(ctx, v.x, v.y, {
         scale: v.scale,
         facing: v.facing,
@@ -1303,11 +1796,11 @@ export class ParticleSystem {
 
   public addSlashVFX(x: number, y: number, direction: number, color: string = '#ffd700', size: number = 60) {
     this.addSpellSlash(x, y, direction, size / 50, color);
-    const particleCount = 12;
+    const particleCount = Math.max(5, Math.round(12 * this.qualityProfile().particleScale));
     for (let i = 0; i < particleCount; i++) {
       const angle = (direction > 0 ? -0.8 : 2.3) + (i / particleCount) * (direction > 0 ? 1.6 : -1.6);
       const speed = Math.random() * 3 + 2;
-      this.particles.push({
+      this.spawnParticle({
         x: x + Math.cos(angle) * (size * 0.7),
         y: y + Math.sin(angle) * (size * 0.7),
         vx: Math.cos(angle) * speed * direction,
@@ -1328,10 +1821,11 @@ export class ParticleSystem {
     color: string = '#ff4400',
     type: Particle['type'] = 'spark'
   ) {
-    for (let i = 0; i < count; i++) {
+    const scaledCount = Math.max(1, Math.round(count * this.qualityProfile().particleScale));
+    for (let i = 0; i < scaledCount; i++) {
       const angle = Math.random() * Math.PI * 2;
       const speed = Math.random() * 5 + 1.5;
-      this.particles.push({
+      this.spawnParticle({
         x,
         y,
         vx: Math.cos(angle) * speed,
@@ -1347,8 +1841,9 @@ export class ParticleSystem {
 
   public addHolyPillar(x: number, y: number) {
     this.addHolyCrystal(x, y - 20, 1.4);
-    for (let i = 0; i < 30; i++) {
-      this.particles.push({
+    const particleCount = Math.max(8, Math.round(30 * this.qualityProfile().particleScale));
+    for (let i = 0; i < particleCount; i++) {
+      this.spawnParticle({
         x: x + (Math.random() * 50 - 25),
         y: y + (Math.random() * 20 - 10),
         vx: (Math.random() - 0.5) * 0.8,
@@ -1373,14 +1868,17 @@ export class ParticleSystem {
     fromPlayer: boolean = true,
     color: string = '#ff5722',
     radius: number = 12,
-    piercing: boolean = false
+    piercing: boolean = false,
+    options: ProjectileCombatOptions = {},
   ): ProjectileVFX {
-    const proj: ProjectileVFX = {
+    const properties: ProjectileVFX = {
       id: `proj_${Date.now()}_${Math.random()}`,
       x,
       y,
       vx,
       vy,
+      previousX: x,
+      previousY: y,
       type,
       radius,
       color,
@@ -1390,48 +1888,83 @@ export class ParticleSystem {
       piercing,
       life: 0,
       maxLife: 2.5,
-      rotation: Math.atan2(vy, vx)
+      rotation: Math.atan2(vy, vx),
+      originX: x,
+      originY: y,
+      ...options,
     };
+    const proj = this.projectilePool.pop() || properties;
+    if (proj !== properties) {
+      this.reusedProjectiles += 1;
+      // A projectile carries many optional combat fields. Clear the recycled
+      // object first so an old pierce/status/impact cannot leak into a new shot.
+      for (const key of Object.keys(proj)) Reflect.deleteProperty(proj, key);
+      Object.assign(proj, properties);
+    }
     this.projectiles.push(proj);
+    this.enforceProjectileBudget();
     return proj;
+  }
+
+  /** Play the impact carried by the same projectile that performed the hit. */
+  public completeProjectile(proj: ProjectileVFX, x: number = proj.x, y: number = proj.y) {
+    if (proj.completed) return;
+    proj.completed = true;
+    if (proj.impactVfx) {
+      this.playVfx(proj.impactVfx, x, y, {
+        facing: proj.vx >= 0 ? 1 : -1,
+        row: proj.impactRow,
+        scale: proj.impactScale ?? 1,
+      });
+    }
+    if (proj.identity) this.addSkillIdentityAccent(x, y, proj.vx >= 0 ? 1 : -1, proj.identity);
   }
 
   /**
    * Update all active particles and effects
    */
   public update(dt: number) {
+    this.enforceBudgets();
+    const hidden = this.isDocumentHidden();
+    if (hidden) this.reduceHiddenWork();
     const dtFrame = dt * 60;
     if (this.screenShakeTime > 0) {
       this.screenShakeTime -= dt;
     }
 
     // 0. Update catalogue sprite VFX
-    this.updateSpriteVfx(dt);
+    if (!hidden) this.updateSpriteVfx(dt);
 
     // 1. Update Spell Animations
-    this.spellAnimations.forEach(spell => {
+    for (const spell of this.spellAnimations) {
       spell.timer += dt;
       spell.currentFrame = Math.floor(spell.timer * spell.fps);
       if (spell.currentFrame >= spell.totalFrames) {
         spell.isDone = true;
       }
-    });
-    this.spellAnimations = this.spellAnimations.filter(s => !s.isDone);
+    }
+    for (let index = this.spellAnimations.length - 1; index >= 0; index -= 1) {
+      if (this.spellAnimations[index].isDone) this.spellAnimations.splice(index, 1);
+    }
 
     // 2. Update Dragon Avatars
-    this.dragonAvatars.forEach(d => {
+    for (const d of this.dragonAvatars) {
       d.life += dt;
-    });
-    this.dragonAvatars = this.dragonAvatars.filter(d => d.life < d.maxLife);
+    }
+    for (let index = this.dragonAvatars.length - 1; index >= 0; index -= 1) {
+      if (this.dragonAvatars[index].life >= this.dragonAvatars[index].maxLife) this.dragonAvatars.splice(index, 1);
+    }
 
     // 3. Update Reaper Avatars
-    this.reaperAvatars.forEach(r => {
+    for (const r of this.reaperAvatars) {
       r.life += dt;
-    });
-    this.reaperAvatars = this.reaperAvatars.filter(r => r.life < r.maxLife);
+    }
+    for (let index = this.reaperAvatars.length - 1; index >= 0; index -= 1) {
+      if (this.reaperAvatars[index].life >= this.reaperAvatars[index].maxLife) this.reaperAvatars.splice(index, 1);
+    }
 
     // 4. Update Holy Hammers
-    this.holyHammers.forEach(h => {
+    for (const h of this.holyHammers) {
       h.life += dt;
       if (h.currentY < h.targetY) {
         h.currentY += 28 * dtFrame;
@@ -1441,72 +1974,94 @@ export class ParticleSystem {
           this.addGroundExplosion(h.x, h.targetY, 2.2);
         }
       }
-    });
-    this.holyHammers = this.holyHammers.filter(h => h.life < h.maxLife);
+    }
+    for (let index = this.holyHammers.length - 1; index >= 0; index -= 1) {
+      if (this.holyHammers[index].life >= this.holyHammers[index].maxLife) this.holyHammers.splice(index, 1);
+    }
 
     // 5. Update Volcanic Fissures
-    this.volcanicFissures.forEach(f => {
+    for (const f of this.volcanicFissures) {
       f.life += dt;
-    });
-    this.volcanicFissures = this.volcanicFissures.filter(f => f.life < f.maxLife);
+    }
+    for (let index = this.volcanicFissures.length - 1; index >= 0; index -= 1) {
+      if (this.volcanicFissures[index].life >= this.volcanicFissures[index].maxLife) this.volcanicFissures.splice(index, 1);
+    }
 
     // 6. Update Screen Flashes
-    this.screenFlashes.forEach(sf => {
+    for (const sf of this.screenFlashes) {
       sf.alpha -= sf.decay * dtFrame;
-    });
-    this.screenFlashes = this.screenFlashes.filter(sf => sf.alpha > 0);
+    }
+    for (let index = this.screenFlashes.length - 1; index >= 0; index -= 1) {
+      if (this.screenFlashes[index].alpha <= 0) this.screenFlashes.splice(index, 1);
+    }
 
     // 7. Update Ghost Trails
-    this.ghostTrails.forEach(g => {
+    for (const g of this.ghostTrails) {
       g.life -= dt;
       g.alpha = Math.max(0, (g.life / g.maxLife) * 0.65);
-    });
-    this.ghostTrails = this.ghostTrails.filter(g => g.life > 0);
+    }
+    for (let index = this.ghostTrails.length - 1; index >= 0; index -= 1) {
+      if (this.ghostTrails[index].life <= 0) this.ghostTrails.splice(index, 1);
+    }
 
     // 8. Update Shadow Clones
-    this.shadowClones.forEach(clone => {
+    for (const clone of this.shadowClones) {
       clone.life += dt;
       clone.animTimer += dt;
       if (clone.life >= clone.maxLife) {
         this.addImpactBurst(clone.x, clone.y - 20, 10, clone.colorTint, 'smoke');
       }
-    });
-    this.shadowClones = this.shadowClones.filter(c => c.life < c.maxLife);
+    }
+    for (let index = this.shadowClones.length - 1; index >= 0; index -= 1) {
+      if (this.shadowClones[index].life >= this.shadowClones[index].maxLife) this.shadowClones.splice(index, 1);
+    }
 
     // 8. Update Summoned Minions
-    this.summonedMinions.forEach(minion => {
+    for (const minion of this.summonedMinions) {
       minion.life += dt;
       minion.animTimer += dt;
       if (minion.attackCooldown > 0) {
         minion.attackCooldown -= dt;
       }
-    });
-    this.summonedMinions = this.summonedMinions.filter(m => m.life < m.maxLife && m.hp > 0);
+    }
+    for (let index = this.summonedMinions.length - 1; index >= 0; index -= 1) {
+      const minion = this.summonedMinions[index];
+      if (minion.life >= minion.maxLife || minion.hp <= 0) this.summonedMinions.splice(index, 1);
+    }
 
     // 9. Update Ground Traps
-    this.groundTraps.forEach(trap => {
+    for (const trap of this.groundTraps) {
       trap.life += dt;
-    });
-    this.groundTraps = this.groundTraps.filter(t => t.life < t.maxLife && !t.isTriggered);
+    }
+    for (let index = this.groundTraps.length - 1; index >= 0; index -= 1) {
+      const trap = this.groundTraps[index];
+      if (trap.life >= trap.maxLife || trap.isTriggered) this.groundTraps.splice(index, 1);
+    }
 
     // 10. Update Ground Zones
-    this.groundZones.forEach(zone => {
+    for (const zone of this.groundZones) {
       zone.life += dt;
       zone.tickTimer += dt;
-    });
-    this.groundZones = this.groundZones.filter(z => z.life < z.maxLife);
+    }
+    for (let index = this.groundZones.length - 1; index >= 0; index -= 1) {
+      if (this.groundZones[index].life >= this.groundZones[index].maxLife) this.groundZones.splice(index, 1);
+    }
 
     // 11. Update Omnislash Lines
-    this.omnislashLines.forEach(line => {
+    for (const line of this.omnislashLines) {
       line.life += dt;
-    });
-    this.omnislashLines = this.omnislashLines.filter(l => l.life < l.maxLife);
+    }
+    for (let index = this.omnislashLines.length - 1; index >= 0; index -= 1) {
+      if (this.omnislashLines[index].life >= this.omnislashLines[index].maxLife) this.omnislashLines.splice(index, 1);
+    }
 
     // 12. Update Chain Lightning Arcs
-    this.chainLightningArcs.forEach(arc => {
+    for (const arc of this.chainLightningArcs) {
       arc.life += dt;
-    });
-    this.chainLightningArcs = this.chainLightningArcs.filter(a => a.life < a.maxLife);
+    }
+    for (let index = this.chainLightningArcs.length - 1; index >= 0; index -= 1) {
+      if (this.chainLightningArcs[index].life >= this.chainLightningArcs[index].maxLife) this.chainLightningArcs.splice(index, 1);
+    }
 
     // 13. Update Particles
     this.particles.forEach(p => {
@@ -1522,7 +2077,12 @@ export class ParticleSystem {
         p.vy -= 0.02 * dtFrame;
       }
     });
-    this.particles = this.particles.filter(p => p.alpha > 0);
+    let activeParticleCount = 0;
+    for (const particle of this.particles) {
+      if (particle.alpha > 0) this.particles[activeParticleCount++] = particle;
+      else this.recycleParticle(particle);
+    }
+    this.particles.length = activeParticleCount;
 
     // 14. Update Floating Combat Texts
     this.floatingTexts.forEach(ft => {
@@ -1531,11 +2091,18 @@ export class ParticleSystem {
       ft.vy *= Math.pow(0.94, dtFrame);
       ft.alpha = 1 - Math.pow(ft.life / ft.maxLife, 2);
     });
-    this.floatingTexts = this.floatingTexts.filter(ft => ft.life < ft.maxLife);
+    let activeTextCount = 0;
+    for (const text of this.floatingTexts) {
+      if (text.life < text.maxLife) this.floatingTexts[activeTextCount++] = text;
+      else this.recycleFloatingText(text);
+    }
+    this.floatingTexts.length = activeTextCount;
 
     // 15. Update Projectiles
     this.projectiles.forEach(proj => {
       proj.life += dt;
+      proj.previousX = proj.x;
+      proj.previousY = proj.y;
       proj.x += proj.vx * dtFrame;
       proj.y += proj.vy * dtFrame;
 
@@ -1543,8 +2110,8 @@ export class ParticleSystem {
         proj.rotation = (proj.rotation || 0) + 0.35 * dtFrame;
       }
 
-      if (Math.random() < 0.6) {
-        this.particles.push({
+      if (!hidden && !proj.visualOnly && Math.random() < this.qualityProfile().projectileTrailChance) {
+        this.spawnParticle({
           x: proj.x + (Math.random() * 6 - 3),
           y: proj.y + (Math.random() * 6 - 3),
           vx: -proj.vx * 0.12,
@@ -1556,8 +2123,21 @@ export class ParticleSystem {
           type: proj.type === 'fireball' ? 'fire' : (proj.type === 'dark_skull' ? 'dark' : 'spark')
         });
       }
+
+      const travelled = Math.hypot(proj.x - (proj.originX ?? proj.x), proj.y - (proj.originY ?? proj.y));
+      if (proj.maxDistance !== undefined && travelled >= proj.maxDistance) {
+        this.completeProjectile(proj);
+      }
     });
-    this.projectiles = this.projectiles.filter(proj => proj.life < proj.maxLife);
+    let activeProjectileCount = 0;
+    for (const projectile of this.projectiles) {
+      if (projectile.life < projectile.maxLife && !projectile.completed) {
+        this.projectiles[activeProjectileCount++] = projectile;
+      }
+      else this.recycleProjectile(projectile);
+    }
+    this.projectiles.length = activeProjectileCount;
+    this.enforceBudgets();
   }
 
   /**
@@ -1566,6 +2146,7 @@ export class ParticleSystem {
   public draw(ctx: CanvasRenderingContext2D) {
     ctx.save();
     ctx.imageSmoothingEnabled = false;
+    const expensiveEffects = this.effectiveVfxQuality() === 'high';
 
     // 0. Catalogue sprite VFX sit behind the bespoke ultimate set pieces.
     this.drawSpriteVfx(ctx);
@@ -1652,7 +2233,7 @@ export class ParticleSystem {
     this.summonedMinions.forEach(minion => {
       ctx.save();
       if (minion.type === 'skeleton') {
-        ctx.filter = 'drop-shadow(0 0 8px #a855f7)';
+        if (expensiveEffects) ctx.filter = 'drop-shadow(0 0 8px #a855f7)';
         sprites.drawMob(ctx, minion.x, minion.y, 'skeleton', minion.state === 'attack' ? 'run' : (minion.state === 'walk' ? 'walk' : 'idle'), minion.facing, false, 0);
 
         const barW = 32;
@@ -1702,7 +2283,7 @@ export class ParticleSystem {
 
         if (this.isDrawableImage(dragonImg)) {
           ctx.shadowColor = '#ff5722';
-          ctx.shadowBlur = 24;
+          ctx.shadowBlur = expensiveEffects ? 24 : 0;
           // Mathematical precision: feet land perfectly on y = 0
           ctx.drawImage(dragonImg, -destW * 0.55, -feetYOffset, destW, destH);
         }
@@ -1950,7 +2531,7 @@ export class ParticleSystem {
         ctx.scale(-1, 1);
       }
 
-      if (spell.tint) {
+      if (spell.tint && expensiveEffects) {
         ctx.filter = `drop-shadow(0 0 10px ${spell.tint})`;
       }
 
@@ -1993,7 +2574,7 @@ export class ParticleSystem {
       ctx.lineWidth = 4.0;
       ctx.globalAlpha = alpha;
       ctx.shadowColor = line.color;
-      ctx.shadowBlur = 14;
+      ctx.shadowBlur = expensiveEffects ? 14 : 0;
       ctx.beginPath();
       ctx.moveTo(line.x1, line.y1);
       ctx.lineTo(line.x2, line.y2);
@@ -2010,7 +2591,7 @@ export class ParticleSystem {
       ctx.lineWidth = 3.5;
       ctx.globalAlpha = alpha;
       ctx.shadowColor = arc.color;
-      ctx.shadowBlur = 14;
+      ctx.shadowBlur = expensiveEffects ? 14 : 0;
       ctx.beginPath();
       ctx.moveTo(arc.points[0].x, arc.points[0].y);
       for (let i = 1; i < arc.points.length; i++) {
@@ -2020,26 +2601,41 @@ export class ParticleSystem {
       ctx.restore();
     });
 
-    // 12. Draw Particles
-    this.particles.forEach(p => {
+    // 12. Draw Particles. Canvas shadow blur is one of the most expensive
+    // raster operations at high DPR. Keep a small high-quality glow budget and
+    // explicitly clear it for ordinary particles; previously one glowing
+    // particle leaked blur into every particle drawn after it.
+    let glowingParticles = 0;
+    const particleGlowBudget = expensiveEffects ? 48 : 0;
+    for (const p of this.particles) {
       ctx.globalAlpha = Math.max(0, p.alpha);
       ctx.fillStyle = p.color;
 
-      if (p.type === 'holy' || p.type === 'electric' || p.type === 'dark' || p.type === 'fire') {
+      const canGlow = glowingParticles < particleGlowBudget
+        && (p.type === 'holy' || p.type === 'electric' || p.type === 'dark' || p.type === 'fire');
+      if (canGlow) {
+        glowingParticles += 1;
         ctx.shadowColor = p.color;
         ctx.shadowBlur = 8;
+      } else {
+        ctx.shadowBlur = 0;
       }
 
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
       ctx.fill();
-    });
+    }
 
     ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
 
-    // 13. Draw Projectiles
-    this.projectiles.forEach(proj => {
+    // 13. Draw Projectiles. A small glow subset carries the magical read;
+    // filter-blitting every arrow in a 30-shot channel was a dominant GPU cost.
+    let glowingProjectiles = 0;
+    const projectileGlowBudget = expensiveEffects ? 16 : 0;
+    for (const proj of this.projectiles) {
+      const useProjectileGlow = !proj.visualOnly && glowingProjectiles < projectileGlowBudget;
+      if (useProjectileGlow) glowingProjectiles += 1;
       ctx.save();
       ctx.translate(proj.x, proj.y);
 
@@ -2049,18 +2645,51 @@ export class ParticleSystem {
 
       const frame = Math.floor(proj.life * 24) % 25 + 1; // 24 FPS, 25 frames
 
-      if (proj.type === 'arrow' || proj.type === 'dagger' || proj.type === 'kunai' || proj.type === 'shuriken') {
+      if (proj.type === 'arrow' || proj.type === 'dagger' || proj.type === 'kunai' || proj.type === 'shuriken' || proj.type === 'spear') {
         const img = sprites.getImage(`sanju_pure_${frame}`);
         if (this.isDrawableImage(img)) {
           if (proj.vx < 0 && proj.rotation === undefined) ctx.scale(-1, 1);
-          ctx.filter = `drop-shadow(0 0 8px #facc15)`; // Yellow glow for physical projectiles
-          ctx.drawImage(img, -24, -24, 48, 48);
+          ctx.globalAlpha = 0.35;
+          if (useProjectileGlow) ctx.filter = `drop-shadow(0 0 8px ${proj.color})`;
+          ctx.drawImage(img, -18, -18, 36, 36);
           ctx.filter = 'none';
+          ctx.globalAlpha = 1;
+        }
+
+        // The sprite pack's generic glow is only the trail. These silhouettes
+        // make an arrow read as an arrow and, critically, Fan of Knives read as
+        // eight individual daggers instead of eight identical energy balls.
+        ctx.strokeStyle = proj.color;
+        ctx.fillStyle = '#f8fafc';
+        ctx.lineWidth = 2;
+        ctx.shadowColor = proj.color;
+        ctx.shadowBlur = useProjectileGlow ? 7 : 0;
+        if (proj.type === 'arrow') {
+          ctx.beginPath(); ctx.moveTo(-17, 0); ctx.lineTo(13, 0); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(18, 0); ctx.lineTo(9, -5); ctx.lineTo(11, 0); ctx.lineTo(9, 5); ctx.closePath(); ctx.fill();
+          ctx.beginPath(); ctx.moveTo(-14, 0); ctx.lineTo(-19, -5); ctx.moveTo(-14, 0); ctx.lineTo(-19, 5); ctx.stroke();
+        } else if (proj.type === 'dagger' || proj.type === 'kunai') {
+          ctx.beginPath(); ctx.moveTo(15, 0); ctx.lineTo(-3, -4); ctx.lineTo(-8, 0); ctx.lineTo(-3, 4); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = proj.color;
+          ctx.fillRect(-10, -6, 3, 12);
+          ctx.fillRect(-17, -2, 8, 4);
+        } else if (proj.type === 'spear') {
+          ctx.beginPath(); ctx.moveTo(-25, 0); ctx.lineTo(16, 0); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(24, 0); ctx.lineTo(13, -6); ctx.lineTo(16, 0); ctx.lineTo(13, 6); ctx.closePath(); ctx.fill();
+        } else {
+          ctx.beginPath();
+          for (let i = 0; i < 8; i++) {
+            const a = i * Math.PI / 4;
+            const r = i % 2 === 0 ? 13 : 4;
+            const px = Math.cos(a) * r, py = Math.sin(a) * r;
+            if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+          }
+          ctx.closePath(); ctx.fill();
         }
       } else if (proj.type === 'fireball' || proj.type === 'meteor') {
         const img = sprites.getImage(`sanju_pure_${frame}`);
         if (this.isDrawableImage(img)) {
-          ctx.filter = `drop-shadow(0 0 12px #ef4444) hue-rotate(320deg)`; // Red/Orange tint for fire
+          if (useProjectileGlow) ctx.filter = `drop-shadow(0 0 12px #ef4444) hue-rotate(320deg)`; // Red/Orange tint for fire
           const size = proj.type === 'meteor' ? proj.radius * 2 : 56;
           ctx.drawImage(img, -size/2, -size/2, size, size);
           ctx.filter = 'none';
@@ -2068,21 +2697,21 @@ export class ParticleSystem {
       } else if (proj.type === 'dark_skull') {
         const img = sprites.getImage(`sanju_blood_${frame}`);
         if (this.isDrawableImage(img)) {
-          ctx.filter = `drop-shadow(0 0 12px #7e22ce) hue-rotate(260deg)`; // Dark purple/blood tint
+          if (useProjectileGlow) ctx.filter = `drop-shadow(0 0 12px #7e22ce) hue-rotate(260deg)`; // Dark purple/blood tint
           ctx.drawImage(img, -32, -32, 64, 64);
           ctx.filter = 'none';
         }
       } else if (proj.type === 'ice_shard') {
         const img = sprites.getImage(`sanju_water_${frame}`);
         if (this.isDrawableImage(img)) {
-          ctx.filter = `drop-shadow(0 0 10px #38bdf8)`; // Cyan glow for ice
+          if (useProjectileGlow) ctx.filter = `drop-shadow(0 0 10px #38bdf8)`; // Cyan glow for ice
           ctx.drawImage(img, -28, -28, 56, 56);
           ctx.filter = 'none';
         }
       } else if (proj.type === 'lightning_orb' || proj.type === 'energy_ball') {
         const img = sprites.getImage(`sanju_pure_${frame}`);
         if (this.isDrawableImage(img)) {
-          ctx.filter = `drop-shadow(0 0 12px #3b82f6) hue-rotate(200deg)`; // Blue tint for lightning/energy
+          if (useProjectileGlow) ctx.filter = `drop-shadow(0 0 12px #3b82f6) hue-rotate(200deg)`; // Blue tint for lightning/energy
           ctx.drawImage(img, -32, -32, 64, 64);
           ctx.filter = 'none';
         }
@@ -2095,18 +2724,9 @@ export class ParticleSystem {
       }
 
       ctx.restore();
-    });
+    }
 
-    // 14. Draw CINEMATIC SCREEN FLASHES (Time Freeze / Elemental Bursts)
-    this.screenFlashes.forEach(sf => {
-      ctx.save();
-      ctx.globalAlpha = Math.min(0.4, Math.max(0, sf.alpha));
-      ctx.fillStyle = sf.color;
-      ctx.fillRect(-200, -200, 2000, 1200);
-      ctx.restore();
-    });
-
-    // 15. Draw Floating Combat Text
+    // 14. Draw Floating Combat Text
     this.floatingTexts.forEach(ft => {
       ctx.save();
       ctx.globalAlpha = Math.max(0, ft.alpha);
@@ -2122,6 +2742,22 @@ export class ParticleSystem {
       ctx.restore();
     });
 
+    ctx.restore();
+  }
+
+  /**
+   * Full-screen flashes live outside the camera/world transform. The old
+   * 2000x1200 world-space rectangle was both camera-dependent and needlessly
+   * expensive after zoom and DPR scaling during an ultimate.
+   */
+  public drawScreenOverlays(ctx: CanvasRenderingContext2D, width: number, height: number) {
+    if (this.screenFlashes.length === 0 || width <= 0 || height <= 0) return;
+    ctx.save();
+    for (const flash of this.screenFlashes) {
+      ctx.globalAlpha = Math.min(0.4, Math.max(0, flash.alpha));
+      ctx.fillStyle = flash.color;
+      ctx.fillRect(0, 0, width, height);
+    }
     ctx.restore();
   }
 }

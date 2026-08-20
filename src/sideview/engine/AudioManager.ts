@@ -4,7 +4,8 @@
  */
 
 import { SFX, allSfxPaths } from './SfxLibrary';
-class AudioManager {
+
+export class AudioManager {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private compressor: DynamicsCompressorNode | null = null;
@@ -19,6 +20,17 @@ class AudioManager {
   
   private audioBuffers: { [src: string]: AudioBuffer } = {};
   private pendingFetches: { [src: string]: Promise<AudioBuffer> } = {};
+  private readonly loadQueue: Array<{
+    src: string;
+    resolve: (buffer: AudioBuffer) => void;
+    reject: (error: unknown) => void;
+  }> = [];
+  private activeLoads = 0;
+  private peakConcurrentLoads = 0;
+  private readonly maxConcurrentLoads = 4;
+  private activeOneShots = 0;
+  private readonly maxConcurrentOneShots = 24;
+  private readonly lastOneShotAt = new Map<string, number>();
 
   constructor() {}
 
@@ -56,9 +68,8 @@ class AudioManager {
     }
     
     if (!this.pendingFetches[src]) {
-      this.pendingFetches[src] = fetch(src)
-        .then(response => response.arrayBuffer())
-        .then(arrayBuffer => this.ctx!.decodeAudioData(arrayBuffer))
+      let pending: Promise<AudioBuffer>;
+      pending = this.enqueueAudioLoad(src)
         .then(buffer => {
           this.audioBuffers[src] = buffer;
           return buffer;
@@ -66,9 +77,51 @@ class AudioManager {
         .catch(err => {
           console.warn('Failed to load audio:', src, err);
           throw err;
+        })
+        .finally(() => {
+          // A failed request must be retryable, and a successful request no
+          // longer belongs in the in-flight registry.
+          if (this.pendingFetches[src] === pending) delete this.pendingFetches[src];
         });
+      this.pendingFetches[src] = pending;
     }
     return this.pendingFetches[src];
+  }
+
+  private enqueueAudioLoad(src: string): Promise<AudioBuffer> {
+    return new Promise<AudioBuffer>((resolve, reject) => {
+      this.loadQueue.push({ src, resolve, reject });
+      this.drainAudioLoadQueue();
+    });
+  }
+
+  private drainAudioLoadQueue() {
+    while (this.activeLoads < this.maxConcurrentLoads && this.loadQueue.length > 0) {
+      const request = this.loadQueue.shift();
+      if (!request) break;
+      this.activeLoads += 1;
+      this.peakConcurrentLoads = Math.max(this.peakConcurrentLoads, this.activeLoads);
+      this.fetchAndDecode(request.src)
+        .then(buffer => {
+          this.activeLoads = Math.max(0, this.activeLoads - 1);
+          request.resolve(buffer);
+          this.drainAudioLoadQueue();
+        }, error => {
+          this.activeLoads = Math.max(0, this.activeLoads - 1);
+          request.reject(error);
+          this.drainAudioLoadQueue();
+        });
+    }
+  }
+
+  private async fetchAndDecode(src: string): Promise<AudioBuffer> {
+    const response = await fetch(src);
+    if (!response.ok) {
+      throw new Error(`Audio request failed (${response.status} ${response.statusText || 'HTTP error'}): ${src}`);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    if (!this.ctx) throw new Error(`Audio context unavailable while decoding: ${src}`);
+    return this.ctx.decodeAudioData(arrayBuffer);
   }
 
   public playBGM(src: string, volume: number = 0.2) {
@@ -137,7 +190,19 @@ class AudioManager {
     if (!this.soundEnabled) return;
     try {
       const buffer = await this.getAudioBuffer(src);
-      if (!buffer || !this.ctx || !this.masterGain) return;
+      // The user can mute while fetch/decode is in flight. Do not let the
+      // awaited continuation create a source after that preference changed.
+      if (!this.soundEnabled || !buffer || !this.ctx || !this.masterGain) return;
+
+      const now = this.ctx.currentTime;
+      // Repeated hit callbacks often arrive in the same render frame. One
+      // audible transient per source in this tiny window reads identically but
+      // avoids creating dozens of BufferSource/Gain pairs at once.
+      const hitLike = /hit_|slam_|metal_|battle[\\/]spell|explode3|magic1/.test(src);
+      const minimumGap = hitLike ? 0.035 : 0.012;
+      const lastStart = this.lastOneShotAt.get(src) ?? Number.NEGATIVE_INFINITY;
+      if (now - lastStart < minimumGap || this.activeOneShots >= this.maxConcurrentOneShots) return;
+      this.lastOneShotAt.set(src, now);
 
       const source = this.ctx.createBufferSource();
       source.buffer = buffer;
@@ -158,9 +223,23 @@ class AudioManager {
 
       source.connect(gainNode);
       gainNode.connect(this.masterGain);
-      
-      source.start(0);
-      source.stop(this.ctx.currentTime + playDuration);
+
+      this.activeOneShots += 1;
+      let released = false;
+      const release = () => {
+        if (released) return;
+        released = true;
+        this.activeOneShots = Math.max(0, this.activeOneShots - 1);
+        try { source.disconnect(); } catch { /* optional Web Audio cleanup */ }
+        try { gainNode.disconnect(); } catch { /* optional Web Audio cleanup */ }
+      };
+      source.onended = release;
+      try {
+        source.start(0);
+        source.stop(this.ctx.currentTime + playDuration);
+      } catch {
+        release();
+      }
     } catch (e) {}
   }
 
@@ -182,12 +261,24 @@ class AudioManager {
    * what made casting lag. Staggered so the decodes do not fight the first
    * frames for CPU.
    */
-  public warmSounds() {
+  public warmSounds(skills: readonly { sound?: string }[] = []) {
     if (this.warmed) return;
     this.warmed = true;
-    const paths = allSfxPaths();
+    const priority = new Set<string>([
+      SFX.hit_sharp.src,
+      SFX.slam.src,
+      SFX.metal_ring.src,
+      SFX.ult_charge.src,
+    ]);
+    for (const skill of skills) {
+      if (skill.sound && SFX[skill.sound]) priority.add(SFX[skill.sound].src);
+    }
+    const remaining = allSfxPaths().filter(src => !priority.has(src));
+    const paths = [...priority, ...remaining];
+    const priorityCount = priority.size;
     paths.forEach((src, i) => {
-      window.setTimeout(() => { this.getAudioBuffer(src).catch(() => {}); }, i * 60);
+      const delay = i < priorityCount ? i * 35 : 250 + (i - priorityCount) * 70;
+      window.setTimeout(() => { this.getAudioBuffer(src).catch(() => {}); }, delay);
     });
   }
 
@@ -208,13 +299,25 @@ class AudioManager {
   }
 
   public playHit(isCrit: boolean = false) {
-    // Cap hit sound to 0.25 seconds
     if (isCrit) {
-      this.playSFX('/assets/audio/sfx/explode3.ogg', 0.12, 1.0, 0.25);
-      this.playSFX('/assets/audio/sfx/RPG Sound Pack/battle/magic1.wav', 0.15, 1.0, 0.25);
+      this.playId('slam', 0.55);
+      this.playId('metal_ring', 0.45);
     } else {
-      this.playSFX('/assets/audio/sfx/RPG Sound Pack/battle/spell.wav', 0.1, 1.0, 0.2);
+      this.playId('hit_sharp', 0.5);
     }
+  }
+
+  public getPerformanceMetrics() {
+    return {
+      activeOneShots: this.activeOneShots,
+      oneShotBudget: this.maxConcurrentOneShots,
+      decodedBuffers: Object.keys(this.audioBuffers).length,
+      pendingBuffers: Object.keys(this.pendingFetches).length,
+      activeLoads: this.activeLoads,
+      queuedLoads: this.loadQueue.length,
+      peakConcurrentLoads: this.peakConcurrentLoads,
+      loadBudget: this.maxConcurrentLoads,
+    } as const;
   }
 
   public playJump() {

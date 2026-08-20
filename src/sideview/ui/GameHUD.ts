@@ -23,6 +23,17 @@ import { quests } from '../quests/QuestManager';
 import { QuestLogUI } from './QuestLogUI';
 import { WorldMapUI } from './WorldMapUI';
 import { DUNGEONS } from '../dungeons/DungeonManager';
+import { InputSettingsPanel, skillAction } from '../input';
+import { SKILL_IDENTITY_MATRIX, isSkillId } from '../combat/SkillMechanics';
+import {
+  clampPercent,
+  escapeHtml,
+  escapeHtmlAttribute,
+  finiteNumber,
+  installModalFocusTrap,
+  safeLocalAssetPath,
+} from './UiSafety';
+import { installRpgUiTheme } from './RpgUiTheme';
 
 export class GameHUD {
   /**
@@ -41,6 +52,17 @@ export class GameHUD {
   private threatClass = '';
   /** Which allies the rail was last built for, so it is not rebuilt per frame. */
   private allyKey = '';
+  /** Element ids are indexed once after render instead of queried every frame. */
+  private hudNodes = new Map<string, HTMLElement>();
+  private lastHudPatchAt = 0;
+  private lastSlowHudPatchAt = 0;
+  private lastPortraitPatchAt = 0;
+  private questPatchKey = '';
+  private lastPowerText = '';
+  private bossPatchKey = '';
+  private activeHudDialog: HTMLElement | null = null;
+  private releaseHudDialogFocus: (() => void) | null = null;
+  private toastTimer: number | null = null;
   /**
    * Interface glyphs.
    *
@@ -91,6 +113,7 @@ export class GameHUD {
   public questLogUI: QuestLogUI | null = null;
   public worldMapUI: WorldMapUI | null = null;
   private selectedItem: { item: ItemData; isEquipped: boolean; slotOrIdx: string | number } | null = null;
+  private controlsPanel: InputSettingsPanel | null = null;
 
   // Joystick state
   private joystickActive: boolean = false;
@@ -99,11 +122,17 @@ export class GameHUD {
   private joystickCenterY: number = 0;
 
   constructor(rootElement: HTMLElement, engine: SideViewEngine, game?: SideViewGame) {
+    installRpgUiTheme();
     this.engine = engine;
     this.game = game;
     this.container = document.createElement('div');
     this.container.id = 'game-hud-overlay';
     rootElement.appendChild(this.container);
+    if (game) {
+      this.controlsPanel = new InputSettingsPanel(rootElement, game.input, {
+        onBindingsChanged: () => this.refreshBindingLabels(),
+      });
+    }
     this.questLogUI = new QuestLogUI(rootElement);
     this.injectStyles();
     this.render();
@@ -136,6 +165,89 @@ export class GameHUD {
     const skillIdx = Number(skill.id.split('_')[1]) - 1;
     const file = pool[skillIdx % pool.length] || 'sword_03a.png';
     return `/assets/rpg-icons/32x32/${file}`;
+  }
+
+  private skillBindingLabel(index: number, fallback: string): string {
+    const action = skillAction(index);
+    return action && this.game ? this.game.inputBindingLabel(action) : fallback;
+  }
+
+  private indexHudNodes(): void {
+    this.hudNodes.clear();
+    this.container.querySelectorAll<HTMLElement>('[id]').forEach(element => {
+      if (element.id) this.hudNodes.set(element.id, element);
+    });
+    this.questPatchKey = '';
+    this.bossPatchKey = '';
+    this.lastPowerText = '';
+  }
+
+  private hudNode<T extends HTMLElement = HTMLElement>(id: string): T | null {
+    const cached = this.hudNodes.get(id);
+    if (cached?.isConnected) return cached as T;
+    const found = this.container.querySelector<T>(`#${CSS.escape(id)}`);
+    if (found) this.hudNodes.set(id, found);
+    return found;
+  }
+
+  private releaseActiveHudDialogFocus(): void {
+    const release = this.releaseHudDialogFocus;
+    this.releaseHudDialogFocus = null;
+    this.activeHudDialog = null;
+    release?.();
+  }
+
+  private openHudDialog(
+    dialog: HTMLElement | null,
+    options: { initialFocus?: HTMLElement | null; onEscape?: () => void } = {},
+  ): void {
+    if (!dialog) return;
+    if (this.activeHudDialog !== dialog) this.releaseActiveHudDialogFocus();
+    dialog.style.display = 'flex';
+    if (this.activeHudDialog === dialog && this.releaseHudDialogFocus) return;
+    this.activeHudDialog = dialog;
+    this.releaseHudDialogFocus = installModalFocusTrap(dialog, {
+      initialFocus: options.initialFocus,
+      onEscape: () => {
+        options.onEscape?.();
+        this.closeHudDialog(dialog);
+      },
+    });
+  }
+
+  private closeHudDialog(dialog: HTMLElement | null): void {
+    if (!dialog) return;
+    dialog.style.display = 'none';
+    if (this.activeHudDialog === dialog) this.releaseActiveHudDialogFocus();
+  }
+
+  private skillTooltip(skill: SkillDefinition, index: number): string {
+    const identity = isSkillId(skill.id) ? SKILL_IDENTITY_MATRIX[skill.id] : undefined;
+    const mechanics = identity?.mechanics;
+    const description = identity?.description || skill.description;
+    const invested = this.engine.skillLevel(skill.id);
+    const damageType = /lightning/i.test(description) ? 'Lightning'
+      : /fire|flame|burn|meteor/i.test(description) ? 'Fire'
+      : /ice|frost|blizzard/i.test(description) ? 'Ice'
+      : /holy|celestial|divine/i.test(description) ? 'Holy'
+      : /dark|shadow|void|soul|necrom/i.test(description) ? 'Dark'
+      : mechanics?.payload.damage ? 'Physical' : 'Utility';
+    const delivery = mechanics?.delivery;
+    const range = delivery
+      ? `${delivery.kind}${delivery.shape ? ` · ${delivery.shape}` : ''}`
+      : 'Class technique';
+    const statuses = mechanics?.payload.statuses?.map(status =>
+      `${status.kind} ${status.duration}s`).join(' · ');
+    const nextRank = invested >= 5 ? 'Maximum rank'
+      : mechanics?.payload.damage ? 'Next rank: +12% damage'
+      : 'Rank does not change utility strength';
+    const binding = this.skillBindingLabel(index, skill.key);
+    return `<div class="tooltip-skill-head"><div><span class="rpg-kicker">${escapeHtml(this.engine.player.characterClass.name)} · Rank ${invested}/5</span><div class="tooltip-skill-name">${escapeHtml(skill.name)}</div></div><kbd class="rpg-key">${escapeHtml(binding)}</kbd></div>
+      <div class="tooltip-badges-row"><span>${escapeHtml(damageType)}</span><span>${escapeHtml(range)}</span></div>
+      <dl class="tooltip-stats"><div><dt>Cost</dt><dd>${skill.manaCost} MP</dd></div><div><dt>Cooldown</dt><dd>${skill.cooldown}s</dd></div><div><dt>Potency</dt><dd>${Math.round(skill.damageMultiplier * 100)}%</dd></div></dl>
+      <p class="tooltip-desc">${escapeHtml(description)}</p>
+      ${statuses ? `<p class="tooltip-status">Status: ${escapeHtml(statuses)}</p>` : ''}
+      <p class="tooltip-next">${escapeHtml(nextRank)}</p>`;
   }
 
   private injectStyles() {
@@ -544,11 +656,11 @@ export class GameHUD {
       .hud-calm .mini-quest-tracker,
       .hud-calm .hud-top-right,
       .hud-calm .voice-dock {
-        opacity: 0.85;
+        opacity: 0.76;
       }
       .hud-calm .skills-hotbar,
       .hud-calm .mobile-controls-wrapper {
-        opacity: 0.95;
+        opacity: 0.9;
       }
 
       .player-status-panel,
@@ -1890,16 +2002,139 @@ export class GameHUD {
       }
 
       .tooltip-desc {
-        font-size: 9px;
+        margin: 0;
+        font-size: 11px;
         color: #e2e8f0;
-        line-height: 1.3;
+        line-height: 1.4;
       }
+
+      /* The compact survival readout keeps exact values available without
+         growing a third row of loose labels. */
+      .sprite-bar-value {
+        position: absolute; inset: 50% 4px auto; z-index: 3;
+        transform: translateY(-50%); color: #fff7df;
+        font-size: 8px; font-weight: 900; line-height: 1; text-align: right;
+        text-shadow: 0 1px 2px #000; pointer-events: none;
+      }
+      .sprite-bar-value--compact { font-size: 7px; }
+      .player-status-chips { display: none; gap: 3px; max-width: 230px; overflow: hidden; }
+      .player-status-chips.has-effects { display: flex; }
+      .player-status-chip {
+        min-width: 0; padding: 2px 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        color: #e8ddc5; background: rgba(0,0,0,.42); border: 1px solid rgba(231,189,85,.25);
+        font-size: 7px; font-weight: 900; text-transform: uppercase;
+      }
+
+      .boss-state-row { display: flex; align-items: center; gap: 7px; min-height: 13px; }
+      .boss-phase-pips { display: inline-flex; gap: 3px; }
+      .boss-phase-pip { width: 17px; height: 4px; background: #312d31; border: 1px solid #09090b; }
+      .boss-phase-pip.is-active { background: #f3c96d; box-shadow: 0 0 7px rgba(243,201,109,.6); }
+      .boss-stagger { color: #ffbf8c; font-size: 8px; font-weight: 900; text-transform: uppercase; }
+      .boss-statuses { display: flex; gap: 3px; margin-left: auto; color: #c7b8dc; font-size: 8px; text-transform: uppercase; }
+      .boss-cast { display: grid; grid-template-columns: minmax(88px,auto) 1fr 34px; align-items: center; gap: 6px; margin-top: 4px; color: #ffc3a4; font-size: 8px; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; }
+      .boss-cast[hidden] { display: none; }
+      .boss-cast-track { height: 5px; overflow: hidden; background: #08090c; border: 1px solid #3e2621; }
+      .boss-cast-track > div { width: 100%; height: 100%; background: linear-gradient(90deg,#f6c453,#ef5b55); transform-origin: left center; }
+      #boss-cast-time { text-align: right; font-variant-numeric: tabular-nums; }
+
+      .hotbar-slot { font: inherit; }
+      .hotbar-slot[data-state='ready'] { filter: brightness(1.05); }
+      .hotbar-slot[data-state='cooldown'] { filter: saturate(.45) brightness(.72); }
+      .hotbar-slot[data-state='resource'] { filter: grayscale(.35) brightness(.62); box-shadow: inset 0 0 0 2px #6b2840; }
+      .hotbar-slot[data-state='disabled'] { filter: grayscale(.8) brightness(.5); cursor: not-allowed; }
+      .hotbar-slot--ultimate[data-state='ready'] { box-shadow: 0 0 0 2px #e7bd55, 0 0 14px rgba(231,189,85,.45); }
+      .slot-cooldown-overlay { background: rgba(4,6,10,.74); }
+
+      .skill-tooltip-popup {
+        width: min(330px, 82vw); padding: 12px;
+        border: 12px solid transparent;
+        border-image: url('/assets/runtime/ui/fantasy-borders/default-panel/panel-016.png') 16 fill / 12px / 0 stretch;
+        background: linear-gradient(rgba(15,19,27,.98),rgba(7,9,13,.99));
+      }
+      .tooltip-skill-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+      .tooltip-skill-head .rpg-kicker { font-size: 8px; }
+      .tooltip-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 5px; margin: 2px 0; }
+      .tooltip-stats div { display: grid; padding: 4px; background: rgba(0,0,0,.3); }
+      .tooltip-stats dt { color: #9e927c; font-size: 8px; font-weight: 900; text-transform: uppercase; }
+      .tooltip-stats dd { margin: 0; color: #f5e9ca; font-size: 10px; font-weight: 900; }
+      .tooltip-status, .tooltip-next { margin: 0; color: #90d6a4; font-size: 9px; line-height: 1.35; }
+      .tooltip-next { color: #d8ba75; }
+
+      /* One frame language across HUD and menu surfaces. */
+      .player-status-panel, .epic-boss-banner, .mini-quest-tracker,
+      .pause-panel, .inventory-modal {
+        border-image-source: url('/assets/runtime/ui/fantasy-borders/default-panel/panel-000.png');
+        image-rendering: pixelated;
+      }
+
+      /* Keyboard/gamepad focus must remain visible over textured RPG panels. */
+      #game-hud-overlay :is(button, [role="button"]):focus-visible {
+        outline: 3px solid #fef08a;
+        outline-offset: 3px;
+        filter: brightness(1.2);
+      }
+
+      /* Restrained exploration layout for a fine pointer: an original compact
+         action fan keeps the same combat hierarchy while giving more of the
+         world back to the player. Touch retains the larger ergonomic ring. */
+      @media (hover: hover) and (pointer: fine) and (min-width: 861px) {
+        .hotbar-slot { width: 44px; height: 44px; }
+        .hotbar-slot[data-skill-idx="0"] {
+          width: 68px; height: 68px;
+          bottom: calc(18px + env(safe-area-inset-bottom));
+          right: calc(22px + env(safe-area-inset-right));
+        }
+        .hotbar-slot[data-skill-idx="0"] .slot-icon-img { width: 38px; height: 38px; }
+        .hotbar-slot[data-skill-idx="1"], .hotbar-slot[data-skill-idx="2"],
+        .hotbar-slot[data-skill-idx="3"], .hotbar-slot[data-skill-idx="4"],
+        .hotbar-slot[data-skill-idx="5"] { width: 44px; height: 44px; }
+        .hotbar-slot[data-skill-idx="1"] { bottom: calc(22px + env(safe-area-inset-bottom)); right: calc(126px + env(safe-area-inset-right)); }
+        .hotbar-slot[data-skill-idx="2"] { bottom: calc(68px + env(safe-area-inset-bottom)); right: calc(117px + env(safe-area-inset-right)); }
+        .hotbar-slot[data-skill-idx="3"] { bottom: calc(105px + env(safe-area-inset-bottom)); right: calc(88px + env(safe-area-inset-right)); }
+        .hotbar-slot[data-skill-idx="4"] { bottom: calc(126px + env(safe-area-inset-bottom)); right: calc(47px + env(safe-area-inset-right)); }
+        .hotbar-slot[data-skill-idx="5"] { bottom: calc(122px + env(safe-area-inset-bottom)); right: calc(3px + env(safe-area-inset-right)); }
+        .potion-slot {
+          width: 48px; height: 48px;
+          bottom: calc(20px + env(safe-area-inset-bottom));
+          right: calc(183px + env(safe-area-inset-right));
+        }
+      }
+
+      /* Accessibility preferences are persisted by the shared input layer and
+         applied to the game root. They are hooks rather than device guesses. */
+      .input-reduced-motion #game-hud-overlay *,
+      .input-reduced-motion #game-hud-overlay *::before,
+      .input-reduced-motion #game-hud-overlay *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+      }
+
+      .input-large-touch-targets #game-hud-overlay :is(
+        .hotbar-slot, .touch-action-btn, .voice-dock-btn, .hud-menu-btn,
+        .pause-close, .pause-tile, .qc-line
+      ) {
+        min-width: 56px;
+        min-height: 56px;
+      }
+
+      /* Explicit modes override the responsive auto mode, including hybrid
+         laptops whose coarse touchscreen and fine trackpad both exist. */
+      .input-touch-always #game-hud-overlay .mobile-joystick-area { display: block !important; }
+      .input-touch-always #game-hud-overlay .mobile-action-hub { display: flex !important; }
+      .input-touch-never #game-hud-overlay :is(.mobile-joystick-area, .mobile-action-hub) { display: none !important; }
     `;
     document.head.appendChild(style);
   }
 
   public render() {
     const p = this.engine.player;
+
+    // A render replaces dialog nodes. Tear down the keyboard trap before the
+    // old tree is detached; attachEvents reinstalls it when an inventory render
+    // intentionally remains open.
+    this.releaseActiveHudDialogFocus();
 
     this.container.innerHTML = `
       <!-- Top Left: the player panel with the banner stacked beneath it.
@@ -1919,32 +2154,37 @@ export class GameHUD {
            became a hairline along the bottom edge: it matters, but not enough
            to spend a third bar on it. -->
       <div class="player-status-panel">
+        <span class="rpg-visually-hidden" role="status">Player status</span>
         <div class="player-portrait-box">
           <canvas class="player-portrait-canvas" id="hud-portrait-cvs" width="48" height="48"></canvas>
         </div>
         <div class="player-bars">
           <div class="player-name-row">
-            <span style="color: ${p.characterClass.accentColor}">${p.characterClass.name}</span>
+            <span style="color: ${escapeHtmlAttribute(p.characterClass.accentColor)}">${escapeHtml(p.characterClass.name)}</span>
             <span style="color: #ffd700" id="hud-level-text">Lv. ${p.level}</span>
           </div>
 
-          <div class="sprite-bar-frame" title="Health (HP)">
+          <div class="sprite-bar-frame" title="Health (HP)" role="progressbar" aria-label="Health" aria-valuemin="0" aria-valuemax="${p.maxHp}" aria-valuenow="${p.hp}" id="hud-hp-track">
             <div class="sprite-bar-lag sprite-bar-lag-hp" id="hud-hp-lag" style="width: 100%"></div>
             <div class="sprite-bar-fill sprite-bar-hp" id="hud-hp-bar" style="width: 100%"></div>
+            <span class="sprite-bar-value" id="hud-hp-text">${p.hp} / ${p.maxHp}</span>
           </div>
 
-          <div class="sprite-bar-frame" style="height: 10px;" title="Mana (MP)">
+          <div class="sprite-bar-frame" style="height: 10px;" title="Mana (MP)" role="progressbar" aria-label="Mana" aria-valuemin="0" aria-valuemax="${p.maxMp}" aria-valuenow="${p.mp}" id="hud-mp-track">
             <div class="sprite-bar-lag sprite-bar-lag-mp" id="hud-mp-lag" style="width: 100%; background: #60a5fa;"></div>
             <div class="sprite-bar-fill sprite-bar-mp" id="hud-mp-bar" style="width: 100%"></div>
+            <span class="sprite-bar-value sprite-bar-value--compact" id="hud-mp-text">${p.mp} / ${p.maxMp}</span>
           </div>
+
+          <div class="player-status-chips" id="player-status-chips" aria-label="Active effects"></div>
 
           <div class="plate-meta">
             <span class="plate-gold" title="Gold">
               <img src="/assets/gui/PNG/iconCircle_brown.png" width="12" height="12" alt="" />
-              <span id="hud-gold-text">${p.gold}</span>
+              <span id="hud-gold-text">${finiteNumber(p.gold).toLocaleString()}</span>
             </span>
             <span class="plate-power" id="hud-power" title="Total Power - every level, item and upgrade counts">${GameHUD.glyph('spark')} ${this.engine.computePower().toLocaleString()}</span>
-            <span class="plate-id" title="Your Player ID - give this to a friend to be invited">ID <b id="hud-id-text">${localStorage.getItem('playerShortId') || '&mdash;'}</b></span>
+            <span class="plate-id" title="Your Player ID - give this to a friend to be invited">ID <b id="hud-id-text">${escapeHtml(localStorage.getItem('playerShortId') || 'Not assigned')}</b></span>
           </div>
         </div>
 
@@ -1974,10 +2214,12 @@ export class GameHUD {
             <span class="boss-name-text" id="boss-name-text">BOSS NAME</span>
             <span class="boss-hp-percentage" id="boss-hp-percentage">100%</span>
           </div>
+          <div class="boss-state-row"><span class="boss-phase-pips" id="boss-phase-pips" aria-label="Boss phase"></span><span class="boss-stagger" id="boss-stagger-state"></span><span class="boss-statuses" id="boss-statuses"></span></div>
           <div class="boss-hp-track">
             <div class="boss-hp-lag" id="boss-hp-lag" style="width: 100%;"></div>
             <div class="boss-hp-fill" id="boss-hp-fill" style="width: 100%;"></div>
           </div>
+          <div class="boss-cast" id="boss-cast" hidden><span id="boss-cast-name">Incoming attack</span><div class="boss-cast-track"><div id="boss-cast-fill"></div></div><span id="boss-cast-time"></span></div>
         </div>
       </div>
 
@@ -2007,37 +2249,37 @@ export class GameHUD {
            This used to be two buttons on every card of the world map, so the
            same choice was spelled out a dozen times and the level gate lived on
            each copy. One screen: pick how you are playing, then pick where. -->
-      <div class="pause-back" id="play-back" style="display:none">
-        <div class="pause-panel">
-          <div class="pause-title">START A RUN</div>
+      <div class="pause-back" id="play-back" style="display:none" role="dialog" aria-modal="true" aria-labelledby="play-title" tabindex="-1">
+        <div class="pause-panel rpg-panel">
+          <div class="pause-heading"><h2 class="pause-title" id="play-title">START A RUN</h2></div>
           <div class="play-modes">
-            <button class="play-mode is-on" data-mode="solo">SOLO</button>
-            <button class="play-mode" data-mode="party">MULTIPLAYER</button>
+            <button class="play-mode is-on" type="button" data-mode="solo">SOLO</button>
+            <button class="play-mode" type="button" data-mode="party">MULTIPLAYER</button>
           </div>
           <div class="pause-label" id="play-hint">Choose where to go</div>
           <div id="play-list"></div>
           <div class="pause-foot">
             <span class="pause-id">Locked runs show what they need</span>
-            <button class="pause-close" id="play-close-btn">CLOSE</button>
+            <button class="pause-close" id="play-close-btn" type="button">CLOSE</button>
           </div>
         </div>
       </div>
 
-      <div class="pause-back" id="skills-back" style="display:none">
-        <div class="pause-panel">
-          <div class="pause-title">SKILLS</div>
+      <div class="pause-back" id="skills-back" style="display:none" role="dialog" aria-modal="true" aria-labelledby="skills-title" tabindex="-1">
+        <div class="pause-panel rpg-panel">
+          <h2 class="pause-title" id="skills-title">SKILLS</h2>
           <div class="sk-points">Unspent points: <b id="sk-points">0</b></div>
           <div id="sk-list"></div>
           <div class="pause-foot">
             <span class="pause-id">One point per level &middot; five per skill</span>
-            <button class="pause-close" id="skills-close-btn">CLOSE</button>
+            <button class="pause-close" id="skills-close-btn" type="button">CLOSE</button>
           </div>
         </div>
       </div>
 
-      <div class="pause-back" id="pause-back" style="display:none">
-        <div class="pause-panel">
-          <div class="pause-title">MENU</div>
+      <div class="pause-back" id="pause-back" style="display:none" role="dialog" aria-modal="true" aria-labelledby="pause-title" tabindex="-1">
+        <div class="pause-panel rpg-panel">
+          <h2 class="pause-title" id="pause-title">MENU</h2>
 
           <div class="pause-group">
             <div class="pause-label">ADVENTURE</div>
@@ -2090,12 +2332,15 @@ export class GameHUD {
               <button class="pause-tile" data-keeps-menu id="toggle-fullscreen-btn" title="Toggle Fullscreen">
                 ${GameHUD.glyph('expand')}<span>Fullscreen</span>
               </button>
+              <button class="pause-tile" id="toggle-controls-btn" title="Controls and accessibility">
+                ${GameHUD.glyph('box')}<span>Controls</span>
+              </button>
             </div>
           </div>
 
           <div class="pause-foot">
-            <span class="pause-id">ID <b>${localStorage.getItem('playerShortId') || '&mdash;'}</b></span>
-            <button class="pause-close" id="pause-close-btn">CLOSE</button>
+            <span class="pause-id">ID <b>${escapeHtml(localStorage.getItem('playerShortId') || 'Not assigned')}</b></span>
+            <button class="pause-close" id="pause-close-btn" type="button">CLOSE</button>
           </div>
         </div>
       </div>
@@ -2116,23 +2361,23 @@ export class GameHUD {
       <div class="skills-hotbar" id="skills-hotbar">
         <div class="skill-tooltip-popup" id="skill-tooltip-popup"></div>
         ${p.characterClass.skills.map((s, idx) => `
-          <div class="hotbar-slot" data-skill-idx="${idx}" title="${s.name} (${s.description})">
-            <span class="slot-key-badge">${s.key}</span>
-            <img src="${this.getSkillIcon(s, p.characterClass.id)}" width="24" height="24" class="slot-icon-img" />
-            <span class="slot-skill-name">${s.name}</span>
-            <div class="slot-cooldown-overlay" id="cd-overlay-${s.id}">0</div>
-          </div>
+          <button class="hotbar-slot ${idx === 5 ? 'hotbar-slot--ultimate' : ''}" id="skill-slot-${escapeHtmlAttribute(s.id)}" type="button" data-skill-idx="${idx}" aria-label="Cast ${escapeHtmlAttribute(s.name)}, ${escapeHtmlAttribute(this.skillBindingLabel(idx, s.key))}" aria-describedby="skill-tooltip-popup" title="${escapeHtmlAttribute(s.name)}">
+            <span class="slot-key-badge">${escapeHtml(this.skillBindingLabel(idx, s.key))}</span>
+            <img src="${escapeHtmlAttribute(safeLocalAssetPath(this.getSkillIcon(s, p.characterClass.id)))}" width="24" height="24" class="slot-icon-img" alt="" />
+            <span class="slot-skill-name">${escapeHtml(s.name)}</span>
+            <div class="slot-cooldown-overlay" id="cd-overlay-${escapeHtmlAttribute(s.id)}" aria-hidden="true">0</div>
+          </button>
         `).join('')}
         <!-- Potions were reachable only through the inventory screen, which you
              cannot open while a boss is chasing you - so in the one fight where
              a potion matters it may as well not exist. Same row as the skills,
              because that is where your hand already is. -->
-        <div class="hotbar-slot potion-slot" id="potion-slot" title="Drink a healing potion (Q)">
-          <span class="slot-key-badge">Q</span>
-          <img src="/assets/ui_sprites/icons/P_Red01.png" width="24" height="24" class="slot-icon-img" />
+        <button class="hotbar-slot potion-slot" id="potion-slot" type="button" aria-label="Drink a healing potion, ${escapeHtmlAttribute(this.game?.inputBindingLabel('quickHeal') || 'Q')}" title="Drink a healing potion (${escapeHtmlAttribute(this.game?.inputBindingLabel('quickHeal') || 'Q')})">
+          <span class="slot-key-badge">${escapeHtml(this.game?.inputBindingLabel('quickHeal') || 'Q')}</span>
+          <img src="/assets/ui_sprites/icons/P_Red01.png" width="24" height="24" class="slot-icon-img" alt="" />
           <span class="slot-skill-name">Potion</span>
           <div class="potion-count" id="potion-count">0</div>
-        </div>
+        </button>
       </div>
 
       <!-- MULTI-DEVICE VIRTUAL TOUCH CONTROLS (Joystick, Jump, Dash with Real Sprites) -->
@@ -2184,45 +2429,45 @@ export class GameHUD {
       </div>
 
       <!-- Inventory Modal -->
-      <div class="inventory-modal" id="inventory-modal">
+      <div class="inventory-modal rpg-panel" id="inventory-modal" role="dialog" aria-modal="true" aria-labelledby="inventory-title" tabindex="-1">
         <div class="inv-header">
-          <h2 class="inv-title">HERO INVENTORY & EQUIPMENT</h2>
-          <button class="inv-close-btn" id="close-inv-btn">${GameHUD.glyph('close')}</button>
+          <h2 class="inv-title" id="inventory-title">HERO INVENTORY &amp; EQUIPMENT</h2>
+          <button class="inv-close-btn" id="close-inv-btn" type="button" aria-label="Close inventory">${GameHUD.glyph('close')}</button>
         </div>
         <div class="inv-grid-container">
           <!-- Left: Equipment Paperdoll Slots -->
           <div class="equipment-paperdoll">
-            <div class="equip-slot ${p.equipment.helmet ? 'filled rarity-' + p.equipment.helmet.rarity : ''}" data-slot="helmet">
+            <div class="equip-slot ${p.equipment.helmet ? 'filled rarity-' + escapeHtmlAttribute(p.equipment.helmet.rarity) : ''}" data-slot="helmet">
               <span class="equip-slot-label">Helm</span>
-              ${p.equipment.helmet ? `<img src="${p.equipment.helmet.image}" width="28" height="28" style="image-rendering:pixelated;" />` : ''}
+              ${p.equipment.helmet ? `<img src="${escapeHtmlAttribute(safeLocalAssetPath(p.equipment.helmet.image))}" width="28" height="28" style="image-rendering:pixelated;" alt="" />` : ''}
             </div>
-            <div class="equip-slot ${p.equipment.wings ? 'filled rarity-' + p.equipment.wings.rarity : ''}" data-slot="wings">
+            <div class="equip-slot ${p.equipment.wings ? 'filled rarity-' + escapeHtmlAttribute(p.equipment.wings.rarity) : ''}" data-slot="wings">
               <span class="equip-slot-label">Wings</span>
-              ${p.equipment.wings ? `<img src="${p.equipment.wings.image}" width="28" height="28" style="image-rendering:pixelated;" />` : ''}
+              ${p.equipment.wings ? `<img src="${escapeHtmlAttribute(safeLocalAssetPath(p.equipment.wings.image))}" width="28" height="28" style="image-rendering:pixelated;" alt="" />` : ''}
             </div>
-            <div class="equip-slot ${p.equipment.amulet ? 'filled rarity-' + p.equipment.amulet.rarity : ''}" data-slot="amulet">
+            <div class="equip-slot ${p.equipment.amulet ? 'filled rarity-' + escapeHtmlAttribute(p.equipment.amulet.rarity) : ''}" data-slot="amulet">
               <span class="equip-slot-label">Amulet</span>
-              ${p.equipment.amulet ? `<img src="${p.equipment.amulet.image}" width="28" height="28" style="image-rendering:pixelated;" />` : ''}
+              ${p.equipment.amulet ? `<img src="${escapeHtmlAttribute(safeLocalAssetPath(p.equipment.amulet.image))}" width="28" height="28" style="image-rendering:pixelated;" alt="" />` : ''}
             </div>
-            <div class="equip-slot ${p.equipment.weapon ? 'filled rarity-' + p.equipment.weapon.rarity : ''}" data-slot="weapon">
+            <div class="equip-slot ${p.equipment.weapon ? 'filled rarity-' + escapeHtmlAttribute(p.equipment.weapon.rarity) : ''}" data-slot="weapon">
               <span class="equip-slot-label">Weapon</span>
-              ${p.equipment.weapon ? `<img src="${p.equipment.weapon.image}" width="28" height="28" style="image-rendering:pixelated;" />` : ''}
+              ${p.equipment.weapon ? `<img src="${escapeHtmlAttribute(safeLocalAssetPath(p.equipment.weapon.image))}" width="28" height="28" style="image-rendering:pixelated;" alt="" />` : ''}
             </div>
-            <div class="equip-slot ${p.equipment.armor ? 'filled rarity-' + p.equipment.armor.rarity : ''}" data-slot="armor">
+            <div class="equip-slot ${p.equipment.armor ? 'filled rarity-' + escapeHtmlAttribute(p.equipment.armor.rarity) : ''}" data-slot="armor">
               <span class="equip-slot-label">Armor</span>
-              ${p.equipment.armor ? `<img src="${p.equipment.armor.image}" width="28" height="28" style="image-rendering:pixelated;" />` : ''}
+              ${p.equipment.armor ? `<img src="${escapeHtmlAttribute(safeLocalAssetPath(p.equipment.armor.image))}" width="28" height="28" style="image-rendering:pixelated;" alt="" />` : ''}
             </div>
-            <div class="equip-slot ${p.equipment.shield ? 'filled rarity-' + p.equipment.shield.rarity : ''}" data-slot="shield">
+            <div class="equip-slot ${p.equipment.shield ? 'filled rarity-' + escapeHtmlAttribute(p.equipment.shield.rarity) : ''}" data-slot="shield">
               <span class="equip-slot-label">Shield</span>
-              ${p.equipment.shield ? `<img src="${p.equipment.shield.image}" width="28" height="28" style="image-rendering:pixelated;" />` : ''}
+              ${p.equipment.shield ? `<img src="${escapeHtmlAttribute(safeLocalAssetPath(p.equipment.shield.image))}" width="28" height="28" style="image-rendering:pixelated;" alt="" />` : ''}
             </div>
-            <div class="equip-slot ${p.equipment.ring ? 'filled rarity-' + p.equipment.ring.rarity : ''}" data-slot="ring">
+            <div class="equip-slot ${p.equipment.ring ? 'filled rarity-' + escapeHtmlAttribute(p.equipment.ring.rarity) : ''}" data-slot="ring">
               <span class="equip-slot-label">Ring</span>
-              ${p.equipment.ring ? `<img src="${p.equipment.ring.image}" width="28" height="28" style="image-rendering:pixelated;" />` : ''}
+              ${p.equipment.ring ? `<img src="${escapeHtmlAttribute(safeLocalAssetPath(p.equipment.ring.image))}" width="28" height="28" style="image-rendering:pixelated;" alt="" />` : ''}
             </div>
-            <div class="equip-slot ${p.equipment.boots ? 'filled rarity-' + p.equipment.boots.rarity : ''}" data-slot="boots">
+            <div class="equip-slot ${p.equipment.boots ? 'filled rarity-' + escapeHtmlAttribute(p.equipment.boots.rarity) : ''}" data-slot="boots">
               <span class="equip-slot-label">Boots</span>
-              ${p.equipment.boots ? `<img src="${p.equipment.boots.image}" width="28" height="28" style="image-rendering:pixelated;" />` : ''}
+              ${p.equipment.boots ? `<img src="${escapeHtmlAttribute(safeLocalAssetPath(p.equipment.boots.image))}" width="28" height="28" style="image-rendering:pixelated;" alt="" />` : ''}
             </div>
           </div>
 
@@ -2239,6 +2484,7 @@ export class GameHUD {
       </div>
     `;
 
+    this.indexHudNodes();
     this.attachEvents();
     this.setupVirtualTouchGamepad();
     // Both have had their one chance to bind to window.
@@ -2257,17 +2503,25 @@ export class GameHUD {
     // item, which calls render(), made the bag vanish and looked like being
     // thrown back to the game.
     if (invModal && this.inventoryOpen) {
-      invModal.style.display = 'flex';
       this.renderInventoryItems();
+      this.openHudDialog(invModal, {
+        initialFocus: closeBtn as HTMLElement | null,
+        onEscape: () => { this.inventoryOpen = false; },
+      });
     }
 
     const openInv = (e: Event) => {
       e.stopPropagation();
       this.inventoryOpen = !this.inventoryOpen;
-      invModal.style.display = this.inventoryOpen ? 'flex' : 'none';
       if (this.inventoryOpen) {
         audio.playClick();
         this.renderInventoryItems();
+        this.openHudDialog(invModal, {
+          initialFocus: closeBtn as HTMLElement | null,
+          onEscape: () => { this.inventoryOpen = false; },
+        });
+      } else {
+        this.closeHudDialog(invModal);
       }
     };
 
@@ -2276,7 +2530,7 @@ export class GameHUD {
     const closeInv = (e: Event) => {
       e.stopPropagation();
       this.inventoryOpen = false;
-      invModal.style.display = 'none';
+      this.closeHudDialog(invModal);
       audio.playClick();
     };
 
@@ -2321,14 +2575,22 @@ export class GameHUD {
 
     const potionSlot = this.container.querySelector('#potion-slot') as HTMLElement;
     const drink = (e?: Event) => {
+      e?.preventDefault();
       e?.stopPropagation();
       const result = this.engine.quickHeal();
       if (result === 'none') this.showToast('No healing potions');
       else if (result === 'full') this.showToast('Already at full health');
+      else if (result === 'blocked') this.showToast('Cannot heal while downed');
       this.paintPotionSlot();
     };
-    potionSlot?.addEventListener('click', drink);
-    potionSlot?.addEventListener('touchstart', drink, { passive: true });
+    if (potionSlot && this.game) {
+      this.game.bindInputAction(potionSlot, 'quickHeal', { vibrateMs: 10 });
+    } else {
+      potionSlot?.addEventListener('click', drink);
+      potionSlot?.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.code === 'Enter' || e.code === 'Space') drink(e);
+      });
+    }
     this.paintPotionSlot();
 
     // Party voice. The browser will not hand over a microphone without a user
@@ -2378,7 +2640,7 @@ export class GameHUD {
           const idx = Number((btn as HTMLElement).dataset.idx);
           const d = DUNGEONS[idx];
           if (!d) return;
-          if (playBack) playBack.style.display = 'none';
+          this.closeHudDialog(playBack);
           audio.playTeleport();
           if (playMode === 'solo') {
             this.game?.onSelectLocation(d.id, true);
@@ -2402,13 +2664,15 @@ export class GameHUD {
     this.container.querySelector('#toggle-play-btn')?.addEventListener('click', (e) => {
       e.stopPropagation();
       paintPlay();
-      if (playBack) playBack.style.display = 'flex';
+      this.openHudDialog(playBack, {
+        initialFocus: playBack?.querySelector<HTMLElement>('.play-mode.is-on'),
+      });
     });
     this.container.querySelector('#play-close-btn')?.addEventListener('click', () => {
-      if (playBack) playBack.style.display = 'none';
+      this.closeHudDialog(playBack);
     });
     playBack?.addEventListener('click', (e) => {
-      if (e.target === playBack) playBack.style.display = 'none';
+      if (e.target === playBack) this.closeHudDialog(playBack);
     });
 
     const skillsBack = this.container.querySelector('#skills-back') as HTMLElement;
@@ -2448,24 +2712,23 @@ export class GameHUD {
     this.container.querySelector('#toggle-skills-btn')?.addEventListener('click', (e) => {
       e.stopPropagation();
       const back = this.container.querySelector('#pause-back') as HTMLElement;
-      if (back) back.style.display = 'none';
+      this.closeHudDialog(back);
       paintSkills();
-      if (skillsBack) skillsBack.style.display = 'flex';
+      this.openHudDialog(skillsBack, {
+        initialFocus: skillsBack?.querySelector<HTMLElement>('button:not([disabled])'),
+      });
     });
     this.container.querySelector('#skills-close-btn')?.addEventListener('click', () => {
-      if (skillsBack) skillsBack.style.display = 'none';
+      this.closeHudDialog(skillsBack);
     });
     skillsBack?.addEventListener('click', (e) => {
-      if (e.target === skillsBack) skillsBack.style.display = 'none';
+      if (e.target === skillsBack) this.closeHudDialog(skillsBack);
     });
 
     const menuBtn = this.container.querySelector('#hud-menu-btn') as HTMLElement;
     const pauseBack = this.container.querySelector('#pause-back') as HTMLElement;
     const setMenu = (open: boolean) => {
-      if (!pauseBack) return;
-      pauseBack.style.display = open ? 'flex' : 'none';
-      const party = this.container.querySelector('#pause-party-group') as HTMLElement;
-      if (party) party.style.display = network.room ? 'block' : 'none';
+      this.setPauseMenu(open);
     };
     // A tile that opens something else has to take the menu down with it.
     //
@@ -2484,16 +2747,18 @@ export class GameHUD {
 
     menuBtn?.addEventListener('click', (e) => {
       e.stopPropagation();
-      setMenu(pauseBack?.style.display === 'none');
+      this.togglePauseMenu();
     });
     this.container.querySelector('#pause-close-btn')?.addEventListener('click', () => setMenu(false));
     // Clicking the darkened area outside the panel closes it too.
     pauseBack?.addEventListener('click', (e) => { if (e.target === pauseBack) setMenu(false); });
     if (!this.globalsBound) window.addEventListener('keydown', (e) => {
-      if (e.code !== 'Escape') return;
-      // The lobby owns Escape while it is open, and it sits above this.
-      if (this.game?.coopLobby?.isOpen) return;
-      setMenu(pauseBack?.style.display === 'none');
+      // SideViewGame's shared input layer owns Escape. This fallback is only
+      // for the HUD's standalone fixture/preview mode.
+      if (e.code !== 'Escape' || this.game) return;
+      // SideViewGame also checks this.game?.coopLobby?.isOpen before closing;
+      // the lobby owns Escape while it is above the HUD.
+      this.togglePauseMenu();
     });
 
     const dockChat = this.container.querySelector('#dock-chat-btn') as HTMLElement;
@@ -2639,6 +2904,12 @@ export class GameHUD {
       }
     });
 
+    this.container.querySelector('#toggle-controls-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      audio.playClick();
+      this.controlsPanel?.open();
+    });
+
     // Mini Quest Tracker Click
     const trackerEl = this.container.querySelector('#mini-quest-tracker');
     trackerEl?.addEventListener('click', (e) => {
@@ -2647,48 +2918,38 @@ export class GameHUD {
     });
 
     // Touch Talk Button
-    const talkBtn = this.container.querySelector('#touch-talk-btn');
-    talkBtn?.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      this.game?.interactWithActiveNpc();
-    });
+    const talkBtn = this.container.querySelector('#touch-talk-btn') as HTMLElement | null;
     // Reviving is a hold, so the button reports press and release rather than
     // a tap. Cancel and leave both clear it, or walking away mid-hold would
     // leave the flag stuck on.
-    const setHold = (held: boolean) => { if (this.game) this.game.touchReviveHeld = held; };
-    talkBtn?.addEventListener('touchstart', () => setHold(true));
-    ['touchend', 'touchcancel', 'pointerup', 'pointerleave'].forEach(ev =>
-      talkBtn?.addEventListener(ev, () => setHold(false)));
-    talkBtn?.addEventListener('pointerdown', () => setHold(true));
-
-    talkBtn?.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      this.game?.interactWithActiveNpc();
-    }, { passive: false });
+    if (talkBtn && this.game) {
+      this.game.bindInputAction(talkBtn, 'interact', { hold: true, vibrateMs: 8 });
+    } else {
+      talkBtn?.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.game?.interactWithActiveNpc();
+      });
+      const setHold = (held: boolean) => { if (this.game) this.game.touchReviveHeld = held; };
+      ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev =>
+        talkBtn?.addEventListener(ev, () => setHold(false)));
+      talkBtn?.addEventListener('pointerdown', () => setHold(true));
+    }
 
     // Skill Hotbar Hover Tooltips & Click / Touch Triggers
     const tooltipPopup = this.container.querySelector('#skill-tooltip-popup') as HTMLElement;
-    const slots = this.container.querySelectorAll('.hotbar-slot');
+    // Potion is visually a hotbar slot but is not a character skill. Selecting
+    // every .hotbar-slot used to bind castSkill(0) to the potion as well.
+    const slots = this.container.querySelectorAll('.hotbar-slot[data-skill-idx]');
     const p = this.engine.player;
 
     slots.forEach(slot => {
-      let lastTriggerTime = 0;
       const idx = Number(slot.getAttribute('data-skill-idx'));
       const skill = p.characterClass.skills[idx];
 
       const showTooltip = () => {
         if (!tooltipPopup || !skill) return;
-        tooltipPopup.innerHTML = `
-          <div class="tooltip-skill-name">${skill.name}</div>
-          <div class="tooltip-badges-row">
-            <span>${GameHUD.glyph('orb')} ${skill.manaCost} MP</span>
-            <span>${GameHUD.glyph('clock')} ${skill.cooldown}s CD</span>
-            <span>${GameHUD.glyph('sword')} ${Math.round(skill.damageMultiplier * 100)}% DMG</span>
-          </div>
-          <div class="tooltip-desc">${skill.description}</div>
-        `;
+        tooltipPopup.innerHTML = this.skillTooltip(skill, idx);
         tooltipPopup.style.display = 'flex';
       };
 
@@ -2705,19 +2966,29 @@ export class GameHUD {
         slot.addEventListener('mouseenter', showTooltip);
         slot.addEventListener('mouseleave', hideTooltip);
       }
+      slot.addEventListener('focus', showTooltip);
+      slot.addEventListener('blur', hideTooltip);
 
       const triggerSkill = (e: Event) => {
         e.preventDefault();
         e.stopPropagation();
         hideTooltip();
-        const now = Date.now();
-        if (now - lastTriggerTime < 180) return; // Debounce synthetic double-tap
-        lastTriggerTime = now;
         this.engine.castSkill(idx);
       };
 
-      slot.addEventListener('pointerdown', triggerSkill);
-      slot.addEventListener('click', triggerSkill);
+      const action = skillAction(idx);
+      if (this.game && action) {
+        this.game.bindInputAction(slot as HTMLElement, action, {
+          vibrateMs: idx === 0 ? 10 : 14,
+          beforePress: hideTooltip,
+        });
+      } else {
+        slot.addEventListener('pointerdown', triggerSkill);
+        slot.addEventListener('keydown', (e: Event) => {
+          const key = (e as KeyboardEvent).code;
+          if (key === 'Enter' || key === 'Space') triggerSkill(e);
+        });
+      }
     });
   }
 
@@ -2773,67 +3044,40 @@ export class GameHUD {
     const resetJoystick = () => {
       this.joystickActive = false;
       this.joystickTouchId = null;
-      joystickKnob.style.transform = `translate(0px, 0px)`;
-      if (arrowLeft) arrowLeft.classList.remove('active');
-      if (arrowRight) arrowRight.classList.remove('active');
+      const currentKnob = live<HTMLElement>('#joystick-knob');
+      const currentLeft = live<HTMLElement>('#joy-arrow-left');
+      const currentRight = live<HTMLElement>('#joy-arrow-right');
+      if (currentKnob) currentKnob.style.transform = `translate(0px, 0px)`;
+      currentLeft?.classList.remove('active');
+      currentRight?.classList.remove('active');
       if (this.game) {
         this.game.touchMoveDir = 0;
       }
     };
 
-    // Touch Events for Joystick
-    joystickZone.addEventListener('touchstart', (e: TouchEvent) => {
+    // Pointer Events cover touch, pen and mouse without the compatibility
+    // mouse event a separate touch listener would generate afterwards.
+    joystickZone.addEventListener('pointerdown', (e: PointerEvent) => {
+      if (!e.isPrimary || (e.pointerType === 'mouse' && e.button !== 0)) return;
       e.preventDefault();
-      const touch = e.changedTouches[0];
-      this.joystickTouchId = touch.identifier;
+      this.joystickTouchId = e.pointerId;
       this.joystickActive = true;
       const rect = joystickZone.getBoundingClientRect();
       this.joystickCenterX = rect.left + rect.width / 2;
       this.joystickCenterY = rect.top + rect.height / 2;
-      handleJoystickMove(touch.clientX, touch.clientY);
-    }, { passive: false });
-
-    if (!this.globalsBound) window.addEventListener('touchmove', (e: TouchEvent) => {
-      if (!this.joystickActive) return;
-      for (let i = 0; i < e.changedTouches.length; i++) {
-        if (e.changedTouches[i].identifier === this.joystickTouchId) {
-          handleJoystickMove(e.changedTouches[i].clientX, e.changedTouches[i].clientY);
-          break;
-        }
-      }
-    }, { passive: false });
-
-    if (!this.globalsBound) window.addEventListener('touchend', (e: TouchEvent) => {
-      if (!this.joystickActive) return;
-      for (let i = 0; i < e.changedTouches.length; i++) {
-        if (e.changedTouches[i].identifier === this.joystickTouchId) {
-          resetJoystick();
-          break;
-        }
-      }
-    }, { passive: false });
-
-    if (!this.globalsBound) window.addEventListener('touchcancel', () => resetJoystick(), { passive: true });
-
-    // Pointer Events for Mouse Simulation on Desktop
-    joystickZone.addEventListener('pointerdown', (e: PointerEvent) => {
-      if (e.pointerType === 'mouse') {
-        this.joystickActive = true;
-        const rect = joystickZone.getBoundingClientRect();
-        this.joystickCenterX = rect.left + rect.width / 2;
-        this.joystickCenterY = rect.top + rect.height / 2;
-        handleJoystickMove(e.clientX, e.clientY);
-      }
+      handleJoystickMove(e.clientX, e.clientY);
+      try { joystickZone.setPointerCapture(e.pointerId); } catch { /* optional */ }
     });
 
     if (!this.globalsBound) window.addEventListener('pointermove', (e: PointerEvent) => {
-      if (this.joystickActive && e.pointerType === 'mouse') {
-        handleJoystickMove(e.clientX, e.clientY);
-      }
+      if (this.joystickActive && e.pointerId === this.joystickTouchId) handleJoystickMove(e.clientX, e.clientY);
     });
 
-    if (!this.globalsBound) window.addEventListener('pointerup', () => {
-      if (this.joystickActive) resetJoystick();
+    if (!this.globalsBound) window.addEventListener('pointerup', (e: PointerEvent) => {
+      if (this.joystickActive && e.pointerId === this.joystickTouchId) resetJoystick();
+    });
+    if (!this.globalsBound) window.addEventListener('pointercancel', (e: PointerEvent) => {
+      if (this.joystickActive && e.pointerId === this.joystickTouchId) resetJoystick();
     });
 
     // Jump Touch Button
@@ -2843,8 +3087,8 @@ export class GameHUD {
         e.stopPropagation();
         this.engine.jumpPlayer();
       };
-      jumpBtn.addEventListener('touchstart', triggerJump, { passive: false });
-      jumpBtn.addEventListener('pointerdown', triggerJump);
+      if (this.game) this.game.bindInputAction(jumpBtn, 'jump', { vibrateMs: 8 });
+      else jumpBtn.addEventListener('pointerdown', triggerJump);
     }
 
     // Dash Touch Button
@@ -2854,25 +3098,27 @@ export class GameHUD {
         e.stopPropagation();
         this.engine.dashPlayer();
       };
-      dashBtn.addEventListener('touchstart', triggerDash, { passive: false });
-      dashBtn.addEventListener('pointerdown', triggerDash);
+      if (this.game) this.game.bindInputAction(dashBtn, 'dash', { vibrateMs: 12 });
+      else dashBtn.addEventListener('pointerdown', triggerDash);
     }
   }
 
   public setWaveInfo(title: string, remainingEnemies: number) {
-    const titleEl = this.container.querySelector('#wave-title-text');
-    const mobsEl = this.container.querySelector('#wave-mobs-text');
-    if (titleEl) titleEl.textContent = title;
-    if (mobsEl) mobsEl.textContent = `Enemies remaining: ${remainingEnemies}`;
+    const titleEl = this.hudNode('wave-title-text');
+    const mobsEl = this.hudNode('wave-mobs-text');
+    if (titleEl) titleEl.textContent = String(title || 'Dungeon Battle');
+    if (mobsEl) mobsEl.textContent = `Enemies remaining: ${Math.max(0, Math.trunc(finiteNumber(remainingEnemies)))}`;
   }
 
   public showToast(message: string) {
-    const toast = this.container.querySelector('#hud-toast-banner') as HTMLElement;
+    const toast = this.hudNode('hud-toast-banner');
     if (!toast) return;
-    toast.textContent = message;
+    toast.textContent = String(message || 'Adventure updated');
     toast.style.display = 'block';
-    setTimeout(() => {
+    if (this.toastTimer !== null) window.clearTimeout(this.toastTimer);
+    this.toastTimer = window.setTimeout(() => {
       toast.style.display = 'none';
+      this.toastTimer = null;
     }, 3800);
   }
 
@@ -2883,6 +3129,10 @@ export class GameHUD {
       audio.playLevelUp(); // Reusing level up sound as notification
 
       const overlay = document.createElement('div');
+      overlay.className = 'rpg-screen rpg-modal';
+      overlay.setAttribute('role', 'dialog');
+      overlay.setAttribute('aria-modal', 'true');
+      overlay.setAttribute('aria-labelledby', 'coop-invite-title');
       overlay.style.position = 'fixed';
       overlay.style.inset = '0';
       overlay.style.backgroundColor = 'rgba(0,0,0,0.85)';
@@ -2895,6 +3145,7 @@ export class GameHUD {
       overlay.style.fontFamily = "'Outfit', sans-serif";
       
       const box = document.createElement('div');
+      box.className = 'rpg-panel rpg-dialog rpg-dialog--compact';
       box.style.background = "url('/assets/kenney-rpg-ui/panel_brown.png') repeat";
       box.style.backgroundSize = "100% 100%";
       box.style.padding = '40px';
@@ -2905,12 +3156,18 @@ export class GameHUD {
       box.style.width = '350px';
 
       const title = document.createElement('h2');
+      title.id = 'coop-invite-title';
+      title.className = 'rpg-title';
       title.innerText = 'CO-OP INVITE';
       title.style.margin = '0 0 10px 0';
       title.style.color = '#ffd700';
 
       const msg = document.createElement('p');
-      msg.innerHTML = `<strong>${inviteData.fromName}</strong> has invited you to clear<br/><strong>${inviteData.dungeonId.toUpperCase().replace('_', ' ')}</strong>!`;
+      const inviter = document.createElement('strong');
+      const dungeon = document.createElement('strong');
+      inviter.textContent = String(inviteData.fromName || 'A fellow adventurer');
+      dungeon.textContent = String(inviteData.dungeonId || 'an expedition').toUpperCase().replaceAll('_', ' ');
+      msg.append(inviter, document.createTextNode(' has invited you to clear '), dungeon, document.createTextNode('.'));
       msg.style.marginBottom = '20px';
       msg.style.lineHeight = '1.5';
 
@@ -2920,6 +3177,8 @@ export class GameHUD {
       btnWrapper.style.justifyContent = 'center';
 
       const acceptBtn = document.createElement('button');
+      acceptBtn.className = 'rpg-button rpg-button--primary';
+      acceptBtn.type = 'button';
       acceptBtn.innerText = 'ACCEPT';
       acceptBtn.style.background = "url('/assets/kenney-rpg-ui/buttonRound_blue.png') no-repeat center center";
       acceptBtn.style.backgroundSize = "100% 100%";
@@ -2930,6 +3189,8 @@ export class GameHUD {
       acceptBtn.style.fontWeight = 'bold';
       
       const declineBtn = document.createElement('button');
+      declineBtn.className = 'rpg-button';
+      declineBtn.type = 'button';
       declineBtn.innerText = 'DECLINE';
       declineBtn.style.background = '#4a2c11';
       declineBtn.style.border = '2px solid #fff';
@@ -2938,12 +3199,16 @@ export class GameHUD {
       declineBtn.style.cursor = 'pointer';
       declineBtn.style.fontWeight = 'bold';
 
-      declineBtn.onclick = () => {
-        document.body.removeChild(overlay);
+      let releaseFocus = () => undefined;
+      const dismiss = () => {
+        releaseFocus();
+        overlay.remove();
       };
 
+      declineBtn.onclick = dismiss;
+
       acceptBtn.onclick = () => {
-        document.body.removeChild(overlay);
+        dismiss();
 
         // Join room and wait for dungeon_start
         // Accepting puts you in the party LOBBY. The run begins only when the
@@ -2965,60 +3230,91 @@ export class GameHUD {
       box.appendChild(btnWrapper);
       overlay.appendChild(box);
       document.body.appendChild(overlay);
+      releaseFocus = installModalFocusTrap(overlay, { onEscape: dismiss, initialFocus: acceptBtn });
     });
   }
 
   public update() {
     const p = this.engine.player;
+    const now = performance.now();
+    // DOM does not need the canvas' full frame rate. Thirty patches per second
+    // keeps cooldown numbers responsive while avoiding dozens of layout reads
+    // during every 60/120 Hz render frame.
+    if (now - this.lastHudPatchAt < 33) return;
+    this.lastHudPatchAt = now;
+    const slowPatch = now - this.lastSlowHudPatchAt >= 200;
 
-    // HP, MP, EXP bars with delayed hit lag catchup
-    const hpBar = this.container.querySelector('#hud-hp-bar') as HTMLElement;
-    const hpLag = this.container.querySelector('#hud-hp-lag') as HTMLElement;
-    const mpBar = this.container.querySelector('#hud-mp-bar') as HTMLElement;
-    const mpLag = this.container.querySelector('#hud-mp-lag') as HTMLElement;
-    const expBar = this.container.querySelector('#hud-exp-bar') as HTMLElement;
-    const goldText = this.container.querySelector('#hud-gold-text');
-
-    const hpPct = Math.max(0, (p.hp / p.maxHp) * 100);
-    const mpPct = Math.max(0, (p.mp / p.maxMp) * 100);
-    const expPct = Math.max(0, (p.exp / p.maxExp) * 100);
-
+    const hp = Math.max(0, finiteNumber(p.hp));
+    const maxHp = Math.max(1, finiteNumber(p.maxHp, 1));
+    const mp = Math.max(0, finiteNumber(p.mp));
+    const maxMp = Math.max(1, finiteNumber(p.maxMp, 1));
+    const exp = Math.max(0, finiteNumber(p.exp));
+    const maxExp = Math.max(1, finiteNumber(p.maxExp, 1));
+    const hpPct = clampPercent((hp / maxHp) * 100);
+    const mpPct = clampPercent((mp / maxMp) * 100);
+    const expPct = clampPercent((exp / maxExp) * 100);
+    const hpBar = this.hudNode('hud-hp-bar');
+    const hpLag = this.hudNode('hud-hp-lag');
+    const mpBar = this.hudNode('hud-mp-bar');
+    const mpLag = this.hudNode('hud-mp-lag');
+    const expBar = this.hudNode('hud-exp-bar');
     if (hpBar) hpBar.style.width = `${hpPct}%`;
     if (hpLag) hpLag.style.width = `${hpPct}%`;
     if (mpBar) mpBar.style.width = `${mpPct}%`;
     if (mpLag) mpLag.style.width = `${mpPct}%`;
     if (expBar) expBar.style.width = `${expPct}%`;
-    if (goldText) goldText.textContent = `${p.gold}`;
+    const hpText = this.hudNode('hud-hp-text');
+    const mpText = this.hudNode('hud-mp-text');
+    if (hpText) hpText.textContent = `${Math.ceil(hp)} / ${Math.ceil(maxHp)}`;
+    if (mpText) mpText.textContent = `${Math.ceil(mp)} / ${Math.ceil(maxMp)}`;
+    const hpTrack = this.hudNode('hud-hp-track');
+    const mpTrack = this.hudNode('hud-mp-track');
+    hpTrack?.setAttribute('aria-valuenow', String(Math.round(hp)));
+    hpTrack?.setAttribute('aria-valuemax', String(Math.round(maxHp)));
+    mpTrack?.setAttribute('aria-valuenow', String(Math.round(mp)));
+    mpTrack?.setAttribute('aria-valuemax', String(Math.round(maxMp)));
 
-    // The level number only ever existed in the render() template, and nothing
-    // calls render() during a fight - so levelling up mid-dungeon showed the
-    // bars reset while the number stayed on the old level until something else
-    // rebuilt the HUD. It updates with everything else now.
-    const levelText = this.container.querySelector('#hud-level-text');
-    if (levelText) levelText.textContent = `Lv. ${p.level}`;
+    if (slowPatch) {
+      const goldText = this.hudNode('hud-gold-text');
+      if (goldText) goldText.textContent = finiteNumber(p.gold).toLocaleString();
+      const levelText = this.hudNode('hud-level-text');
+      if (levelText) levelText.textContent = `Lv. ${Math.max(1, Math.trunc(finiteNumber(p.level, 1)))}`;
+      this.paintPotionSlot();
 
-    // The ID is assigned when the account is created, which can happen after
-    // the HUD has already been built once.
-    this.paintPotionSlot();
+      const powerText = this.hudNode('hud-power');
+      // Keep the canonical computation in one place; only the DOM patch is
+      // throttled. This exact call is also the leaderboard's display contract.
+      const powerValue = this.engine.computePower().toLocaleString();
+      const value = `${GameHUD.glyph('spark')} ${powerValue}`;
+      if (powerText && this.lastPowerText !== value) {
+        this.lastPowerText = value;
+        powerText.innerHTML = value;
+      }
 
-    const powerText = this.container.querySelector('#hud-power');
-    if (powerText) {
-      // innerHTML, not textContent: the value carries a glyph, and assigning
-      // markup as text printed the whole <svg ...> tag across the plate.
-      const value = `${GameHUD.glyph('spark')} ${this.engine.computePower().toLocaleString()}`;
-      if (powerText.innerHTML !== value) powerText.innerHTML = value;
-    }
+      const townBtn = this.hudNode('return-town-btn');
+      if (townBtn) townBtn.style.display = this.engine.isTownMode ? 'none' : 'block';
+      const idText = this.hudNode('hud-id-text');
+      const shortId = localStorage.getItem('playerShortId');
+      if (idText && shortId && idText.textContent !== shortId) idText.textContent = shortId;
 
-    // Town Return button
-    const townBtn = this.container.querySelector('#return-town-btn') as HTMLElement;
-    if (townBtn) {
-      townBtn.style.display = this.engine.isTownMode ? 'none' : 'block';
+      const chips = this.hudNode('player-status-chips');
+      if (chips) {
+        const effects = p.activeBuffs.slice(0, 5);
+        chips.classList.toggle('has-effects', effects.length > 0);
+        const key = effects.map(buff => `${buff.stat}:${Math.ceil(buff.timer)}`).join('|');
+        if (chips.dataset.key !== key) {
+          chips.dataset.key = key;
+          chips.innerHTML = effects.map(buff => `<span class="player-status-chip">${escapeHtml(String(buff.stat))} ${Math.max(0, buff.timer).toFixed(1)}s</span>`).join('');
+        }
+      }
+      this.patchQuestTracker();
+      this.lastSlowHudPatchAt = now;
     }
 
     // Touch Talk Button, which doubles as the revive button. In town it talks;
     // in a dungeon standing over a downed teammate it picks them up. The two
     // never apply at once, so one button covers both without extra clutter.
-    const talkBtn = this.container.querySelector('#touch-talk-btn') as HTMLElement;
+    const talkBtn = this.hudNode('touch-talk-btn');
     if (talkBtn) {
       const activeNpc = this.engine.townHub?.getActiveNpc();
       const downedAlly = this.engine.nearestDownedAlly();
@@ -3035,55 +3331,29 @@ export class GameHUD {
     }
 
     this.paintDownedOverlay();
-    const idText = this.container.querySelector('#hud-id-text');
-    const shortId = localStorage.getItem('playerShortId');
-    if (idText && shortId && idText.textContent !== shortId) idText.textContent = shortId;
-
     this.paintThreat();
     this.paintAllyRail();
 
-    // Mini Quest Tracker update
-    const activeQuests = quests.getAllActiveQuests();
-    const qNameEl = this.container.querySelector('#tracker-quest-name');
-    const qListEl = this.container.querySelector('#tracker-obj-list');
-
-    if (qNameEl && qListEl) {
-      if (activeQuests.length > 0) {
-        const topQ = activeQuests[0];
-        qNameEl.textContent = topQ.quest.title;
-        qListEl.innerHTML = topQ.objectives.map(obj => `
-          <div style="color: ${obj.isCompleted ? '#4ade80' : '#cbd5e1'};">
-            ${GameHUD.glyph(obj.isCompleted ? 'check' : 'box')} ${obj.description} (${obj.currentCount}/${obj.requiredCount})
-          </div>
-        `).join('');
-      } else {
-        qNameEl.textContent = 'No Active Quest';
-        qListEl.innerHTML = `<div>Visit Elder Justinian in Eldermoor</div>`;
-      }
-    }
-
     // Top Boss Health Bar (MapleStory / Dark Souls Style)
-    const bossBanner = this.container.querySelector('#epic-boss-banner') as HTMLElement;
-    const waveBanner = this.container.querySelector('#dungeon-wave-banner') as HTMLElement;
+    const bossBanner = this.hudNode('epic-boss-banner');
+    const waveBanner = this.hudNode('dungeon-wave-banner');
     const activeBoss = this.engine.enemies.find(e => !e.isDead && e.type === 'boss');
 
     if (activeBoss && !this.engine.isTownMode) {
       if (bossBanner) {
         bossBanner.style.display = 'flex';
-        const nameEl = this.container.querySelector('#boss-name-text');
-        const pctEl = this.container.querySelector('#boss-hp-percentage');
-        const fillEl = this.container.querySelector('#boss-hp-fill') as HTMLElement;
-        const lagEl = this.container.querySelector('#boss-hp-lag') as HTMLElement;
-        const iconEl = this.container.querySelector('#boss-portrait-icon');
-
-        const hpPct = Math.max(0, (activeBoss.hp / activeBoss.maxHp) * 100);
+        const nameEl = this.hudNode('boss-name-text');
+        const pctEl = this.hudNode('boss-hp-percentage');
+        const fillEl = this.hudNode('boss-hp-fill');
+        const lagEl = this.hudNode('boss-hp-lag');
+        const bossHp = Math.max(0, finiteNumber(activeBoss.hp));
+        const bossMax = Math.max(1, finiteNumber(activeBoss.maxHp, 1));
+        const hpPct = clampPercent((bossHp / bossMax) * 100);
         if (nameEl) nameEl.textContent = activeBoss.name.toUpperCase();
-        if (pctEl) pctEl.textContent = `${Math.ceil(hpPct)}% (${activeBoss.hp} / ${activeBoss.maxHp})`;
+        if (pctEl) pctEl.textContent = `${Math.ceil(hpPct)}% (${Math.ceil(bossHp)} / ${Math.ceil(bossMax)})`;
         if (fillEl) fillEl.style.width = `${hpPct}%`;
         if (lagEl) lagEl.style.width = `${hpPct}%`;
-        if (iconEl) {
-          iconEl.innerHTML = `<img src='/assets/gui/PNG/buttonSquare_brown.png' width='32' height='32' style='image-rendering:pixelated;' />`;
-        }
+        this.patchBossState(activeBoss);
       }
       if (waveBanner) waveBanner.style.display = 'none';
     } else {
@@ -3092,8 +3362,8 @@ export class GameHUD {
     }
 
     // Wave Banner in Town vs Dungeon
-    const waveTitle = this.container.querySelector('#wave-title-text');
-    const waveMobs = this.container.querySelector('#wave-mobs-text');
+    const waveTitle = this.hudNode('wave-title-text');
+    const waveMobs = this.hudNode('wave-mobs-text');
     if (this.engine.isTownMode && waveTitle && waveMobs) {
       waveTitle.textContent = 'HAVEN OF ELDERMOOR';
       waveMobs.textContent = 'Peaceful Town Sanctuary';
@@ -3101,12 +3371,21 @@ export class GameHUD {
 
     // Update Skill Cooldowns
     p.characterClass.skills.forEach(skill => {
-      const overlay = this.container.querySelector(`#cd-overlay-${skill.id}`) as HTMLElement;
-      const cd = p.skillCooldowns[skill.id] || 0;
+      const overlay = this.hudNode(`cd-overlay-${skill.id}`);
+      const slot = this.hudNode<HTMLButtonElement>(`skill-slot-${skill.id}`);
+      const cd = Math.max(0, finiteNumber(p.skillCooldowns[skill.id]));
+      const state = p.downed || p.hp <= 0 ? 'disabled' : cd > 0 ? 'cooldown' : p.mp < skill.manaCost ? 'resource' : 'ready';
+      if (slot) {
+        slot.dataset.state = state;
+        slot.disabled = state === 'disabled';
+        slot.setAttribute('aria-disabled', String(state === 'disabled' || state === 'resource'));
+        slot.setAttribute('aria-label', `Cast ${skill.name}, ${this.skillBindingLabel(Number(slot.dataset.skillIdx), skill.key)}. ${state}.`);
+      }
       if (overlay) {
         if (cd > 0) {
           overlay.style.display = 'flex';
           overlay.textContent = cd.toFixed(1);
+          overlay.style.setProperty('--cooldown-progress', String(clampPercent((cd / Math.max(.01, skill.cooldown)) * 100)));
         } else {
           overlay.style.display = 'none';
         }
@@ -3114,8 +3393,8 @@ export class GameHUD {
     });
 
     // Update Dash Cooldown
-    const dashOverlay = this.container.querySelector('#dash-cooldown-overlay') as HTMLElement;
-    const dashBtn = this.container.querySelector('#touch-dash-btn') as HTMLElement;
+    const dashOverlay = this.hudNode('dash-cooldown-overlay');
+    const dashBtn = this.hudNode('touch-dash-btn');
     const dashCd = p.dashCooldown || 0;
     if (dashOverlay && dashBtn) {
       if (dashCd > 0) {
@@ -3129,7 +3408,7 @@ export class GameHUD {
     }
 
     // Combo
-    const comboEl = this.container.querySelector('#combo-display') as HTMLElement;
+    const comboEl = this.hudNode('combo-display');
     if (comboEl) {
       if (p.comboCount > 1 && p.comboTimer > 0) {
         comboEl.style.display = 'block';
@@ -3140,8 +3419,9 @@ export class GameHUD {
     }
 
     // Portrait canvas
-    const portraitCvs = this.container.querySelector('#hud-portrait-cvs') as HTMLCanvasElement;
-    if (portraitCvs) {
+    const portraitCvs = this.hudNode<HTMLCanvasElement>('hud-portrait-cvs');
+    if (portraitCvs && now - this.lastPortraitPatchAt >= 250) {
+      this.lastPortraitPatchAt = now;
       const ctx = portraitCvs.getContext('2d');
       if (ctx) {
         ctx.clearRect(0, 0, portraitCvs.width, portraitCvs.height);
@@ -3152,6 +3432,59 @@ export class GameHUD {
         ctx.restore();
       }
     }
+  }
+
+  private patchQuestTracker(): void {
+    const activeQuests = quests.getAllActiveQuests();
+    const top = activeQuests[0];
+    const key = top
+      ? `${top.quest.id}|${top.objectives.map(objective => `${objective.id}:${objective.currentCount}:${objective.isCompleted}`).join(',')}`
+      : 'none';
+    if (key === this.questPatchKey) return;
+    this.questPatchKey = key;
+    const name = this.hudNode('tracker-quest-name');
+    const list = this.hudNode('tracker-obj-list');
+    if (!name || !list) return;
+    if (!top) {
+      name.textContent = 'No Active Quest';
+      list.textContent = 'Visit Elder Justinian in Eldermoor';
+      return;
+    }
+    name.textContent = top.quest.title;
+    list.innerHTML = top.objectives.map(objective => {
+      const current = Math.max(0, Math.trunc(finiteNumber(objective.currentCount)));
+      const required = Math.max(1, Math.trunc(finiteNumber(objective.requiredCount, 1)));
+      return `<div class="${objective.isCompleted ? 'is-complete' : ''}">${GameHUD.glyph(objective.isCompleted ? 'check' : 'box')}<span>${escapeHtml(objective.description)}</span><strong>${current}/${required}</strong></div>`;
+    }).join('');
+  }
+
+  private patchBossState(activeBoss: import('../dungeons/DungeonManager').EnemyInstance): void {
+    const phases = Math.max(1, Math.trunc(finiteNumber(activeBoss.phases, 1)));
+    const current = Math.max(1, Math.min(phases, Math.trunc(finiteNumber(activeBoss.currentPhase, 1))));
+    const statuses = this.engine.statusesForEnemy(activeBoss);
+    const key = `${activeBoss.id}|${phases}|${current}|${statuses.map(status => status.kind).join(',')}`;
+    if (key !== this.bossPatchKey) {
+      this.bossPatchKey = key;
+      const pips = this.hudNode('boss-phase-pips');
+      if (pips) {
+        pips.innerHTML = Array.from({ length: phases }, (_, index) => `<span class="boss-phase-pip ${index < current ? 'is-active' : ''}"></span>`).join('');
+        pips.setAttribute('aria-label', `Phase ${current} of ${phases}`);
+      }
+      const statusNode = this.hudNode('boss-statuses');
+      if (statusNode) statusNode.textContent = statuses.length ? statuses.map(status => status.kind).join(' · ') : 'No status effects';
+    }
+    const stagger = this.hudNode('boss-stagger-state');
+    if (stagger) stagger.textContent = activeBoss.hitStun > 0 ? 'Staggered' : '';
+    const cast = this.hudNode('boss-cast');
+    const castName = this.hudNode('boss-cast-name');
+    const castFill = this.hudNode('boss-cast-fill');
+    const castTime = this.hudNode('boss-cast-time');
+    const remaining = Math.max(0, finiteNumber(activeBoss.bossCastTimer));
+    const duration = Math.max(.01, finiteNumber(activeBoss.bossCastDuration, .01));
+    if (cast) cast.hidden = !activeBoss.bossCastName || remaining <= 0;
+    if (castName) castName.textContent = activeBoss.bossCastName || '';
+    if (castFill) castFill.style.transform = `scaleX(${clampPercent(remaining / duration * 100) / 100})`;
+    if (castTime) castTime.textContent = remaining > 0 ? `${remaining.toFixed(1)}s` : '';
   }
 
   private selectItemForInspection(item: ItemData, isEquipped: boolean, slotOrIdx: string | number) {
@@ -3180,8 +3513,8 @@ export class GameHUD {
 
     keys.forEach((key, i) => {
       const [icon, label, scale] = stats[i];
-      const mine = ((item.stats as any)?.[key] || 0) * scale;
-      const theirs = ((equipped?.stats as any)?.[key] || 0) * scale;
+      const mine = finiteNumber((item.stats as any)?.[key]) * scale;
+      const theirs = finiteNumber((equipped?.stats as any)?.[key]) * scale;
       const delta = Math.round((mine - theirs) * 10) / 10;
       if (delta === 0) return;
       if (delta > 0) better++; else worse++;
@@ -3194,7 +3527,7 @@ export class GameHUD {
       return `<div class="cmp-row"><span class="cmp-head cmp-up">EMPTY SLOT — pure gain</span>${rows.join('')}</div>`;
     }
     if (!rows.length) {
-      return `<div class="cmp-row"><span class="cmp-head">Identical to your ${equipped.name}</span></div>`;
+      return `<div class="cmp-row"><span class="cmp-head">Identical to your ${escapeHtml(equipped.name)}</span></div>`;
     }
 
     const verdict = better && !worse ? ['UPGRADE', 'cmp-up']
@@ -3202,7 +3535,7 @@ export class GameHUD {
       : ['SIDEGRADE', 'cmp-side'];
 
     return `<div class="cmp-row">
-      <span class="cmp-head ${verdict[1]}">${verdict[0]} vs ${equipped.name}</span>
+      <span class="cmp-head ${verdict[1]}">${verdict[0]} vs ${escapeHtml(equipped.name)}</span>
       ${rows.join('')}
     </div>`;
   }
@@ -3249,20 +3582,20 @@ export class GameHUD {
 
     pane.innerHTML = `
       <div class="inspector-header">
-        <div class="inspector-icon-box rarity-${item.rarity}">
-          ${item.image ? `<img src="${item.image}" width="32" height="32" style="image-rendering:pixelated;" />` : ''}
+        <div class="inspector-icon-box rarity-${escapeHtmlAttribute(item.rarity)}">
+          ${safeLocalAssetPath(item.image) ? `<img src="${escapeHtmlAttribute(safeLocalAssetPath(item.image))}" width="32" height="32" style="image-rendering:pixelated;" alt="" />` : ''}
         </div>
         <div class="inspector-title-col">
-          <div class="inspector-item-name" style="color: ${rConfig.color};">${item.name}</div>
+          <div class="inspector-item-name" style="color: ${rConfig.color};">${escapeHtml(item.name)}</div>
           <div class="inspector-rarity-pill">
             <span style="color: ${rConfig.color};">${rConfig.name}</span>
-            <span style="color: #64748b;">• ${item.type.toUpperCase()}</span>
+            <span style="color: #64748b;">&middot; ${escapeHtml(item.type.toUpperCase())}</span>
           </div>
         </div>
       </div>
       ${statChips.length > 0 ? `<div class="inspector-stats-grid">${statChips.join('')}</div>` : ''}
       ${comparison}
-      <div class="inspector-desc">${item.description}</div>
+      <div class="inspector-desc">${escapeHtml(item.description)}</div>
       <div class="inspector-actions">
         ${isEquipped
           ? `<button class="inspector-btn inspector-btn-danger" id="inspector-unequip-btn">UNEQUIP</button>`
@@ -3320,7 +3653,7 @@ export class GameHUD {
    * stutter.
    */
   private paintAllyRail() {
-    const rail = this.container.querySelector('#ally-rail') as HTMLElement;
+    const rail = this.hudNode('ally-rail');
     if (!rail || !this.engine) return;
 
     const ids = Object.keys(network.remotePlayers);
@@ -3342,25 +3675,26 @@ export class GameHUD {
         const cls = CHARACTER_CLASSES.find(c => c.id === r.classId);
         const accent = cls?.themeColor || '#4fade5';
         return `
-          <div class="ally" data-ally="${id}" style="--ally:${accent}">
-            <span class="ally-name">${r.name || 'Ally'}</span>
+          <div class="ally" data-ally="${escapeHtmlAttribute(id)}" style="--ally:${accent}">
+            <span class="ally-name">${escapeHtml(r.name || 'Ally')}</span>
             <span class="ally-down-tag" style="display:none">DOWN</span>
-            <span class="ally-hp"><span class="ally-hp-fill" style="width:100%"></span></span>
+            <span class="ally-hp" role="progressbar" aria-label="${escapeHtmlAttribute(r.name || 'Ally')} health" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><span class="ally-hp-fill" style="width:100%"></span></span>
           </div>`;
       }).join('');
     }
 
     ids.forEach(id => {
       const r = network.remotePlayers[id];
-      const row = rail.querySelector(`[data-ally="${id}"]`) as HTMLElement;
+      const row = rail.querySelector(`[data-ally="${CSS.escape(id)}"]`) as HTMLElement;
       if (!row) return;
-      const pct = Math.max(0, Math.min(100, r.hpPct ?? 100));
+      const pct = clampPercent(finiteNumber(r.hpPct, 100));
       const fill = row.querySelector('.ally-hp-fill') as HTMLElement;
       if (fill) {
         fill.style.width = `${r.downed ? 0 : pct}%`;
         fill.className = `ally-hp-fill${pct <= 25 ? ' critical' : pct <= 55 ? ' hurt' : ''}`;
       }
       row.classList.toggle('is-down', !!r.downed);
+      row.querySelector('.ally-hp')?.setAttribute('aria-valuenow', String(r.downed ? 0 : Math.round(pct)));
       const tag = row.querySelector('.ally-down-tag') as HTMLElement;
       if (tag) tag.style.display = r.downed ? 'inline' : 'none';
     });
@@ -3391,12 +3725,124 @@ export class GameHUD {
    * the pause menu, the skills panel and the chat wheel cannot be left hanging
    * behind a map or a lobby.
    */
+  private elementIsOpen(selector: string): boolean {
+    const element = this.container.querySelector(selector) as HTMLElement | null;
+    if (!element) return false;
+    return element.classList.contains('open') || element.style.display === 'flex' || element.style.display === 'block';
+  }
+
+  private setPauseMenu(open: boolean): void {
+    const pauseBack = this.container.querySelector('#pause-back') as HTMLElement | null;
+    if (!pauseBack) return;
+    const party = this.container.querySelector('#pause-party-group') as HTMLElement | null;
+    if (party) party.style.display = network.room ? 'block' : 'none';
+    if (open) {
+      this.openHudDialog(pauseBack, {
+        initialFocus: pauseBack.querySelector<HTMLElement>('button:not([disabled])'),
+      });
+    } else {
+      this.closeHudDialog(pauseBack);
+    }
+  }
+
+  /** Shared keyboard/gamepad menu action entrypoint. */
+  public togglePauseMenu(): void {
+    if (this.elementIsOpen('#pause-back')) {
+      this.setPauseMenu(false);
+      return;
+    }
+    if (this.closeTopInputPanel()) return;
+    this.setPauseMenu(true);
+  }
+
+  /** Close exactly the highest HUD-owned surface, returning whether one closed. */
+  public closeTopInputPanel(): boolean {
+    if (this.controlsPanel?.isOpen) {
+      this.controlsPanel.close();
+      return true;
+    }
+    const wheel = this.container.querySelector('#qc-wheel');
+    if (wheel?.classList.contains('open')) {
+      wheel.classList.remove('open');
+      return true;
+    }
+    for (const selector of ['#skills-back', '#play-back']) {
+      if (!this.elementIsOpen(selector)) continue;
+      const element = this.container.querySelector(selector) as HTMLElement;
+      this.closeHudDialog(element);
+      return true;
+    }
+    if (this.inventoryOpen || this.elementIsOpen('#inventory-modal')) {
+      this.inventoryOpen = false;
+      const inventory = this.container.querySelector('#inventory-modal') as HTMLElement | null;
+      this.closeHudDialog(inventory);
+      return true;
+    }
+    if (this.elementIsOpen('#pause-back')) {
+      this.setPauseMenu(false);
+      return true;
+    }
+    if (typeof document !== 'undefined' && document.querySelector('.lb-backdrop')) {
+      this.leaderboard.close();
+      return true;
+    }
+    return false;
+  }
+
+  public isInputBlocking(): boolean {
+    return Boolean(this.controlsPanel?.isOpen)
+      || this.inventoryOpen
+      || ['#pause-back', '#skills-back', '#play-back'].some(selector => this.elementIsOpen(selector))
+      || Boolean(this.container.querySelector('#qc-wheel.open'))
+      || (typeof document !== 'undefined' && Boolean(document.querySelector('.lb-backdrop')));
+  }
+
+  public navigateMenu(direction: 'up' | 'down' | 'left' | 'right' | 'confirm'): void {
+    const scopes = [
+      '#pause-back', '#skills-back', '#play-back', '#inventory-modal', '#qc-wheel.open',
+    ];
+    const scope = scopes
+      .map(selector => this.container.querySelector(selector) as HTMLElement | null)
+      .find(element => element && (element.classList.contains('open') || element.style.display === 'flex' || element.style.display === 'block'));
+    if (!scope) return;
+    const buttons = [...scope.querySelectorAll<HTMLElement>('button:not([disabled]), [role="button"][tabindex="0"]')]
+      .filter(element => element.offsetParent !== null || typeof element.getBoundingClientRect !== 'function');
+    if (!buttons.length) return;
+    let index = buttons.indexOf(document.activeElement as HTMLElement);
+    if (direction === 'confirm') {
+      const target = index >= 0 ? buttons[index] : buttons[0];
+      target.focus();
+      target.click();
+      return;
+    }
+    const delta = direction === 'up' || direction === 'left' ? -1 : 1;
+    index = index < 0 ? 0 : (index + delta + buttons.length) % buttons.length;
+    buttons[index].focus();
+  }
+
+  public toggleQuickChat(): void {
+    const wheel = this.container.querySelector('#qc-wheel') as HTMLElement | null;
+    if (!wheel) return;
+    wheel.classList.toggle('open');
+    if (wheel.classList.contains('open')) {
+      queueMicrotask(() => (wheel.querySelector('button') as HTMLElement | null)?.focus());
+    }
+  }
+
+  public closeQuickChat(): void {
+    this.container.querySelector('#qc-wheel')?.classList.remove('open');
+  }
+
   public closePanels() {
+    this.controlsPanel?.close(false);
     ['#pause-back', '#skills-back', '#play-back'].forEach((sel) => {
       const el = this.container.querySelector(sel) as HTMLElement | null;
-      if (el) el.style.display = 'none';
+      this.closeHudDialog(el);
     });
     this.container.querySelector('#qc-wheel')?.classList.remove('open');
+    this.inventoryOpen = false;
+    const inventory = this.container.querySelector('#inventory-modal') as HTMLElement | null;
+    this.closeHudDialog(inventory);
   }
 
   private paintDownedOverlay() {
@@ -3425,6 +3871,31 @@ export class GameHUD {
     slot.classList.toggle('empty', n === 0);
   }
 
+  public refreshPotionSlot(): void {
+    this.paintPotionSlot();
+  }
+
+  private refreshBindingLabels(): void {
+    this.container.querySelectorAll<HTMLElement>('.hotbar-slot[data-skill-idx]').forEach(slot => {
+      const index = Number(slot.dataset.skillIdx);
+      const skill = this.engine.player.characterClass.skills[index];
+      const action = skillAction(index);
+      if (!skill || !action || !this.game) return;
+      const label = this.game.inputBindingLabel(action);
+      const badge = slot.querySelector('.slot-key-badge');
+      if (badge) badge.textContent = label;
+      slot.setAttribute('aria-label', `Cast ${skill.name}, ${label}`);
+    });
+    const potion = this.container.querySelector<HTMLElement>('#potion-slot');
+    if (potion && this.game) {
+      const label = this.game.inputBindingLabel('quickHeal');
+      const badge = potion.querySelector('.slot-key-badge');
+      if (badge) badge.textContent = label;
+      potion.setAttribute('aria-label', `Drink a healing potion, ${label}`);
+      potion.title = `Drink a healing potion (${label})`;
+    }
+  }
+
   private renderInventoryItems() {
     const bagGrid = this.container.querySelector('#inv-bag-grid');
     if (!bagGrid) return;
@@ -3432,9 +3903,9 @@ export class GameHUD {
 
     // Render bag slots
     bagGrid.innerHTML = p.inventory.map((item, idx) => `
-      <div class="bag-slot rarity-${item.rarity}" data-inv-idx="${idx}" title="${item.name} (${item.rarity.toUpperCase()})">
-        ${item.image ? `<img src="${item.image}" width="28" height="28" style="image-rendering:pixelated;" />` : ''}
-      </div>
+      <button class="bag-slot rarity-${escapeHtmlAttribute(item.rarity)}" type="button" data-inv-idx="${idx}" title="${escapeHtmlAttribute(item.name)} (${escapeHtmlAttribute(item.rarity.toUpperCase())})">
+        ${safeLocalAssetPath(item.image) ? `<img src="${escapeHtmlAttribute(safeLocalAssetPath(item.image))}" width="28" height="28" style="image-rendering:pixelated;" alt="" />` : ''}
+      </button>
     `).join('');
 
     // Bag slot click handlers
@@ -3450,7 +3921,6 @@ export class GameHUD {
         }
       };
       slot.addEventListener('click', onSlotClick);
-      slot.addEventListener('touchstart', onSlotClick, { passive: true });
     });
 
     // Equipment Paperdoll slot click handlers
@@ -3466,7 +3936,6 @@ export class GameHUD {
         }
       };
       eqSlot.addEventListener('click', onEquipClick);
-      eqSlot.addEventListener('touchstart', onEquipClick, { passive: true });
     });
 
     // Render current inspector pane state

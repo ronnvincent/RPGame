@@ -17,8 +17,85 @@ import { sprites } from './SpriteManager';
 import { quests } from '../quests/QuestManager';
 import { TownHub } from '../town/TownHub';
 import { SaveManager } from './SaveManager';
-import { network } from '../network/NetworkManager';
+import {
+  network,
+  type PlayerDamagePacket,
+  type PlayerDamageStatus,
+} from '../network/NetworkManager';
 import { quickChatById } from '../network/QuickChat';
+import {
+  buildZoneHazards,
+  buildZonePlatforms,
+  type BuiltZoneHazard,
+  type HazardKind,
+} from '../maps/ZoneContent';
+import { drawZonePresentation } from '../maps/ZonePresentation';
+import type {
+  BuffApplication,
+  EnemyStatusKind,
+  PlayerBuffStat,
+  SkillMechanics,
+  StatusApplication,
+} from '../combat/SkillMechanics';
+
+interface ActivePlayerBuff {
+  stat: PlayerBuffStat;
+  multiplier: number;
+  timer: number;
+  amount?: number;
+  sourceSkillId?: string;
+}
+
+interface EnemyCombatStatus {
+  kind: EnemyStatusKind;
+  remaining: number;
+  duration: number;
+  magnitude: number;
+  tickInterval: number;
+  tickTimer: number;
+  damagePerTick: number;
+  damageRemaining: number;
+  ticksRemaining: number;
+  sourceSkillId: string;
+  colour: string;
+  lastCastToken: number;
+}
+
+interface PlayerNegativeStatus {
+  kind: 'slow' | 'poison' | 'burn' | 'stun';
+  remaining: number;
+  magnitude: number;
+  tickInterval: number;
+  tickTimer: number;
+  rawTickDamage: number;
+  sourceId: string;
+}
+
+interface CombatPlayerTarget {
+  kind: 'local' | 'remote';
+  socketId: string | null;
+  x: number;
+  y: number;
+}
+
+export type ZoneHazardPhase = 'idle' | 'telegraph' | 'active' | 'cooldown';
+
+export interface ZoneHazardSnapshot {
+  id: string;
+  kind: HazardKind;
+  x: number;
+  y: number;
+  radius: number;
+  telegraph: string;
+  phase: ZoneHazardPhase;
+  phaseProgress: number;
+}
+
+interface ZoneAccessibilityPreferences {
+  reducedMotion: boolean;
+  screenShake: boolean;
+  screenFlashes: boolean;
+}
 
 export interface PlayerEquipment {
   helmet?: ItemData;
@@ -100,12 +177,9 @@ export interface PlayerState {
   totalDef: number;
   totalSpeed: number;
   totalCrit: number;
+  totalAttackSpeed: number;
   // Active Buffs
-  activeBuffs: {
-    stat: string;
-    multiplier: number;
-    timer: number;
-  }[];
+  activeBuffs: ActivePlayerBuff[];
   // Skill Cooldowns
   skillCooldowns: { [skillId: string]: number };
   /** Unspent points, one per level. */
@@ -185,6 +259,15 @@ function afterDefence(raw: number, def: number): number {
 }
 
 export class SideViewEngine {
+  /** Remote ultimates keep the same anticipation beat without owning our cinematic director. */
+  private static readonly REMOTE_ULTIMATE_ANTICIPATION_MS = 550;
+  /** A danger mark must stay visible long enough to read before it can hurt. */
+  public static readonly ZONE_HAZARD_TELEGRAPH_SECONDS = 1.2;
+  /** The damaging window is deliberately shorter than the authored cooldown. */
+  public static readonly ZONE_HAZARD_ACTIVE_SECONDS = 0.72;
+  /** A quiet beat separates one authored anchor from the next. */
+  public static readonly ZONE_HAZARD_RECOVERY_SECONDS = 1.08;
+
   public player: PlayerState;
   public enemies: EnemyInstance[] = [];
   public droppedLoots: DroppedLoot[] = [];
@@ -209,6 +292,10 @@ export class SideViewEngine {
   public currentWaveIndex: number = 0;
   public currentDungeonIndex: number = 0;
   public currentDungeonId: string = 'goblin_catacombs';
+  /** Canonical id shared with movement and targeted-damage packets. */
+  public get networkSceneId(): string {
+    return this.isTownMode ? 'town' : this.currentDungeonId;
+  }
   private syncTimer: number = 0;
   /** Skill slot of the swing in progress, so the attack animation can vary. */
   private lastSkillIndex: number = 0;
@@ -216,6 +303,14 @@ export class SideViewEngine {
   private attackHold: number = 0;
   /** Short global cooldown between casts, independent of the swing animation. */
   private castLock: number = 0;
+  /**
+   * Every delayed combat action belongs to the run that scheduled it. Changing
+   * scenes advances the epoch and clears the timers, preventing an old boss
+   * telegraph, projectile volley, or multi-hit from landing in town/the next
+   * dungeon.
+   */
+  private combatTaskEpoch = 0;
+  private delayedCombatTasks = new Set<number>();
   /** Set when the run has been lost, so defeat is announced exactly once. */
   public runOver = false;
 
@@ -229,6 +324,11 @@ export class SideViewEngine {
 
   /** Wipe the run tally. Called when a dungeon starts, not when it ends. */
   public resetRunStats() {
+    this.cancelDelayedCombatTasks();
+    this.enemyStatuses.clear();
+    this.playerNegativeStatuses.length = 0;
+    this.enemyPlayerTargets.clear();
+    this.receivedPlayerDamageHits.clear();
     this.damageDealt = 0;
     this.damageTaken = 0;
     this.killCount = 0;
@@ -237,10 +337,36 @@ export class SideViewEngine {
     this.player.downTimer = 0;
     this.player.revivesUsed = 0;
   }
+
+  /** Cancel delayed hits/VFX owned by the previous scene or run. */
+  public cancelDelayedCombatTasks() {
+    this.combatTaskEpoch++;
+    this.delayedCombatTasks.forEach(handle => window.clearTimeout(handle));
+    this.delayedCombatTasks.clear();
+    this.particles.cancelDelayedTasks();
+    this.ultimate.cancel();
+  }
+
+  /** Schedule work that is safe to discard when the combat scene changes. */
+  private scheduleCombatTask(task: () => void, delayMs: number) {
+    const epoch = this.combatTaskEpoch;
+    const handle = window.setTimeout(() => {
+      this.delayedCombatTasks.delete(handle);
+      if (epoch !== this.combatTaskEpoch) return;
+      task();
+    }, delayMs);
+    this.delayedCombatTasks.add(handle);
+  }
   /** Raised when the player dies with no revive left. */
   public onRunLost: (() => void) | null = null;
   /** Which of a boss's abilities comes next, per boss. */
   private bossRotation = new Map<string, number>();
+  /** Stable aggro target per enemy; invalid/downed/cross-scene targets are replaced. */
+  private enemyPlayerTargets = new Map<string, string>();
+  /** Targeted hits are idempotent across retransmit/reconnect races. */
+  private receivedPlayerDamageHits = new Map<string, number>();
+  private playerDamageSequence = 0;
+  private readonly playerDamageNonce = Math.random().toString(36).slice(2, 10);
   private playerSyncTimer: number = 0;
   public townHub: TownHub | null = null;
   public readonly portalX: number = 2560;
@@ -249,13 +375,25 @@ export class SideViewEngine {
   /** Runs the slow-motion / freeze / declaration sequence for ultimates. */
   public readonly ultimate = new UltimateDirector();
   public battleTheme: BattleTheme = 'catacombs';
+  private zoneHazards: BuiltZoneHazard[] = [];
+  private zoneHazardClock = 0;
+  private readonly zoneHazardLastDamageMs = new Map<string, number>();
+  private zoneGeometryTheme: BattleTheme | null = null;
+  private zoneGeometryGroundY = Number.NaN;
+  private zoneGeometryArenaWidth = Number.NaN;
+  private visualPreferencesOverride: ZoneAccessibilityPreferences | null = null;
   private readonly cameraFollowSpeed = 10;
   private readonly cameraLookAheadPx = 140;
   private readonly cameraLeadRecoverySpeed = 12;
   private cameraLeadOffset = 0;
   private readonly physicsFrameScale = 60;
   private playerRunBob = 0;
+  private skillCastToken = 0;
   public recentCorpsePositions: { x: number; y: number }[] = [];
+  /** Timed enemy effects are engine-owned so dungeon/network records stay serializable. */
+  public readonly enemyStatuses = new Map<string, EnemyCombatStatus[]>();
+  /** Future enemy skills can use this same list; Purge Flame already cleans it. */
+  public readonly playerNegativeStatuses: PlayerNegativeStatus[] = [];
 
   constructor(characterClass: CharacterClass) {
     this.particles = new ParticleSystem();
@@ -266,6 +404,18 @@ export class SideViewEngine {
 
   public recalculateStats() {
     this.recomputeStats();
+  }
+
+  /** Receives the shared input settings once per frame without polling DOM/storage in hot paths. */
+  public setVisualPreferences(preferences: ZoneAccessibilityPreferences) {
+    const normalized = {
+      reducedMotion: Boolean(preferences.reducedMotion),
+      screenShake: Boolean(preferences.screenShake),
+      screenFlashes: Boolean(preferences.screenFlashes),
+    };
+    if (this.visualPreferencesOverride) Object.assign(this.visualPreferencesOverride, normalized);
+    else this.visualPreferencesOverride = normalized;
+    this.particles.setReducedMotion(normalized.reducedMotion);
   }
 
   public addItemToInventory(item: ItemData) {
@@ -318,6 +468,7 @@ export class SideViewEngine {
       totalDef: stats.def,
       totalSpeed: stats.speed,
       totalCrit: stats.critChance,
+      totalAttackSpeed: 1,
       activeBuffs: [],
       skillCooldowns: cooldowns,
       equipment: {},
@@ -362,6 +513,7 @@ export class SideViewEngine {
     let def = (p.baseDef + bonusDef) * lvlMultiplier;
     let spd = p.baseSpeed + bonusSpeed;
     let crit = p.baseCrit + bonusCrit;
+    let attackSpeed = 1;
 
     // Active Buffs
     p.activeBuffs.forEach(buff => {
@@ -369,27 +521,243 @@ export class SideViewEngine {
       if (buff.stat === 'def') def *= buff.multiplier;
       if (buff.stat === 'speed') spd *= buff.multiplier;
       if (buff.stat === 'crit') crit *= buff.multiplier;
+      if (buff.stat === 'attackSpeed') attackSpeed *= buff.multiplier;
     });
 
     p.totalAtk = Math.round(atk);
     p.totalDef = Math.round(def);
     p.totalSpeed = Number(spd.toFixed(1));
     p.totalCrit = Number(crit.toFixed(2));
+    p.totalAttackSpeed = Number(attackSpeed.toFixed(2));
   }
 
   public setBattleTheme(theme: BattleTheme) {
     this.battleTheme = theme;
-    this.buildMapPlatforms(theme);
+    // Every wave begins with a complete warning window. Carrying the prior
+    // zone clock into a new encounter could make the first hazard arrive
+    // already active while the wave banner is still leaving the screen.
+    this.rebuildZoneGeometry(theme, true);
   }
 
-  public buildMapPlatforms(_theme: BattleTheme) {
-    // No floating ledges anywhere.
-    //
-    // They were wooden planks on legs that ran to a hardcoded y of 600; with
-    // the legs gone they became bars hanging in mid air, and once the maps had
-    // real ground there was nothing for them to connect to. Nothing in the
-    // dungeons requires the height, so the levels read as ground you walk on.
-    this.platforms = [];
+  public buildMapPlatforms(theme: BattleTheme) {
+    this.rebuildZoneGeometry(theme, this.zoneGeometryTheme !== theme);
+  }
+
+  private rebuildZoneGeometry(theme: BattleTheme, resetHazardCycle: boolean) {
+    const previousGroundY = this.zoneGeometryGroundY;
+    const previousPlatforms = this.platforms;
+    const playerSupportIndex = previousPlatforms.findIndex(platform => (
+      this.player.isGrounded
+      && this.player.x >= platform.x - 12
+      && this.player.x <= platform.x + platform.width + 12
+      && Math.abs(this.player.y - platform.y) <= 4
+    ));
+    const playerWasOnFloor = this.player.isGrounded
+      && Number.isFinite(previousGroundY)
+      && Math.abs(this.player.y - previousGroundY) <= 4;
+
+    this.platforms = buildZonePlatforms(theme, this.groundY, this.arenaWidth).map(platform => ({
+      ...platform,
+      type: 'one-way' as const,
+    }));
+    this.zoneHazards = buildZoneHazards(theme, this.groundY, this.arenaWidth);
+
+    // Canvas resizes move the play line. Keep grounded actors attached to the
+    // surface that supported them instead of leaving them floating at the old
+    // y until gravity catches up on a later frame.
+    if (Number.isFinite(previousGroundY) && previousGroundY !== this.groundY) {
+      if (playerWasOnFloor) {
+        this.player.y = this.groundY;
+      } else if (playerSupportIndex >= 0) {
+        const priorSupport = previousPlatforms[playerSupportIndex];
+        const nextSupport = this.platforms.find(platform => (
+          platform.x === priorSupport.x && platform.width === priorSupport.width
+        ));
+        if (nextSupport) this.player.y = nextSupport.y;
+      }
+
+      for (const enemy of this.enemies) {
+        if (enemy.isGrounded && Math.abs(enemy.y - previousGroundY) <= 4) {
+          enemy.y = this.groundY;
+        }
+      }
+      for (const loot of this.droppedLoots) {
+        if (loot.isGrounded && Math.abs(loot.y - previousGroundY + 10) <= 6) {
+          loot.y += this.groundY - previousGroundY;
+        }
+      }
+    }
+
+    this.zoneGeometryTheme = theme;
+    this.zoneGeometryGroundY = this.groundY;
+    this.zoneGeometryArenaWidth = this.arenaWidth;
+    if (resetHazardCycle) {
+      this.zoneHazardClock = 0;
+      this.zoneHazardLastDamageMs.clear();
+    }
+    sprites.warmZoneContent(theme);
+  }
+
+  private activeZoneTheme(): BattleTheme {
+    return this.isTownMode ? 'town' : this.battleTheme;
+  }
+
+  private ensureZoneGeometry() {
+    const theme = this.activeZoneTheme();
+    if (
+      this.zoneGeometryTheme !== theme
+      || this.zoneGeometryGroundY !== this.groundY
+      || this.zoneGeometryArenaWidth !== this.arenaWidth
+    ) {
+      this.rebuildZoneGeometry(theme, this.zoneGeometryTheme !== theme);
+    }
+  }
+
+  private zoneHazardPhase(index: number): { phase: ZoneHazardPhase; progress: number } {
+    if (this.zoneHazards.length === 0) return { phase: 'idle', progress: 0 };
+    const telegraph = SideViewEngine.ZONE_HAZARD_TELEGRAPH_SECONDS;
+    const active = SideViewEngine.ZONE_HAZARD_ACTIVE_SECONDS;
+    const slotDuration = telegraph + active + SideViewEngine.ZONE_HAZARD_RECOVERY_SECONDS;
+    const turn = Math.floor(this.zoneHazardClock / slotDuration);
+    if (turn % this.zoneHazards.length !== index) return { phase: 'idle', progress: 0 };
+
+    const elapsed = this.zoneHazardClock - turn * slotDuration;
+    if (elapsed < telegraph) {
+      return { phase: 'telegraph', progress: Math.max(0, Math.min(1, elapsed / telegraph)) };
+    }
+    if (elapsed < telegraph + active) {
+      return { phase: 'active', progress: Math.max(0, Math.min(1, (elapsed - telegraph) / active)) };
+    }
+    return {
+      phase: 'cooldown',
+      progress: Math.max(0, Math.min(1, (elapsed - telegraph - active) / SideViewEngine.ZONE_HAZARD_RECOVERY_SECONDS)),
+    };
+  }
+
+  /** Stable, read-only runtime data for the HUD, diagnostics, and integration tests. */
+  public getZoneHazardSnapshot(): ZoneHazardSnapshot[] {
+    this.ensureZoneGeometry();
+    return this.zoneHazards.map((hazard, index) => {
+      const state = this.zoneHazardPhase(index);
+      return {
+        id: hazard.id,
+        kind: hazard.kind,
+        x: hazard.anchors[0],
+        y: hazard.y,
+        radius: hazard.radius,
+        telegraph: hazard.telegraph,
+        phase: state.phase,
+        phaseProgress: state.progress,
+      };
+    });
+  }
+
+  private zoneAccessibilityPreferences(): ZoneAccessibilityPreferences {
+    if (this.visualPreferencesOverride) return this.visualPreferencesOverride;
+    let reducedMotion = typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let screenShake = true;
+    let screenFlashes = true;
+
+    if (typeof document !== 'undefined') {
+      const classes = document.documentElement?.classList;
+      reducedMotion ||= Boolean(classes?.contains('input-reduced-motion'));
+      screenShake = !classes?.contains('input-disable-shake');
+      screenFlashes = !classes?.contains('input-disable-flashes');
+    } else if (typeof localStorage !== 'undefined') {
+      try {
+        const stored = JSON.parse(localStorage.getItem('rpg.input.accessibility.v1') || 'null') as Partial<ZoneAccessibilityPreferences> | null;
+        if (stored) {
+          if (typeof stored.reducedMotion === 'boolean') reducedMotion = stored.reducedMotion;
+          if (typeof stored.screenShake === 'boolean') screenShake = stored.screenShake;
+          if (typeof stored.screenFlashes === 'boolean') screenFlashes = stored.screenFlashes;
+        }
+      } catch {
+        // Accessibility storage is optional; malformed local data uses the
+        // system preference and conservative visual defaults above.
+      }
+    }
+    return { reducedMotion, screenShake, screenFlashes };
+  }
+
+  private applyZoneHazardToPlayer(hazard: BuiltZoneHazard) {
+    const p = this.player;
+    if (
+      this.isTownMode
+      || p.downed
+      || this.runOver
+      || p.hp <= 0
+      || p.iframeTimer > 0
+      || p.stealthTimer > 0
+      || this.ultimate.invulnerable
+    ) return;
+
+    const hazardX = hazard.anchors[0];
+    const withinHorizontalRange = Math.abs(p.x - hazardX) <= hazard.radius + p.width * 0.35;
+    // Ledges are an intentional evade route for ground hazards. Checking the
+    // player's feet, rather than the sprite centre, keeps the collision aligned
+    // with the warning ellipse painted on the floor.
+    const withinGroundBand = Math.abs(p.y - hazard.y) <= hazard.radius * 0.75;
+    if (!withinHorizontalRange || !withinGroundBand) return;
+
+    const nowMs = this.zoneHazardClock * 1000;
+    const lastDamageMs = this.zoneHazardLastDamageMs.get(hazard.id) ?? Number.NEGATIVE_INFINITY;
+    if (nowMs - lastDamageMs < hazard.damageCooldownMs) return;
+    this.zoneHazardLastDamageMs.set(hazard.id, nowMs);
+
+    const rawDamage = Math.max(14, Math.round(p.maxHp * 0.1));
+    const mitigated = Math.max(
+      1,
+      Math.round(afterDefence(rawDamage, p.totalDef) * this.incomingDamageMultiplier()),
+    );
+    const { hpDamage, absorbed } = this.absorbPlayerDamage(mitigated);
+
+    p.hp = Math.max(0, p.hp - hpDamage);
+    this.damageTaken += hpDamage;
+    this.lastHurtAt = performance.now();
+    p.iframeTimer = Math.max(p.iframeTimer, 0.42);
+
+    const direction = p.x === hazardX ? -p.facing : Math.sign(p.x - hazardX);
+    if (hazard.kind === 'abyss-current' || hazard.kind === 'ridge-gust') {
+      p.vx = direction * Math.max(4.5, p.totalSpeed * 1.15);
+    } else {
+      p.vx = direction * 3.2;
+      p.vy = -2.2;
+      p.isGrounded = false;
+    }
+
+    const preferences = this.zoneAccessibilityPreferences();
+    audio.playHit(false);
+    if (preferences.screenShake && !preferences.reducedMotion) {
+      this.particles.triggerScreenShake(hpDamage > 0 ? 5 : 2, 0.18);
+    }
+    if (preferences.screenFlashes) {
+      this.particles.addScreenFlash('#ef4444', 0.12, 0.025);
+    }
+    if (absorbed > 0) {
+      this.particles.addFloatingText(p.x, p.y - p.height / 2 - 14, `SHIELD -${absorbed}`, '#60a5fa', false, 14);
+    }
+    if (hpDamage > 0) {
+      this.particles.addFloatingText(p.x, p.y - p.height / 2, `HAZARD -${hpDamage}`, '#fb7185', false, 16);
+    }
+    this.resolvePlayerDefeat();
+  }
+
+  private updateZoneHazards(dt: number) {
+    this.ensureZoneGeometry();
+    if (this.isTownMode || this.zoneHazards.length === 0 || dt <= 0) return;
+
+    // Do not let a restored background tab jump over the warning and land in
+    // an active damage frame. A stalled frame advances this system by at most
+    // 100 ms, preserving the full readable telegraph.
+    this.zoneHazardClock += Math.min(dt, 0.1);
+    for (let index = 0; index < this.zoneHazards.length; index += 1) {
+      if (this.zoneHazardPhase(index).phase === 'active') {
+        this.applyZoneHazardToPlayer(this.zoneHazards[index]);
+        break;
+      }
+    }
   }
 
 
@@ -397,10 +765,11 @@ export class SideViewEngine {
 
   public movePlayer(direction: number) {
     // Downed players are out of the fight until somebody reaches them.
-    if (this.player.downed) return;
+    if (this.player.downed || this.playerStatusMagnitude('stun') > 0) return;
 
     if (this.player.isDashing) return;
-    this.player.vx = direction * this.player.totalSpeed;
+    const slow = Math.min(0.8, this.playerStatusMagnitude('slow'));
+    this.player.vx = direction * this.player.totalSpeed * (1 - slow);
     if (direction !== 0) {
       this.player.facing = direction > 0 ? 1 : -1;
     }
@@ -408,7 +777,7 @@ export class SideViewEngine {
 
   public jumpPlayer(holdingDown: boolean = false) {
     // Downed players are out of the fight until somebody reaches them.
-    if (this.player.downed) return;
+    if (this.player.downed || this.playerStatusMagnitude('stun') > 0) return;
 
     const p = this.player;
 
@@ -426,7 +795,12 @@ export class SideViewEngine {
       p.isGrounded = false;
       p.hasJumpedOnce = true;
       audio.playJump();
-    } else if (p.hasJumpedOnce && (p.equipment.wings || p.characterClass.id === 'ninja' || p.characterClass.id === 'dragoon')) {
+    } else if (p.hasJumpedOnce && (
+      p.equipment.wings
+      || p.characterClass.id === 'ninja'
+      || p.characterClass.id === 'dragoon'
+      || p.activeBuffs.some(buff => buff.stat === 'airMobility')
+    )) {
       // Double jump
       p.vy = -p.characterClass.stats.jumpPower * 0.9;
       p.hasJumpedOnce = false;
@@ -436,7 +810,7 @@ export class SideViewEngine {
 
   public dashPlayer() {
     // Downed players are out of the fight until somebody reaches them.
-    if (this.player.downed) return;
+    if (this.player.downed || this.playerStatusMagnitude('stun') > 0) return;
 
     const p = this.player;
     if (p.dashTimer > 0 || p.isDashing || (p.dashCooldown || 0) > 0) return;
@@ -595,15 +969,21 @@ export class SideViewEngine {
     originY: number,
     facing: number,
     damage: number,
-    ownerSocketId?: string | null
+    ownerSocketId?: string | null,
+    onUltimateImpact?: () => void,
+    ultimateCaster: 'local' | 'remote' = 'local',
   ) {
     const vfx = skill.vfx || {};
-    const targetX = originX + facing * (skill.range * 0.6);
+    const leapDistance = skill.mechanics.movement?.kind === 'leap'
+      ? skill.mechanics.movement.distance
+      : undefined;
+    const projectedTargetX = originX + facing * (leapDistance ?? skill.range * 0.6);
+    const targetX = leapDistance === undefined ? projectedTargetX : this.clampArenaX(projectedTargetX);
     const targetY = originY;
 
     // Palette sheets carry the same animation in nine colours; pick the row that
     // matches the skill's element so one sheet serves every damage type.
-    const row = FX_COLOUR_ROW[skill.damageType] ?? 5;
+    const row = vfx.identity?.paletteRow ?? FX_COLOUR_ROW[skill.damageType] ?? 5;
 
     // A catalogue sound if the skill names one, otherwise the old generic
     // profile. Sixty skills used to share about ten sounds, which is why combat
@@ -614,8 +994,15 @@ export class SideViewEngine {
     if (vfx.cast) {
       this.particles.playVfx(vfx.cast, originX, originY - 18, { facing, row });
     }
+    if (vfx.identity) {
+      this.particles.addSkillIdentityAccent(originX, originY, facing, vfx.identity);
+    }
 
-    if (vfx.projectile) {
+    // Gameplay projectiles carry their own sprite/trail and impact metadata.
+    // Spawning a second catalogue projectile here made the visible bolt arrive
+    // at a different time and position from the collider.
+    const hasGameplayProjectile = skill.mechanics.delivery.kind === 'projectile';
+    if (vfx.projectile && !hasGameplayProjectile) {
       // Travels toward the aim direction and fades as it goes.
       this.particles.playVfx(vfx.projectile, originX + facing * 24, originY - 14, {
         facing,
@@ -625,30 +1012,45 @@ export class SideViewEngine {
       });
     }
 
-    if (vfx.impact) {
-      const delay = vfx.projectile ? Math.min(0.35, skill.range / 900) : 0;
-      const fire = () => this.particles.playVfx(vfx.impact!, targetX, targetY - 18, { facing, row });
-      if (delay > 0) window.setTimeout(fire, delay * 1000);
-      else fire();
-    }
+    // Impacts are emitted by the delivery executor at the resolved collider,
+    // target, zone, or sequence point. Keeping them out of this cast-only path
+    // prevents the old projected targetX flash from landing before the hit.
 
     // Ultimates get the cinematic treatment: the declaration and slow-motion
     // land first, and the payload only fires when the world unfreezes.
     if (skill.isUltimate) {
-      const cls = CHARACTER_CLASSES.find(c => c.id === classId);
-      const line = ULTIMATE_LINES[classId] || skill.name.toUpperCase();
       audio.playId('ult_charge', 0.9);
-      this.ultimate.start(line, cls?.accentColor || '#ffd77a', () => {
-        this.playUltimatePayload(skill, originX, originY, facing, row);
-      });
+      const epoch = this.combatTaskEpoch;
+      const impact = () => {
+        // The director is real-time rather than timer-driven, so it needs the
+        // same scene guard as scheduled tasks.
+        if (epoch !== this.combatTaskEpoch) return;
+        if (vfx.impact) {
+          this.particles.playVfx(vfx.impact, targetX, targetY - 18, { facing, row });
+        }
+        this.playUltimatePayload(skill, originX, originY, facing, row, ultimateCaster === 'local');
+        onUltimateImpact?.();
+      };
+
+      if (ultimateCaster === 'local') {
+        const cls = CHARACTER_CLASSES.find(c => c.id === classId);
+        const line = ULTIMATE_LINES[classId] || skill.name.toUpperCase();
+        this.ultimate.start(line, cls?.accentColor || '#ffd77a', impact);
+      } else {
+        // A teammate's cast has its own cancellable visual beat. It must never
+        // replace the local director callback or grant this player cinematic
+        // invulnerability/slow-motion.
+        this.scheduleCombatTask(impact, SideViewEngine.REMOTE_ULTIMATE_ANTICIPATION_MS);
+      }
     }
 
-    if (vfx.screen) {
+    if (vfx.screen && !skill.isUltimate) {
       if (vfx.screen.shake) this.particles.triggerScreenShake(vfx.screen.shake, 0.4);
       if (vfx.screen.flash) this.particles.addScreenFlash(vfx.screen.flash, 0.55, 0.05);
     }
 
-    this.playSkillSetPiece(classId, skillIndex, originX, originY, facing, damage, ownerSocketId ?? null);
+    // Stateful summons are created by the mechanics executor (or as explicitly
+    // visual-only replicas for remote casts), never by this VFX-only function.
   }
 
   /** Cinematic ultimates and summons - see SKILL_SET_PIECES. */
@@ -663,26 +1065,37 @@ export class SideViewEngine {
     x: number,
     y: number,
     facing: number,
-    row: number
+    row: number,
+    localCinematicFeedback = true,
   ) {
     const big = skill.vfx.ultimate || 'ult_epic_explosion_002';
     const spread = Math.max(110, skill.aoeRadius);
 
-    this.hitStopTimer = 0.06;
     if (skill.sound) audio.playId(skill.sound, 1.15);
-    this.particles.triggerScreenShake(skill.vfx.screen?.shake ?? 26, 0.35);
-    if (skill.vfx.screen?.flash) {
-      this.particles.addScreenFlash(skill.vfx.screen.flash, 0.7, 0.05);
+    if (localCinematicFeedback) {
+      this.hitStopTimer = 0.06;
+      this.particles.triggerScreenShake(skill.vfx.screen?.shake ?? 26, 0.35);
+      if (skill.vfx.screen?.flash) {
+        this.particles.addScreenFlash(skill.vfx.screen.flash, 0.7, 0.05);
+      }
     }
 
-    // A centred hero blast, then a staggered ring around it so the AoE reads
-    // as an area rather than a single puff.
+    // A centred hero blast plus a quality-bounded staggered ring. Four large
+    // additive sheets per local and remote ultimate churned the sprite cap in
+    // party fights before adaptive quality could react.
     this.particles.playVfx(big, x + facing * 40, y - 40, { facing, row, scale: 1.35 });
-    for (let i = 0; i < 3; i++) {
+    const quality = this.particles.getVfxQuality();
+    const secondaryCount = quality === 'high' ? 2 : (quality === 'medium' ? 1 : 0);
+    for (let i = 0; i < secondaryCount; i++) {
       const ox = x + facing * 40 + (Math.random() * 2 - 1) * spread;
       const oy = y - 20 - Math.random() * 70;
-      window.setTimeout(
-        () => this.particles.playVfx(big, ox, oy, { facing, row, scale: 0.8 + Math.random() * 0.6 }),
+      this.scheduleCombatTask(
+        () => {
+          const liveQuality = this.particles.getVfxQuality();
+          const liveSecondaryCount = liveQuality === 'high' ? 2 : (liveQuality === 'medium' ? 1 : 0);
+          if (i >= liveSecondaryCount) return;
+          this.particles.playVfx(big, ox, oy, { facing, row, scale: 0.8 + Math.random() * 0.6 });
+        },
         120 + i * 90
       );
     }
@@ -752,348 +1165,817 @@ export class SideViewEngine {
 
     const remoteDamage = typeof skillDamage === 'number' && skillDamage > 0 ? skillDamage : this.player.totalAtk;
 
-    this.playSkillVfx(skill, classId, skillIndex, startX, startY, facing, remoteDamage, ownerSocketId);
+    const replicatedEntities = () => this.spawnRemoteSkillEntities(skill, startX, startY, facing, ownerSocketId);
+    this.playSkillVfx(
+      skill,
+      classId,
+      skillIndex,
+      startX,
+      startY,
+      facing,
+      remoteDamage,
+      ownerSocketId,
+      skill.isUltimate ? replicatedEntities : undefined,
+      'remote',
+    );
+    if (!skill.isUltimate) replicatedEntities();
+  }
+
+  /** Visual replicas never participate in the authoritative damage simulation. */
+  private spawnRemoteSkillEntities(
+    skill: SkillDefinition,
+    x: number,
+    y: number,
+    facing: number,
+    ownerSocketId?: string,
+  ) {
+    const { delivery, hits } = skill.mechanics;
+    const identity = skill.vfx.identity;
+    if (delivery.kind === 'projectile') {
+      const count = Math.max(1, hits.count);
+      for (let i = 0; i < count; i++) {
+        const spawn = () => {
+          let px = x + facing * 20;
+          let py = y - 14;
+          let vx = facing * (delivery.speed ?? 12);
+          let vy = 0;
+          if (delivery.radial) {
+            const angle = i / count * Math.PI * 2;
+            vx = Math.cos(angle) * (delivery.speed ?? 12);
+            vy = Math.sin(angle) * (delivery.speed ?? 12);
+          } else if (hits.targeting === 'rain') {
+            px = x + facing * skill.range * 0.6 - skill.aoeRadius + (i + 0.5) * (skill.aoeRadius * 2 / count);
+            py = Math.max(30, y - 260);
+            vx = 0;
+            vy = delivery.speed ?? 15;
+          }
+          this.particles.addProjectile(
+            px,
+            py,
+            vx,
+            vy,
+            delivery.projectile || 'energy_ball',
+            0,
+            false,
+            false,
+            identity.palette[i % identity.palette.length],
+            delivery.projectile === 'dagger' ? 8 : 10,
+            Boolean(delivery.piercing),
+            {
+              visualOnly: true,
+              maxDistance: hits.targeting === 'rain' ? 300 : Math.max(80, skill.range),
+              impactVfx: skill.vfx.impact,
+              impactRow: identity.paletteRow,
+              identity,
+            },
+          );
+        };
+        if (i === 0 || delivery.radial) spawn();
+        else this.scheduleCombatTask(spawn, (hits.intervalMs ?? 45) * i);
+      }
+    }
+
+    if (delivery.kind === 'zone') {
+      this.particles.addGroundZone(
+        delivery.origin === 'caster' ? x : x + facing * skill.range * 0.6,
+        this.groundY,
+        skill.aoeRadius,
+        0,
+        delivery.duration ?? 5,
+        delivery.zoneType || 'blizzard',
+        identity.palette[0],
+        {
+          allyMitigation: skill.mechanics.payload.zoneAllyMitigation,
+          allyHealPercentPerTick: skill.mechanics.payload.zoneHealPercentPerTick,
+          tickInterval: delivery.tickInterval,
+        },
+      );
+    } else if (delivery.kind === 'trap') {
+      this.particles.addGroundTrap(x + facing * 40, this.groundY, 'poison', 0, { visualOnly: true });
+    }
+
+    if (delivery.kind === 'distributed' || delivery.kind === 'chain') {
+      const targets = this.getClosestEnemies(x, y, delivery.maxTargets ?? hits.count, Math.max(skill.range, 550));
+      const resolved = hits.targeting === 'distinct' || delivery.kind === 'chain'
+        ? Math.min(hits.count, targets.length)
+        : hits.count;
+      for (let i = 0; i < resolved; i++) {
+        const target = targets.length ? targets[i % targets.length] : null;
+        if (!target) continue;
+        this.scheduleCombatTask(() => {
+          if (skill.vfx.impact) {
+            this.particles.playVfx(skill.vfx.impact, target.x, target.y - 18, { facing, row: identity.paletteRow });
+          }
+          this.particles.addSkillIdentityAccent(target.x, target.y, facing, identity);
+        }, (hits.intervalMs ?? 80) * i);
+      }
+    } else if (hits.count > 1 && delivery.kind !== 'projectile' && delivery.kind !== 'zone') {
+      for (let i = 1; i < hits.count; i++) {
+        this.scheduleCombatTask(() => {
+          const impactX = delivery.origin === 'caster' ? x : x + facing * skill.range * 0.6;
+          if (skill.vfx.impact) {
+            this.particles.playVfx(skill.vfx.impact, impactX, y - 18, { facing, row: identity.paletteRow });
+          }
+          this.particles.addSkillIdentityAccent(impactX, y, facing, identity);
+        }, (hits.intervalMs ?? 80) * i);
+      }
+    }
+
+    const summon = skill.mechanics.summon;
+    if (summon?.kind === 'skeleton') {
+      this.particles.spawnSkeletonMinion(x + facing * 40, this.groundY, 0, ownerSocketId, true);
+    } else if (summon?.kind === 'shadow_clones') {
+      this.particles.spawnShadowClones(x, y, facing, 0);
+    } else if (summon?.kind === 'dragon_avatar') {
+      this.particles.spawnDragonDescent(x, y, facing);
+    } else if (summon?.kind === 'reaper_waves') {
+      this.particles.spawnReaperDeathNova(x, this.groundY, facing);
+    }
+  }
+
+  /**
+   * Apply an ultimate's gameplay at the same instant as its cinematic payload.
+   * Previously every ultimate damaged enemies on button-down, roughly half a
+   * second before the visible impact. Keeping this small dispatcher separate
+   * also makes future ultimates fall back to a safe area hit automatically.
+   */
+  private executeUltimateGameplay(skill: SkillDefinition, attackX: number, attackY: number) {
+    const damage = this.calculateDamage(skill);
+    this.executeSkillMechanics(skill, damage, Math.random() < this.player.totalCrit, attackX, attackY);
   }
 
   public castSkill(skillIndex: number) {
+    this.castSkillFromMechanics(skillIndex);
+  }
+  /** The only local cast path: resource gates followed by descriptor execution. */
+  private castSkillFromMechanics(skillIndex: number) {
     const p = this.player;
-    // Downed players are out of the fight until somebody reaches them.
-    if (p.downed) return;
-    const skill: SkillDefinition = p.characterClass.skills[skillIndex];
+    if (
+      this.isTownMode
+      || p.downed
+      || this.runOver
+      || p.hp <= 0
+      || this.castLock > 0
+      || this.playerStatusMagnitude('stun') > 0
+    ) return;
+
+    const skill = p.characterClass.skills[skillIndex];
     if (!skill) return;
-
-    // Anti-spam. This used to test attackTimer, which is the SWING length -
-    // up to 0.7s - so a heavy skill locked out every other skill for its whole
-    // animation. Casting now has its own short lock, letting you keep acting
-    // while a swing plays out.
-    if (this.castLock > 0) {
-      return;
-    }
-
-    // Mana. Every skill cost 0 and mana was never spent anywhere, so the blue
-    // bar filled up and did nothing - and the correct way to play was to press
-    // whichever skill was off cooldown. A cost is what turns that into a
-    // choice.
     const cost = skill.manaCost || 0;
     if (cost > 0 && p.mp < cost) {
       this.particles.addFloatingText(p.x, p.y - 34, 'NOT ENOUGH MANA', '#60a5fa', true, 15);
       audio.playClick();
       return;
     }
-
-    // Check cooldown
     if ((p.skillCooldowns[skill.id] || 0) > 0) {
       this.particles.addFloatingText(p.x, p.y - 20, 'On Cooldown!', '#ef5350', false, 14);
       return;
     }
 
     if (cost > 0) p.mp = Math.max(0, p.mp - cost);
-
-    // Set cooldown
     p.skillCooldowns[skill.id] = skill.cooldown;
-    // Attack pose length now follows the skill's cast time, so a heavy wind-up
-    // reads as heavier than a quick jab instead of every skill holding the same
-    // fixed 0.45s. Capped so casting never feels sluggish - attackTimer also
-    // gates the next input.
-    p.attackTimer = skill.cooldown === 0 ? 0.22 : Math.min(0.7, 0.3 + skill.castTime * 1.2);
+    const attackSpeed = Math.max(0.5, p.totalAttackSpeed || 1);
+    p.attackTimer = (skill.cooldown === 0 ? 0.22 : Math.min(0.7, 0.3 + skill.castTime * 1.2)) / attackSpeed;
     p.animState = 'attack';
     this.lastSkillIndex = skillIndex;
     this.attackHold = p.attackTimer;
-    this.castLock = 0.16;
+    this.castLock = 0.16 / attackSpeed;
 
-    const attackX = p.x + (p.facing * (skill.range * 0.6));
+    const leapDistance = skill.mechanics.movement?.kind === 'leap'
+      ? skill.mechanics.movement.distance
+      : undefined;
+    const projectedAttackX = p.x + p.facing * (leapDistance ?? skill.range * 0.6);
+    const attackX = leapDistance === undefined ? projectedAttackX : this.clampArenaX(projectedAttackX);
     const attackY = p.y;
     const isCrit = Math.random() < p.totalCrit;
     const damage = this.calculateDamage(skill);
 
-    // Broadcast skill to network immediately
-    network.sendPlayerSkill(skillIndex, p.characterClass.id, p.x, p.y, p.facing, this.groundY, this.isTownMode, damage);
+    network.sendPlayerSkill(
+      skillIndex,
+      p.characterClass.id,
+      p.x,
+      p.y,
+      p.facing,
+      this.groundY,
+      this.isTownMode,
+      damage,
+    );
 
-    // Same call the remote path uses, so every party member sees the identical
-    // effect. Also plays the cast SFX and any cinematic set piece / summon.
-    this.playSkillVfx(skill, p.characterClass.id, skillIndex, p.x, p.y, p.facing, damage, network.socket?.id || null);
+    this.playSkillVfx(
+      skill,
+      p.characterClass.id,
+      skillIndex,
+      p.x,
+      p.y,
+      p.facing,
+      damage,
+      network.socket?.id || null,
+      skill.isUltimate
+        ? () => this.executeSkillMechanics(skill, damage, isCrit, attackX, attackY)
+        : undefined,
+    );
 
-    // Buffs cover the whole party. A defence or speed buff that only helped the
-    // caster made the support classes worth nothing to play alongside.
-    if (skill.buff) {
-      this.applyPartyBuff(skill.buff.stat, skill.buff.multiplier, skill.buff.duration);
-      network.sendPartySupport({
-        kind: 'buff',
-        stat: skill.buff.stat,
-        multiplier: skill.buff.multiplier,
-        duration: skill.buff.duration,
-        casterName: p.characterClass.name,
-      });
+    if (!skill.isUltimate) {
+      this.executeSkillMechanics(skill, damage, isCrit, attackX, attackY);
     }
+  }
 
-    // Mid-air Plunging Dive Attack for Basic Attack (Skill 0)
-    if (skillIndex === 0 && !p.isGrounded) {
+  private executeSkillMechanics(
+    skill: SkillDefinition,
+    totalDamage: number,
+    rolledCrit: boolean,
+    attackX: number,
+    attackY: number,
+  ) {
+    const mechanics = skill.mechanics;
+    const p = this.player;
+    const movementOriginX = p.x;
+    const castToken = ++this.skillCastToken;
+    let resolvedDamage = totalDamage;
+
+    if (mechanics.basic?.aerialPlunge && !p.isGrounded) {
       p.vy = 14;
       p.attackTimer = 0.4;
       p.animState = 'attack';
       return;
     }
-
-    // 3-Hit Ground Attack Combo String for Basic Attack (Skill 0)
-    if (skillIndex === 0) {
-      const step = p.comboStep || 0;
+    if (mechanics.basic?.comboMultipliers?.length) {
+      const combo = mechanics.basic.comboMultipliers;
+      const step = p.comboStep % combo.length;
+      resolvedDamage *= combo[step];
+      p.comboStep = (step + 1) % combo.length;
       p.comboResetTimer = 0.75;
+      p.attackTimer = (0.22 + step * 0.04) / Math.max(0.5, p.totalAttackSpeed || 1);
+    }
 
-      if (step === 0) {
-        // Step 1: Swift horizontal slash
-        p.comboStep = 1;
-        p.attackTimer = 0.22;
-        this.executeAreaDamage(attackX, attackY, skill, 1.0);
-      } else if (step === 1) {
-        // Step 2: Uppercut spin slash (lifts targets slightly)
-        p.comboStep = 2;
-        p.attackTimer = 0.25;
-        this.executeAreaDamage(attackX, attackY, skill, 1.35);
-      } else {
-        // Step 3: Heavy ground smash finisher with screen shake
-        p.comboStep = 0;
-        p.attackTimer = 0.35;
-        this.particles.triggerScreenShake(10, 0.3);
-        this.executeAreaDamage(attackX, attackY, skill, 1.9);
+    this.applySupportPayload(skill, mechanics);
+    this.applyMovement(mechanics, attackX);
+    this.spawnSkillSummon(skill, resolvedDamage);
+
+    const land = () => this.executeDelivery(
+      skill,
+      resolvedDamage,
+      rolledCrit,
+      attackX,
+      attackY,
+      castToken,
+      movementOriginX,
+    );
+    if (mechanics.movement?.kind === 'leap') {
+      const landingX = this.clampArenaX(attackX);
+      if (skill.isUltimate) {
+        // The director already supplied W6's anticipation delay. Commit its
+        // declared horizontal leap and damage on that exact impact beat.
+        p.x = landingX;
+        p.vy = 16;
+        p.isGrounded = false;
+        land();
+        return;
       }
+      const delay = mechanics.movement.delayMs ?? 250;
+      p.vy = -(mechanics.movement.knockUp ?? 12);
+      p.isGrounded = false;
+      this.scheduleCombatTask(() => {
+        p.x = landingX;
+        p.vy = 16;
+        land();
+      }, delay);
       return;
+    }
+    land();
+  }
+
+  private applySupportPayload(skill: SkillDefinition, mechanics: SkillMechanics) {
+    const payload = mechanics.payload;
+    const p = this.player;
+
+    for (const buff of payload.buffs || []) this.applyBuffApplication(skill.id, buff);
+
+    if (payload.stealthSeconds) {
+      p.stealthTimer = Math.max(p.stealthTimer, payload.stealthSeconds);
+      p.iframeTimer = Math.max(p.iframeTimer, 0.5);
     }
 
-    // ----------------------------------------------------
-    // DEDICATED CLASS-SPECIFIC SKILL LOGIC
-    // ----------------------------------------------------
+    if (payload.heal) {
+      const percentHeal = payload.heal.kind === 'max-hp-percent'
+        ? Math.max(0, Math.min(1, payload.heal.amount))
+        : null;
+      const heal = payload.heal.kind === 'flat'
+        ? payload.heal.amount
+        : payload.heal.kind === 'max-hp-percent'
+          ? p.maxHp * payload.heal.amount
+          : payload.heal.amount + p.totalAtk * (payload.heal.atkScale || 0);
+      const amount = Math.max(1, Math.round(heal));
+      const applyLocalHeal = () => percentHeal === null
+        ? this.applyPartyHeal(amount)
+        : this.applyPartyPercentHeal(percentHeal);
 
-    // 1. NINJA: REAL SHADOW CLONES, SUBSTITUTION, DRAGON BLADE & CINEMATIC OMNISLASH
-    if (skill.id === 'ni_2') {
-      this.executeAreaDamage(attackX, attackY, skill);
-      return;
-    }
-    if (skill.id === 'ni_3') {
-      p.x = Math.max(60, Math.min(this.arenaWidth - 60, p.x + p.facing * 200));
-      p.iframeTimer = 0.4;
-      this.executeAreaDamage(p.x, p.y, skill);
-      return;
-    }
-    if (skill.id === 'ni_4') {
-      this.executeAreaDamage(p.x + p.facing * 70, p.y, skill);
-      return;
-    }
-    if (skill.id === 'ni_6') {
-      // 1. NINJA ULTIMATE: Cinematic Time-Freeze Omnislash
-      const onScreenEnemies = this.enemies.filter(e => !e.isDead && Math.abs(e.x - p.x) < 550);
-      const targets = onScreenEnemies.length > 0 ? onScreenEnemies.map(e => ({ x: e.x, y: e.y })) : [{ x: attackX, y: attackY }];
-      this.particles.triggerCinematicOmnislash(targets);
-      targets.forEach(t => {
-        this.executeAreaDamage(t.x, t.y, skill);
-      });
-      return;
-    }
-
-    // 2. NECROMANCER: REAL SKELETON MINIONS, CORPSE EXPLOSION, GRIM REAPER DEATH NOVA
-    if (skill.id === 'n_3') {
-      this.particles.addFloatingText(p.x, p.y - 40, 'SUMMONED SKELETON!', '#c084fc', true, 16);
-      return;
-    }
-    if (skill.id === 'n_5') {
-      if (this.recentCorpsePositions.length > 0) {
-        this.recentCorpsePositions.forEach(pos => {
-          this.executeAreaDamage(pos.x, pos.y, skill);
+      if (payload.heal.scope === 'self') {
+        applyLocalHeal();
+      } else if (payload.heal.scope === 'party') {
+        applyLocalHeal();
+        network.sendPartySupport({
+          kind: 'heal',
+          ...(percentHeal === null ? { amount } : { percent: percentHeal }),
+          casterName: p.characterClass.name,
         });
-        this.recentCorpsePositions = [];
       } else {
-        this.executeAreaDamage(attackX, attackY, skill);
+        const localPct = p.hp / Math.max(1, p.maxHp);
+        const remoteHealthRatio = (hpPct: number | undefined) => (
+          Math.max(0, Math.min(100, hpPct ?? 100)) / 100
+        );
+        const lowestRemote = Object.entries(network.remotePlayers)
+          .filter(([, remote]) => !remote.downed && typeof remote.hpPct === 'number')
+          .sort(([, a], [, b]) => remoteHealthRatio(a.hpPct) - remoteHealthRatio(b.hpPct))[0];
+        if (lowestRemote && remoteHealthRatio(lowestRemote[1].hpPct) < localPct) {
+          network.sendPartySupport({
+            kind: 'heal',
+            ...(percentHeal === null ? { amount } : { percent: percentHeal }),
+            targetSocketId: lowestRemote[0],
+            casterName: p.characterClass.name,
+          });
+        } else {
+          applyLocalHeal();
+        }
       }
-      return;
-    }
-    if (skill.id === 'n_6') {
-      // 2. NECROMANCER ULTIMATE: Bringer of Death Companion
-      this.executeAreaDamage(attackX, attackY, skill);
-      return;
     }
 
-    // 3. ASSASSIN: FAN OF KNIVES, SMOKE BOMB, BACKSTAB RUSH, PHANTOM SHADOW TEMPEST
-    if (skill.id === 'as_3') {
-      p.stealthTimer = 4.0;
-      p.iframeTimer = 0.5;
-      return;
+    if (payload.cleanse) {
+      this.applyPartyCleanse(payload.cleanse.count);
+      if (payload.cleanse.scope === 'party') {
+        network.sendPartySupport({
+          kind: 'cleanse',
+          count: payload.cleanse.count,
+          casterName: p.characterClass.name,
+        });
+      }
     }
-    if (skill.id === 'as_4') {
-      return;
-    }
-    if (skill.id === 'as_5') {
-      const closest = this.getClosestEnemy(350);
-      if (closest) {
-        p.x = closest.x + (closest.facing * -40);
-        p.facing = closest.facing;
-        this.applyDamageToEnemy(closest, Math.round(damage * 1.5), true, p.facing);
+
+    if (payload.resurrection) {
+      const downed = Object.entries(network.remotePlayers)
+        .filter(([, remote]) => remote.downed)
+        .sort(([, a], [, b]) => Math.abs(a.x - p.x) - Math.abs(b.x - p.x))[0];
+      if (downed) {
+        network.sendPartySupport({
+          kind: 'revive',
+          percent: payload.resurrection.reviveHpPercent,
+          targetSocketId: downed[0],
+          casterName: p.characterClass.name,
+        });
+        this.particles.addFloatingText(downed[1].x, downed[1].y - 45, 'RESURRECTED', '#fef3c7', true, 18);
       } else {
-        p.x += p.facing * 180;
-        this.executeAreaDamage(p.x, p.y, skill);
+        this.addPlayerBuff({
+          stat: 'deathPrevention',
+          multiplier: payload.resurrection.reviveHpPercent,
+          duration: payload.resurrection.preventionDuration,
+          scope: 'self',
+          amount: 1,
+        }, skill.id);
       }
-      return;
     }
-    if (skill.id === 'as_6') {
-      // 3. ASSASSIN ULTIMATE: Phantom Shadow Execution Tempest
-      const onScreenEnemies = this.enemies.filter(e => !e.isDead && Math.abs(e.x - p.x) < 550);
-      const targets = onScreenEnemies.length > 0 ? onScreenEnemies.map(e => ({ x: e.x, y: e.y })) : [{ x: attackX, y: attackY }];
-      this.particles.triggerShadowTempest(targets, p.x, p.y);
-      targets.forEach(t => {
-        this.executeAreaDamage(t.x, t.y, skill);
+  }
+
+  private applyBuffApplication(skillId: string, buff: BuffApplication) {
+    this.addPlayerBuff(buff, skillId);
+    if (buff.scope === 'party') {
+      network.sendPartySupport({
+        kind: 'buff',
+        stat: buff.stat,
+        multiplier: buff.multiplier,
+        duration: buff.duration,
+        casterName: this.player.characterClass.name,
       });
-      return;
     }
+  }
 
-    // 4. ARCHER: RAIN OF ARROWS, POISON TRAP, ASTRAL DRAGON PIERCER
-    if (skill.id === 'ar_2') {
-      for (let i = 0; i < 12; i++) {
-        setTimeout(() => {
-          this.particles.addProjectile(
-            attackX + (Math.random() * 160 - 80),
-            60 + Math.random() * 40,
-            (Math.random() - 0.5) * 2,
-            15 + Math.random() * 5,
-            'arrow',
-            Math.round(damage * 0.35),
-            isCrit,
-            true,
-            '#a3e635',
-            10,
-            false
-          );
-        }, i * 45);
-      }
-      return;
-    }
-    if (skill.id === 'ar_3') {
-      this.particles.addGroundTrap(p.x + p.facing * 40, this.groundY, 'poison', damage);
-      return;
-    }
-    if (skill.id === 'ar_6') {
-      // 4. ARCHER ULTIMATE: Astral Dragon Piercer Hurricane
-      this.executeAreaDamage(attackX, attackY, skill);
-      return;
-    }
-
-    // 5. MAGE: CHAIN LIGHTNING, BLIZZARD, ARMAGEDDON METEOR STORM
-    if (skill.id === 'm_3') {
-      const nearby = this.getClosestEnemies(p.x, p.y, 4, 380);
-      const points = [{ x: p.x, y: p.y - 20 }, ...nearby.map(e => ({ x: e.x, y: e.y - 15 }))];
-      nearby.forEach(e => {
-        this.applyDamageToEnemy(e, damage, isCrit, p.facing);
-      });
-      return;
-    }
-    if (skill.id === 'm_5') {
-      this.particles.addGroundZone(attackX, this.groundY, 160, Math.round(damage * 0.2), 5.0, 'blizzard', '#60a5fa');
-      return;
-    }
-    if (skill.id === 'm_6') {
-      // 5. MAGE ULTIMATE: Armageddon Meteor Storm
-      this.executeAreaDamage(attackX, attackY, skill);
-      return;
-    }
-
-    // 6. PALADIN: CONSECRATION, HAMMER OF THE GODS
-    if (skill.id === 'p_4') {
-      this.particles.addGroundZone(p.x, this.groundY, 140, Math.round(damage * 0.25), 6.0, 'holy_consecration', '#facc15');
-      return;
-    }
-    if (skill.id === 'p_6') {
-      // 6. PALADIN ULTIMATE: Hammer of the Gods Judgement
-      this.executeAreaDamage(attackX, attackY, skill);
-      return;
-    }
-
-    // 7. DRAGOON: DRAGON DIVE, FLAME BREATH, ELDER DRAGON DESCENT
-    if (skill.id === 'd_2') {
-      p.vy = -13;
-      setTimeout(() => {
-        p.x = attackX;
-        p.vy = 18;
-        this.particles.triggerScreenShake(14, 0.5);
-        this.executeAreaDamage(attackX, attackY, skill);
-      }, 250);
-      return;
-    }
-    if (skill.id === 'd_3') {
-      this.executeAreaDamage(p.x + p.facing * 60, p.y, skill);
-      return;
-    }
-    if (skill.id === 'd_6') {
-      // 7. DRAGOON ULTIMATE: Active Elder Dragon Companion & Flame Descent
-      this.executeAreaDamage(p.x + p.facing * 120, this.groundY, skill);
-      return;
-    }
-
-    // 8. WARRIOR: WHIRLWIND, BLADE DASH, TITAN CATACLYSM EARTH SHATTER
-    if (skill.id === 'w_2') {
-      this.executeAreaDamage(p.x, p.y, skill);
-      setTimeout(() => this.executeAreaDamage(p.x, p.y, skill), 150);
-      setTimeout(() => this.executeAreaDamage(p.x, p.y, skill), 300);
-      return;
-    }
-    if (skill.id === 'w_5') {
-      p.x = Math.max(60, Math.min(this.arenaWidth - 60, p.x + p.facing * 220));
-      this.executeAreaDamage(p.x, p.y, skill);
-      return;
-    }
-    if (skill.id === 'w_6') {
-      // 8. WARRIOR ULTIMATE: Titan Cataclysm Earth Shatter
-      p.vy = -9;
-      this.executeAreaDamage(attackX, attackY, skill);
-      return;
-    }
-
-    // 9. BERSERKER: BLOOD TITAN RAMPAGE
-    if (skill.id === 'b_6') {
-      // 9. BERSERKER ULTIMATE: Blood Titan Rampage
-      this.executeAreaDamage(attackX, attackY, skill);
-      return;
-    }
-
-    // 10. PRIEST: SANCTUARY WARD, CELESTIAL DIVINE RADIANCE
-    if (skill.id === 'pr_4') {
-      this.particles.addGroundZone(p.x, this.groundY, 150, 0, 7.0, 'sanctuary_ward', '#38bdf8');
-      p.activeBuffs.push({ stat: 'def', multiplier: 2.0, timer: 7.0 });
-      this.recomputeStats();
-      return;
-    }
-    if (skill.id === 'pr_6') {
-      // 10. PRIEST ULTIMATE: Celestial Divine Radiance Starlight
-      this.executeAreaDamage(attackX, attackY, skill);
-      return;
-    }
-
-    // Apply Direct Heal skills
-    if (skill.heals) {
-      const healAmount = Math.round(p.maxHp * 0.35 + p.totalAtk * 1.5);
-      network.sendPartySupport({ kind: 'heal', amount: healAmount, casterName: p.characterClass.name });
-      p.hp = Math.min(p.maxHp, p.hp + healAmount);
-      this.particles.addFloatingText(p.x, p.y - 30, `+${healAmount} HP`, '#66bb6a', true, 20);
-      return;
-    }
-
-    // Fallback Projectile or Direct Area Hitbox.
-    // A skill fires a travelling projectile when its descriptor declares one -
-    // which now matches what each skill's description actually claims.
-    if (skill.vfx.projectile) {
-      const isPiercing = skill.id === 'd_4';
-      const projType = skill.damageType === 'physical' ? 'arrow' : 'fireball';
-      this.particles.addProjectile(
-        p.x + (p.facing * 20),
-        p.y - 10,
-        p.facing * 12,
-        0,
-        projType,
-        damage,
-        isCrit,
-        true,
-        skill.damageType === 'fire' ? '#ff5722' : '#d7ccc8',
-        skill.aoeRadius > 50 ? 18 : 12,
-        isPiercing
-      );
+  private addPlayerBuff(buff: BuffApplication, sourceSkillId?: string) {
+    const existing = this.player.activeBuffs.find(active => active.stat === buff.stat && active.sourceSkillId === sourceSkillId);
+    if (existing) {
+      existing.timer = Math.max(existing.timer, buff.duration);
+      existing.multiplier = buff.multiplier;
+      if (buff.amount !== undefined) existing.amount = Math.max(existing.amount || 0, buff.amount);
     } else {
-      this.executeAreaDamage(attackX, attackY, skill);
+      this.player.activeBuffs.push({
+        stat: buff.stat,
+        multiplier: buff.multiplier,
+        timer: buff.duration,
+        amount: buff.amount,
+        sourceSkillId,
+      });
+    }
+    this.recomputeStats();
+    const label = buff.stat === 'shield'
+      ? `SHIELD ${buff.amount || 0}`
+      : buff.stat === 'deathPrevention'
+        ? 'RESURRECTION READY'
+        : `${String(buff.stat).toUpperCase()} ${buff.multiplier >= 1 ? '+' : ''}${Math.round((buff.multiplier - 1) * 100)}%`;
+    this.particles.addFloatingText(this.player.x, this.player.y - 30, label, '#ffee58', true, 15);
+  }
+
+  private applyMovement(mechanics: SkillMechanics, attackX: number) {
+    const move = mechanics.movement;
+    if (!move || move.kind === 'leap') return;
+    const p = this.player;
+    if (move.iframeSeconds) p.iframeTimer = Math.max(p.iframeTimer, move.iframeSeconds);
+
+    if (move.kind === 'teleport-behind') {
+      const target = this.getClosestEnemy(move.distance ?? 300);
+      if (target) {
+        p.x = this.clampArenaX(target.x - target.facing * 34);
+        p.facing = target.facing;
+      } else {
+        p.x = this.clampArenaX(p.x + p.facing * (move.distance ?? 180));
+      }
+    } else if (move.kind === 'dash' || move.kind === 'substitution' || move.kind === 'charge') {
+      p.x = this.clampArenaX(p.x + p.facing * (move.distance ?? Math.abs(attackX - p.x)));
+    } else if (move.kind === 'drift' && move.distance) {
+      p.x = this.clampArenaX(p.x + p.facing * move.distance);
+    }
+  }
+
+  private clampArenaX(x: number) {
+    return Math.max(60, Math.min(this.arenaWidth - 60, x));
+  }
+
+  private spawnSkillSummon(skill: SkillDefinition, totalDamage: number) {
+    const summon = skill.mechanics.summon;
+    if (!summon) return;
+    const p = this.player;
+    const summonDamage = Math.max(1, Math.round(totalDamage * summon.damageScale));
+    if (summon.kind === 'skeleton') {
+      this.particles.spawnSkeletonMinion(p.x + p.facing * 40, this.groundY, summonDamage, network.socket?.id || null);
+    } else if (summon.kind === 'shadow_clones') {
+      // damageScale is the repeat strength of each clone. Two 50% repeats pay
+      // one complete skill budget together; dividing by count again left the
+      // advertised 150% Shadow Clone at only half of that potency.
+      this.particles.spawnShadowClones(p.x, p.y, p.facing, summonDamage);
+    } else if (summon.kind === 'dragon_avatar') {
+      this.particles.spawnDragonDescent(p.x, p.y, p.facing);
+    } else if (summon.kind === 'reaper_waves') {
+      this.particles.spawnReaperDeathNova(p.x, this.groundY, p.facing);
+    }
+  }
+
+  private executeDelivery(
+    skill: SkillDefinition,
+    totalDamage: number,
+    rolledCrit: boolean,
+    attackX: number,
+    attackY: number,
+    castToken: number,
+    movementOriginX?: number,
+  ) {
+    const { delivery, hits: sequence, payload } = skill.mechanics;
+    if (!payload.damage && !payload.statuses?.length) return;
+    const directTotal = payload.damage ? totalDamage * (payload.directDamageShare ?? 1) : 0;
+
+    if (delivery.kind === 'projectile') {
+      this.spawnSkillProjectiles(skill, directTotal, rolledCrit, attackX, castToken);
+      return;
+    }
+
+    if (delivery.kind === 'zone') {
+      const zoneX = delivery.origin === 'caster' ? this.player.x : attackX;
+      const tickCount = Math.max(1, sequence.count);
+      this.particles.addGroundZone(
+        zoneX,
+        this.groundY,
+        skill.aoeRadius,
+        Math.max(0, Math.round(directTotal / tickCount)),
+        delivery.duration ?? tickCount * (delivery.tickInterval ?? 0.5),
+        delivery.zoneType || 'blizzard',
+        skill.vfx.identity.palette[0],
+        {
+          skillId: skill.id,
+          statuses: payload.statuses,
+          allyMitigation: payload.zoneAllyMitigation,
+          allyHealPercentPerTick: payload.zoneHealPercentPerTick,
+          tickInterval: delivery.tickInterval,
+        },
+      );
+      if (skill.vfx.impact) {
+        this.particles.playVfx(skill.vfx.impact, zoneX, this.groundY - 18, {
+          facing: this.player.facing,
+          row: skill.vfx.identity.paletteRow,
+        });
+      }
+      return;
+    }
+
+    if (delivery.kind === 'trap') {
+      this.particles.addGroundTrap(
+        this.player.x + this.player.facing * 40,
+        this.groundY,
+        'poison',
+        Math.max(1, Math.round(directTotal)),
+        {
+          skillId: skill.id,
+          statuses: payload.statuses,
+          cloudDamageTotal: Math.max(0, totalDamage - directTotal),
+        },
+      );
+      return;
+    }
+
+    if (delivery.kind === 'corpses') {
+      const corpses = this.recentCorpsePositions.splice(0);
+      if (!corpses.length) {
+        this.hitArea(skill, attackX, attackY, directTotal * (delivery.fallbackDamageScale ?? 0.5), rolledCrit, castToken);
+      } else {
+        const share = directTotal / corpses.length;
+        corpses.forEach(corpse => this.hitArea(skill, corpse.x, corpse.y, share, rolledCrit, castToken));
+      }
+      return;
+    }
+
+    if (delivery.kind === 'chain' || delivery.kind === 'distributed') {
+      this.executeDistributedHits(skill, directTotal, rolledCrit, attackX, attackY, castToken);
+      return;
+    }
+
+    if (delivery.kind === 'targeted') {
+      const target = this.getClosestEnemy(skill.range || 400);
+      if (target) {
+        this.hitEnemyWithSkill(target, skill, directTotal, rolledCrit, castToken);
+        if (skill.vfx.impact) {
+          this.particles.playVfx(skill.vfx.impact, target.x, target.y - 18, {
+            facing: this.player.facing,
+            row: skill.vfx.identity.paletteRow,
+          });
+        }
+      }
+      return;
+    }
+
+    if (delivery.kind === 'support') {
+      if (payload.damage) this.hitArea(skill, attackX, attackY, directTotal, rolledCrit, castToken);
+      return;
+    }
+
+    if (delivery.kind === 'summon') {
+      // Stateful summon entities own their hit timing. Applying the full area
+      // hit here made Shadow Clone deal damage on button-down while its two
+      // visible attackers were still only decoration.
+      return;
+    }
+
+    // Melee and area sequences share a total damage budget across all ticks.
+    const count = Math.max(1, sequence.count);
+    const weights = this.normalizedHitWeights(sequence.falloff, count);
+    for (let i = 0; i < count; i++) {
+      const fire = () => {
+        const centerX = delivery.origin === 'caster' ? this.player.x : attackX;
+        const centerY = delivery.origin === 'ground' ? this.groundY : attackY;
+        this.hitArea(skill, centerX, centerY, directTotal * weights[i], rolledCrit, castToken, movementOriginX);
+        if (skill.vfx.impact) {
+          this.particles.playVfx(skill.vfx.impact, centerX, centerY - 18, {
+            facing: this.player.facing,
+            row: skill.vfx.identity.paletteRow,
+          });
+        }
+      };
+      if (i === 0) fire();
+      else this.scheduleCombatTask(fire, (sequence.intervalMs ?? 80) * i);
+    }
+  }
+
+  private normalizedHitWeights(falloff: readonly number[] | undefined, count: number): number[] {
+    const raw = Array.from({ length: count }, (_, index) => Math.max(0, falloff?.[index] ?? 1));
+    const sum = raw.reduce((total, value) => total + value, 0) || 1;
+    return raw.map(value => value / sum);
+  }
+
+  private executeDistributedHits(
+    skill: SkillDefinition,
+    directTotal: number,
+    rolledCrit: boolean,
+    attackX: number,
+    attackY: number,
+    castToken: number,
+  ) {
+    const sequence = skill.mechanics.hits;
+    const count = Math.max(1, sequence.count);
+    const targets = this.getClosestEnemies(
+      this.player.x,
+      this.player.y,
+      skill.mechanics.delivery.maxTargets ?? count,
+      Math.max(skill.range, 550),
+    );
+    const distinct = skill.mechanics.delivery.kind === 'chain' || sequence.targeting === 'distinct';
+    const resolvedCount = distinct ? Math.min(count, targets.length) : count;
+    const weights = this.normalizedHitWeights(sequence.falloff, Math.max(1, resolvedCount));
+    const points = [{ x: this.player.x, y: this.player.y - 20 }, ...targets.map(target => ({ x: target.x, y: target.y - 18 }))];
+    if (skill.mechanics.delivery.kind === 'chain') this.particles.addChainLightning(points);
+
+    for (let i = 0; i < resolvedCount; i++) {
+      const target = targets.length ? targets[distinct ? i : i % targets.length] : null;
+      const fire = () => {
+        if (target && !target.isDead) {
+          this.hitEnemyWithSkill(target, skill, directTotal * weights[i], rolledCrit, castToken);
+          if (skill.vfx.impact) {
+            this.particles.playVfx(skill.vfx.impact, target.x, target.y - 18, {
+              facing: this.player.facing,
+              row: skill.vfx.identity.paletteRow,
+            });
+          }
+        } else if (i === 0 && targets.length === 0) {
+          this.particles.addSkillIdentityAccent(attackX, attackY, this.player.facing, skill.vfx.identity);
+        }
+      };
+      if (i === 0) fire();
+      else this.scheduleCombatTask(fire, (sequence.intervalMs ?? 80) * i);
+    }
+  }
+
+  private spawnSkillProjectiles(
+    skill: SkillDefinition,
+    directTotal: number,
+    rolledCrit: boolean,
+    attackX: number,
+    castToken: number,
+  ) {
+    const delivery = skill.mechanics.delivery;
+    const sequence = skill.mechanics.hits;
+    const count = Math.max(1, sequence.count);
+    const weights = this.normalizedHitWeights(sequence.falloff, count);
+    const p = this.player;
+    const identity = skill.vfx.identity;
+    // Dragon Piercer still renders all 30 arrows, but six representative
+    // arrows carry the combined damage of five visuals each. The old 30xN
+    // piercing hit fan-out produced hundreds of sounds, text nodes, VFX, and
+    // socket packets in one second without changing the skill's total damage.
+    const damageStride = skill.id === 'ar_6' ? 5 : 1;
+
+    for (let i = 0; i < count; i++) {
+      const spawn = () => {
+        const groupStart = Math.floor(i / damageStride) * damageStride;
+        const groupEnd = Math.min(count, groupStart + damageStride);
+        const damageCarrier = damageStride === 1 || i === Math.min(groupEnd - 1, groupStart + Math.floor(damageStride / 2));
+        let projectileWeight = 0;
+        if (damageCarrier) {
+          for (let weightIndex = groupStart; weightIndex < groupEnd; weightIndex += 1) {
+            projectileWeight += weights[weightIndex];
+          }
+        }
+        const virtualHitDamages = damageCarrier && damageStride > 1
+          ? weights
+            .slice(groupStart, groupEnd)
+            .map(weight => Math.max(1, Math.round(directTotal * weight)))
+          : undefined;
+        const projectileDamage = virtualHitDamages
+          ? virtualHitDamages.reduce((sum, packet) => sum + packet, 0)
+          : (damageCarrier ? Math.max(1, Math.round(directTotal * projectileWeight)) : 0);
+        let x = p.x + p.facing * 20;
+        let y = p.y - 14;
+        let vx = p.facing * (delivery.speed ?? 12);
+        let vy = 0;
+        if (delivery.radial) {
+          const angle = i / count * Math.PI * 2;
+          vx = Math.cos(angle) * (delivery.speed ?? 12);
+          vy = Math.sin(angle) * (delivery.speed ?? 12);
+        } else if (sequence.targeting === 'rain') {
+          x = attackX - skill.aoeRadius + (i + 0.5) * (skill.aoeRadius * 2 / count);
+          y = Math.max(30, p.y - 260);
+          vx = 0;
+          vy = delivery.speed ?? 15;
+        }
+
+        this.particles.addProjectile(
+          x,
+          y,
+          vx,
+          vy,
+          delivery.projectile || 'energy_ball',
+          projectileDamage,
+          skill.mechanics.payload.forceCrit || rolledCrit,
+          true,
+          identity.palette[i % identity.palette.length],
+          delivery.projectile === 'dagger' ? 8 : skill.aoeRadius > 60 ? 15 : 10,
+          Boolean(delivery.piercing),
+          {
+            maxDistance: sequence.targeting === 'rain' ? 300 : Math.max(80, skill.range),
+            visualOnly: !damageCarrier,
+            skillId: damageCarrier ? skill.id : undefined,
+            impactVfx: damageCarrier ? skill.vfx.impact : undefined,
+            impactRow: damageCarrier ? identity.paletteRow : undefined,
+            aoeRadius: damageCarrier && skill.id === 'ar_4' ? skill.aoeRadius : 0,
+            statuses: damageCarrier ? skill.mechanics.payload.statuses : undefined,
+            lifesteal: damageCarrier ? skill.mechanics.payload.lifesteal : undefined,
+            knockback: damageCarrier ? skill.mechanics.payload.knockback : undefined,
+            knockUp: damageCarrier ? skill.mechanics.payload.knockUp : undefined,
+            identity: damageCarrier ? identity : undefined,
+            castToken: damageCarrier ? castToken : undefined,
+            virtualHitDamages,
+          },
+        );
+      };
+      if (i === 0 || delivery.radial) spawn();
+      else this.scheduleCombatTask(spawn, (sequence.intervalMs ?? 45) * i);
+    }
+
+    // Fan of Knives is readable immediately and the real dagger entities own
+    // the eight split damage packets. Resolve their spawn-point overlaps now so
+    // close targets do not wait a frame while preserving piercing travel.
+    if (delivery.radial) this.checkProjectileCollisions();
+  }
+
+  private targetsForArea(
+    skill: SkillDefinition,
+    centerX: number,
+    centerY: number,
+    movementOriginX?: number,
+  ): EnemyInstance[] {
+    const shape = skill.mechanics.delivery.shape || 'point';
+    const p = this.player;
+    return this.enemies.filter(enemy => {
+      if (enemy.isDead) return false;
+      const dx = enemy.x - p.x;
+      const forward = dx * p.facing;
+      const vertical = Math.abs((enemy.y - 24) - centerY);
+      if (vertical > 120) return false;
+      if (shape === 'radial') return Math.abs(enemy.x - centerX) <= skill.aoeRadius + enemy.width / 2;
+      if (shape === 'cone') return forward >= -12 && forward <= skill.range + enemy.width / 2;
+      if (shape === 'line' || shape === 'lane' || shape === 'wall') {
+        const move = skill.mechanics.movement;
+        if (movementOriginX !== undefined && move && move.kind !== 'leap') {
+          const pathMin = Math.min(movementOriginX, p.x) - enemy.width / 2;
+          const pathMax = Math.max(movementOriginX, p.x) + enemy.width / 2;
+          return enemy.x >= pathMin && enemy.x <= pathMax;
+        }
+        return forward >= -12 && forward <= Math.max(skill.range, skill.aoeRadius) + enemy.width / 2;
+      }
+      return Math.abs(enemy.x - centerX) <= skill.aoeRadius + enemy.width / 2;
+    });
+  }
+
+  private hitArea(
+    skill: SkillDefinition,
+    centerX: number,
+    centerY: number,
+    damage: number,
+    rolledCrit: boolean,
+    castToken: number,
+    movementOriginX?: number,
+  ) {
+    const targets = this.targetsForArea(skill, centerX, centerY, movementOriginX);
+    targets.forEach(target => this.hitEnemyWithSkill(target, skill, damage, rolledCrit, castToken));
+    if (targets.length) {
+      this.player.comboCount++;
+      this.player.comboTimer = 3;
+      quests.onComboReached(this.player.comboCount);
+    }
+  }
+
+  private hitEnemyWithSkill(
+    enemy: EnemyInstance,
+    skill: SkillDefinition,
+    damage: number,
+    rolledCrit: boolean,
+    castToken: number,
+    virtualHitDamages?: readonly number[],
+  ) {
+    const payload = skill.mechanics.payload;
+    const executeMultiplier = payload.executeBelowHp
+      && enemy.hp / Math.max(1, enemy.maxHp) <= payload.executeBelowHp
+      ? (payload.executeMultiplier ?? 1)
+      : 1;
+    const backHit = enemy.facing === this.player.facing;
+    const crit = Boolean(payload.forceCrit)
+      || rolledCrit
+      || (backHit && Math.random() < (payload.backHitCritBonus || 0));
+    let dealt = 0;
+    if (virtualHitDamages?.length) {
+      // One carrier represents several authored hits. Resolve every virtual
+      // packet through the same crit/round/defence path the original arrows
+      // used, then emit one combined gameplay/feedback/network event.
+      const finalDamage = virtualHitDamages.reduce((sum, packet) => {
+        let rawPacket = packet * executeMultiplier;
+        if (crit) rawPacket *= BALANCE.critMultiplier;
+        const roundedPacket = Math.max(1, Math.round(rawPacket));
+        return sum + this.resolveEnemyDamage(enemy, roundedPacket, false);
+      }, 0);
+      if (finalDamage > 0) {
+        dealt = this.applyResolvedDamageToEnemy(enemy, finalDamage, crit, this.player.facing, false);
+      }
+    } else {
+      let rawDamage = damage * executeMultiplier;
+      if (crit) rawDamage *= BALANCE.critMultiplier;
+      dealt = rawDamage > 0
+        ? this.applyDamageToEnemy(enemy, Math.max(1, Math.round(rawDamage)), crit, this.player.facing)
+        : 0;
+    }
+
+    if (payload.knockUp) enemy.vy = -Math.max(Math.abs(enemy.vy), payload.knockUp);
+    if (payload.knockback) enemy.vx = this.player.facing * payload.knockback;
+    if (payload.lifesteal && dealt > 0) {
+      const heal = Math.max(1, Math.round(dealt * payload.lifesteal));
+      this.player.hp = Math.min(this.player.maxHp, this.player.hp + heal);
+      this.particles.addFloatingText(this.player.x, this.player.y - 34, `+${heal} HP`, '#e879f9', true, 15);
+    }
+    const directShare = payload.directDamageShare ?? 1;
+    const preDirectPotency = directShare > 0 ? damage / directShare : damage;
+    for (const status of payload.statuses || []) {
+      this.applyEnemyStatus(enemy, status, skill, preDirectPotency, castToken);
     }
   }
 
@@ -1109,6 +1991,14 @@ export class SideViewEngine {
       }
     });
     return closest;
+  }
+
+  private findSkillById(skillId: string): SkillDefinition | null {
+    for (const characterClass of CHARACTER_CLASSES) {
+      const skill = characterClass.skills.find(candidate => candidate.id === skillId);
+      if (skill) return skill;
+    }
+    return null;
   }
 
   private getClosestEnemies(x: number, y: number, count: number = 4, maxRange: number = 400): EnemyInstance[] {
@@ -1175,11 +2065,245 @@ export class SideViewEngine {
     }
   }
 
-  public applyDamageToEnemy(enemy: EnemyInstance, rawDamage: number, isCrit: boolean, knockbackDir: number, fromRemote: boolean = false) {
-    const finalDamage = fromRemote
-      ? Math.max(1, Math.round(rawDamage))
-      : Math.max(1, Math.round(afterDefence(rawDamage, enemy.def)));
+  private statusColour(kind: EnemyStatusKind): string {
+    return ({
+      slow: '#67e8f9',
+      poison: '#84cc16',
+      burn: '#fb923c',
+      stun: '#fde047',
+      frailty: '#c084fc',
+      taunt: '#facc15',
+    } satisfies Record<EnemyStatusKind, string>)[kind];
+  }
 
+  private statusMagnitude(enemy: EnemyInstance, kind: EnemyStatusKind): number {
+    const statuses = this.enemyStatuses.get(enemy.id) || [];
+    return statuses
+      .filter(status => status.kind === kind)
+      .reduce((largest, status) => Math.max(largest, status.magnitude), 0);
+  }
+
+  public statusesForEnemy(enemy: EnemyInstance): readonly EnemyCombatStatus[] {
+    return this.enemyStatuses.get(enemy.id) || [];
+  }
+
+  private applyEnemyStatus(
+    enemy: EnemyInstance,
+    application: StatusApplication,
+    skill: SkillDefinition,
+    sourceDamage: number,
+    castToken: number = 0,
+  ) {
+    if ((application.chance ?? 1) < Math.random()) return;
+    const list = this.enemyStatuses.get(enemy.id) || [];
+    const ticks = application.tickInterval
+      ? Math.max(1, Math.ceil(application.duration / application.tickInterval))
+      : 1;
+    const damageTotal = application.damageShare ? Math.max(0, sourceDamage * application.damageShare) : 0;
+    const damagePerTick = damageTotal > 0 ? damageTotal / ticks : 0;
+    const existing = list.find(status => status.kind === application.kind && status.sourceSkillId === skill.id);
+    if (existing) {
+      existing.remaining = Math.max(existing.remaining, application.duration);
+      existing.duration = application.duration;
+      existing.magnitude = Math.max(existing.magnitude, application.magnitude || 0);
+      // A repeated hit from the same cast and a later refresh both contribute
+      // only their own reserved DoT budget. Keep the unpaid remainder instead
+      // of replacing it (lost damage) or restarting a copy of the timer
+      // (duplicated damage). The refreshed effect distributes that exact
+      // aggregate over the ticks still available in the refreshed duration.
+      existing.damageRemaining += damageTotal;
+      existing.ticksRemaining = Math.max(existing.ticksRemaining, ticks);
+      existing.damagePerTick = existing.ticksRemaining > 0
+        ? existing.damageRemaining / existing.ticksRemaining
+        : 0;
+      existing.lastCastToken = castToken;
+    } else {
+      list.push({
+        kind: application.kind,
+        remaining: application.duration,
+        duration: application.duration,
+        magnitude: application.magnitude || 0,
+        tickInterval: application.tickInterval || 0,
+        tickTimer: application.tickInterval || 0,
+        damagePerTick,
+        damageRemaining: damageTotal,
+        ticksRemaining: ticks,
+        sourceSkillId: skill.id,
+        colour: this.statusColour(application.kind),
+        lastCastToken: castToken,
+      });
+      this.enemyStatuses.set(enemy.id, list);
+      this.particles.addFloatingText(
+        enemy.x,
+        enemy.y - enemy.height / 2 - 12,
+        application.kind.toUpperCase(),
+        this.statusColour(application.kind),
+        true,
+        12,
+      );
+    }
+    if (application.kind === 'stun') enemy.hitStun = Math.max(enemy.hitStun, application.duration);
+  }
+
+  private playerStatusMagnitude(kind: PlayerNegativeStatus['kind']): number {
+    return this.playerNegativeStatuses
+      .filter(status => status.kind === kind)
+      .reduce((largest, status) => Math.max(largest, status.magnitude), 0);
+  }
+
+  /**
+   * Apply a strictly bounded hostile status. This is public because a verified
+   * host hit is resolved by the recipient, while local host hits use the same
+   * path. Purge Flame now has real poison/burn/slow/stun entries to remove.
+   */
+  public applyPlayerNegativeStatus(status: PlayerDamageStatus, sourceId: string = 'enemy'): boolean {
+    const kind = status?.kind;
+    if (!['slow', 'poison', 'burn', 'stun'].includes(kind)) return false;
+    const maxDuration = kind === 'stun' ? 2.5 : 8;
+    if (!Number.isFinite(status.duration) || status.duration < 0.1 || status.duration > maxDuration) return false;
+    const maxMagnitude = kind === 'slow' ? 0.8 : 1;
+    if (!Number.isFinite(status.magnitude) || status.magnitude < 0 || status.magnitude > maxMagnitude) return false;
+
+    const damageOverTime = kind === 'poison' || kind === 'burn';
+    const tickInterval = damageOverTime ? Number(status.tickInterval) : 0;
+    const rawTickDamage = damageOverTime ? Number(status.rawTickDamage) : 0;
+    if (damageOverTime && (
+      !Number.isFinite(tickInterval)
+      || tickInterval < 0.25
+      || tickInterval > 2
+      || !Number.isFinite(rawTickDamage)
+      || rawTickDamage < 1
+      || rawTickDamage > 100_000
+    )) return false;
+    if (!damageOverTime && (status.tickInterval !== undefined || status.rawTickDamage !== undefined)) return false;
+
+    const safeSourceId = String(sourceId || 'enemy').slice(0, 96);
+    const existing = this.playerNegativeStatuses.find(entry => entry.kind === kind && entry.sourceId === safeSourceId);
+    if (existing) {
+      existing.remaining = Math.max(existing.remaining, status.duration);
+      existing.magnitude = Math.max(existing.magnitude, status.magnitude);
+      existing.tickInterval = tickInterval;
+      existing.tickTimer = damageOverTime ? Math.min(existing.tickTimer, tickInterval) : 0;
+      existing.rawTickDamage = Math.max(existing.rawTickDamage, rawTickDamage);
+    } else {
+      this.playerNegativeStatuses.push({
+        kind,
+        remaining: status.duration,
+        magnitude: status.magnitude,
+        tickInterval,
+        tickTimer: tickInterval,
+        rawTickDamage,
+        sourceId: safeSourceId,
+      });
+    }
+
+    if (kind === 'stun') this.player.vx = 0;
+    this.particles.addFloatingText(
+      this.player.x,
+      this.player.y - this.player.height / 2 - 12,
+      kind.toUpperCase(),
+      this.statusColour(kind),
+      true,
+      12,
+    );
+    return true;
+  }
+
+  private applyPlayerStatusTick(status: PlayerNegativeStatus) {
+    const p = this.player;
+    if (p.downed || this.runOver || p.hp <= 0 || status.rawTickDamage <= 0) return;
+    const mitigated = Math.max(
+      1,
+      Math.round(afterDefence(status.rawTickDamage, p.totalDef) * this.incomingDamageMultiplier()),
+    );
+    const { hpDamage, absorbed } = this.absorbPlayerDamage(mitigated);
+    p.hp = Math.max(0, p.hp - hpDamage);
+    this.damageTaken += hpDamage;
+    this.lastHurtAt = performance.now();
+    if (absorbed > 0) {
+      this.particles.addFloatingText(p.x, p.y - p.height / 2 - 14, `SHIELD -${absorbed}`, '#60a5fa', false, 12);
+    }
+    if (hpDamage > 0) {
+      this.particles.addFloatingText(
+        p.x,
+        p.y - p.height / 2,
+        `${status.kind.toUpperCase()} -${hpDamage}`,
+        this.statusColour(status.kind),
+        false,
+        14,
+      );
+    }
+    this.resolvePlayerDefeat();
+  }
+
+  private updateCombatStatuses(dt: number) {
+    for (const [enemyId, statuses] of this.enemyStatuses) {
+      const enemy = this.enemies.find(candidate => candidate.id === enemyId);
+      if (!enemy || enemy.isDead) {
+        this.enemyStatuses.delete(enemyId);
+        continue;
+      }
+      for (let i = statuses.length - 1; i >= 0; i--) {
+        const status = statuses[i];
+        status.remaining -= dt;
+        if (status.tickInterval > 0 && status.damageRemaining > 0 && status.ticksRemaining > 0) {
+          status.tickTimer -= dt;
+          // Process the tick that lands exactly on expiry before removing the
+          // status. Without this, a five-second poison only paid four of its
+          // five reserved ticks when updated in one-second steps.
+          while (status.tickTimer <= 0 && status.ticksRemaining > 0 && !enemy.isDead) {
+            status.tickTimer += status.tickInterval;
+            const tickDamage = Math.max(1, Math.round(status.damageRemaining / status.ticksRemaining));
+            this.applyDamageToEnemy(enemy, tickDamage, false, 0);
+            status.damageRemaining = Math.max(0, status.damageRemaining - tickDamage);
+            status.ticksRemaining--;
+            status.damagePerTick = status.ticksRemaining > 0
+              ? status.damageRemaining / status.ticksRemaining
+              : 0;
+          }
+        }
+        if (status.remaining <= 0) {
+          statuses.splice(i, 1);
+          this.particles.addFloatingText(enemy.x, enemy.y - enemy.height / 2 - 10, `${status.kind.toUpperCase()} ENDED`, status.colour, false, 10);
+        }
+      }
+      if (!statuses.length) this.enemyStatuses.delete(enemyId);
+    }
+
+    for (let i = this.playerNegativeStatuses.length - 1; i >= 0; i--) {
+      const status = this.playerNegativeStatuses[i];
+      status.remaining -= dt;
+      if (status.tickInterval > 0 && status.rawTickDamage > 0) {
+        status.tickTimer -= dt;
+        while (status.tickTimer <= 0 && !this.player.downed && !this.runOver) {
+          status.tickTimer += status.tickInterval;
+          this.applyPlayerStatusTick(status);
+        }
+      }
+      if (status.remaining <= 0) this.playerNegativeStatuses.splice(i, 1);
+    }
+  }
+
+  private resolveEnemyDamage(enemy: EnemyInstance, rawDamage: number, fromRemote: boolean): number {
+    const frailty = this.statusMagnitude(enemy, 'frailty');
+    const effectiveDef = enemy.def * (1 - frailty);
+    return fromRemote
+      ? Math.max(1, Math.round(rawDamage))
+      : Math.max(1, Math.round(afterDefence(rawDamage, effectiveDef)));
+  }
+
+  public applyDamageToEnemy(enemy: EnemyInstance, rawDamage: number, isCrit: boolean, knockbackDir: number, fromRemote: boolean = false): number {
+    const finalDamage = this.resolveEnemyDamage(enemy, rawDamage, fromRemote);
+    return this.applyResolvedDamageToEnemy(enemy, finalDamage, isCrit, knockbackDir, fromRemote);
+  }
+
+  private applyResolvedDamageToEnemy(
+    enemy: EnemyInstance,
+    finalDamage: number,
+    isCrit: boolean,
+    knockbackDir: number,
+    fromRemote: boolean,
+  ): number {
     enemy.hp -= finalDamage;
     // Only count damage we actually dealt. A remote packet is a teammate's
     // blow arriving for replay, and crediting it would hand everyone the same
@@ -1227,6 +2351,7 @@ export class SideViewEngine {
         this.onEnemyDefeated(enemy);
       }
     }
+    return finalDamage;
   }
 
   public onEnemyDefeated(enemy: EnemyInstance) {
@@ -1328,7 +2453,7 @@ export class SideViewEngine {
       p.mp = p.maxMp;
 
       audio.playLevelUp();
-      this.particles.addFloatingText(p.x, p.y - 60, '★ LEVEL UP! ★', '#ffd700', true, 24);
+      this.particles.addFloatingText(p.x, p.y - 60, 'LEVEL UP!', '#ffd700', true, 24);
     }
   }
 
@@ -1373,7 +2498,70 @@ export class SideViewEngine {
     this.player.mp = this.player.maxMp;
   }
 
+  /** Resolve zero HP before any passive effect can make it positive again. */
+  private resolvePlayerDefeat() {
+    const p = this.player;
+    if (p.hp > 0 || p.downed || this.runOver) return;
+
+    const preventionIndex = p.activeBuffs.findIndex(buff => buff.stat === 'deathPrevention' && (buff.amount || 0) > 0);
+    if (preventionIndex >= 0) {
+      const prevention = p.activeBuffs[preventionIndex];
+      p.activeBuffs.splice(preventionIndex, 1);
+      p.hp = Math.max(1, Math.round(p.maxHp * Math.max(0.1, prevention.multiplier)));
+      p.mp = Math.max(p.mp, Math.round(p.maxMp * 0.25));
+      p.downed = false;
+      p.downTimer = 0;
+      p.iframeTimer = 2.5;
+      p.animState = 'idle';
+      this.particles.addFloatingText(p.x, p.y - 46, 'RESURRECTION BLESSING', '#fef3c7', true, 18);
+      this.recomputeStats();
+      return;
+    }
+
+    const reviveIdx = p.inventory.findIndex(
+      item => item.id === 'pot_revive_feather' || item.consumableEffect?.type === 'revive',
+    );
+    if (reviveIdx !== -1) {
+      p.inventory.splice(reviveIdx, 1);
+      p.hp = Math.round(p.maxHp * 0.6);
+      p.mp = Math.round(p.maxMp * 0.6);
+      p.iframeTimer = 2.5;
+      p.animState = 'idle';
+      audio.playLevelUp();
+      this.particles.addFloatingText(p.x, p.y - 40, 'PHOENIX FEATHER RESURRECTION!', '#ffd700', true, 20);
+      this.triggerSave();
+      return;
+    }
+
+    p.vx = 0;
+    p.attackTimer = 0;
+    p.isDashing = false;
+    p.animState = 'dead';
+    p.hp = 0;
+
+    if (this.canBeRevived()) {
+      p.downed = true;
+      p.downTimer = SideViewEngine.BLEED_OUT_SECONDS;
+      p.revivesUsed = (p.revivesUsed || 0) + 1;
+      this.cancelDelayedCombatTasks();
+      audio.playHit();
+      this.particles.addFloatingText(p.x, p.y - 46, 'DOWNED! HOLD ON!', '#ff6b6b', true, 18);
+      network.sendPartySupport({ kind: 'downed', casterName: this.playerName() });
+      return;
+    }
+
+    this.runOver = true;
+    this.cancelDelayedCombatTasks();
+    this.onRunLost?.();
+  }
+
   public update(dt: number) {
+    this.ensureZoneGeometry();
+    // This must precede hit-stop, ultimate freezes, and regeneration. The old
+    // order let 1% HP regen turn a lethal 0 into a positive number, skipping
+    // downed/death resolution entirely.
+    this.resolvePlayerDefeat();
+
     // The director runs on unscaled time - it must not slow itself down.
     this.ultimate.update(dt);
 
@@ -1387,6 +2575,9 @@ export class SideViewEngine {
     if (this.hitStopTimer > 0) {
       this.hitStopTimer -= dt;
       this.particles.update(dt);
+      // Gameplay projectiles keep moving while cosmetic VFX animate through
+      // hit-stop, so their swept collision must resolve in the same frame.
+      this.checkProjectileCollisions();
       return;
     }
 
@@ -1403,11 +2594,14 @@ export class SideViewEngine {
     dt *= worldScale;
     if (dt <= 0) {
       this.particles.update(fxDt);
+      this.checkProjectileCollisions();
       return;
     }
 
     const p = this.player;
     const dtFrame = dt * this.physicsFrameScale;
+    this.updateZoneHazards(dt);
+    this.updateCombatStatuses(dt);
 
     // Bleeding out. Ticked before anything else so a downed player cannot act,
     // and so the countdown keeps running while the fight carries on around it.
@@ -1470,45 +2664,18 @@ export class SideViewEngine {
       }
     }
 
-    // 3. Passive Natural Mana & HP Regeneration
-    p.mp = Math.min(p.maxMp, p.mp + (p.maxMp * 0.05) * dt);
-    p.hp = Math.min(p.maxHp, p.hp + (p.maxHp * 0.01) * dt);
+    // 3. Passive regeneration. Mana remains available during active combat so
+    // rotations recover; HP waits five seconds after a hit. Neither resource
+    // can regenerate while downed/dead or after the run has ended.
+    if (!p.downed && !this.runOver && p.hp > 0) {
+      p.mp = Math.min(p.maxMp, p.mp + (p.maxMp * 0.05) * dt);
+      const outOfCombat = this.isTownMode || performance.now() - this.lastHurtAt >= 5000;
+      if (outOfCombat) p.hp = Math.min(p.maxHp, p.hp + (p.maxHp * 0.01) * dt);
+    }
 
-    // 4. Update Animation State & Auto-Revive
-    if (p.hp <= 0) {
-      // Check if player has auto-revive feather in inventory
-      const reviveIdx = p.inventory.findIndex(i => i.id === 'pot_revive_feather' || i.consumableEffect?.type === 'revive');
-      if (reviveIdx !== -1) {
-        const item = p.inventory[reviveIdx];
-        p.inventory.splice(reviveIdx, 1);
-        p.hp = Math.round(p.maxHp * 0.6);
-        p.mp = Math.round(p.maxMp * 0.6);
-        p.iframeTimer = 2.5;
-        p.animState = 'idle';
-        audio.playLevelUp();
-        this.particles.addFloatingText(p.x, p.y - 40, '✨ PHOENIX FEATHER RESURRECTION! ✨', '#ffd700', true, 20);
-        this.triggerSave();
-      } else if (!p.downed && this.canBeRevived()) {
-        // In a party, going down is a call for help rather than the end of the
-        // run. The teammate who comes for you is the moment people remember,
-        // and it cannot happen if death is instant.
-        p.downed = true;
-        p.downTimer = SideViewEngine.BLEED_OUT_SECONDS;
-        p.revivesUsed = (p.revivesUsed || 0) + 1;
-        p.animState = 'dead';
-        p.vx = 0;
-        p.hp = 0;
-        audio.playHit();
-        this.particles.addFloatingText(p.x, p.y - 46, 'DOWNED! HOLD ON!', '#ff6b6b', true, 18);
-        network.sendPartySupport({ kind: 'downed', casterName: this.playerName() });
-      } else if (!this.runOver && !p.downed) {
-        // Dying used to set an animation state and nothing else: no defeat, no
-        // respawn, nothing lost. You could not lose the game, and a fight you
-        // cannot lose has no tension no matter how hard the boss hits.
-        p.animState = 'dead';
-        this.runOver = true;
-        this.onRunLost?.();
-      }
+    // 4. Update Animation State
+    if (p.downed || this.runOver || p.hp <= 0) {
+      p.animState = 'dead';
     } else if (p.attackTimer > 0) {
       p.attackTimer -= dt;
       // Hold the swing long enough to read, then give the animation back to
@@ -1551,6 +2718,7 @@ export class SideViewEngine {
         if (p.x >= plat.x - 12 && p.x <= plat.x + plat.width + 12) {
           const prevY = p.y - p.vy * dtFrame;
           if (prevY <= plat.y + 4 && p.y >= plat.y) {
+            const landingVy = p.vy;
             p.y = plat.y;
             p.vy = 0;
             p.isGrounded = true;
@@ -1558,7 +2726,7 @@ export class SideViewEngine {
             landedOnPlatform = true;
 
             // Plunging dive attack landing impact explosion
-            if (p.attackTimer > 0 && p.animState === 'attack') {
+            if (p.attackTimer > 0 && p.animState === 'attack' && landingVy > 8) {
               this.particles.triggerScreenShake(14, 0.4);
               this.particles.addGroundExplosion(p.x, plat.y - 20, 2.0);
               this.particles.addImpactBurst(p.x, plat.y, 30, '#ffd700', 'spark');
@@ -1574,13 +2742,14 @@ export class SideViewEngine {
     // Ground collision: feet land directly on groundY
     if (!landedOnPlatform) {
       if (p.y >= this.groundY) {
+        const landingVy = p.vy;
         p.y = this.groundY;
         p.vy = 0;
         p.isGrounded = true;
         p.hasJumpedOnce = false;
 
         // Plunging dive attack landing impact explosion on floor
-        if (p.attackTimer > 0 && p.animState === 'attack' && p.vy > 8) {
+        if (p.attackTimer > 0 && p.animState === 'attack' && landingVy > 8) {
           this.particles.triggerScreenShake(14, 0.4);
           this.particles.addGroundExplosion(p.x, this.groundY - 20, 2.0);
           this.particles.addImpactBurst(p.x, this.groundY, 30, '#ffd700', 'spark');
@@ -1622,7 +2791,7 @@ export class SideViewEngine {
     this.updateLoot(dt);
 
     // 9. Update Particles & Entities
-    this.particles.update(dt);
+    this.particles.update(fxDt);
     this.checkProjectileCollisions();
     this.checkSpecialSkillEntities(dt);
 
@@ -1630,7 +2799,13 @@ export class SideViewEngine {
     this.playerSyncTimer -= dt;
     if (this.playerSyncTimer <= 0) {
       this.playerSyncTimer = 0.05;
-      network.sendPlayerMove(this.player, this.groundY, this.player.attackTimer > 0, this.isTownMode);
+      network.sendPlayerMove(
+        this.player,
+        this.groundY,
+        this.player.attackTimer > 0,
+        this.isTownMode,
+        this.networkSceneId,
+      );
     }
 
     // 11. Host Broadcasts Enemy State over Network (10 times a second)
@@ -1643,7 +2818,40 @@ export class SideViewEngine {
     }
   }
 
+  private updateShadowCloneStrikes() {
+    const skill = this.findSkillById('ni_2');
+    if (!skill) return;
+
+    for (const clone of this.particles.shadowClones) {
+      if (clone.hasStruck || clone.life < 0.11) continue;
+      clone.hasStruck = true;
+
+      // Remote replicas carry zero damage. They still complete their visual
+      // attack once, but never participate in this client's authoritative
+      // enemy simulation.
+      if (clone.damage <= 0) continue;
+      const reach = Math.max(80, skill.range, skill.aoeRadius);
+      const target = this.enemies
+        .filter(enemy => (
+          !enemy.isDead
+          && Math.abs(enemy.x - clone.x) <= reach + enemy.width / 2
+          && Math.abs((enemy.y - 24) - clone.y) <= 120
+        ))
+        .sort((a, b) => Math.hypot(a.x - clone.x, a.y - clone.y) - Math.hypot(b.x - clone.x, b.y - clone.y))[0];
+      if (!target) continue;
+
+      this.hitEnemyWithSkill(target, skill, clone.damage, false, ++this.skillCastToken);
+      if (skill.vfx.impact) {
+        this.particles.playVfx(skill.vfx.impact, target.x, target.y - 18, {
+          facing: clone.facing,
+          row: skill.vfx.identity.paletteRow,
+        });
+      }
+    }
+  }
+
   private checkSpecialSkillEntities(dt: number) {
+    this.updateShadowCloneStrikes();
     const ownerState = (ownerSocketId: string | null | undefined) => {
       if (!ownerSocketId) return null;
       if (network.socket && ownerSocketId === network.socket.id) {
@@ -1726,10 +2934,11 @@ export class SideViewEngine {
               minion.attackCooldown = 1.4;
               minion.skillCooldown = 4.5;
               this.particles.triggerScreenShake(14, 0.45);
-              this.particles.addFloatingText(minion.x, this.groundY - 180, '☄ MAGMA METEOR BARRAGE!', '#ff5722', true, 16);
+              this.particles.addFloatingText(minion.x, this.groundY - 180, 'MAGMA METEOR BARRAGE!', '#ff5722', true, 16);
 
               for (let m = 0; m < 3; m++) {
-                setTimeout(() => {
+                this.scheduleCombatTask(() => {
+                  if (!this.particles.summonedMinions.includes(minion)) return;
                   const targetX = minion.x + minion.facing * (130 + m * 85);
                   this.particles.addGroundExplosion(targetX, this.groundY - 20, 2.2);
                   this.particles.addImpactBurst(targetX, this.groundY - 10, 25, '#ff5722', 'fire');
@@ -1747,7 +2956,7 @@ export class SideViewEngine {
               minion.attackCooldown = 1.2;
               minion.skillCooldown = 5.0;
               this.particles.triggerScreenShake(16, 0.5);
-              this.particles.addFloatingText(minion.x, this.groundY - 180, '🌪 DRAGON TEMPEST!', '#f97316', true, 16);
+              this.particles.addFloatingText(minion.x, this.groundY - 180, 'DRAGON TEMPEST!', '#f97316', true, 16);
               this.particles.addFireSpin(minion.x + minion.facing * 110, this.groundY - 30, 2.5);
 
               this.enemies.forEach(e => {
@@ -1819,7 +3028,7 @@ export class SideViewEngine {
               minion.attackCooldown = 1.4;
               minion.skillCooldown = 4.5;
               this.particles.triggerScreenShake(14, 0.45);
-              this.particles.addFloatingText(minion.x, this.groundY - 150, '🔮 VOID SINGULARITY!', '#a855f7', true, 16);
+              this.particles.addFloatingText(minion.x, this.groundY - 150, 'VOID SINGULARITY!', '#a855f7', true, 16);
 
               const vortexX = minion.x + minion.facing * 130;
               this.particles.addVoidVortex(vortexX, this.groundY - 25, 2.6);
@@ -1840,10 +3049,11 @@ export class SideViewEngine {
               minion.attackCooldown = 1.2;
               minion.skillCooldown = 4.5;
               this.particles.triggerScreenShake(16, 0.5);
-              this.particles.addFloatingText(minion.x, this.groundY - 150, '💀 DEATH NOVA!', '#9333ea', true, 16);
+              this.particles.addFloatingText(minion.x, this.groundY - 150, 'DEATH NOVA!', '#9333ea', true, 16);
 
               for (let s = 0; s < 3; s++) {
-                setTimeout(() => {
+                this.scheduleCombatTask(() => {
+                  if (!this.particles.summonedMinions.includes(minion)) return;
                   const skullX = minion.x + minion.facing * (100 + s * 80);
                   this.particles.addDarkPillar(skullX, this.groundY);
                   this.particles.addImpactBurst(skullX, this.groundY - 20, 30, '#a855f7', 'dark');
@@ -1912,14 +3122,15 @@ export class SideViewEngine {
             minion.attackCooldown = 1.1;
             minion.skillCooldown = 3.5;
             this.particles.triggerScreenShake(18, 0.5);
-            this.particles.addFloatingText(minion.x, this.groundY - 120, '🔮 VOID TEMPEST!', '#a855f7', true, 16);
+            this.particles.addFloatingText(minion.x, this.groundY - 120, 'VOID TEMPEST!', '#a855f7', true, 16);
 
             const blastX = minion.x + minion.facing * 100;
             this.particles.addVoidVortex(blastX, this.groundY - 20, 2.4);
             this.particles.addDarkPillar(blastX, this.groundY);
 
             for (let k = 0; k < 3; k++) {
-              setTimeout(() => {
+              this.scheduleCombatTask(() => {
+                if (!this.particles.summonedMinions.includes(minion)) return;
                 const hitX = minion.x + minion.facing * (70 + k * 60);
                 this.particles.addDarkPillar(hitX, this.groundY);
                 this.particles.addImpactBurst(hitX, this.groundY - 20, 25, '#9333ea', 'dark');
@@ -1974,15 +3185,30 @@ export class SideViewEngine {
 
     // B. Check Ground Traps Collision with Enemies
     this.particles.groundTraps.forEach(trap => {
-      if (trap.isTriggered) return;
+      if (trap.isTriggered || trap.visualOnly) return;
       for (const enemy of this.enemies) {
         if (enemy.isDead) continue;
         const dist = Math.hypot(enemy.x - trap.x, enemy.y - trap.y);
         if (dist < trap.radius + enemy.width / 2) {
           trap.isTriggered = true;
           this.applyDamageToEnemy(enemy, trap.damage, true, 0);
+          const trapSkill = trap.skillId ? this.findSkillById(trap.skillId) : null;
+          if (trapSkill) {
+            for (const status of trap.statuses || []) {
+              this.applyEnemyStatus(enemy, { ...status, damageShare: undefined }, trapSkill, 0);
+            }
+          }
           if (trap.trapType === 'poison') {
-            this.particles.addGroundZone(trap.x, this.groundY, 90, Math.round(trap.damage * 0.3), 5.0, 'poison_cloud', '#22c55e');
+            this.particles.addGroundZone(
+              trap.x,
+              this.groundY,
+              90,
+              Math.max(0, Math.round((trap.cloudDamageTotal || 0) / 5)),
+              5.0,
+              'poison_cloud',
+              '#22c55e',
+              { skillId: trap.skillId, statuses: trap.statuses, tickInterval: 1 },
+            );
             this.particles.addImpactBurst(trap.x, trap.y - 10, 25, '#22c55e', 'poison');
           } else {
             this.particles.addGroundExplosion(trap.x, this.groundY - 20, 1.8);
@@ -1994,8 +3220,9 @@ export class SideViewEngine {
 
     // C. Check Ground Zones periodic tick damage
     this.particles.groundZones.forEach(zone => {
-      if (zone.tickTimer >= 0.5) {
+      if (zone.tickTimer >= (zone.tickInterval ?? 0.5)) {
         zone.tickTimer = 0;
+        const zoneSkill = zone.skillId ? this.findSkillById(zone.skillId) : null;
         this.enemies.forEach(enemy => {
           if (enemy.isDead) return;
           const dist = Math.hypot(enemy.x - zone.x, enemy.y - zone.y);
@@ -2003,19 +3230,71 @@ export class SideViewEngine {
             if (zone.damagePerTick > 0) {
               this.applyDamageToEnemy(enemy, zone.damagePerTick, false, 0);
             }
+            if (zoneSkill) {
+              for (const status of zone.statuses || []) {
+                this.applyEnemyStatus(enemy, { ...status, damageShare: undefined }, zoneSkill, 0);
+              }
+            }
           }
         });
+        if (zone.allyHealPercentPerTick && Math.abs(this.player.x - zone.x) <= zone.radius && this.player.hp > 0) {
+          const heal = Math.max(1, Math.round(this.player.maxHp * zone.allyHealPercentPerTick));
+          this.player.hp = Math.min(this.player.maxHp, this.player.hp + heal);
+          this.particles.addFloatingText(this.player.x, this.player.y - 32, `+${heal} HP`, '#4ade80', false, 12);
+        }
       }
     });
   }
 
-  private updateEnemies(dt: number) {
+  private eligibleCombatPlayerTargets(): CombatPlayerTarget[] {
+    if (this.isTownMode) return [];
+    const targets: CombatPlayerTarget[] = [];
     const p = this.player;
+
+    if (!p.downed && !this.runOver && p.hp > 0 && p.stealthTimer <= 0) {
+      targets.push({ kind: 'local', socketId: null, x: p.x, y: p.y });
+    }
+
+    if (!network.room) return targets;
+    for (const [socketId, remote] of Object.entries(network.remotePlayers)) {
+      if (remote.downed || (typeof remote.hpPct === 'number' && remote.hpPct <= 0)) continue;
+      if (Boolean(remote.isTownMode) !== Boolean(this.isTownMode)) continue;
+      if (remote.sceneId !== this.networkSceneId) continue;
+
+      const x = typeof remote.targetX === 'number' ? remote.targetX : remote.x;
+      const relativeY = typeof remote.targetY === 'number' ? remote.targetY : remote.y;
+      if (!Number.isFinite(x) || !Number.isFinite(relativeY)) continue;
+      targets.push({ kind: 'remote', socketId, x, y: relativeY + this.groundY });
+    }
+    return targets;
+  }
+
+  /** Nearest eligible party member with a small hysteresis to prevent aggro flicker. */
+  private selectEnemyPlayerTarget(enemy: EnemyInstance): CombatPlayerTarget | null {
+    const targets = this.eligibleCombatPlayerTargets();
+    if (!targets.length) {
+      this.enemyPlayerTargets.delete(enemy.id);
+      return null;
+    }
+    const score = (target: CombatPlayerTarget) => Math.hypot(
+      target.x - enemy.x,
+      (target.y - enemy.y) * 0.35,
+    );
+    const nearest = targets.reduce((best, target) => score(target) < score(best) ? target : best);
+    const lockedKey = this.enemyPlayerTargets.get(enemy.id);
+    const locked = targets.find(target => (target.socketId || 'local') === lockedKey);
+    const selected = locked && score(locked) <= score(nearest) + 120 ? locked : nearest;
+    this.enemyPlayerTargets.set(enemy.id, selected.socketId || 'local');
+    return selected;
+  }
+
+  private updateEnemies(dt: number) {
     const dtFrame = dt * this.physicsFrameScale;
 
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const enemy = this.enemies[i];
       if (enemy.isDead) {
+        this.enemyPlayerTargets.delete(enemy.id);
         this.enemies.splice(i, 1);
         continue;
       }
@@ -2024,18 +3303,30 @@ export class SideViewEngine {
       if (enemy.hitStun > 0) {
         enemy.hitStun -= dt;
       } else if (this.isHost) {
-        // AI Tracking towards player (or minion)
-        let targetX = p.x;
-        if (p.stealthTimer > 0 && this.particles.summonedMinions.length > 0) {
+        // The host owns aggro for every same-scene party member. Remote Y is
+        // normalized back into this canvas's world coordinates above.
+        const target = this.selectEnemyPlayerTarget(enemy);
+        let targetX = target?.x;
+        let isDecoy = false;
+        const taunted = this.statusMagnitude(enemy, 'taunt') > 0
+          || this.statusesForEnemy(enemy).some(status => status.kind === 'taunt');
+        if (!target && !taunted && this.particles.summonedMinions.length > 0) {
           targetX = this.particles.summonedMinions[0].x;
+          isDecoy = true;
+        }
+        if (targetX === undefined) {
+          targetX = enemy.x;
+          isDecoy = true;
         }
 
         const dx = targetX - enemy.x;
         const dist = Math.abs(dx);
+        const verticalDistance = target ? Math.abs(target.y - enemy.y) : 0;
         enemy.facing = dx > 0 ? 1 : -1;
 
-        if (dist > enemy.attackRange) {
-          enemy.vx = enemy.facing * enemy.speed;
+        if (dist > enemy.attackRange || verticalDistance > 110) {
+          const slow = Math.min(0.9, this.statusMagnitude(enemy, 'slow'));
+          enemy.vx = enemy.facing * enemy.speed * (1 - slow);
           enemy.isAttacking = false;
         } else {
           enemy.vx = 0;
@@ -2044,7 +3335,7 @@ export class SideViewEngine {
           enemy.attackTimer -= dt;
           if (enemy.attackTimer <= 0) {
             enemy.attackTimer = enemy.attackCooldown;
-            if (this.isHost) this.enemyAttackPlayer(enemy);
+            if (!isDecoy && target) this.enemyAttackCombatTarget(enemy, target);
           }
           // isAttacking existed on the enemy but nothing ever set it, so the
           // attack sheets could never be reached. The flag is the window just
@@ -2086,6 +3377,11 @@ export class SideViewEngine {
     const skills = bossSkillsFor(enemy.name);
     if (!skills.length || enemy.isDead) return;
 
+    if ((enemy.bossCastTimer || 0) > 0) {
+      enemy.bossCastTimer = Math.max(0, (enemy.bossCastTimer || 0) - dt);
+      if (enemy.bossCastTimer === 0) enemy.bossCastName = undefined;
+    }
+
     // Half health is where the fight changes. `phases: 2` was declared on three
     // bosses and nothing ever read it - the same shape of gap as minLevel and
     // isAttacking. A boss that fights identically from full health to zero has
@@ -2119,17 +3415,41 @@ export class SideViewEngine {
     this.castBossSkill(enemy, skill);
   }
 
+  private playerStatusForBossSkill(enemy: EnemyInstance, skill: BossSkill): PlayerDamageStatus | undefined {
+    const rawTickDamage = Math.max(1, Math.round(enemy.atk * BALANCE.enemyAtk * 0.2));
+    if (skill.name === 'Venom Spray') {
+      return { kind: 'poison', duration: 4, magnitude: 0.1, tickInterval: 1, rawTickDamage };
+    }
+    if (skill.name === 'Web Snare') {
+      return { kind: 'slow', duration: 3.5, magnitude: 0.45 };
+    }
+    if (['Infernal Breath', 'Meteor Fall', 'Molten Hammer'].includes(skill.name)) {
+      return { kind: 'burn', duration: 3, magnitude: 0.1, tickInterval: 1, rawTickDamage };
+    }
+    if (['Abyssal Current', 'Tidal Crush'].includes(skill.name)) {
+      return { kind: 'slow', duration: 2.5, magnitude: 0.3 };
+    }
+    if (skill.name === 'Blacksteel Decree') {
+      return { kind: 'stun', duration: 0.6, magnitude: 1 };
+    }
+    return undefined;
+  }
+
   private castBossSkill(enemy: EnemyInstance, skill: BossSkill) {
-    const p = this.player;
 
     // The wind-up: name it and mark the ground, then land it.
     this.particles.addFloatingText(enemy.x, enemy.y - 90, skill.name.toUpperCase(), skill.colour, true, 18);
     audio.playId('ult_charge', 0.7);
 
-    const targetX = skill.kind === 'slam' ? p.x : enemy.x;
+    const primaryTarget = this.selectEnemyPlayerTarget(enemy);
+    const targetX = skill.kind === 'slam' ? (primaryTarget?.x ?? enemy.x) : enemy.x;
     const facing = enemy.facing;
+    const status = this.playerStatusForBossSkill(enemy, skill);
+    enemy.bossCastName = skill.name;
+    enemy.bossCastTimer = skill.telegraph;
+    enemy.bossCastDuration = skill.telegraph;
 
-    window.setTimeout(() => {
+    this.scheduleCombatTask(() => {
       if (enemy.isDead) return;
       const dmg = skill.damage;
 
@@ -2137,9 +3457,12 @@ export class SideViewEngine {
         // Fanned across the arena, so standing still is the wrong answer.
         for (let i = 0; i < 4; i++) {
           const ox = enemy.x + facing * (70 + i * 90);
-          window.setTimeout(() => {
+          this.scheduleCombatTask(() => {
+            if (enemy.isDead) return;
             this.particles.playVfx(skill.vfx, ox, this.groundY - 30, { facing, scale: 0.9 });
-            if (Math.abs(p.x - ox) < 70) this.enemyAttackPlayer(enemy, dmg);
+            this.eligibleCombatPlayerTargets()
+              .filter(target => Math.abs(target.x - ox) < 70 && Math.abs(target.y - this.groundY) < 130)
+              .forEach(target => this.enemyAttackCombatTarget(enemy, target, dmg, status));
           }, i * 110);
         }
       } else if (skill.kind === 'beam') {
@@ -2147,15 +3470,24 @@ export class SideViewEngine {
           const ox = enemy.x + facing * (60 + i * 80);
           this.particles.playVfx(skill.vfx, ox, this.groundY - 40, { facing, scale: 1.0 });
         }
-        const inLine = (facing > 0 ? p.x > enemy.x : p.x < enemy.x) && Math.abs(p.x - enemy.x) < 460;
-        if (inLine) this.enemyAttackPlayer(enemy, dmg);
+        this.eligibleCombatPlayerTargets()
+          .filter(target => (
+            (facing > 0 ? target.x > enemy.x : target.x < enemy.x)
+            && Math.abs(target.x - enemy.x) < 460
+            && Math.abs(target.y - enemy.y) < 140
+          ))
+          .forEach(target => this.enemyAttackCombatTarget(enemy, target, dmg, status));
       } else if (skill.kind === 'nova') {
         this.particles.playVfx(skill.vfx, enemy.x, this.groundY - 50, { facing, scale: 1.6 });
-        if (Math.abs(p.x - enemy.x) < 190) this.enemyAttackPlayer(enemy, dmg);
+        this.eligibleCombatPlayerTargets()
+          .filter(target => Math.abs(target.x - enemy.x) < 190 && Math.abs(target.y - enemy.y) < 140)
+          .forEach(target => this.enemyAttackCombatTarget(enemy, target, dmg, status));
       } else {
         // slam - lands where the player was standing when it started.
         this.particles.playVfx(skill.vfx, targetX, this.groundY - 40, { facing, scale: 1.5 });
-        if (Math.abs(p.x - targetX) < 120) this.enemyAttackPlayer(enemy, dmg);
+        this.eligibleCombatPlayerTargets()
+          .filter(target => Math.abs(target.x - targetX) < 120 && Math.abs(target.y - this.groundY) < 140)
+          .forEach(target => this.enemyAttackCombatTarget(enemy, target, dmg, status));
       }
 
       this.particles.triggerScreenShake(skill.kind === 'volley' ? 6 : 12, 0.3);
@@ -2163,9 +3495,26 @@ export class SideViewEngine {
   }
 
   /** Adds a buff to this player and shows it. Used by the caster and by allies. */
-  public applyPartyBuff(stat: any, multiplier: number, duration: number, fromName?: string) {
+  public applyPartyBuff(
+    stat: PlayerBuffStat,
+    multiplier: number,
+    duration: number,
+    fromName?: string,
+    sourceActorId?: string,
+  ) {
     const p = this.player;
-    p.activeBuffs.push({ stat, multiplier, timer: duration });
+    const sourceSkillId = sourceActorId
+      ? `remote:${sourceActorId}`
+      : fromName
+        ? `remote:${fromName}`
+        : 'party';
+    const existing = p.activeBuffs.find(buff => buff.stat === stat && buff.sourceSkillId === sourceSkillId);
+    if (existing) {
+      existing.multiplier = multiplier;
+      existing.timer = Math.max(existing.timer, duration);
+    } else {
+      p.activeBuffs.push({ stat, multiplier, timer: duration, sourceSkillId });
+    }
     this.recomputeStats();
     const pct = Math.round((multiplier - 1) * 100);
     const who = fromName ? `${fromName}: ` : '';
@@ -2179,6 +3528,27 @@ export class SideViewEngine {
     p.hp = Math.min(p.maxHp, p.hp + amount);
     const who = fromName ? `${fromName}: ` : '';
     this.particles.addFloatingText(p.x, p.y - 30, `${who}+${amount} HP`, '#4ade80', true, 16);
+  }
+
+  /** Apply max-HP healing against the recipient's stats, not the caster's. */
+  public applyPartyPercentHeal(percent: number, fromName?: string) {
+    const boundedPercent = Number.isFinite(percent) ? Math.max(0, Math.min(1, percent)) : 0;
+    if (boundedPercent <= 0) return;
+    const amount = Math.max(1, Math.round(this.player.maxHp * boundedPercent));
+    this.applyPartyHeal(amount, fromName);
+  }
+
+  /** Remove a bounded number of local debuffs for both local and relayed party casts. */
+  public applyPartyCleanse(count: number, fromName?: string): number {
+    if (this.player.downed || this.runOver || this.player.hp <= 0) return 0;
+    const requested = Number.isFinite(count) ? Math.max(0, Math.min(5, Math.floor(count))) : 0;
+    const removed = Math.min(requested, this.playerNegativeStatuses.length);
+    if (removed <= 0) return 0;
+
+    this.playerNegativeStatuses.splice(0, removed);
+    const label = fromName ? `${fromName}: CLEANSED` : 'CLEANSED';
+    this.particles.addFloatingText(this.player.x, this.player.y - 42, label, '#fef3c7', true, 16);
+    return removed;
   }
 
   /**
@@ -2235,7 +3605,7 @@ export class SideViewEngine {
         ctx.fillRect(bx - w / 2, by + 18, w, 7);
         ctx.fillStyle = '#4ade80';
         ctx.fillRect(bx - w / 2 + 1, by + 19, (w - 2) * pct, 5);
-      } else if (Math.hypot(r.x - this.player.x, r.y - this.player.y) < SideViewEngine.REVIVE_RANGE) {
+      } else if (Math.hypot(r.x - this.player.x, r.y + this.groundY - this.player.y) < SideViewEngine.REVIVE_RANGE) {
         ctx.font = 'bold 10px "Outfit", sans-serif';
         ctx.fillStyle = '#4ade80';
         ctx.strokeText('HOLD E TO REVIVE', bx, by + 26);
@@ -2392,10 +3762,11 @@ export class SideViewEngine {
       const r = network.remotePlayers[socketId];
       if (!r.downed) continue;
       if (Boolean(r.isTownMode) !== Boolean(this.isTownMode)) continue;
-      const d = Math.hypot(r.x - this.player.x, r.y - this.player.y);
+      const worldY = r.y + this.groundY;
+      const d = Math.hypot(r.x - this.player.x, worldY - this.player.y);
       if (d < bestDist) {
         bestDist = d;
-        best = { socketId, x: r.x, y: r.y, name: r.name };
+        best = { socketId, x: r.x, y: worldY, name: r.name };
       }
     }
     return best;
@@ -2429,12 +3800,13 @@ export class SideViewEngine {
   }
 
   /** We were picked up: back on our feet, hurt but standing. */
-  public acceptRevive(byName?: string) {
+  public acceptRevive(byName?: string, hpPercent = 0.4) {
     const p = this.player;
     if (!p.downed) return;
     p.downed = false;
     p.downTimer = 0;
-    p.hp = Math.max(1, Math.round(p.maxHp * 0.4));
+    const boundedPercent = Number.isFinite(hpPercent) ? Math.max(0, Math.min(1, hpPercent)) : 0.4;
+    p.hp = Math.max(1, Math.round(p.maxHp * boundedPercent));
     p.mp = Math.max(p.mp, Math.round(p.maxMp * 0.25));
     p.iframeTimer = 2.5;
     p.animState = 'idle';
@@ -2457,11 +3829,13 @@ export class SideViewEngine {
     p.downed = false;
     if (this.runOver) return;
     this.runOver = true;
+    this.cancelDelayedCombatTasks();
     this.onRunLost?.();
   }
 
-  public quickHeal(): 'healed' | 'full' | 'none' {
+  public quickHeal(): 'healed' | 'full' | 'none' | 'blocked' {
     const p = this.player;
+    if (p.downed || this.runOver || p.hp <= 0) return 'blocked';
     if (p.hp >= p.maxHp) return 'full';
 
     // Weakest sufficient potion first: spending a large one on a scratch is a
@@ -2573,28 +3947,133 @@ export class SideViewEngine {
     );
   }
 
-  private enemyAttackPlayer(enemy: EnemyInstance, multiplier: number = 1) {
+  private incomingDamageMultiplier(): number {
+    let multiplier = 1;
+    for (const buff of this.player.activeBuffs) {
+      if (buff.stat === 'damageReduction') multiplier *= Math.max(0.05, buff.multiplier);
+    }
+    for (const zone of this.particles.groundZones) {
+      if (!zone.allyMitigation) continue;
+      if (Math.abs(this.player.x - zone.x) <= zone.radius) multiplier *= 1 - zone.allyMitigation;
+    }
+    return Math.max(0.1, multiplier);
+  }
+
+  private absorbPlayerDamage(incoming: number): { hpDamage: number; absorbed: number } {
+    let remaining = incoming;
+    let absorbed = 0;
+    for (const buff of this.player.activeBuffs) {
+      if (buff.stat !== 'shield' || !buff.amount || remaining <= 0) continue;
+      const used = Math.min(buff.amount, remaining);
+      buff.amount -= used;
+      remaining -= used;
+      absorbed += used;
+      if (buff.amount <= 0) buff.timer = 0;
+    }
+    return { hpDamage: remaining, absorbed };
+  }
+
+  private rollEnemyRawDamage(enemy: EnemyInstance, multiplier: number): number {
+    return enemy.atk * BALANCE.enemyAtk * multiplier * (1 + (Math.random() * 0.2 - 0.1));
+  }
+
+  private nextPlayerDamageHitId(): string {
+    this.playerDamageSequence = (this.playerDamageSequence + 1) % 0x7fffffff;
+    return `pd_${this.playerDamageNonce}_${Date.now().toString(36)}_${this.playerDamageSequence.toString(36)}`;
+  }
+
+  private applyIncomingPlayerDamage(
+    rawDamage: number,
+    sourceX: number,
+    status?: PlayerDamageStatus,
+  ): number {
     const p = this.player;
     // Committing to an ultimate should never get you punished for it - the
     // caster is untouchable for the length of the cinematic.
     // Already down: the bleed-out clock is the threat now, not the boss. Being
     // finished off while helpless would just shorten a window meant for rescue.
-    if (p.downed) return;
-    if (p.iframeTimer > 0 || p.stealthTimer > 0 || this.ultimate.invulnerable) return;
+    if (p.downed || this.runOver || p.hp <= 0) return 0;
+    if (p.iframeTimer > 0 || p.stealthTimer > 0 || this.ultimate.invulnerable) return 0;
 
-    const rawDamage = enemy.atk * BALANCE.enemyAtk * multiplier * (1 + (Math.random() * 0.2 - 0.1));
-    const finalDamage = Math.max(1, Math.round(afterDefence(rawDamage, p.totalDef)));
+    const mitigated = Math.max(1, Math.round(afterDefence(rawDamage, p.totalDef) * this.incomingDamageMultiplier()));
+    const { hpDamage: finalDamage, absorbed } = this.absorbPlayerDamage(mitigated);
 
     p.hp = Math.max(0, p.hp - finalDamage);
     this.damageTaken += finalDamage;
     this.lastHurtAt = performance.now();
     p.iframeTimer = 0.4;
-    p.vx = enemy.facing * 4.0;
+    const knockbackDir = p.x === sourceX ? -p.facing : (p.x > sourceX ? 1 : -1);
+    p.vx = knockbackDir * 4.0;
     p.vy = -2.0;
 
+    if (status) this.applyPlayerNegativeStatus(status, `hostile:${status.kind}`);
+
     audio.playHit(false);
-    this.particles.triggerScreenShake(6, 0.2);
-    this.particles.addFloatingText(p.x, p.y - p.height / 2, `-${finalDamage}`, '#ef5350', false, 18);
+    this.particles.triggerScreenShake(finalDamage > 0 ? 6 : 2, 0.2);
+    if (absorbed > 0) {
+      this.particles.addFloatingText(p.x, p.y - p.height / 2 - 14, `SHIELD -${absorbed}`, '#60a5fa', false, 14);
+    }
+    if (finalDamage > 0) {
+      this.particles.addFloatingText(p.x, p.y - p.height / 2, `-${finalDamage}`, '#ef5350', false, 18);
+    }
+
+    // Resolve a lethal hit in the same combat event. Waiting for the next
+    // frame used to give passive regeneration a chance to erase the zero-HP
+    // state before downed/death logic saw it.
+    this.resolvePlayerDefeat();
+    return finalDamage;
+  }
+
+  /**
+   * Guest-side endpoint for one server-verified host hit. It deliberately
+   * receives raw attack power: this device owns its defence, shield, i-frames,
+   * death-prevention inventory, and downed transition.
+   */
+  public applyNetworkPlayerDamage(packet: PlayerDamagePacket): number {
+    if (this.isHost || !network.room) return 0;
+    if (!packet || packet.isTownMode !== this.isTownMode || packet.sceneId !== this.networkSceneId) return 0;
+    if (!/^[A-Za-z0-9:_-]{1,96}$/.test(packet.hitId)) return 0;
+    if (!Number.isFinite(packet.rawDamage) || packet.rawDamage < 1 || packet.rawDamage > 250_000) return 0;
+    if (!Number.isFinite(packet.sourceX) || Math.abs(packet.sourceX) > 10_000_000) return 0;
+    if (packet.knockbackDir !== -1 && packet.knockbackDir !== 1) return 0;
+
+    const now = performance.now();
+    for (const [hitId, receivedAt] of this.receivedPlayerDamageHits) {
+      if (now - receivedAt > 15_000) this.receivedPlayerDamageHits.delete(hitId);
+    }
+    if (this.receivedPlayerDamageHits.has(packet.hitId)) return 0;
+    this.receivedPlayerDamageHits.set(packet.hitId, now);
+    while (this.receivedPlayerDamageHits.size > 512) {
+      const oldest = this.receivedPlayerDamageHits.keys().next().value;
+      if (typeof oldest !== 'string') break;
+      this.receivedPlayerDamageHits.delete(oldest);
+    }
+
+    return this.applyIncomingPlayerDamage(packet.rawDamage, packet.sourceX, packet.status);
+  }
+
+  private enemyAttackCombatTarget(
+    enemy: EnemyInstance,
+    target: CombatPlayerTarget,
+    multiplier: number = 1,
+    status?: PlayerDamageStatus,
+  ) {
+    if (!this.isHost || this.isTownMode) return;
+    const rawDamage = this.rollEnemyRawDamage(enemy, multiplier);
+    if (target.kind === 'local') {
+      this.applyIncomingPlayerDamage(rawDamage, enemy.x, status);
+      return;
+    }
+    if (!target.socketId) return;
+    network.sendPlayerDamage(target.socketId, {
+      hitId: this.nextPlayerDamageHitId(),
+      rawDamage: Math.max(1, Math.min(250_000, Math.round(rawDamage * 100) / 100)),
+      sourceX: enemy.x,
+      knockbackDir: target.x >= enemy.x ? 1 : -1,
+      isTownMode: false,
+      sceneId: this.networkSceneId,
+      status,
+    });
   }
 
   private updateLoot(dt: number) {
@@ -2652,17 +4131,36 @@ export class SideViewEngine {
     }
   }
 
+  private projectileIntersectsEnemy(proj: import('./ParticleSystem').ProjectileVFX, enemy: EnemyInstance): boolean {
+    const radiusX = Math.max(1, proj.radius + (enemy.width || 40) / 2);
+    const radiusY = Math.max(1, proj.radius + 40);
+    const chestY = enemy.y - 24;
+    const startX = ((proj.previousX ?? proj.x) - enemy.x) / radiusX;
+    const startY = ((proj.previousY ?? proj.y) - chestY) / radiusY;
+    const endX = (proj.x - enemy.x) / radiusX;
+    const endY = (proj.y - chestY) / radiusY;
+    const segmentX = endX - startX;
+    const segmentY = endY - startY;
+    const lengthSq = segmentX * segmentX + segmentY * segmentY;
+    const t = lengthSq > 0
+      ? Math.max(0, Math.min(1, -(startX * segmentX + startY * segmentY) / lengthSq))
+      : 0;
+    const closestX = startX + segmentX * t;
+    const closestY = startY + segmentY * t;
+    return closestX * closestX + closestY * closestY <= 1;
+  }
+
   private checkProjectileCollisions() {
     for (let i = this.particles.projectiles.length - 1; i >= 0; i--) {
       const proj = this.particles.projectiles[i];
 
-      if (proj.fromPlayer) {
+      if (proj.fromPlayer && !proj.visualOnly) {
         for (const enemy of this.enemies) {
           if (enemy.isDead) continue;
-          // Use AABB for 2D Beat 'em up accurate hit detection (ignore extreme Y axis mismatches)
-          const distX = Math.abs(proj.x - enemy.x);
-          const distY = Math.abs(proj.y - (enemy.y - 24)); // Compare to enemy chest height
-          if (distX < proj.radius + (enemy.width || 40) / 2 && distY < proj.radius + 40) {
+          // Sweep the projectile's previous-to-current segment through an
+          // enemy-sized ellipse. Endpoint-only checks let fast arrows tunnel
+          // through targets on a 30 FPS device or one long browser frame.
+          if (this.projectileIntersectsEnemy(proj, enemy)) {
             if (proj.piercing) {
               const hitList = proj.hitEnemyIds || [];
               if (hitList.includes(enemy.id)) {
@@ -2672,10 +4170,36 @@ export class SideViewEngine {
               hitList.push(enemy.id);
             }
 
-            this.applyDamageToEnemy(enemy, proj.damage, proj.isCrit, proj.vx > 0 ? 1 : -1);
+            const skill = proj.skillId ? this.findSkillById(proj.skillId) : null;
+            if (skill) {
+              if (proj.aoeRadius && proj.aoeRadius > 0) {
+                this.hitArea(skill, enemy.x, enemy.y - 24, proj.damage, proj.isCrit, proj.castToken ?? 0);
+              } else {
+                this.hitEnemyWithSkill(
+                  enemy,
+                  skill,
+                  proj.damage,
+                  proj.isCrit,
+                  proj.castToken ?? 0,
+                  proj.virtualHitDamages,
+                );
+              }
+            } else {
+              this.applyDamageToEnemy(enemy, proj.damage, proj.isCrit, proj.vx > 0 ? 1 : -1);
+            }
             if (!proj.piercing) {
-              this.particles.projectiles.splice(i, 1);
+              this.particles.completeProjectile(proj, enemy.x, enemy.y - 18);
+              this.particles.removeProjectileAt(i);
               break;
+            } else {
+              if (proj.impactVfx) {
+                this.particles.playVfx(proj.impactVfx, enemy.x, enemy.y - 18, {
+                  facing: proj.vx >= 0 ? 1 : -1,
+                  row: proj.impactRow,
+                  scale: proj.impactScale,
+                });
+              }
+              if (proj.identity) this.particles.addSkillIdentityAccent(enemy.x, enemy.y, proj.vx >= 0 ? 1 : -1, proj.identity);
             }
           }
         }
@@ -2749,6 +4273,91 @@ export class SideViewEngine {
     audio.playClick();
   }
 
+  private zoneHazardColour(kind: HazardKind): string {
+    if (kind === 'poison-pool' || kind === 'root-spikes' || kind === 'ridge-gust') return '#84cc16';
+    if (kind === 'cursed-mist' || kind === 'void-pulse' || kind === 'astral-burst') return '#c084fc';
+    if (kind === 'abyss-current') return '#22d3ee';
+    if (kind === 'rockfall' || kind === 'warband-volley' || kind === 'siege-shot') return '#fbbf24';
+    return '#fb542b';
+  }
+
+  private drawZoneHazards(
+    ctx: CanvasRenderingContext2D,
+    cameraX: number,
+    viewportWidth: number,
+    preferences: ZoneAccessibilityPreferences = this.zoneAccessibilityPreferences(),
+  ) {
+    if (this.isTownMode) return;
+
+    for (const hazard of this.getZoneHazardSnapshot()) {
+      if (hazard.phase === 'idle' || hazard.phase === 'cooldown') continue;
+      if (hazard.x + hazard.radius < cameraX - 100 || hazard.x - hazard.radius > cameraX + viewportWidth + 100) continue;
+
+      const colour = this.zoneHazardColour(hazard.kind);
+      const animatedPulse = preferences.reducedMotion
+        ? 1
+        : 0.88 + Math.sin(this.zoneHazardClock * 14) * 0.12;
+      ctx.save();
+      ctx.translate(hazard.x, hazard.y);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      if (hazard.phase === 'telegraph') {
+        const contraction = preferences.reducedMotion ? 1 : 1.18 - hazard.phaseProgress * 0.18;
+        ctx.globalAlpha = 0.18 + hazard.phaseProgress * 0.24;
+        ctx.fillStyle = colour;
+        ctx.beginPath();
+        ctx.ellipse(0, -2, hazard.radius, Math.max(12, hazard.radius * 0.2), 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.globalAlpha = 0.76;
+        ctx.strokeStyle = colour;
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([8, 6]);
+        ctx.lineDashOffset = preferences.reducedMotion ? 0 : -this.zoneHazardClock * 24;
+        ctx.beginPath();
+        ctx.ellipse(
+          0,
+          -2,
+          hazard.radius * contraction,
+          Math.max(15, hazard.radius * 0.24 * contraction),
+          0,
+          0,
+          Math.PI * 2,
+        );
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.globalAlpha = 0.9;
+        ctx.font = '900 10px "Outfit", sans-serif';
+        ctx.fillStyle = '#fff7ed';
+        ctx.strokeStyle = 'rgba(15, 23, 42, 0.9)';
+        ctx.lineWidth = 3;
+        ctx.strokeText('DANGER', 0, -25);
+        ctx.fillText('DANGER', 0, -25);
+      } else {
+        ctx.globalAlpha = 0.48 * animatedPulse;
+        ctx.fillStyle = colour;
+        ctx.beginPath();
+        ctx.ellipse(0, -3, hazard.radius, Math.max(18, hazard.radius * 0.25), 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.globalAlpha = 0.9;
+        ctx.strokeStyle = '#fff7ed';
+        ctx.lineWidth = 2;
+        for (let offset = -0.65; offset <= 0.65; offset += 0.325) {
+          const x = hazard.radius * offset;
+          ctx.beginPath();
+          ctx.moveTo(x - 7, 0);
+          ctx.lineTo(x, -24 - Math.abs(offset) * 10);
+          ctx.lineTo(x + 7, 0);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+  }
+
   /**
    * Render side-view world, player, enemies, loot, and spell animations
    */
@@ -2762,6 +4371,15 @@ export class SideViewEngine {
     this.canvasWidth = virtualWidth;
     this.canvasHeight = virtualHeight;
     this.groundY = Math.round(virtualHeight - 75);
+    const currentTheme = this.activeZoneTheme();
+    const visualPreferences = this.zoneAccessibilityPreferences();
+    const vfxQuality = this.particles.getVfxQuality();
+    const presentationOptions = {
+      elapsedSeconds: this.zoneHazardClock,
+      reducedMotion: visualPreferences.reducedMotion,
+      quality: vfxQuality === 'high' ? 'high' as const : (vfxQuality === 'medium' ? 'balanced' as const : 'low' as const),
+    };
+    this.ensureZoneGeometry();
 
     const p = this.player;
     const shake = this.particles.getScreenShakeOffset();
@@ -2772,14 +4390,26 @@ export class SideViewEngine {
     ctx.scale(zoom, zoom);
 
     // 1. Draw Seamless Parallax Background & Deep Ground Tiles
-    const currentTheme = this.isTownMode ? ('town' as BattleTheme) : this.battleTheme;
     sprites.drawEnvironment(ctx, camX, virtualWidth, virtualHeight, this.groundY, this.arenaWidth, currentTheme);
+    sprites.drawZoneContentPlane(ctx, currentTheme, 'background', camX, virtualWidth, this.groundY);
+    sprites.drawZoneContentPlane(ctx, currentTheme, 'gameplay-back', camX, virtualWidth, this.groundY);
+    drawZonePresentation(
+      ctx,
+      currentTheme,
+      'behind-entities',
+      camX,
+      virtualWidth,
+      virtualHeight,
+      this.groundY,
+      presentationOptions,
+    );
 
     ctx.save();
     ctx.translate(-camX, -camY);
 
     // 1.5 Draw Multi-Level Platforms
     sprites.drawPlatforms(ctx, this.platforms, currentTheme);
+    this.drawZoneHazards(ctx, camX, virtualWidth, visualPreferences);
 
     // 2. Render Dropped Loot with Rarity Beacons & Cached Sprites
     for (const loot of this.droppedLoots) {
@@ -2916,7 +4546,7 @@ export class SideViewEngine {
           ctx.shadowColor = '#dc2626';
           ctx.shadowBlur = 10;
           ctx.textAlign = 'center';
-          ctx.fillText('⚠ !', enemy.x, enemy.y - enemy.height - 12);
+          ctx.fillText('DANGER', enemy.x, enemy.y - enemy.height - 12);
           ctx.restore();
         }
 
@@ -2938,6 +4568,25 @@ export class SideViewEngine {
         ctx.fillStyle = '#ffffff';
         ctx.textAlign = 'center';
         ctx.fillText(enemy.name, 0, barY - 4);
+
+        const statuses = this.statusesForEnemy(enemy);
+        if (statuses.length) {
+          const markerY = barY - 18;
+          const startX = -((statuses.length - 1) * 13) / 2;
+          ctx.font = '900 9px "Outfit", sans-serif';
+          statuses.forEach((status, index) => {
+            const markerX = startX + index * 13;
+            ctx.fillStyle = 'rgba(2, 6, 23, 0.88)';
+            ctx.beginPath();
+            ctx.arc(markerX, markerY, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = status.colour;
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.fillStyle = status.colour;
+            ctx.fillText(status.kind[0].toUpperCase(), markerX, markerY + 3);
+          });
+        }
         ctx.restore();
       }
     }
@@ -2967,10 +4616,6 @@ export class SideViewEngine {
     );
 
     ctx.restore();
-    // Cinematic overlay for ultimates: dim + declaration, over the world.
-    this.ultimate.draw(ctx, width, height);
-
-
     // Render Remote Multiplayer Players
     if (network.room) {
       for (const socketId in network.remotePlayers) {
@@ -3028,6 +4673,20 @@ export class SideViewEngine {
     );
 
     ctx.restore();
+    sprites.drawZoneContentPlane(ctx, currentTheme, 'foreground', camX, virtualWidth, this.groundY);
+    drawZonePresentation(
+      ctx,
+      currentTheme,
+      'above-entities',
+      camX,
+      virtualWidth,
+      virtualHeight,
+      this.groundY,
+      presentationOptions,
+    );
+    this.particles.drawScreenOverlays(ctx, virtualWidth, virtualHeight);
+    // Cinematic dim/declaration are screen-space, above the scene and below DOM HUD.
+    this.ultimate.draw(ctx, virtualWidth, virtualHeight);
     ctx.restore();
   }
 

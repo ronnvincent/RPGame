@@ -1,0 +1,8 @@
+Monsters Creatures Fantasy by Luiz Melo
+Source: https://luizmelo.itch.io/monsters-creatures-fantasy
+License: CC0-1.0
+Canonical license: https://creativecommons.org/publicdomain/zero/1.0/
+
+The official asset page identifies this pack as Creative Commons Zero and
+permits commercial and non-commercial use without required attribution.
+This local notice documents the provenance of the already bundled files.

@@ -21,6 +21,13 @@ import { CHARACTER_CLASSES } from '../classes/ClassDefinitions';
 import { DUNGEONS } from '../dungeons/DungeonManager';
 import { HERO_SPRITES, heroFrame } from '../engine/HeroSprites';
 import { synergyFor } from '../network/PartySynergy';
+import {
+  escapeHtml,
+  escapeHtmlAttribute,
+  finiteNumber,
+  installModalFocusTrap,
+  safeLocalAssetPath,
+} from './UiSafety';
 
 const STYLE_ID = 'coop-lobby-style';
 type Tab = 'party' | 'public' | 'friends';
@@ -49,6 +56,7 @@ export class CoopLobbyUI {
   private idleFrame = 0;
   private idleTimer: number | null = null;
   private keyHandler: ((e: KeyboardEvent) => void) | null = null;
+  private releaseFocus: (() => void) | null = null;
 
   constructor(parent: HTMLElement, onLaunch: () => void) {
     this.parent = parent;
@@ -89,15 +97,28 @@ export class CoopLobbyUI {
 
     const root = document.createElement('div');
     root.id = 'coop-lobby';
-    root.innerHTML = '<div class="cl-panel"><div class="cl-body">Opening party…</div></div>';
+    root.className = 'rpg-screen';
+    root.setAttribute('role', 'dialog');
+    root.setAttribute('aria-modal', 'true');
+    root.setAttribute('aria-labelledby', 'coop-lobby-title');
+    root.innerHTML = '<div class="cl-panel"><div class="cl-body">Opening party...</div></div>';
     this.parent.appendChild(root);
     this.root = root;
     network.requestFriends();
     this.render();
+    this.releaseFocus = installModalFocusTrap(root, {
+      onEscape: () => {
+        network.leaveLobby();
+        this.close();
+      },
+      initialFocus: root.querySelector<HTMLButtonElement>('.cl-tab.on'),
+    });
 
     // The character on the stage breathes. A still frame reads as a loading
     // screen; the walk cycle is what makes the lobby feel like the game.
-    this.idleTimer = window.setInterval(() => {
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      || document.documentElement.dataset.rpgReducedMotion === 'true';
+    if (!reducedMotion) this.idleTimer = window.setInterval(() => {
       this.idleFrame++;
       // Every card, each on its own class's frame count - querySelector took
       // the first one, so only the leftmost character ever animated.
@@ -110,6 +131,8 @@ export class CoopLobbyUI {
   }
 
   public close() {
+    this.releaseFocus?.();
+    this.releaseFocus = null;
     if (this.keyHandler) {
       window.removeEventListener('keydown', this.keyHandler);
       this.keyHandler = null;
@@ -117,6 +140,10 @@ export class CoopLobbyUI {
     if (this.idleTimer !== null) {
       window.clearInterval(this.idleTimer);
       this.idleTimer = null;
+    }
+    if (this.voiceRepaint) {
+      voice.removeStateListener(this.voiceRepaint);
+      this.voiceRepaint = null;
     }
     this.root?.remove();
     this.root = null;
@@ -156,8 +183,12 @@ export class CoopLobbyUI {
 
   private render() {
     if (!this.root) return;
+    const focused = this.root.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
+    const focusKey = focused?.dataset.focusKey || '';
+    const inviteDraft = (this.root.querySelector('.cl-id') as HTMLInputElement | null)?.value || '';
+    const friendDraft = (this.root.querySelector('.cl-fid') as HTMLInputElement | null)?.value || '';
     const st = this.state;
-    const max = st?.maxPlayers ?? 4;
+    const max = Math.max(1, Math.min(4, Math.trunc(finiteNumber(st?.maxPlayers, 4))));
     const members = st?.members ?? [];
     const dungeon = DUNGEONS.find(d => d.id === st?.dungeonId);
     const iAmHost = network.isHost;
@@ -176,10 +207,10 @@ export class CoopLobbyUI {
     }
 
     const action = iAmHost
-      ? `<button class="cl-key cl-start" ${everyoneReady ? '' : 'disabled'}>
+      ? `<button class="cl-key cl-start" type="button" data-focus-key="start" ${everyoneReady ? '' : 'disabled'}>
            <b>ENTER</b> ${everyoneReady ? 'Start Run' : 'Waiting for party'}
          </button>`
-      : `<button class="cl-key ${this.localReady ? 'cl-unready' : 'cl-ready'}">
+      : `<button class="cl-key ${this.localReady ? 'cl-unready' : 'cl-ready'}" type="button" data-focus-key="ready">
            <b>R</b> ${this.localReady ? 'Cancel Ready' : 'Ready'}
          </button>`;
 
@@ -187,7 +218,12 @@ export class CoopLobbyUI {
       <div class="cl-stage">
         <div class="cl-topo"></div>
 
-        <div class="cl-tabs">
+        <header class="cl-titlebar">
+          <div><p class="rpg-kicker">Expedition Staging</p><h1 class="rpg-title" id="coop-lobby-title">Party Lobby</h1></div>
+          <div class="cl-room-status" role="status">${network.socket?.connected ? 'Connected' : 'Connection recovering'}</div>
+        </header>
+
+        <div class="cl-tabs" role="tablist" aria-label="Lobby sections">
           <span class="cl-hint">Q</span>
           ${this.tabBtn('party', 'Party')}
           ${this.tabBtn('public', 'Public Games')}
@@ -196,19 +232,19 @@ export class CoopLobbyUI {
         </div>
 
         <div class="cl-main">
-          <div class="cl-left">
-            <button class="cl-quick">QUICK JOIN</button>
+          <aside class="cl-left" aria-label="Expedition details">
+            <button class="cl-quick" type="button" data-focus-key="quick">QUICK JOIN</button>
 
             <div class="cl-facts">
               ${this.fact('Dungeon', dungeon ? dungeon.name : (st?.dungeonId || 'Not chosen'))}
               ${this.fact('Network', network.socket?.connected ? 'CONNECTED' : 'OFFLINE')}
               ${this.fact('Party', `${members.length}/${max}`)}
               ${this.fact('Bonus', synergy.label, synergy.id !== 'none')}
-              ${this.fact('Your ID', localStorage.getItem('playerShortId') || '&mdash;')}
+              ${this.fact('Your ID', localStorage.getItem('playerShortId') || 'Not assigned')}
             </div>
-          </div>
+          </aside>
 
-          <div class="cl-right">
+          <section class="cl-right" aria-live="polite">
             ${this.tab === 'party' ? `
               <div class="cl-crests">${crests.join('')}</div>
               <div class="cl-syn ${synergy.id !== 'none' ? 'on' : ''}">
@@ -223,20 +259,25 @@ export class CoopLobbyUI {
 
             ${this.tab === 'public' ? this.publicPanel() : ''}
             ${this.tab === 'friends' ? this.friendsPanel() : ''}
-          </div>
+          </section>
         </div>
 
-        <div class="cl-toast"></div>
+        <div class="cl-toast" role="status" aria-live="polite"></div>
 
         <div class="cl-foot">
-          <button class="cl-key cl-leave"><b>ESC</b> Leave Party</button>
-          <button class="cl-key cl-mic" title="Toggle Microphone"><b>M</b> Mic</button>
-          <button class="cl-key cl-spk" title="Toggle Party Audio"><b>H</b> Audio</button>
+          <button class="cl-key cl-leave" type="button" data-focus-key="leave"><b>ESC</b> Leave Party</button>
+          <button class="cl-key cl-mic" type="button" data-focus-key="mic" title="Toggle Microphone"><b>M</b> Mic</button>
+          <button class="cl-key cl-spk" type="button" data-focus-key="speaker" title="Toggle Party Audio"><b>H</b> Audio</button>
           <div class="cl-foot-right">${action}</div>
         </div>
       </div>`;
 
     this.bind();
+    const invite = this.root.querySelector('.cl-id') as HTMLInputElement | null;
+    const friend = this.root.querySelector('.cl-fid') as HTMLInputElement | null;
+    if (invite) invite.value = inviteDraft;
+    if (friend) friend.value = friendDraft;
+    if (focusKey) requestAnimationFrame(() => this.root?.querySelector<HTMLElement>(`[data-focus-key="${CSS.escape(focusKey)}"]`)?.focus());
   }
 
   private pct(mult: number): string {
@@ -245,13 +286,14 @@ export class CoopLobbyUI {
   }
 
   private tabBtn(id: Tab, label: string): string {
-    return `<button class="cl-tab ${this.tab === id ? 'on' : ''}" data-tab="${id}">${label}</button>`;
+    const active = this.tab === id;
+    return `<button class="cl-tab ${active ? 'on' : ''}" type="button" role="tab" aria-selected="${active}" data-tab="${id}" data-focus-key="tab-${id}">${escapeHtml(label)}</button>`;
   }
 
   private fact(label: string, value: string, highlight = false): string {
     return `<div class="cl-fact">
-      <span class="cl-fact-k">${label}</span>
-      <span class="cl-fact-v ${highlight ? 'hot' : ''}">${value}</span>
+      <span class="cl-fact-k">${escapeHtml(label)}</span>
+      <span class="cl-fact-v ${highlight ? 'hot' : ''}">${escapeHtml(value)}</span>
     </div>`;
   }
 
@@ -271,17 +313,22 @@ export class CoopLobbyUI {
     // packet, so a teammate's sprite is as available as ours - it was simply
     // never asked for. data-class lets the idle loop advance each one on its
     // own frame count.
-    const src = mine ? (heroSrc ?? this.heroIdleSrc(m.classId)) : this.heroIdleSrc(m.classId);
+    const src = safeLocalAssetPath(mine ? (heroSrc ?? this.heroIdleSrc(m.classId)) : this.heroIdleSrc(m.classId));
+    const iconPath = safeLocalAssetPath(icon);
+    const classId = cls?.id || '';
+    // A network class id must never be inserted raw as data-class="${m.classId...".
     const art = src
-      ? `<img class="cl-hero-img" data-class="${m.classId || ''}" src="${src}" alt="" />`
-      : icon ? `<img src="${icon}" alt="" />` : '';
+      ? `<img class="cl-hero-img" data-class="${escapeHtmlAttribute(classId)}" src="${escapeHtmlAttribute(src)}" alt="" />`
+      : iconPath ? `<img src="${escapeHtmlAttribute(iconPath)}" alt="" />` : '';
+    const level = Math.max(1, Math.trunc(finiteNumber(m.level, 1)));
+    const power = Math.max(0, Math.trunc(finiteNumber(m.power)));
     return `
       <div class="cl-crest filled ${mine ? 'is-me' : ''} ${m.ready ? 'is-ready' : ''}" style="--accent:${accent}">
         <div class="cl-crest-art ${src ? 'cl-crest-hero' : ''}">${art}</div>
-        <div class="cl-crest-name">${m.name}${m.online ? '' : ' <i>(offline)</i>'}</div>
-        <div class="cl-crest-meta">Lv ${m.level} &middot; ${cls ? cls.name : 'Choosing'}</div>
-        ${m.power ? `<div class="cl-crest-power">${m.power.toLocaleString()} PWR</div>` : ''}
-        <div class="cl-crest-state">${state}</div>
+        <div class="cl-crest-name">${escapeHtml(m.name)}${m.online ? '' : ' <i>(offline)</i>'}</div>
+        <div class="cl-crest-meta">Lv ${level} &middot; ${escapeHtml(cls ? cls.name : 'Choosing')}</div>
+        ${power ? `<div class="cl-crest-power">${power.toLocaleString()} PWR</div>` : ''}
+        <div class="cl-crest-state">${escapeHtml(state)}</div>
       </div>`;
   }
 
@@ -297,14 +344,17 @@ export class CoopLobbyUI {
     const rows = this.openLobbies.length
       ? this.openLobbies.map(l => {
           const d = DUNGEONS.find(x => x.id === l.dungeonId);
-          const host = `${l.hostName}&rsquo;s party`;
+          const host = `${l.hostName}'s party`;
+          const level = Math.max(1, Math.trunc(finiteNumber(l.minLevel, 1)));
+          const members = Math.max(0, Math.trunc(finiteNumber(l.members)));
+          const maximum = Math.max(1, Math.min(4, Math.trunc(finiteNumber(l.maxPlayers, 4))));
           return `
             <div class="cl-pub">
               <div class="cl-pub-meta">
-                <div class="cl-pub-name">${d ? d.name : l.dungeonId}</div>
-                <div class="cl-pub-sub">${host} &middot; Lv ${l.minLevel}+ &middot; ${l.members}/${l.maxPlayers}</div>
+                <div class="cl-pub-name">${escapeHtml(d ? d.name : l.dungeonId)}</div>
+                <div class="cl-pub-sub">${escapeHtml(host)} &middot; Lv ${level}+ &middot; ${members}/${maximum}</div>
               </div>
-              <button class="cl-mini cl-join" data-room="${l.roomId}">JOIN</button>
+              <button class="cl-mini cl-join" type="button" data-room="${escapeHtmlAttribute(l.roomId)}" data-focus-key="join-${escapeHtmlAttribute(l.roomId)}">JOIN</button>
             </div>`;
         }).join('')
       : '<div class="cl-none">No open parties right now. Start one and others can find you.</div>';
@@ -313,7 +363,7 @@ export class CoopLobbyUI {
       <div class="cl-pane">
         <div class="cl-pane-head">
           <span>OPEN PARTIES</span>
-          <button class="cl-mini cl-refresh">REFRESH</button>
+          <button class="cl-mini cl-refresh" type="button" data-focus-key="refresh">REFRESH</button>
         </div>
         <div class="cl-pub-list">${rows}</div>
       </div>`;
@@ -324,14 +374,16 @@ export class CoopLobbyUI {
       <div class="cl-pane">
         <div class="cl-pane-head"><span>INVITE BY ID</span></div>
         <div class="cl-row">
-          <input class="cl-id" type="text" maxlength="6" placeholder="PLAYER ID" />
-          <button class="cl-mini cl-inv">INVITE</button>
+          <label class="rpg-visually-hidden" for="cl-invite-id">Player ID to invite</label>
+          <input class="cl-id" id="cl-invite-id" type="text" maxlength="6" autocomplete="off" placeholder="PLAYER ID" data-focus-key="invite-id" />
+          <button class="cl-mini cl-inv" type="button" data-focus-key="invite">INVITE</button>
         </div>
 
         <div class="cl-pane-head"><span>FRIENDS</span></div>
         <div class="cl-row">
-          <input class="cl-fid" type="text" maxlength="6" placeholder="ADD BY ID" />
-          <button class="cl-mini cl-addf">ADD</button>
+          <label class="rpg-visually-hidden" for="cl-friend-id">Player ID to add as friend</label>
+          <input class="cl-fid" id="cl-friend-id" type="text" maxlength="6" autocomplete="off" placeholder="ADD BY ID" data-focus-key="friend-id" />
+          <button class="cl-mini cl-addf" type="button" data-focus-key="add-friend">ADD</button>
         </div>
         <div class="cl-friends">${this.friendRows()}</div>
       </div>`;
@@ -345,15 +397,17 @@ export class CoopLobbyUI {
       const cls = classOf(f.classId);
       const status = f.inParty ? 'In party' : f.online ? 'Online' : 'Offline';
       const canInvite = f.online && !f.inParty;
+      const level = Math.max(1, Math.trunc(finiteNumber(f.level, 1)));
+      const uuid = escapeHtmlAttribute(f.uuid);
       return `
         <div class="cl-friend ${f.online ? '' : 'is-off'}">
           <span class="cl-dot ${f.online ? 'on' : ''}"></span>
           <div class="cl-fmeta">
-            <div class="cl-fname">${f.name}</div>
-            <div class="cl-fsub">Lv ${f.level}${cls ? ' &middot; ' + cls.name : ''} &middot; ${status}</div>
+            <div class="cl-fname">${escapeHtml(f.name)}</div>
+            <div class="cl-fsub">Lv ${level}${cls ? ' &middot; ' + escapeHtml(cls.name) : ''} &middot; ${escapeHtml(status)}</div>
           </div>
-          <button class="cl-mini cl-finv" data-uuid="${f.uuid}" ${canInvite ? '' : 'disabled'}>INVITE</button>
-          <button class="cl-mini cl-frem" data-uuid="${f.uuid}" title="Remove">&#10005;</button>
+          <button class="cl-mini cl-finv" type="button" data-uuid="${uuid}" data-focus-key="friend-invite-${uuid}" ${canInvite ? '' : 'disabled'}>INVITE</button>
+          <button class="cl-mini cl-frem" type="button" data-uuid="${uuid}" data-focus-key="friend-remove-${uuid}" title="Remove friend">&times;</button>
         </div>`;
     }).join('');
   }
@@ -368,16 +422,18 @@ export class CoopLobbyUI {
 
     const paintVoice = () => {
       if (micBtn) {
-        micBtn.textContent = voice.isMicOn ? '🎙️ ON' : '🎙️ MUTED';
+        micBtn.textContent = voice.isMicOn ? 'Mic On' : 'Mic Muted';
         micBtn.style.opacity = voice.isMicOn ? '1' : '0.55';
+        micBtn.setAttribute('aria-pressed', String(voice.isMicOn));
       }
       if (spkBtn) {
         const live = voice.peerCount;
-        spkBtn.textContent = !voice.isSpeakerOn ? '🎧 OFF'
-          : live > 0 ? `🎧 ${live}`
-          : voice.attemptedPeers > 0 ? '🎧 …'
-          : '🎧 ON';
+        spkBtn.textContent = !voice.isSpeakerOn ? 'Audio Off'
+          : live > 0 ? `Audio ${live}`
+          : voice.attemptedPeers > 0 ? 'Audio Connecting'
+          : 'Audio On';
         spkBtn.style.opacity = voice.isSpeakerOn ? '1' : '0.55';
+        spkBtn.setAttribute('aria-pressed', String(voice.isSpeakerOn));
       }
     };
     // Re-rendering replaces these buttons, so the old listener is dropped
@@ -788,6 +844,62 @@ export class CoopLobbyUI {
         .cl-fact-k { width: 60px; }
         .cl-foot { padding: 8px 14px 10px; }
         .cl-key { padding: 6px 8px; font-size: 10.5px; }
+      }
+
+      /* Shared dark-fantasy treatment. Runtime Kenney borders supply the
+         pixel frame while the staging layout and interaction hooks stay put. */
+      #coop-lobby { padding: 0; background: #05070a; }
+      .cl-stage {
+        padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right))
+          max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+        background: radial-gradient(circle at 50% 20%, rgba(82,54,108,.2), transparent 44%), linear-gradient(#0b0e14,#05070a);
+      }
+      .cl-titlebar {
+        position: relative; display: flex; align-items: flex-start; justify-content: space-between;
+        gap: 12px; padding: 8px 18px 2px;
+      }
+      .cl-titlebar p { margin: 0 0 2px; }
+      .cl-room-status { color: #9dd8ac; font-size: 11px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+      .cl-tabs { border-bottom-color: rgba(231,189,85,.24); }
+      .cl-tab { min-height: 44px; border: 1px solid transparent; }
+      .cl-tab.on { color: var(--rpg-gold-bright); border-color: rgba(231,189,85,.45); background: rgba(231,189,85,.1); }
+      .cl-quick { min-height: 48px; color: #171006; background: linear-gradient(#ffe39a,#d8a83b 52%,#a66f20 53%); box-shadow: 0 4px #07080b; }
+      .cl-pane, .cl-crest, .cl-syn {
+        border: 10px solid transparent;
+        border-image: url('/assets/runtime/ui/fantasy-borders/default-panel/panel-016.png') 16 fill / 10px / 0 stretch;
+        image-rendering: pixelated;
+      }
+      .cl-crest { border-width: 8px; border-image-width: 8px; }
+      .cl-mini, .cl-key { min-height: 44px; touch-action: manipulation; }
+      .cl-mini { color: var(--rpg-paper); border-color: rgba(231,189,85,.32); background: linear-gradient(#302c34,#15161d); }
+      .cl-row input { min-height: 44px; border-color: rgba(231,189,85,.34); }
+      .cl-foot { border-top-color: rgba(231,189,85,.2); background: rgba(5,7,10,.76); }
+
+      @media (pointer: coarse) {
+        .cl-tab, .cl-mini, .cl-key, .cl-quick, .cl-row input { min-height: 48px; }
+      }
+
+      @media (orientation: portrait), (max-width: 620px) {
+        .cl-stage { overflow-y: auto; }
+        .cl-titlebar { padding: 5px 8px 0; }
+        .cl-titlebar .rpg-title { font-size: 1.15rem; }
+        .cl-tabs { justify-content: flex-start; overflow-x: auto; padding-inline: 4px; }
+        .cl-hint { display: none; }
+        .cl-main { flex: none; display: flex; flex-direction: column; gap: 9px; padding: 8px 5px; min-height: auto; }
+        .cl-left { display: grid; grid-template-columns: auto 1fr; align-items: start; gap: 8px; }
+        .cl-quick { padding: 9px 13px; margin: 0; font-size: 11px; }
+        .cl-facts { display: grid; grid-template-columns: 1fr 1fr; }
+        .cl-fact { gap: 5px; }
+        .cl-fact-k { width: auto; }
+        .cl-right { min-height: 380px; }
+        .cl-crests { justify-content: flex-start; min-height: 270px; overflow-x: auto; padding-bottom: 5px; }
+        .cl-crest { width: 126px; min-height: 250px; }
+        .cl-crest-art.cl-crest-hero { height: 120px; }
+        .cl-crest-art img.cl-hero-img { height: 184px; }
+        .cl-pane { width: 100%; max-width: none; min-height: 300px; }
+        .cl-foot { position: sticky; bottom: 0; flex-wrap: wrap; padding: 8px 5px; z-index: 4; }
+        .cl-foot-right { margin-left: 0; }
+        .cl-toast { position: fixed; bottom: max(72px, env(safe-area-inset-bottom)); }
       }
     `;
     document.head.appendChild(st);

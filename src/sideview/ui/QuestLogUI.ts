@@ -1,243 +1,191 @@
-/**
- * Full Quest Log & Lore Codex Modal
- * Features:
- * 1. Category Tabs: Main Story, Side Bounties, Completed Log, Lore & Bestiary
- * 2. Detailed Objective Tracking Checklists
- * 3. Item & EXP Reward Previews
- * 4. Responsive Keyboard Shortcuts ([J] / [Escape])
- */
-
 import { quests } from '../quests/QuestManager';
-import { QUEST_DEFINITIONS, QuestDefinition } from '../quests/QuestDefinitions';
 import { audio } from '../engine/AudioManager';
+import { clampPercent, escapeHtml, installModalFocusTrap } from './UiSafety';
+
+type QuestTab = 'main' | 'side' | 'completed' | 'lore';
+const STYLE_ID = 'quest-log-rpg-style';
+
+const LORE_ENTRIES = [
+  { title: 'The Five Primordial Runes', tag: 'World', content: 'Ancient artifacts created at the dawn of Aethelgard. Verdant sustains nature, Shadow balances the spirit realm, Flame carries energy, Frost safeguards memory, and Void holds the cosmic horizon.' },
+  { title: 'NightBorne Void Overlord', tag: 'Boss', content: 'A cosmic entity sealed during the First Calamity. NightBorne shapes eclipses, shadow doubles, and dimensional rifts to consume light.' },
+  { title: 'Chief Warlord Grimjaw', tag: 'Boss', content: 'Leader of the subterranean goblin hordes. The stolen Verdant Rune drives his final, desperate rage.' },
+  { title: 'Arch-Lich Malakar', tag: 'Boss', content: 'A fallen archmage who traded his mortal soul for unlife and now raises soldiers from the Crypt of the Damned.' },
+  { title: 'Ancient Red Dragon Ignis', tag: 'Boss', content: 'An elder dragon sleeping beneath the caldera. His awakening turns stone corridors into rivers of fire.' },
+] as const;
 
 export class QuestLogUI {
-  private container: HTMLElement;
   private modalEl: HTMLElement | null = null;
-  private currentTab: 'main' | 'side' | 'completed' | 'lore' = 'main';
+  private releaseFocus: (() => void) | null = null;
+  private currentTab: QuestTab = 'main';
 
-  constructor(parent: HTMLElement) {
-    this.container = parent;
+  constructor(private container: HTMLElement) {
+    this.injectStyles();
   }
 
-  public toggle() {
-    if (this.modalEl) {
-      this.close();
-    } else {
-      this.open();
-    }
+  public toggle(): void {
+    if (this.modalEl) this.close();
+    else this.open();
   }
 
-  public open() {
+  public open(): void {
     this.close();
     audio.playPageTurn();
+    const modal = document.createElement('div');
+    modal.className = 'rpg-screen rpg-modal quest-log-screen';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', 'quest-log-title');
+    modal.innerHTML = `<div class="rpg-screen__backdrop" aria-hidden="true"></div>
+      <section class="rpg-panel rpg-dialog quest-log-dialog" tabindex="-1">
+        <header class="rpg-dialog__header">
+          <div><p class="rpg-kicker">Journal and Field Notes</p><h2 class="rpg-title" id="quest-log-title">Quest Log</h2></div>
+          <span class="rpg-help"><kbd class="rpg-key">J</kbd> or <kbd class="rpg-key">Esc</kbd> closes</span>
+        </header>
+        <div class="rpg-tabs" role="tablist" aria-label="Quest categories"></div>
+        <div class="rpg-dialog__body quest-log-content" id="quest-log-content" role="tabpanel" tabindex="0"></div>
+        <footer class="rpg-dialog__footer"><button class="rpg-button" id="close-quest-log-btn" type="button">Close Journal</button></footer>
+      </section>`;
+    this.container.appendChild(modal);
+    this.modalEl = modal;
 
-    this.modalEl = document.createElement('div');
-    this.modalEl.className = 'dialogue-modal-backdrop';
-    this.modalEl.style.justifyContent = 'center';
-    this.modalEl.style.padding = 'max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left))';
-
-    const frame = document.createElement('div');
-    frame.className = 'dialogue-box-frame quest-log-modal';
-    frame.style.maxWidth = '880px';
-    frame.style.width = '94vw';
-    frame.style.height = '85dvh';
-    frame.style.maxHeight = '85dvh';
-    frame.style.display = 'flex';
-    frame.style.flexDirection = 'column';
-    frame.style.touchAction = 'pan-y';
-
-    // Header
-    const header = document.createElement('div');
-    header.className = 'dialogue-header-row';
-    header.innerHTML = `
-      <div style="font-size: 18px; font-weight: 900; color: #ffd700; display: flex; align-items: center; gap: 8px;">
-        <span>📜 QUEST LOG & LORE ARCHIVE</span>
-      </div>
-      <div style="font-size: 11px; color: #94a3b8; font-weight: 700;">[J / Esc to Close]</div>
-    `;
-
-    // Tabs Row
-    const tabsRow = document.createElement('div');
-    tabsRow.style.cssText = 'display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 10px 0; border-bottom: 2px solid rgba(255,215,0,0.2); padding-bottom: 8px;';
-    
-    const tabs: { id: 'main' | 'side' | 'completed' | 'lore'; label: string; icon: string }[] = [
-      { id: 'main', label: 'Main Story', icon: '⚔️' },
-      { id: 'side', label: 'Side & Bounties', icon: '🎯' },
-      { id: 'completed', label: 'Completed', icon: '🏆' },
-      { id: 'lore', label: 'Lore & Bestiary', icon: '📖' }
+    const tabs: Array<{ id: QuestTab; label: string }> = [
+      { id: 'main', label: 'Main Story' }, { id: 'side', label: 'Side and Bounties' },
+      { id: 'completed', label: 'Completed' }, { id: 'lore', label: 'Lore and Bestiary' },
     ];
-
-    tabs.forEach((tab) => {
-      const tabBtn = document.createElement('button');
-      tabBtn.className = `dialogue-btn ${this.currentTab === tab.id ? 'dialogue-btn-quest' : ''}`;
-      tabBtn.innerHTML = `${tab.icon} ${tab.label}`;
-      tabBtn.onclick = () => {
-        audio.playPageTurn();
-        this.currentTab = tab.id;
-        this.renderTabContent(contentArea);
-        tabsRow.querySelectorAll('.dialogue-btn').forEach((b, i) => {
-          b.className = `dialogue-btn ${tabs[i].id === this.currentTab ? 'dialogue-btn-quest' : ''}`;
-        });
-      };
-      tabsRow.appendChild(tabBtn);
+    const tabList = modal.querySelector('.rpg-tabs') as HTMLElement;
+    tabs.forEach((tab, index) => {
+      const button = document.createElement('button');
+      button.className = 'rpg-tab';
+      button.type = 'button';
+      button.id = `quest-tab-${tab.id}`;
+      button.dataset.tab = tab.id;
+      button.setAttribute('role', 'tab');
+      button.setAttribute('aria-controls', 'quest-log-content');
+      button.setAttribute('aria-selected', String(this.currentTab === tab.id));
+      button.tabIndex = this.currentTab === tab.id ? 0 : -1;
+      button.textContent = tab.label;
+      button.addEventListener('click', () => this.setTab(tab.id));
+      button.addEventListener('keydown', event => {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+        event.preventDefault();
+        const next = (index + (event.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length;
+        this.setTab(tabs[next].id);
+        tabList.querySelector<HTMLButtonElement>(`[data-tab="${tabs[next].id}"]`)?.focus();
+      });
+      tabList.appendChild(button);
     });
 
-    // Content Area
-    const contentArea = document.createElement('div');
-    contentArea.style.cssText = 'flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 6px;';
-
-    this.renderTabContent(contentArea);
-
-    // Footer
-    const footer = document.createElement('div');
-    footer.className = 'dialogue-actions-row';
-    footer.innerHTML = `<button id="close-quest-log-btn" class="dialogue-btn">Close ✕</button>`;
-    footer.querySelector('#close-quest-log-btn')?.addEventListener('click', () => this.close());
-
-    frame.appendChild(header);
-    frame.appendChild(tabsRow);
-    frame.appendChild(contentArea);
-    frame.appendChild(footer);
-    this.modalEl.appendChild(frame);
-    this.container.appendChild(this.modalEl);
+    modal.querySelector('#close-quest-log-btn')?.addEventListener('click', () => this.close());
+    modal.addEventListener('pointerdown', event => { if (event.target === modal) this.close(); });
+    this.renderTabContent();
+    this.releaseFocus = installModalFocusTrap(modal, {
+      onEscape: () => this.close(),
+      initialFocus: modal.querySelector<HTMLButtonElement>(`[data-tab="${this.currentTab}"]`),
+    });
   }
 
-  private renderTabContent(container: HTMLElement) {
-    container.innerHTML = '';
+  private setTab(tab: QuestTab): void {
+    if (!this.modalEl) return;
+    this.currentTab = tab;
+    audio.playPageTurn();
+    this.modalEl.querySelectorAll<HTMLButtonElement>('[role="tab"]').forEach(button => {
+      const active = button.dataset.tab === tab;
+      button.setAttribute('aria-selected', String(active));
+      button.tabIndex = active ? 0 : -1;
+    });
+    const content = this.modalEl.querySelector('#quest-log-content');
+    content?.setAttribute('aria-labelledby', `quest-tab-${tab}`);
+    this.renderTabContent();
+  }
 
-    if (this.currentTab === 'main' || this.currentTab === 'side') {
-      const activeList = quests.getAllActiveQuests().filter(q => 
-        this.currentTab === 'main' ? q.quest.category === 'main' : q.quest.category !== 'main'
-      );
+  private renderTabContent(): void {
+    const content = this.modalEl?.querySelector('#quest-log-content') as HTMLElement | null;
+    if (!content) return;
+    content.replaceChildren();
 
-      if (activeList.length === 0) {
-        container.innerHTML = `
-          <div style="text-align: center; color: #94a3b8; font-size: 14px; padding: 40px; font-style: italic;">
-            No active ${this.currentTab === 'main' ? 'Main Story' : 'Side'} quests currently.
-            <div style="font-size: 12px; color: #64748b; margin-top: 6px;">Talk to NPCs in the Haven of Eldermoor to accept new assignments!</div>
-          </div>
-        `;
-        return;
-      }
-
-      activeList.forEach(({ quest, objectives, state }) => {
-        const card = document.createElement('div');
-        card.style.cssText = `
-          background: url('/assets/kenney-rpg-ui/panelInset_brown.png') repeat;
-          background-size: 100% 100%;
-          padding: 14px 16px;
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-          border-radius: 4px;
-        `;
-
-        card.innerHTML = `
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div style="font-size: 15px; font-weight: 900; color: #fef08a; font-family: 'Cinzel', serif;">${quest.title}</div>
-            <span style="font-size: 10.5px; padding: 3px 8px; border-radius: 4px; font-weight: 800; background: ${state === 'ready_to_turn_in' ? '#22c55e' : '#3b82f6'}; color: #fff;">
-              ${state === 'ready_to_turn_in' ? 'READY TO TURN IN' : 'IN PROGRESS'}
-            </span>
-          </div>
-
-          <div style="font-size: 12px; color: #cbd5e1; line-height: 1.4;">${quest.description}</div>
-          <div style="font-size: 11px; color: #94a3b8;"><strong>Quest Giver:</strong> ${quest.giverName} (Haven of Eldermoor)</div>
-
-          <div style="margin-top: 4px; background: rgba(0,0,0,0.5); padding: 8px 12px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
-            <div style="font-size: 11.5px; font-weight: 800; color: #fef08a; margin-bottom: 6px;">Objectives:</div>
-            <div style="display: flex; flex-direction: column; gap: 4px;">
-              ${objectives.map(obj => `
-                <div style="display: flex; align-items: center; justify-content: space-between; font-size: 11.5px; color: ${obj.isCompleted ? '#4ade80' : '#e2e8f0'};">
-                  <span>${obj.isCompleted ? '☑️' : '◻️'} ${obj.description}</span>
-                  <span style="font-weight: 700;">${obj.currentCount}/${obj.requiredCount}</span>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-
-          <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 6px; font-size: 11px; color: #fef08a;">
-            <div>Rewards: +${quest.rewards.exp} EXP, +${quest.rewards.gold} Gold ${quest.rewards.runeUnlocked ? `• 🌟 ${quest.rewards.runeUnlocked.toUpperCase()} RUNE` : ''}</div>
-          </div>
-        `;
-
-        container.appendChild(card);
-      });
-    } else if (this.currentTab === 'completed') {
+    if (this.currentTab === 'completed') {
       const completed = quests.getAllCompletedQuests();
-      if (completed.length === 0) {
-        container.innerHTML = `<div style="text-align: center; color: #94a3b8; padding: 40px; font-style: italic;">No completed quests yet. Embark on your journey!</div>`;
-        return;
-      }
-
-      completed.forEach(q => {
-        const card = document.createElement('div');
-        card.style.cssText = `
-          background: url('/assets/kenney-rpg-ui/panelInset_brown.png') repeat;
-          background-size: 100% 100%;
-          padding: 10px 14px;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          border-radius: 4px;
-        `;
-        card.innerHTML = `
-          <div>
-            <div style="font-size: 13.5px; font-weight: 900; color: #4ade80; font-family: 'Cinzel', serif;">✓ ${q.title}</div>
-            <div style="font-size: 11px; color: #cbd5e1;">${q.description}</div>
-          </div>
-          <span style="font-size: 11px; color: #fef08a; font-weight: 800;">+${q.rewards.exp} EXP / +${q.rewards.gold}G</span>
-        `;
-        container.appendChild(card);
-      });
-    } else if (this.currentTab === 'lore') {
-      const loreEntries = [
-        {
-          title: "The Five Primordial Runes",
-          icon: "🌟",
-          content: "Ancient cosmic artifacts created at the dawn of Aethelgard. Verdant maintains nature, Shadow balances the spirit realm, Flame grants warmth and energy, Frost safeguards memory, and Void holds the cosmic horizon."
-        },
-        {
-          title: "NightBorne Void Overlord",
-          icon: "👑",
-          content: "A supreme cosmic entity sealed during the First Calamity. NightBorne wields total eclipse sorcery, creating shadow clones and dimensional rifts to consume all light."
-        },
-        {
-          title: "Chief Warlord Grimjaw",
-          icon: "👺",
-          content: "Leader of the subterranean goblin hordes. Corrupted by the stolen Verdant Rune, Grimjaw enters an unstoppable rage when near defeat."
-        },
-        {
-          title: "Arch-Lich Malakar",
-          icon: "☠️",
-          content: "A fallen archmage who traded his mortal soul for eternal unlife. Chanting in the Crypt of the Damned, he raises legions of undead warriors."
-        },
-        {
-          title: "Ancient Red Dragon Ignis",
-          icon: "🐉",
-          content: "A colossal elder dragon sleeping deep within the volcanic caldera. Awakened by dark disturbances, his flames melt solid diamond."
-        }
-      ];
-
-      loreEntries.forEach(entry => {
-        const card = document.createElement('div');
-        card.style.cssText = 'background: rgba(20, 15, 30, 0.85); border: 1px solid #6b21a8; border-radius: 8px; padding: 12px 14px;';
-        card.innerHTML = `
-          <div style="font-size: 15px; font-weight: 900; color: #c084fc; display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-            <span>${entry.icon}</span>
-            <span>${entry.title}</span>
-          </div>
-          <div style="font-size: 12px; color: #cbd5e1; line-height: 1.5;">${entry.content}</div>
-        `;
-        container.appendChild(card);
-      });
+      if (!completed.length) return this.renderEmpty(content, 'No completed quests yet.', 'Your victories will be recorded here.');
+      completed.forEach(quest => content.appendChild(this.completedCard(quest)));
+      return;
     }
+    if (this.currentTab === 'lore') {
+      LORE_ENTRIES.forEach(entry => {
+        const article = document.createElement('article');
+        article.className = 'rpg-card quest-lore-card';
+        article.innerHTML = `<header><span class="rpg-badge">${escapeHtml(entry.tag)}</span><h3 class="rpg-heading">${escapeHtml(entry.title)}</h3></header><p>${escapeHtml(entry.content)}</p>`;
+        content.appendChild(article);
+      });
+      return;
+    }
+
+    const list = quests.getAllActiveQuests().filter(({ quest }) =>
+      this.currentTab === 'main' ? quest.category === 'main' : quest.category !== 'main');
+    if (!list.length) {
+      const label = this.currentTab === 'main' ? 'main-story' : 'side';
+      return this.renderEmpty(content, `No active ${label} quests.`, 'Talk to the people of Eldermoor for new work.');
+    }
+
+    list.forEach(({ quest, objectives, state }) => {
+      const complete = objectives.filter(objective => objective.isCompleted).length;
+      const progress = objectives.length ? clampPercent((complete / objectives.length) * 100) : 0;
+      const article = document.createElement('article');
+      article.className = 'rpg-card quest-card';
+      article.innerHTML = `
+        <header class="quest-card__header">
+          <div><p class="rpg-kicker">Act ${quest.act || 'Town'} · Level ${quest.recommendedLevel}+</p><h3 class="rpg-heading">${escapeHtml(quest.title)}</h3></div>
+          <span class="rpg-badge ${state === 'ready_to_turn_in' ? 'rpg-badge--success' : ''}">${state === 'ready_to_turn_in' ? 'Ready to turn in' : 'In progress'}</span>
+        </header>
+        <p class="quest-card__copy">${escapeHtml(quest.description)}</p>
+        <div class="quest-card__meta"><span><b>Giver:</b> ${escapeHtml(quest.giverName)}</span><span><b>Location:</b> Haven of Eldermoor</span></div>
+        <div class="rpg-progress" style="--rpg-progress-value:${progress}%" role="progressbar" aria-label="Quest objectives" aria-valuemin="0" aria-valuemax="${objectives.length}" aria-valuenow="${complete}"></div>
+        <ul class="quest-objectives">${objectives.map(objective => `<li class="${objective.isCompleted ? 'is-complete' : ''}"><span aria-hidden="true">${objective.isCompleted ? '[x]' : '[ ]'}</span><span>${escapeHtml(objective.description)}</span><strong>${objective.currentCount}/${objective.requiredCount}</strong></li>`).join('')}</ul>
+        <footer class="quest-rewards"><span class="rpg-label">Rewards</span><strong>${quest.rewards.exp} EXP · ${quest.rewards.gold} Gold${quest.rewards.runeUnlocked ? ` · ${escapeHtml(quest.rewards.runeUnlocked)} rune` : ''}</strong></footer>`;
+      content.appendChild(article);
+    });
   }
 
-  public close() {
-    if (this.modalEl && this.modalEl.parentNode) {
-      this.modalEl.parentNode.removeChild(this.modalEl);
-    }
+  private completedCard(quest: ReturnType<typeof quests.getAllCompletedQuests>[number]): HTMLElement {
+    const card = document.createElement('article');
+    card.className = 'rpg-card quest-complete-card';
+    card.innerHTML = `<div><span class="rpg-badge rpg-badge--success">Completed</span><h3 class="rpg-heading">${escapeHtml(quest.title)}</h3><p>${escapeHtml(quest.description)}</p></div><strong>${quest.rewards.exp} EXP · ${quest.rewards.gold} Gold</strong>`;
+    return card;
+  }
+
+  private renderEmpty(container: HTMLElement, title: string, detail: string): void {
+    const empty = document.createElement('div');
+    empty.className = 'rpg-empty';
+    const heading = document.createElement('div');
+    const strong = document.createElement('strong');
+    const copy = document.createElement('p');
+    strong.textContent = title;
+    copy.textContent = detail;
+    heading.append(strong, copy);
+    empty.appendChild(heading);
+    container.appendChild(empty);
+  }
+
+  public close(): void {
+    this.releaseFocus?.();
+    this.releaseFocus = null;
+    this.modalEl?.remove();
     this.modalEl = null;
+  }
+
+  private injectStyles(): void {
+    if (document.getElementById(STYLE_ID)) return;
+    const style = document.createElement('style');
+    style.id = STYLE_ID;
+    style.textContent = `
+      .quest-log-dialog{height:min(88dvh,820px)}.quest-log-content{display:grid;gap:9px;padding:8px 4px 8px 2px}
+      .quest-card,.quest-lore-card,.quest-complete-card{padding:11px 13px;border-width:10px;border-image-width:10px}
+      .quest-card__header{display:flex;justify-content:space-between;gap:10px}.quest-card__header p{margin:0 0 3px}.quest-card__copy,.quest-lore-card p,.quest-complete-card p{margin:7px 0;color:#d6cbb5;line-height:1.45}
+      .quest-card__meta{display:flex;gap:16px;flex-wrap:wrap;color:var(--rpg-muted);font-size:.76rem}.quest-objectives{display:grid;gap:5px;margin:8px 0;padding:0;list-style:none}
+      .quest-objectives li{display:grid;grid-template-columns:26px 1fr auto;gap:5px;color:#e8dfcb;font-size:.84rem}.quest-objectives li.is-complete{color:#84dda0;text-decoration:line-through;text-decoration-thickness:1px}
+      .quest-rewards{display:flex;justify-content:space-between;gap:8px;padding-top:7px;border-top:1px solid rgba(231,189,85,.2);color:var(--rpg-gold-bright);font-size:.8rem}
+      .quest-lore-card header{display:flex;align-items:center;gap:9px}.quest-complete-card{display:flex;align-items:center;justify-content:space-between;gap:12px}.quest-complete-card h3{margin-top:5px}.quest-complete-card>strong{color:var(--rpg-gold-bright);white-space:nowrap}
+      @media(max-width:620px){.quest-log-dialog{height:96dvh}.quest-log-screen .rpg-dialog__header .rpg-help{display:none}.quest-card__header,.quest-complete-card{align-items:flex-start;flex-direction:column}.quest-rewards{flex-direction:column}.quest-objectives li{grid-template-columns:24px 1fr}.quest-objectives li strong{grid-column:2}}
+    `;
+    document.head.appendChild(style);
   }
 }
