@@ -1,7 +1,43 @@
 import { io, Socket } from 'socket.io-client';
 import { getGameServerOrigin } from '../config/RuntimeConfig';
-import { PlayerState } from '../engine/SideViewEngine';
+import type { IncomingAttackDefense } from '../combat/DefenseMechanics';
+import type { EnemyAttackProfileId } from '../combat/EnemyAttackProfiles';
+import type { PlayerState } from '../engine/SideViewEngine';
+import {
+  DUNGEON_RUN_SCHEMA_VERSION,
+  RUN_LIMITS,
+  type DungeonRunState as DungeonRunStateContract,
+} from '../dungeons/run/RunTypes';
+import {
+  isBoundedDungeonEncounterSnapshot,
+  type DungeonEncounterSnapshot,
+} from '../dungeons/DungeonEncounterRuntime';
 import { PayloadCadence, quantizeNetworkCoordinate, smoothNetworkCoordinate } from './NetworkCadence';
+
+export type DungeonRunState = DungeonRunStateContract;
+export const RUN_SYNC_PROTOCOL_VERSION = 1 as const;
+export const RUN_SYNC_MAX_BYTES = 128 * 1024;
+
+export interface DungeonRunSyncPacket {
+  protocolVersion: typeof RUN_SYNC_PROTOCOL_VERSION;
+  runState: DungeonRunState;
+  /** Optional host-authoritative live objective/hazard state. */
+  encounterSnapshot?: DungeonEncounterSnapshot;
+}
+
+export type CombatDefenseOutcome = 'dodge' | 'perfect-dodge' | 'parry';
+
+/** Guest-authored result for one host-authored enemy attack intent. */
+export interface CombatDefenseResultPacket {
+  intentId: string;
+  sourceEnemyId: string;
+  outcome: CombatDefenseOutcome;
+}
+
+/** Server-stamped packet delivered only to the current room host. */
+export interface RemoteCombatDefenseResultPacket extends CombatDefenseResultPacket {
+  socketId: string;
+}
 
 /** An open party shown in the browser. */
 export interface OpenLobby {
@@ -66,6 +102,11 @@ export interface PlayerDamagePacket {
   isTownMode: boolean;
   sceneId: string;
   status?: PlayerDamageStatus;
+  /** Optional enemy-intent metadata used by the guest dodge/parry resolver. */
+  parryability?: IncomingAttackDefense;
+  intentId?: string;
+  sourceEnemyId?: string;
+  profileId?: EnemyAttackProfileId;
 }
 
 export interface LobbyMember {
@@ -109,12 +150,147 @@ export interface LocalProfile {
   power?: number;
 }
 
+const RUN_STATE_STATUSES = new Set(['active', 'completed', 'failed']);
+const ROOM_STATE_STATUSES = new Set(['available', 'active', 'completed', 'failed']);
+const RESERVED_RECORD_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isSafeRunToken(value: unknown, max = 128): value is string {
+  return typeof value === 'string'
+    && value.length > 0
+    && value.length <= max
+    && !RESERVED_RECORD_KEYS.has(value)
+    && /^[A-Za-z0-9:._-]+$/.test(value);
+}
+
+function isBoundedInteger(value: unknown, min: number, max: number): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= min && value <= max;
+}
+
+function isBoundedTokenArray(value: unknown, maxItems: number, maxTokenLength = 128): value is string[] {
+  return Array.isArray(value)
+    && value.length <= maxItems
+    && value.every(item => isSafeRunToken(item, maxTokenLength));
+}
+
+function serializedByteLength(value: unknown): number {
+  try {
+    return new TextEncoder().encode(JSON.stringify(value)).byteLength;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+/**
+ * Runtime boundary for host-authored run snapshots. TypeScript cannot protect
+ * reconnect packets, so both inbound and outbound snapshots use this same
+ * schema/version/count/byte gate before gameplay sees them.
+ */
+export function isBoundedDungeonRunState(value: unknown): value is DungeonRunState {
+  if (!isRecord(value) || serializedByteLength(value) > RUN_SYNC_MAX_BYTES) return false;
+  const state = value as any;
+  if (state.schemaVersion !== DUNGEON_RUN_SCHEMA_VERSION) return false;
+  if (!isSafeRunToken(state.contentVersion, 64)) return false;
+  if (!isSafeRunToken(state.runId, 128) || !isSafeRunToken(state.dungeonId, 64)) return false;
+  if (!isBoundedInteger(state.seed, 0, 0xffff_ffff)) return false;
+  if (!isBoundedInteger(state.authorityEpoch, 1, 1_000_000_000)) return false;
+  if (!isBoundedInteger(state.revision, 0, 2_147_483_647)) return false;
+  if (!isBoundedInteger(state.lastCommandSequence, 0, 2_147_483_647)) return false;
+  if (!isBoundedInteger(state.elapsedMs, 0, 2_147_483_647)) return false;
+  if (!RUN_STATE_STATUSES.has(state.status) || !isSafeRunToken(state.currentRoomId, 128)) return false;
+
+  if (!isRecord(state.graph) || !Array.isArray(state.graph.nodes) || !Array.isArray(state.graph.exits)) return false;
+  if (state.graph.nodes.length < 1 || state.graph.nodes.length > RUN_LIMITS.maxRooms) return false;
+  if (state.graph.exits.length > RUN_LIMITS.maxRooms * RUN_LIMITS.maxExitsPerRoom) return false;
+
+  const nodeIds = new Set<string>();
+  for (const node of state.graph.nodes) {
+    if (!isRecord(node) || !isSafeRunToken(node.id, 128) || nodeIds.has(node.id)) return false;
+    if (!isSafeRunToken(node.templateId, 128) || !isSafeRunToken(node.sceneId, 128)) return false;
+    if (!isBoundedTokenArray(node.enemyGroupIds, RUN_LIMITS.maxObjectiveEntities)) return false;
+    if (!isBoundedTokenArray(node.worldObjectIds, RUN_LIMITS.maxObjectiveEntities)) return false;
+    if (!Array.isArray(node.choices) || node.choices.length > RUN_LIMITS.maxRoomChoices) return false;
+    if (!isBoundedTokenArray(node.tags, 32, 64)) return false;
+    nodeIds.add(node.id);
+  }
+  if (!isSafeRunToken(state.graph.entryRoomId, 128) || !nodeIds.has(state.graph.entryRoomId)) return false;
+  if (!isSafeRunToken(state.graph.finaleRoomId, 128) || !nodeIds.has(state.graph.finaleRoomId)) return false;
+  if (!nodeIds.has(state.currentRoomId)) return false;
+  for (const exit of state.graph.exits) {
+    if (!isRecord(exit) || !isSafeRunToken(exit.id, 128)) return false;
+    if (!isSafeRunToken(exit.fromRoomId, 128) || !nodeIds.has(exit.fromRoomId)) return false;
+    if (!isSafeRunToken(exit.toRoomId, 128) || !nodeIds.has(exit.toRoomId)) return false;
+  }
+
+  if (!isBoundedTokenArray(state.activeActorIds, RUN_LIMITS.maxActors)) return false;
+  if (new Set(state.activeActorIds).size !== state.activeActorIds.length) return false;
+  if (!isBoundedTokenArray(state.visitedRoomIds, RUN_LIMITS.maxRooms)) return false;
+  if (!state.visitedRoomIds.every((id: string) => nodeIds.has(id))) return false;
+  if (!isBoundedTokenArray(state.revealedSecretRoomIds, RUN_LIMITS.maxRooms)) return false;
+  if (!state.revealedSecretRoomIds.every((id: string) => nodeIds.has(id))) return false;
+
+  if (!isRecord(state.roomStates)) return false;
+  const roomStates = Object.entries(state.roomStates);
+  if (roomStates.length > RUN_LIMITS.maxRooms) return false;
+  for (const [roomId, roomState] of roomStates) {
+    if (!isSafeRunToken(roomId, 128) || !nodeIds.has(roomId) || !isRecord(roomState)) return false;
+    if (roomState.roomId !== roomId || !ROOM_STATE_STATUSES.has(roomState.status as string)) return false;
+    if (!Array.isArray(roomState.choiceSelections)
+      || roomState.choiceSelections.length > RUN_LIMITS.maxRoomChoices) return false;
+    for (const choice of roomState.choiceSelections) {
+      if (!isRecord(choice)
+        || !isSafeRunToken(choice.actorId, 128)
+        || !isSafeRunToken(choice.choiceId, 128)) return false;
+    }
+    if (roomState.objectiveState !== undefined && !isRecord(roomState.objectiveState)) return false;
+  }
+  if (!Object.hasOwn(state.roomStates, state.currentRoomId)) return false;
+
+  if (!isRecord(state.relicsByActorId)) return false;
+  const relicEntries = Object.entries(state.relicsByActorId);
+  if (relicEntries.length > RUN_LIMITS.maxActors) return false;
+  for (const [actorId, relicIds] of relicEntries) {
+    if (!isSafeRunToken(actorId, 128)
+      || !isBoundedTokenArray(relicIds, RUN_LIMITS.maxRelicsPerActor)) return false;
+  }
+
+  if (!Array.isArray(state.relicOffers)
+    || state.relicOffers.length > RUN_LIMITS.maxRooms) return false;
+  for (const offer of state.relicOffers) {
+    if (!isRecord(offer)
+      || !isSafeRunToken(offer.id, 128)
+      || !isSafeRunToken(offer.actorId, 128)
+      || !isSafeRunToken(offer.sourceId, 128)
+      || !isBoundedTokenArray(offer.relicIds, RUN_LIMITS.maxRelicOfferSize)) return false;
+    if (offer.chosenRelicId !== undefined && !isSafeRunToken(offer.chosenRelicId, 128)) return false;
+  }
+  if (state.failureReason !== undefined
+    && (typeof state.failureReason !== 'string' || state.failureReason.length > 256)) return false;
+  return true;
+}
+
+function isCombatDefenseResult(value: unknown, withSocketId: boolean): boolean {
+  if (!isRecord(value) || serializedByteLength(value) > 1024) return false;
+  if (!isSafeRunToken(value.intentId, 96) || !isSafeRunToken(value.sourceEnemyId, 160)) return false;
+  if (value.outcome !== 'dodge' && value.outcome !== 'perfect-dodge' && value.outcome !== 'parry') return false;
+  return !withSocketId || isSafeRunToken(value.socketId, 128);
+}
+
 export interface FullSyncSnapshot {
+  /** Added in protocol v1; omitted by legacy servers and therefore optional inbound. */
+  protocolVersion?: typeof RUN_SYNC_PROTOCOL_VERSION;
   requesterId?: string;
   waveIndex: number;
   dungeonIndex: number;
   dungeonId: string;
   enemies: any[];
+  /** Optional deterministic run controller state for reconnecting guests. */
+  runState?: DungeonRunState;
+  /** Optional live room simulation state for reconnecting guests. */
+  encounterSnapshot?: DungeonEncounterSnapshot;
 }
 
 type SkillHandler = (
@@ -175,8 +351,10 @@ export class NetworkManager {
   private onDamageEnemyCb: ((enemyId: string, damage: number, facing: number) => void) | null = null;
   private onEnemyHitCb: ((data: { enemyId: string, damage: number, isCrit: boolean, knockbackDir: number, newHp: number }) => void) | null = null;
   private onPlayerDamageCb: ((data: PlayerDamagePacket) => void) | null = null;
+  private onCombatDefenseCb: ((data: RemoteCombatDefenseResultPacket) => void) | null = null;
   private onFullSyncRequestCb: ((requesterId: string) => void) | null = null;
   private onFullSyncCb: ((snapshot: FullSyncSnapshot) => void) | null = null;
+  private onRunSyncCb: ((runState: DungeonRunState, encounterSnapshot?: DungeonEncounterSnapshot) => void) | null = null;
   private onRoleChangeCb: ((isHost: boolean) => void) | null = null;
   private onLobbyErrorCb: ((msg: string) => void) | null = null;
   private onLobbyStateCb: ((state: LobbyState) => void) | null = null;
@@ -520,6 +698,27 @@ export class NetworkManager {
       this.onPlayerDamageCb?.(data);
     });
 
+    // The server stamps the guest socket id and routes this only to the room
+    // host. Validate again at the browser boundary before combat consumes it.
+    this.socket.on('combat_defense', (data: RemoteCombatDefenseResultPacket) => {
+      if (!this.isHost || !isCombatDefenseResult(data, true)) return;
+      this.debug('IN', 'combat_defense', data);
+      this.onCombatDefenseCb?.(data);
+    });
+
+    this.socket.on('run_sync', (data: DungeonRunSyncPacket) => {
+      if (data?.protocolVersion !== RUN_SYNC_PROTOCOL_VERSION
+        || serializedByteLength(data) > RUN_SYNC_MAX_BYTES
+        || !isBoundedDungeonRunState(data.runState)
+        || (data.encounterSnapshot !== undefined
+          && !isBoundedDungeonEncounterSnapshot(data.encounterSnapshot))) return;
+      this.debug('IN', 'run_sync', {
+        runId: data.runState.runId,
+        revision: data.runState.revision,
+      });
+      this.onRunSyncCb?.(data.runState, data.encounterSnapshot);
+    });
+
     this.socket.on('request_full_sync', (data) => {
       this.debug('IN', 'request_full_sync', data);
       this.onFullSyncRequestCb?.(data?.requesterId);
@@ -527,6 +726,10 @@ export class NetworkManager {
 
     this.socket.on('full_sync', (data) => {
       this.debug('IN', 'full_sync', { enemies: data?.enemies?.length, waveIndex: data?.waveIndex });
+      if (data?.protocolVersion !== undefined && data.protocolVersion !== RUN_SYNC_PROTOCOL_VERSION) return;
+      if (data?.runState !== undefined && !isBoundedDungeonRunState(data.runState)) return;
+      if (data?.encounterSnapshot !== undefined
+        && !isBoundedDungeonEncounterSnapshot(data.encounterSnapshot)) return;
       if (data) this.onFullSyncCb?.(data);
     });
   }
@@ -943,9 +1146,35 @@ export class NetworkManager {
       spawnDelay: e.spawnDelay,
       hitStun: e.hitStun,
       isDead: e.isDead,
+      isElite: e.isElite,
       phases: e.phases,
       currentPhase: e.currentPhase,
       specialAttackTimer: e.specialAttackTimer,
+      bossCastName: e.bossCastName,
+      bossCastTimer: e.bossCastTimer,
+      bossCastDuration: e.bossCastDuration,
+      role: e.role,
+      formationId: e.formationId,
+      formationSlotId: e.formationSlotId,
+      eliteModifiers: Array.isArray(e.eliteModifiers) ? [...e.eliteModifiers] : undefined,
+      guardState: e.guardState ? { ...e.guardState } : undefined,
+      attackProfileId: e.attackProfileId,
+      attackIntent: e.attackIntent
+        ? {
+            ...e.attackIntent,
+            // Intent Y coordinates follow the same ground-relative wire
+            // convention as enemy/player Y so different viewport heights agree.
+            sourceY: this.toNetworkY(e.attackIntent.sourceY, groundY),
+            target: e.attackIntent.target
+              ? { ...e.attackIntent.target, y: this.toNetworkY(e.attackIntent.target.y, groundY) }
+              : undefined,
+          }
+        : undefined,
+      intentSequence: e.intentSequence,
+      roleActionCooldown: e.roleActionCooldown,
+      summonOwnerId: e.summonOwnerId,
+      objectiveEntity: e.objectiveEntity,
+      featureSpriteId: e.featureSpriteId,
       lootDrop: e.lootDrop
     };
   }
@@ -1019,6 +1248,40 @@ export class NetworkManager {
     this.onPlayerDamageCb = onDamage;
   }
 
+  /** Guest -> server -> host: resolution of one enemy attack intent. */
+  public sendCombatDefense(result: CombatDefenseResultPacket) {
+    if (!this.socket || !this.room || this.isHost || !isCombatDefenseResult(result, false)) return;
+    this.debug('OUT', 'combat_defense', result);
+    this.socket.emit('combat_defense', result);
+  }
+
+  /** Host side: receives only server-validated results from current guests. */
+  public onCombatDefense(cb: (data: RemoteCombatDefenseResultPacket) => void) {
+    if (!this.socket) this.connect();
+    this.onCombatDefenseCb = cb;
+  }
+
+  /** Host-only deterministic run snapshot broadcast to every current guest. */
+  public sendRunSync(runState: DungeonRunState, encounterSnapshot?: DungeonEncounterSnapshot | null) {
+    if (!this.socket || !this.room || !this.isHost || !isBoundedDungeonRunState(runState)) return;
+    if (encounterSnapshot !== undefined && encounterSnapshot !== null
+      && !isBoundedDungeonEncounterSnapshot(encounterSnapshot)) return;
+    const packet: DungeonRunSyncPacket = {
+      protocolVersion: RUN_SYNC_PROTOCOL_VERSION,
+      runState,
+      ...(encounterSnapshot ? { encounterSnapshot } : {}),
+    };
+    if (serializedByteLength(packet) > RUN_SYNC_MAX_BYTES) return;
+    this.debug('OUT', 'run_sync', { runId: runState.runId, revision: runState.revision });
+    this.socket.emit('run_sync', packet);
+  }
+
+  /** Guest side: receives bounded, schema-compatible host run state. */
+  public onRunSync(cb: (runState: DungeonRunState, encounterSnapshot?: DungeonEncounterSnapshot) => void) {
+    if (!this.socket) this.connect();
+    this.onRunSyncCb = cb;
+  }
+
   // ================= FULL SNAPSHOT =================
 
   /** Guest -> server -> host: "I just joined/reconnected, send me everything." */
@@ -1036,14 +1299,24 @@ export class NetworkManager {
 
   public sendFullSync(requesterId: string | undefined, snapshot: Omit<FullSyncSnapshot, 'requesterId'>, groundY: number) {
     if (!this.socket || !this.room) return;
+    if (snapshot.runState !== undefined && !isBoundedDungeonRunState(snapshot.runState)) return;
+    if (snapshot.encounterSnapshot !== undefined
+      && !isBoundedDungeonEncounterSnapshot(snapshot.encounterSnapshot)) return;
     const payload = {
+      protocolVersion: RUN_SYNC_PROTOCOL_VERSION,
       requesterId,
       waveIndex: snapshot.waveIndex,
       dungeonIndex: snapshot.dungeonIndex,
       dungeonId: snapshot.dungeonId,
-      enemies: (snapshot.enemies || []).map(e => this.serializeEnemy(e, groundY))
+      enemies: (snapshot.enemies || []).map(e => this.serializeEnemy(e, groundY)),
+      ...(snapshot.runState ? { runState: snapshot.runState } : {}),
+      ...(snapshot.encounterSnapshot ? { encounterSnapshot: snapshot.encounterSnapshot } : {}),
     };
-    this.debug('OUT', 'full_sync', { requesterId, enemies: payload.enemies.length });
+    this.debug('OUT', 'full_sync', {
+      requesterId,
+      enemies: payload.enemies.length,
+      runRevision: snapshot.runState?.revision,
+    });
     this.socket.emit('full_sync', payload);
   }
 

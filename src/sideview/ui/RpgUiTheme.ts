@@ -172,7 +172,9 @@ export function installRpgUiTheme(): void {
       color: var(--rpg-paper);
       background: linear-gradient(rgba(16, 21, 29, .96), rgba(9, 12, 17, .98));
       border: 16px solid transparent;
-      border-image: var(--rpg-panel-image) 16 fill / 16px / 0 stretch;
+      /* These Kenney frames are opaque-white masks. Filling the center paints
+         a white sheet over the dark surface; use only their border slices. */
+      border-image: var(--rpg-panel-image) 16 / 16px / 0 stretch;
       image-rendering: pixelated;
       filter: drop-shadow(0 12px 22px rgba(0, 0, 0, .52));
     }

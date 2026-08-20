@@ -23,7 +23,7 @@ import { quests } from '../quests/QuestManager';
 import { QuestLogUI } from './QuestLogUI';
 import { WorldMapUI } from './WorldMapUI';
 import { DUNGEONS } from '../dungeons/DungeonManager';
-import { InputSettingsPanel, skillAction } from '../input';
+import { InputSettingsPanel, isActionPointerStart, skillAction } from '../input';
 import { SKILL_IDENTITY_MATRIX, isSkillId } from '../combat/SkillMechanics';
 import {
   clampPercent,
@@ -34,6 +34,39 @@ import {
   safeLocalAssetPath,
 } from './UiSafety';
 import { installRpgUiTheme } from './RpgUiTheme';
+import {
+  COMBAT_FEEDBACK_SPRITES,
+  GAMEPLAY_SPRITES,
+  OBJECTIVE_SPRITES,
+  getGameplaySpriteFiles,
+  type GameplaySpriteId,
+  type RoomObjectiveId,
+} from '../assets/GameplaySpriteManifest';
+
+export type DungeonHudObjectiveKind = RoomObjectiveId | 'kill-all';
+
+export interface DungeonObjectiveHudState {
+  kind: DungeonHudObjectiveKind;
+  title: string;
+  current?: number;
+  target?: number;
+  progressPercent?: number;
+  progressText?: string;
+  complete?: boolean;
+  spriteId?: GameplaySpriteId;
+}
+
+export interface DungeonRelicHudItem {
+  id: string;
+  name: string;
+  stacks?: number;
+  spriteId?: GameplaySpriteId;
+}
+
+export interface DungeonContextActionHudState {
+  label?: string;
+  spriteId?: GameplaySpriteId;
+}
 
 export class GameHUD {
   /**
@@ -63,6 +96,10 @@ export class GameHUD {
   private activeHudDialog: HTMLElement | null = null;
   private releaseHudDialogFocus: (() => void) | null = null;
   private toastTimer: number | null = null;
+  private dungeonObjective: DungeonObjectiveHudState | null = null;
+  private dungeonRelics: DungeonRelicHudItem[] = [];
+  /** A non-null value means a room interaction temporarily takes priority over parry. */
+  private dungeonContextAction: DungeonContextActionHudState | null = null;
   /**
    * Interface glyphs.
    *
@@ -114,6 +151,8 @@ export class GameHUD {
   public worldMapUI: WorldMapUI | null = null;
   private selectedItem: { item: ItemData; isEquipped: boolean; slotOrIdx: string | number } | null = null;
   private controlsPanel: InputSettingsPanel | null = null;
+  /** Every render replaces bound DOM nodes, so their active holds must be disposed first. */
+  private actionBindingDisposers = new Set<() => void>();
 
   // Joystick state
   private joystickActive: boolean = false;
@@ -188,6 +227,174 @@ export class GameHUD {
     const found = this.container.querySelector<T>(`#${CSS.escape(id)}`);
     if (found) this.hudNodes.set(id, found);
     return found;
+  }
+
+  /**
+   * Paints one licensed gameplay sprite into a DOM icon without leaking an
+   * asset path into feature code. Sprite sheets and atlases are cropped to
+   * their first authored frame after the image dimensions are available.
+   */
+  private paintGameplaySpriteIcon(slot: HTMLElement | null, spriteId: GameplaySpriteId): void {
+    if (!slot) return;
+    const clip = GAMEPLAY_SPRITES[spriteId];
+    const src = safeLocalAssetPath(getGameplaySpriteFiles(spriteId)[0]);
+    let image = slot.querySelector<HTMLImageElement>('img');
+    if (!image) {
+      image = document.createElement('img');
+      image.alt = '';
+      image.draggable = false;
+      slot.replaceChildren(image);
+    }
+    if (!src) {
+      image.removeAttribute('src');
+      return;
+    }
+    if (slot.dataset.spriteId === spriteId && image.getAttribute('src') === src) return;
+    slot.dataset.spriteId = spriteId;
+    image.style.removeProperty('width');
+    image.style.removeProperty('height');
+    image.style.removeProperty('left');
+    image.style.removeProperty('top');
+
+    image.onload = () => {
+      if (!slot.isConnected || slot.dataset.spriteId !== spriteId || !image) return;
+      const boxWidth = Math.max(1, slot.clientWidth);
+      const boxHeight = Math.max(1, slot.clientHeight);
+      let frameX = 0;
+      let frameY = 0;
+      let frameWidth = image.naturalWidth;
+      let frameHeight = image.naturalHeight;
+      const layout = clip.layout;
+      if (layout.kind === 'atlas') {
+        frameX = layout.x;
+        frameY = layout.y;
+        frameWidth = layout.width;
+        frameHeight = layout.height;
+      } else if (layout.kind === 'grid') {
+        frameWidth = image.naturalWidth / layout.columns;
+        frameHeight = image.naturalHeight / layout.rows;
+      } else if (layout.kind === 'strip') {
+        frameWidth = layout.frameWidth;
+        frameHeight = layout.frameHeight;
+      }
+      const scale = Math.min(boxWidth / Math.max(1, frameWidth), boxHeight / Math.max(1, frameHeight));
+      image.style.width = `${image.naturalWidth * scale}px`;
+      image.style.height = `${image.naturalHeight * scale}px`;
+      image.style.left = `${(boxWidth - frameWidth * scale) / 2 - frameX * scale}px`;
+      image.style.top = `${(boxHeight - frameHeight * scale) / 2 - frameY * scale}px`;
+    };
+    if (image.getAttribute('src') !== src) image.src = src;
+    else if (image.complete) image.onload(new Event('load'));
+  }
+
+  private objectiveSpriteId(state: DungeonObjectiveHudState): GameplaySpriteId {
+    if (state.spriteId) return state.spriteId;
+    if (state.kind === 'kill-all') return COMBAT_FEEDBACK_SPRITES['melee-telegraph'];
+    return OBJECTIVE_SPRITES[state.kind][state.complete ? 'complete' : 'primary'];
+  }
+
+  private patchDungeonRunHud(): void {
+    const panel = this.hudNode('dungeon-run-status');
+    if (!panel) return;
+    const objective = this.dungeonObjective;
+    const hasContent = Boolean(objective || this.dungeonRelics.length);
+    panel.classList.toggle('is-active', hasContent && !this.engine.isTownMode);
+    panel.setAttribute('aria-hidden', String(!hasContent || this.engine.isTownMode));
+
+    const objectiveRow = this.hudNode('run-objective-row');
+    if (objectiveRow) objectiveRow.style.display = objective ? 'grid' : 'none';
+    if (objective) {
+      const title = this.hudNode('run-objective-title');
+      const detail = this.hudNode('run-objective-progress');
+      const meter = this.hudNode('run-objective-meter');
+      const fill = this.hudNode('run-objective-fill');
+      const current = Math.max(0, finiteNumber(objective.current));
+      const target = Math.max(0, finiteNumber(objective.target));
+      const percent = objective.complete
+        ? 100
+        : objective.progressPercent !== undefined
+          ? clampPercent(finiteNumber(objective.progressPercent))
+          : target > 0 ? clampPercent((current / target) * 100) : 0;
+      if (title) title.textContent = objective.title || 'Dungeon objective';
+      if (detail) detail.textContent = objective.progressText
+        || (target > 0 ? `${Math.min(current, target).toLocaleString()} / ${target.toLocaleString()}` : 'In progress');
+      if (meter) {
+        meter.setAttribute('aria-valuenow', String(Math.round(percent)));
+        meter.setAttribute('aria-label', `${objective.title || 'Dungeon objective'} progress`);
+      }
+      if (fill) fill.style.width = `${percent}%`;
+      objectiveRow?.classList.toggle('is-complete', Boolean(objective.complete));
+      this.paintGameplaySpriteIcon(this.hudNode('run-objective-icon'), this.objectiveSpriteId(objective));
+    }
+
+    const relicRail = this.hudNode('run-relic-rail');
+    if (relicRail) {
+      relicRail.style.display = this.dungeonRelics.length ? 'flex' : 'none';
+      const relicKey = this.dungeonRelics.map(relic => `${relic.id}:${relic.stacks || 1}:${relic.spriteId || ''}`).join('|');
+      if (relicRail.dataset.key !== relicKey) {
+        relicRail.dataset.key = relicKey;
+        relicRail.replaceChildren();
+        this.dungeonRelics.slice(0, 5).forEach((relic, index) => {
+          const chip = document.createElement('span');
+          chip.className = 'run-relic-chip';
+          chip.title = `${relic.name}${(relic.stacks || 1) > 1 ? ` x${Math.trunc(relic.stacks || 1)}` : ''}`;
+          chip.setAttribute('aria-label', chip.title);
+          const icon = document.createElement('span');
+          icon.className = 'gameplay-sprite-icon run-relic-icon';
+          icon.id = `run-relic-icon-${index}`;
+          const label = document.createElement('span');
+          label.className = 'run-relic-name';
+          label.textContent = relic.name;
+          chip.append(icon, label);
+          const stacks = Math.max(1, Math.trunc(finiteNumber(relic.stacks, 1)));
+          if (stacks > 1) {
+            const count = document.createElement('strong');
+            count.textContent = `x${stacks}`;
+            chip.append(count);
+          }
+          relicRail.appendChild(chip);
+          this.paintGameplaySpriteIcon(icon, relic.spriteId || OBJECTIVE_SPRITES['defend-relic'].primary);
+        });
+        if (this.dungeonRelics.length > 5) {
+          const overflow = document.createElement('span');
+          overflow.className = 'run-relic-overflow';
+          overflow.textContent = `+${this.dungeonRelics.length - 5}`;
+          overflow.title = `${this.dungeonRelics.length - 5} more relics`;
+          relicRail.appendChild(overflow);
+        }
+      }
+    }
+  }
+
+  private patchDungeonContextAction(): void {
+    const button = this.hudNode<HTMLButtonElement>('touch-talk-btn');
+    if (!button) return;
+    const activeNpc = this.engine.townHub?.getActiveNpc();
+    const downedAlly = this.engine.nearestDownedAlly();
+    const label = button.querySelector<HTMLElement>('span[data-context-label]');
+    button.classList.toggle('touch-revive-btn', Boolean(downedAlly && !this.engine.isTownMode));
+
+    let text = 'TALK';
+    let spriteId: GameplaySpriteId = OBJECTIVE_SPRITES['escort-npc'].primary;
+    let visible = Boolean(activeNpc);
+    if (!this.engine.isTownMode) {
+      visible = true;
+      if (downedAlly) {
+        text = 'REVIVE';
+        spriteId = OBJECTIVE_SPRITES['defend-relic'].active;
+      } else if (this.dungeonContextAction) {
+        text = String(this.dungeonContextAction.label || 'INTERACT').slice(0, 12).toUpperCase();
+        spriteId = this.dungeonContextAction.spriteId || OBJECTIVE_SPRITES['defend-relic'].primary;
+      } else {
+        text = 'PARRY';
+        spriteId = COMBAT_FEEDBACK_SPRITES.parry;
+      }
+    }
+    button.style.display = visible ? 'flex' : 'none';
+    button.setAttribute('aria-label', text === 'REVIVE' ? 'Hold to revive teammate' : text);
+    button.title = text === 'PARRY' ? 'Parry incoming attack' : text;
+    if (label) label.textContent = text;
+    this.paintGameplaySpriteIcon(this.hudNode('touch-context-sprite'), spriteId);
   }
 
   private releaseActiveHudDialogFocus(): void {
@@ -440,6 +647,124 @@ export class GameHUD {
         font-family: 'Outfit', sans-serif;
         text-shadow: 1px 1px 1px #000;
       }
+
+      /* Compact dungeon-run readout. Feature identity comes from the licensed
+         gameplay manifest; this chrome never paints a white panel over play. */
+      .dungeon-run-status {
+        display: none;
+        width: min(286px, calc(100vw - 24px));
+        padding: 7px 9px;
+        box-sizing: border-box;
+        background: rgba(15, 10, 22, 0.88);
+        border: 1px solid rgba(212, 175, 55, 0.72);
+        border-radius: 4px;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.72);
+        grid-template-columns: 1fr;
+        gap: 5px;
+        pointer-events: none;
+      }
+
+      .dungeon-run-status.is-active { display: grid; }
+
+      .run-objective-row {
+        display: grid;
+        grid-template-columns: 32px minmax(0, 1fr);
+        align-items: center;
+        gap: 7px;
+      }
+
+      .gameplay-sprite-icon {
+        position: relative;
+        display: inline-block;
+        overflow: hidden;
+        flex: 0 0 auto;
+        image-rendering: pixelated;
+      }
+
+      .gameplay-sprite-icon > img {
+        position: absolute;
+        max-width: none;
+        max-height: none;
+        image-rendering: pixelated;
+        pointer-events: none;
+      }
+
+      .run-objective-icon {
+        width: 30px;
+        height: 30px;
+        filter: drop-shadow(0 2px 2px rgba(0,0,0,.85));
+      }
+
+      .run-objective-copy { min-width: 0; }
+      .run-objective-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 6px;
+      }
+      .run-objective-title {
+        overflow: hidden;
+        color: #f8d66d;
+        font-size: 9px;
+        font-weight: 900;
+        letter-spacing: .55px;
+        line-height: 1.2;
+        text-overflow: ellipsis;
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+      .run-objective-progress {
+        color: #e2e8f0;
+        font-family: 'Outfit', sans-serif;
+        font-size: 8px;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+      .run-objective-meter {
+        height: 5px;
+        margin-top: 4px;
+        overflow: hidden;
+        background: rgba(0,0,0,.74);
+        border: 1px solid rgba(245, 205, 92, .38);
+        border-radius: 3px;
+      }
+      .run-objective-fill {
+        width: 0;
+        height: 100%;
+        background: linear-gradient(90deg, #b7791f, #f6d365);
+        transition: width .16s linear;
+      }
+      .run-objective-row.is-complete .run-objective-title { color: #86efac; }
+      .run-objective-row.is-complete .run-objective-fill { background: #4ade80; }
+
+      .run-relic-rail {
+        display: none;
+        align-items: center;
+        gap: 4px;
+        min-width: 0;
+        overflow: hidden;
+      }
+      .run-relic-chip {
+        display: inline-flex;
+        min-width: 0;
+        max-width: 92px;
+        height: 22px;
+        padding: 2px 5px 2px 2px;
+        box-sizing: border-box;
+        align-items: center;
+        gap: 3px;
+        background: rgba(72, 48, 24, .78);
+        border: 1px solid rgba(246, 211, 101, .55);
+        border-radius: 3px;
+        color: #fff3c4;
+        font-family: 'Outfit', sans-serif;
+        font-size: 7.5px;
+        font-weight: 800;
+      }
+      .run-relic-icon { width: 17px; height: 17px; }
+      .run-relic-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .run-relic-chip strong { color: #fde68a; font-size: 7px; }
+      .run-relic-overflow { color: #fde68a; font: 900 8px 'Outfit', sans-serif; }
 
       /* Combo Display */
       .combo-display {
@@ -1371,6 +1696,13 @@ export class GameHUD {
         transform: scale(0.88);
       }
 
+      .touch-context-sprite {
+        width: 22px;
+        height: 22px;
+        margin-bottom: 1px;
+        filter: drop-shadow(0 1px 2px rgba(0,0,0,.9));
+      }
+
       .jump-touch-btn {
         width: 68px;
         height: 68px;
@@ -1458,10 +1790,10 @@ export class GameHUD {
       .hotbar-slot[data-skill-idx="0"] {
         width: 86px;
         height: 86px;
-        /* Anchors the corner. The skills are points on a circle drawn about
-           this button's centre, so moving it moves the whole arc with it. */
-        bottom: calc(22px + env(safe-area-inset-bottom));
-        right: calc(22px + env(safe-area-inset-right));
+        /* Pull the main attack into the fan instead of marooning it in the
+           corner. Its centre is the origin for the compact skill arc below. */
+        bottom: calc(27px + env(safe-area-inset-bottom));
+        right: calc(67px + env(safe-area-inset-right));
         z-index: 10;
       }
       .hotbar-slot[data-skill-idx="0"] .slot-icon-img {
@@ -1469,25 +1801,21 @@ export class GameHUD {
         height: 48px;
       }
 
-      /* Outer Arc layout for active skills 1-5 (Radius 155px) */
+      /* Outer Arc layout for active skills 1-5 (Radius 100px) */
       .hotbar-slot[data-skill-idx="1"], .hotbar-slot[data-skill-idx="2"], 
       .hotbar-slot[data-skill-idx="3"], .hotbar-slot[data-skill-idx="4"], 
       .hotbar-slot[data-skill-idx="5"] {
         width: 58px;
         height: 58px;
       }
-      /* One arc, not five hand-placed offsets.
-         Points on a circle of radius 175 around the attack button's centre,
-         21.5 degrees apart, sweeping from its left round to above it - the
-         arrangement this genre uses, where the basic attack anchors the corner
-         and the skills ring it. Placed by hand they had drifted out of any
-         shape, with the attack sitting among them rather than at the centre
-         they turn around. */
-      .hotbar-slot[data-skill-idx="1"] { bottom: calc(45px + env(safe-area-inset-bottom)); right: calc(211px + env(safe-area-inset-right)); }
-      .hotbar-slot[data-skill-idx="2"] { bottom: calc(109px + env(safe-area-inset-bottom)); right: calc(195px + env(safe-area-inset-right)); }
-      .hotbar-slot[data-skill-idx="3"] { bottom: calc(162px + env(safe-area-inset-bottom)); right: calc(158px + env(safe-area-inset-right)); }
-      .hotbar-slot[data-skill-idx="4"] { bottom: calc(198px + env(safe-area-inset-bottom)); right: calc(103px + env(safe-area-inset-right)); }
-      .hotbar-slot[data-skill-idx="5"] { bottom: calc(211px + env(safe-area-inset-bottom)); right: calc(39px + env(safe-area-inset-right)); }
+      /* Five 58px skills on a tight 100px-radius fan, 36 degrees apart.
+         Neighbours retain a small gap, while every skill is now only 28px
+         edge-to-edge from the 86px attack button instead of roughly 103px. */
+      .hotbar-slot[data-skill-idx="1"] { bottom: calc(41px + env(safe-area-inset-bottom)); right: calc(181px + env(safe-area-inset-right)); }
+      .hotbar-slot[data-skill-idx="2"] { bottom: calc(100px + env(safe-area-inset-bottom)); right: calc(162px + env(safe-area-inset-right)); }
+      .hotbar-slot[data-skill-idx="3"] { bottom: calc(136px + env(safe-area-inset-bottom)); right: calc(112px + env(safe-area-inset-right)); }
+      .hotbar-slot[data-skill-idx="4"] { bottom: calc(136px + env(safe-area-inset-bottom)); right: calc(50px + env(safe-area-inset-right)); }
+      .hotbar-slot[data-skill-idx="5"] { bottom: calc(100px + env(safe-area-inset-bottom)); right: calc(0px + env(safe-area-inset-right)); }
 
       /* The potion. On mobile the slots are placed one by one and this one had
          no place of its own, so it sat wherever the container defaulted to.
@@ -1518,6 +1846,16 @@ export class GameHUD {
         right: 3px;
         bottom: 2px;
         font-size: 11px;
+      }
+
+      /* A 568px landscape phone can lose another 40px to left/right safe-area
+         gutters. In that pocket the potion and utility column cannot both sit
+         beside the joystick, so lift only the potion above the column. The
+         two-pixel vertical gap remains stable when a bottom inset is present. */
+      @media (max-width: 600px) {
+        .potion-slot {
+          bottom: calc(208px + env(safe-area-inset-bottom));
+        }
       }
 
       /* On a pointer device the joystick is hidden, and the potion was placed
@@ -1553,14 +1891,14 @@ export class GameHUD {
         width: 54px;
         height: 54px;
         bottom: calc(28px + env(safe-area-inset-bottom));
-        right: calc(300px + env(safe-area-inset-right));
+        right: calc(268px + env(safe-area-inset-right));
         font-size: 9px;
       }
       .dash-touch-btn {
         width: 50px;
         height: 50px;
         bottom: calc(92px + env(safe-area-inset-bottom));
-        right: calc(300px + env(safe-area-inset-right));
+        right: calc(268px + env(safe-area-inset-right));
         font-size: 8.5px;
       }
 
@@ -1569,7 +1907,7 @@ export class GameHUD {
         width: 50px;
         height: 50px;
         bottom: calc(156px + env(safe-area-inset-bottom));
-        right: calc(300px + env(safe-area-inset-right));
+        right: calc(268px + env(safe-area-inset-right));
         font-size: 8.5px;
       }
 
@@ -1619,6 +1957,17 @@ export class GameHUD {
         .wave-mobs-left {
           font-size: 8px;
         }
+        .dungeon-run-status {
+          width: min(228px, calc(100vw - 18px));
+          padding: 4px 6px;
+          gap: 3px;
+        }
+        .run-objective-row { grid-template-columns: 26px minmax(0, 1fr); gap: 5px; }
+        .run-objective-icon { width: 24px; height: 24px; }
+        .run-objective-title { font-size: 7.8px; }
+        .run-objective-progress { font-size: 7px; }
+        .run-relic-chip { max-width: 67px; height: 19px; font-size: 6.8px; }
+        .run-relic-icon { width: 14px; height: 14px; }
         .hud-top-right {
           top: max(6px, env(safe-area-inset-top));
           right: max(6px, env(safe-area-inset-right));
@@ -2048,7 +2397,7 @@ export class GameHUD {
       .skill-tooltip-popup {
         width: min(330px, 82vw); padding: 12px;
         border: 12px solid transparent;
-        border-image: url('/assets/runtime/ui/fantasy-borders/default-panel/panel-016.png') 16 fill / 12px / 0 stretch;
+        border-image: url('/assets/runtime/ui/fantasy-borders/default-panel/panel-016.png') 16 / 12px / 0 stretch;
         background: linear-gradient(rgba(15,19,27,.98),rgba(7,9,13,.99));
       }
       .tooltip-skill-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
@@ -2135,6 +2484,8 @@ export class GameHUD {
     // old tree is detached; attachEvents reinstalls it when an inventory render
     // intentionally remains open.
     this.releaseActiveHudDialogFocus();
+    this.disposeActionBindings();
+    this.resetDetachedTouchControls();
 
     this.container.innerHTML = `
       <!-- Top Left: the player panel with the banner stacked beneath it.
@@ -2204,6 +2555,22 @@ export class GameHUD {
         <div class="wave-title" id="wave-title-text">DUNGEON BATTLE</div>
         <div class="wave-mobs-left" id="wave-mobs-text">Enemies remaining: 0</div>
       </div>
+
+      <section class="dungeon-run-status" id="dungeon-run-status" aria-label="Dungeon run" aria-hidden="true">
+        <div class="run-objective-row" id="run-objective-row">
+          <span class="gameplay-sprite-icon run-objective-icon" id="run-objective-icon" aria-hidden="true"><img alt="" draggable="false" /></span>
+          <div class="run-objective-copy">
+            <div class="run-objective-head">
+              <span class="run-objective-title" id="run-objective-title">DUNGEON OBJECTIVE</span>
+              <span class="run-objective-progress" id="run-objective-progress">In progress</span>
+            </div>
+            <div class="run-objective-meter" id="run-objective-meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <div class="run-objective-fill" id="run-objective-fill"></div>
+            </div>
+          </div>
+        </div>
+        <div class="run-relic-rail" id="run-relic-rail" aria-label="Active relics"></div>
+      </section>
       </div>
 
       <!-- Top Center: Epic Boss Health Bar (MapleStory / Dark Souls Style) -->
@@ -2413,8 +2780,8 @@ export class GameHUD {
 
         <div class="mobile-action-hub">
           <button class="touch-action-btn touch-talk-btn" id="touch-talk-btn">
-            <img src="/assets/gui/PNG/iconCircle_beige.png" width="20" height="20" />
-            <span>TALK</span>
+            <span class="gameplay-sprite-icon touch-context-sprite" id="touch-context-sprite" aria-hidden="true"><img alt="" draggable="false" /></span>
+            <span data-context-label>TALK</span>
           </button>
           <button class="touch-action-btn jump-touch-btn" id="touch-jump-btn">
             <img src="/assets/gui/PNG/arrowBrown_right.png" width="20" height="20" style="transform: rotate(-90deg);" />
@@ -2485,6 +2852,8 @@ export class GameHUD {
     `;
 
     this.indexHudNodes();
+    this.patchDungeonRunHud();
+    this.patchDungeonContextAction();
     this.attachEvents();
     this.setupVirtualTouchGamepad();
     // Both have had their one chance to bind to window.
@@ -2584,7 +2953,7 @@ export class GameHUD {
       this.paintPotionSlot();
     };
     if (potionSlot && this.game) {
-      this.game.bindInputAction(potionSlot, 'quickHeal', { vibrateMs: 10 });
+      this.bindActionControl(potionSlot, 'quickHeal', { vibrateMs: 10 });
     } else {
       potionSlot?.addEventListener('click', drink);
       potionSlot?.addEventListener('keydown', (e: KeyboardEvent) => {
@@ -2923,7 +3292,7 @@ export class GameHUD {
     // a tap. Cancel and leave both clear it, or walking away mid-hold would
     // leave the flag stuck on.
     if (talkBtn && this.game) {
-      this.game.bindInputAction(talkBtn, 'interact', { hold: true, vibrateMs: 8 });
+      this.bindActionControl(talkBtn, 'interact', { hold: true, vibrateMs: 8 });
     } else {
       talkBtn?.addEventListener('click', (e) => {
         e.preventDefault();
@@ -2978,7 +3347,7 @@ export class GameHUD {
 
       const action = skillAction(idx);
       if (this.game && action) {
-        this.game.bindInputAction(slot as HTMLElement, action, {
+        this.bindActionControl(slot as HTMLElement, action, {
           vibrateMs: idx === 0 ? 10 : 14,
           beforePress: hideTooltip,
         });
@@ -3058,7 +3427,9 @@ export class GameHUD {
     // Pointer Events cover touch, pen and mouse without the compatibility
     // mouse event a separate touch listener would generate afterwards.
     joystickZone.addEventListener('pointerdown', (e: PointerEvent) => {
-      if (!e.isPrimary || (e.pointerType === 'mouse' && e.button !== 0)) return;
+      // The joystick may be the second finger down (for example after holding
+      // an attack), so touch must not depend on PointerEvent.isPrimary.
+      if (!isActionPointerStart(e) || this.joystickActive) return;
       e.preventDefault();
       this.joystickTouchId = e.pointerId;
       this.joystickActive = true;
@@ -3087,7 +3458,7 @@ export class GameHUD {
         e.stopPropagation();
         this.engine.jumpPlayer();
       };
-      if (this.game) this.game.bindInputAction(jumpBtn, 'jump', { vibrateMs: 8 });
+      if (this.game) this.bindActionControl(jumpBtn, 'jump', { vibrateMs: 8 });
       else jumpBtn.addEventListener('pointerdown', triggerJump);
     }
 
@@ -3098,8 +3469,31 @@ export class GameHUD {
         e.stopPropagation();
         this.engine.dashPlayer();
       };
-      if (this.game) this.game.bindInputAction(dashBtn, 'dash', { vibrateMs: 12 });
+      if (this.game) this.bindActionControl(dashBtn, 'dash', { vibrateMs: 12 });
       else dashBtn.addEventListener('pointerdown', triggerDash);
+    }
+  }
+
+  private bindActionControl(
+    element: HTMLElement,
+    action: Parameters<SideViewGame['bindInputAction']>[1],
+    options: Parameters<SideViewGame['bindInputAction']>[2] = {},
+  ): void {
+    if (!this.game) return;
+    this.actionBindingDisposers.add(this.game.bindInputAction(element, action, options));
+  }
+
+  private disposeActionBindings(): void {
+    for (const dispose of this.actionBindingDisposers) dispose();
+    this.actionBindingDisposers.clear();
+  }
+
+  private resetDetachedTouchControls(): void {
+    this.joystickActive = false;
+    this.joystickTouchId = null;
+    if (this.game) {
+      this.game.touchMoveDir = 0;
+      this.game.touchReviveHeld = false;
     }
   }
 
@@ -3108,6 +3502,27 @@ export class GameHUD {
     const mobsEl = this.hudNode('wave-mobs-text');
     if (titleEl) titleEl.textContent = String(title || 'Dungeon Battle');
     if (mobsEl) mobsEl.textContent = `Enemies remaining: ${Math.max(0, Math.trunc(finiteNumber(remainingEnemies)))}`;
+  }
+
+  /** Host/run adapter: null clears the objective without rebuilding the HUD. */
+  public setDungeonObjective(objective: DungeonObjectiveHudState | null): void {
+    this.dungeonObjective = objective ? { ...objective } : null;
+    this.patchDungeonRunHud();
+  }
+
+  /** Replaces the compact mid-run relic strip. The supplied array is never retained. */
+  public setDungeonRelics(relics: readonly DungeonRelicHudItem[]): void {
+    this.dungeonRelics = relics.map(relic => ({ ...relic }));
+    this.patchDungeonRunHud();
+  }
+
+  /**
+   * A room interaction may temporarily replace PARRY. Passing null restores
+   * the normal dungeon parry action; town TALK and co-op REVIVE still win.
+   */
+  public setDungeonContextAction(action: DungeonContextActionHudState | null): void {
+    this.dungeonContextAction = action ? { ...action } : null;
+    this.patchDungeonContextAction();
   }
 
   public showToast(message: string) {
@@ -3311,24 +3726,10 @@ export class GameHUD {
       this.lastSlowHudPatchAt = now;
     }
 
-    // Touch Talk Button, which doubles as the revive button. In town it talks;
-    // in a dungeon standing over a downed teammate it picks them up. The two
-    // never apply at once, so one button covers both without extra clutter.
-    const talkBtn = this.hudNode('touch-talk-btn');
-    if (talkBtn) {
-      const activeNpc = this.engine.townHub?.getActiveNpc();
-      const downedAlly = this.engine.nearestDownedAlly();
-      const label = talkBtn.querySelector('span');
-      if (downedAlly && !this.engine.isTownMode) {
-        talkBtn.style.display = 'flex';
-        talkBtn.classList.add('touch-revive-btn');
-        if (label) label.textContent = 'REVIVE';
-      } else {
-        talkBtn.classList.remove('touch-revive-btn');
-        if (label) label.textContent = 'TALK';
-        talkBtn.style.display = (this.engine.isTownMode && activeNpc) ? 'flex' : 'none';
-      }
-    }
+    // TALK in town, REVIVE beside a downed ally, authored room interaction
+    // when present, otherwise the timing-based dungeon PARRY action.
+    this.patchDungeonContextAction();
+    if (slowPatch) this.patchDungeonRunHud();
 
     this.paintDownedOverlay();
     this.paintThreat();

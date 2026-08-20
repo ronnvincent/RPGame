@@ -235,8 +235,38 @@ test('CORS is an exact allowlist', async () => {
   const allowed = await json('/', { origin: ALLOWED_ORIGIN });
   assert.equal(allowed.response.headers.get('access-control-allow-origin'), ALLOWED_ORIGIN);
 
+  const production = await json('/', { origin: 'https://rpg-game-three.vercel.app' });
+  assert.equal(
+    production.response.headers.get('access-control-allow-origin'),
+    'https://rpg-game-three.vercel.app'
+  );
+
+  const preview = await json('/', { origin: 'https://rpg-game-three-fix-login-4tvon.vercel.app' });
+  assert.equal(
+    preview.response.headers.get('access-control-allow-origin'),
+    'https://rpg-game-three-fix-login-4tvon.vercel.app'
+  );
+
   const denied = await json('/', { origin: 'https://evil.test' });
   assert.notEqual(denied.response.headers.get('access-control-allow-origin'), 'https://evil.test');
+});
+
+test('guest registration preflight returns the browser CORS contract', async () => {
+  const origin = 'https://rpg-game-three.vercel.app';
+  const response = await fetch(`${URL}/api/register_guest`, {
+    method: 'OPTIONS',
+    headers: {
+      Origin: origin,
+      'Access-Control-Request-Method': 'POST',
+      'Access-Control-Request-Headers': 'content-type',
+    },
+  });
+
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.get('access-control-allow-origin'), origin);
+  assert.match(response.headers.get('access-control-allow-methods') || '', /POST/);
+  assert.match(response.headers.get('access-control-allow-headers') || '', /Content-Type/i);
+  assert.equal(response.headers.get('access-control-allow-credentials'), null);
 });
 
 test('dungeon requirements are canonical and unknown dungeon ids are rejected', async () => {

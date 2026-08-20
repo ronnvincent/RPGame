@@ -17,14 +17,41 @@ const LOCAL_ORIGINS = [
   'http://localhost:4173',
   'http://127.0.0.1:4173',
 ];
+const DEPLOYED_BROWSER_ORIGINS = [
+  'https://rpg-game-three.vercel.app',
+];
 const configuredOrigins = String(process.env.CORS_ORIGINS || '')
   .split(',')
   .map(origin => origin.trim())
   .filter(Boolean);
-const ALLOWED_ORIGINS = new Set(configuredOrigins.length ? configuredOrigins : LOCAL_ORIGINS);
+// Environment-provided origins extend the known browser origins instead of
+// accidentally removing the production site or local development access.
+const ALLOWED_ORIGINS = new Set([
+  ...LOCAL_ORIGINS,
+  ...DEPLOYED_BROWSER_ORIGINS,
+  ...configuredOrigins,
+]);
+const isSafeBrowserOrigin = (origin) => {
+  if (ALLOWED_ORIGINS.has(origin)) return true;
+  try {
+    const parsed = new URL(origin);
+    const isLocal = parsed.protocol === 'http:'
+      && (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1');
+    const isProjectPreview = parsed.protocol === 'https:'
+      && /^rpg-game-three-[a-z0-9-]+\.vercel\.app$/i.test(parsed.hostname);
+    return (isLocal || isProjectPreview)
+      && parsed.username === ''
+      && parsed.password === ''
+      && parsed.pathname === '/'
+      && parsed.search === ''
+      && parsed.hash === '';
+  } catch {
+    return false;
+  }
+};
 const corsOrigin = (origin, callback) => {
   // Native apps, curl, health checks and same-origin requests send no Origin.
-  if (!origin || ALLOWED_ORIGINS.has(origin)) return callback(null, true);
+  if (!origin || isSafeBrowserOrigin(origin)) return callback(null, true);
   return callback(new Error('Origin is not allowed by CORS'));
 };
 const corsOptions = {
@@ -33,6 +60,7 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: false,
   maxAge: 86400,
+  optionsSuccessStatus: 204,
 };
 
 app.use(cors(corsOptions));
@@ -901,6 +929,8 @@ const RATE_LIMITS = {
   wave_sync: [6, 1000],
   enemy_died: [64, 1000],
   player_damage: [48, 1000],
+  combat_defense: [30, 1000],
+  run_sync: [10, 1000],
   request_full_sync: [3, 3000],
   full_sync: [3, 3000],
   voice_signal: [80, 1000],
@@ -958,6 +988,281 @@ function sanitizePlayerDamageStatus(value) {
     tickInterval: damageOverTime ? value.tickInterval : undefined,
     rawTickDamage: damageOverTime ? value.rawTickDamage : undefined,
   };
+}
+
+const RUN_SYNC_PROTOCOL_VERSION = 1;
+const RUN_SYNC_MAX_BYTES = 128 * 1024;
+const ENCOUNTER_SNAPSHOT_MAX_BYTES = 64 * 1024;
+const ENCOUNTER_LIMITS = Object.freeze({
+  maxActors: 8,
+  maxEnemies: 32,
+  maxWorldObjects: 32,
+  maxHazards: 16,
+  maxRouteProps: 8,
+  maxPendingExplosions: 8,
+});
+const RUN_SYNC_LIMITS = Object.freeze({
+  maxActors: 8,
+  maxRooms: 32,
+  maxExitsPerRoom: 4,
+  maxObjectiveEntities: 64,
+  maxRoomChoices: 12,
+  maxRelicsPerActor: 24,
+  maxRelicOfferSize: 4,
+});
+const RUN_STATE_STATUSES = new Set(['active', 'completed', 'failed']);
+const ROOM_STATE_STATUSES = new Set(['available', 'active', 'completed', 'failed']);
+const COMBAT_DEFENSE_OUTCOMES = new Set(['dodge', 'perfect-dodge', 'parry']);
+const ATTACK_DEFENSE_TYPES = new Set(['parryable', 'dodge-only', 'unavoidable']);
+const ENEMY_ATTACK_PROFILE_IDS = new Set([
+  'melee-light', 'melee-heavy', 'shield-bash', 'ranged-shot', 'healer-cast',
+  'summoner-cast', 'assassin-lunge', 'boss-slam', 'boss-volley', 'boss-nova', 'boss-beam',
+]);
+const RESERVED_RECORD_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
+
+function isRecord(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function safeRunToken(value, max = 128) {
+  return typeof value === 'string'
+    && value.length > 0
+    && value.length <= max
+    && !RESERVED_RECORD_KEYS.has(value)
+    && /^[A-Za-z0-9:._-]+$/.test(value);
+}
+
+function boundedInteger(value, min, max) {
+  return Number.isSafeInteger(value) && value >= min && value <= max;
+}
+
+function boundedTokenArray(value, maxItems, maxTokenLength = 128) {
+  return Array.isArray(value)
+    && value.length <= maxItems
+    && value.every(item => safeRunToken(item, maxTokenLength));
+}
+
+/**
+ * A host owns run decisions, but it does not own guest memory. Reject stale
+ * schema versions, oversized graphs, unsafe record keys, and unbounded arrays
+ * before a snapshot is relayed or embedded in a reconnect full_sync.
+ */
+function sanitizeDungeonRunState(value, expectedDungeonId) {
+  if (!isRecord(value) || !isPayloadWithin(value, RUN_SYNC_MAX_BYTES)) return null;
+  if (value.schemaVersion !== 1) return null;
+  if (!safeRunToken(value.contentVersion, 64)) return null;
+  if (!safeRunToken(value.runId, 128) || !safeRunToken(value.dungeonId, 64)) return null;
+  if (expectedDungeonId && value.dungeonId !== expectedDungeonId) return null;
+  if (!boundedInteger(value.seed, 0, 0xffffffff)) return null;
+  if (!boundedInteger(value.authorityEpoch, 1, 1_000_000_000)) return null;
+  if (!boundedInteger(value.revision, 0, 2_147_483_647)) return null;
+  if (!boundedInteger(value.lastCommandSequence, 0, 2_147_483_647)) return null;
+  if (!boundedInteger(value.elapsedMs, 0, 2_147_483_647)) return null;
+  if (!RUN_STATE_STATUSES.has(value.status) || !safeRunToken(value.currentRoomId, 128)) return null;
+
+  const graph = value.graph;
+  if (!isRecord(graph) || !Array.isArray(graph.nodes) || !Array.isArray(graph.exits)) return null;
+  if (graph.nodes.length < 1 || graph.nodes.length > RUN_SYNC_LIMITS.maxRooms) return null;
+  if (graph.exits.length > RUN_SYNC_LIMITS.maxRooms * RUN_SYNC_LIMITS.maxExitsPerRoom) return null;
+  const nodeIds = new Set();
+  for (const node of graph.nodes) {
+    if (!isRecord(node) || !safeRunToken(node.id, 128) || nodeIds.has(node.id)) return null;
+    if (!safeRunToken(node.templateId, 128) || !safeRunToken(node.sceneId, 128)) return null;
+    if (!boundedTokenArray(node.enemyGroupIds, RUN_SYNC_LIMITS.maxObjectiveEntities)) return null;
+    if (!boundedTokenArray(node.worldObjectIds, RUN_SYNC_LIMITS.maxObjectiveEntities)) return null;
+    if (!Array.isArray(node.choices) || node.choices.length > RUN_SYNC_LIMITS.maxRoomChoices) return null;
+    if (!boundedTokenArray(node.tags, 32, 64)) return null;
+    nodeIds.add(node.id);
+  }
+  if (!safeRunToken(graph.entryRoomId, 128) || !nodeIds.has(graph.entryRoomId)) return null;
+  if (!safeRunToken(graph.finaleRoomId, 128) || !nodeIds.has(graph.finaleRoomId)) return null;
+  if (!nodeIds.has(value.currentRoomId)) return null;
+  for (const exit of graph.exits) {
+    if (!isRecord(exit) || !safeRunToken(exit.id, 128)) return null;
+    if (!safeRunToken(exit.fromRoomId, 128) || !nodeIds.has(exit.fromRoomId)) return null;
+    if (!safeRunToken(exit.toRoomId, 128) || !nodeIds.has(exit.toRoomId)) return null;
+  }
+
+  if (!boundedTokenArray(value.activeActorIds, RUN_SYNC_LIMITS.maxActors)) return null;
+  if (new Set(value.activeActorIds).size !== value.activeActorIds.length) return null;
+  if (!boundedTokenArray(value.visitedRoomIds, RUN_SYNC_LIMITS.maxRooms)
+    || !value.visitedRoomIds.every(roomId => nodeIds.has(roomId))) return null;
+  if (!boundedTokenArray(value.revealedSecretRoomIds, RUN_SYNC_LIMITS.maxRooms)
+    || !value.revealedSecretRoomIds.every(roomId => nodeIds.has(roomId))) return null;
+
+  if (!isRecord(value.roomStates)) return null;
+  const roomStates = Object.entries(value.roomStates);
+  if (roomStates.length > RUN_SYNC_LIMITS.maxRooms) return null;
+  for (const [roomId, roomState] of roomStates) {
+    if (!safeRunToken(roomId, 128) || !nodeIds.has(roomId) || !isRecord(roomState)) return null;
+    if (roomState.roomId !== roomId || !ROOM_STATE_STATUSES.has(roomState.status)) return null;
+    if (!Array.isArray(roomState.choiceSelections)
+      || roomState.choiceSelections.length > RUN_SYNC_LIMITS.maxRoomChoices) return null;
+    for (const choice of roomState.choiceSelections) {
+      if (!isRecord(choice) || !safeRunToken(choice.actorId, 128) || !safeRunToken(choice.choiceId, 128)) return null;
+    }
+    if (roomState.objectiveState !== undefined && !isRecord(roomState.objectiveState)) return null;
+  }
+  if (!Object.hasOwn(value.roomStates, value.currentRoomId)) return null;
+
+  if (!isRecord(value.relicsByActorId)) return null;
+  const relicEntries = Object.entries(value.relicsByActorId);
+  if (relicEntries.length > RUN_SYNC_LIMITS.maxActors) return null;
+  for (const [actorId, relicIds] of relicEntries) {
+    if (!safeRunToken(actorId, 128)
+      || !boundedTokenArray(relicIds, RUN_SYNC_LIMITS.maxRelicsPerActor)) return null;
+  }
+
+  if (!Array.isArray(value.relicOffers) || value.relicOffers.length > RUN_SYNC_LIMITS.maxRooms) return null;
+  for (const offer of value.relicOffers) {
+    if (!isRecord(offer)
+      || !safeRunToken(offer.id, 128)
+      || !safeRunToken(offer.actorId, 128)
+      || !safeRunToken(offer.sourceId, 128)
+      || !boundedTokenArray(offer.relicIds, RUN_SYNC_LIMITS.maxRelicOfferSize)) return null;
+    if (offer.chosenRelicId !== undefined && !safeRunToken(offer.chosenRelicId, 128)) return null;
+  }
+  if (value.failureReason !== undefined
+    && (typeof value.failureReason !== 'string' || value.failureReason.length > 256)) return null;
+  return value;
+}
+
+function recordHasOnly(value, allowedKeys) {
+  if (!isRecord(value)) return false;
+  const allowed = new Set(allowedKeys);
+  return Object.keys(value).every(key => allowed.has(key) && !RESERVED_RECORD_KEYS.has(key));
+}
+
+function finiteEncounterNumber(value, min, max) {
+  return Number.isFinite(value) && value >= min && value <= max;
+}
+
+function uniqueSafeEncounterIds(value, limit) {
+  return boundedTokenArray(value, limit) && new Set(value).size === value.length;
+}
+
+function safeEncounterSprite(value) {
+  return safeRunToken(value, 160);
+}
+
+function validEncounterObjective(value) {
+  if (!isRecord(value) || !safeRunToken(value.id, 128) || typeof value.type !== 'string') return false;
+  const groups = list => uniqueSafeEncounterIds(list, ENCOUNTER_LIMITS.maxEnemies);
+  switch (value.type) {
+    case 'kill_all':
+      return recordHasOnly(value, ['id', 'type', 'spawnGroupIds']) && groups(value.spawnGroupIds);
+    case 'defend_relic':
+      return recordHasOnly(value, ['id', 'type', 'targetObjectId', 'durationMs', 'maxHp', 'spawnGroupIds'])
+        && safeRunToken(value.targetObjectId, 128) && finiteEncounterNumber(value.durationMs, 1, 3_600_000)
+        && finiteEncounterNumber(value.maxHp, 1, 1_000_000_000) && groups(value.spawnGroupIds);
+    case 'escort':
+      return recordHasOnly(value, ['id', 'type', 'escortActorId', 'checkpointIds', 'maxHp', 'spawnGroupIds'])
+        && safeRunToken(value.escortActorId, 128)
+        && uniqueSafeEncounterIds(value.checkpointIds, ENCOUNTER_LIMITS.maxWorldObjects)
+        && finiteEncounterNumber(value.maxHp, 1, 1_000_000_000) && groups(value.spawnGroupIds);
+    case 'survive':
+      return recordHasOnly(value, ['id', 'type', 'durationMs', 'spawnGroupIds'])
+        && finiteEncounterNumber(value.durationMs, 1, 3_600_000) && groups(value.spawnGroupIds);
+    case 'destroy_nests':
+      return recordHasOnly(value, ['id', 'type', 'nestObjectIds', 'spawnGroupIds'])
+        && uniqueSafeEncounterIds(value.nestObjectIds, ENCOUNTER_LIMITS.maxWorldObjects)
+        && groups(value.spawnGroupIds);
+    case 'timed_escape':
+      return recordHasOnly(value, ['id', 'type', 'durationMs', 'exitTriggerId', 'participation', 'requiredCount'])
+        && finiteEncounterNumber(value.durationMs, 1, 3_600_000)
+        && safeRunToken(value.exitTriggerId, 128)
+        && (value.participation === 'all_active' || value.participation === 'fixed_count')
+        && (value.requiredCount === undefined
+          || boundedInteger(value.requiredCount, 1, ENCOUNTER_LIMITS.maxActors));
+    default: return false;
+  }
+}
+
+/** Server-side mirror of the client encounter boundary; returns null on any malformed field. */
+function sanitizeDungeonEncounterSnapshot(value, expectedRoomId) {
+  if (!recordHasOnly(value, [
+    'schemaVersion', 'room', 'seed', 'arenaWidth', 'groundY', 'elapsedSeconds', 'objectiveElapsedMs',
+    'objectiveStatus', 'eventSequence', 'worldObjects', 'hazards', 'routeProps', 'escort',
+    'activeActorIds', 'escapedActorIds', 'knownEnemyIds', 'defeatedEnemyIds', 'spawnsSealed',
+    'pendingExplosions',
+  ]) || !isPayloadWithin(value, ENCOUNTER_SNAPSHOT_MAX_BYTES) || value.schemaVersion !== 1) return null;
+  if (!recordHasOnly(value.room, ['id', 'kind', 'access', 'objective'])
+    || !safeRunToken(value.room.id, 128)
+    || (expectedRoomId && value.room.id !== expectedRoomId)
+    || !new Set(['combat', 'objective', 'elite', 'miniboss', 'event', 'treasure', 'shrine', 'boss', 'escape']).has(value.room.kind)
+    || !new Set(['normal', 'secret']).has(value.room.access)
+    || (value.room.objective !== undefined && !validEncounterObjective(value.room.objective))) return null;
+  if (!boundedInteger(value.seed, 0, 0xffffffff)
+    || !finiteEncounterNumber(value.arenaWidth, 640, 12_000)
+    || !finiteEncounterNumber(value.groundY, -12_000, 12_000)
+    || !finiteEncounterNumber(value.elapsedSeconds, 0, 3_600_000)
+    || !finiteEncounterNumber(value.objectiveElapsedMs, 0, 3_600_000_000)
+    || !boundedInteger(value.eventSequence, 0, Number.MAX_SAFE_INTEGER)
+    || !new Set(['active', 'succeeded', 'failed']).has(value.objectiveStatus)
+    || typeof value.spawnsSealed !== 'boolean') return null;
+  if (!Array.isArray(value.worldObjects) || value.worldObjects.length > ENCOUNTER_LIMITS.maxWorldObjects
+    || !Array.isArray(value.hazards) || value.hazards.length > ENCOUNTER_LIMITS.maxHazards
+    || !Array.isArray(value.routeProps) || value.routeProps.length > ENCOUNTER_LIMITS.maxRouteProps
+    || !Array.isArray(value.pendingExplosions) || value.pendingExplosions.length > ENCOUNTER_LIMITS.maxPendingExplosions
+    || !uniqueSafeEncounterIds(value.activeActorIds, ENCOUNTER_LIMITS.maxActors)
+    || !uniqueSafeEncounterIds(value.escapedActorIds, ENCOUNTER_LIMITS.maxActors)
+    || !uniqueSafeEncounterIds(value.knownEnemyIds, ENCOUNTER_LIMITS.maxEnemies)
+    || !uniqueSafeEncounterIds(value.defeatedEnemyIds, ENCOUNTER_LIMITS.maxEnemies)
+    || !value.escapedActorIds.every(id => value.activeActorIds.includes(id))
+    || !value.defeatedEnemyIds.every(id => value.knownEnemyIds.includes(id))) return null;
+
+  for (const object of value.worldObjects) {
+    if (!recordHasOnly(object, ['id', 'kind', 'spriteId', 'secondarySpriteId', 'x', 'y', 'width', 'height', 'hp', 'maxHp', 'active'])
+      || !safeRunToken(object.id, 128)
+      || !new Set(['relic', 'nest', 'explosive-barrel', 'breakable-bridge', 'escape-gate', 'survival-ward']).has(object.kind)
+      || !safeEncounterSprite(object.spriteId)
+      || (object.secondarySpriteId !== undefined && !safeEncounterSprite(object.secondarySpriteId))
+      || !finiteEncounterNumber(object.x, -24_000, 24_000) || !finiteEncounterNumber(object.y, -24_000, 24_000)
+      || !finiteEncounterNumber(object.width, 1, 4_000) || !finiteEncounterNumber(object.height, 1, 4_000)
+      || !finiteEncounterNumber(object.maxHp, 1, 1_000_000_000)
+      || !finiteEncounterNumber(object.hp, 0, object.maxHp) || typeof object.active !== 'boolean') return null;
+  }
+  for (const hazard of value.hazards) {
+    if (!recordHasOnly(hazard, ['id', 'kind', 'bodySpriteId', 'telegraphSpriteId', 'impactSpriteId', 'x', 'y', 'baseX', 'baseY', 'minX', 'maxX', 'width', 'height', 'direction', 'phase', 'timerSeconds', 'impactSeconds', 'cycle'])
+      || !safeRunToken(hazard.id, 128)
+      || !new Set(['falling-rocks', 'traps', 'moving-platform']).has(hazard.kind)
+      || !safeEncounterSprite(hazard.bodySpriteId) || !safeEncounterSprite(hazard.telegraphSpriteId)
+      || !safeEncounterSprite(hazard.impactSpriteId)
+      || ![hazard.x, hazard.y, hazard.baseX, hazard.baseY, hazard.minX, hazard.maxX]
+        .every(number => finiteEncounterNumber(number, -24_000, 24_000))
+      || hazard.minX > hazard.maxX || !finiteEncounterNumber(hazard.width, 1, 4_000)
+      || !finiteEncounterNumber(hazard.height, 1, 4_000) || ![-1, 1].includes(hazard.direction)
+      || !new Set(['cooldown', 'telegraph', 'active']).has(hazard.phase)
+      || !finiteEncounterNumber(hazard.timerSeconds, 0, 3_600)
+      || !finiteEncounterNumber(hazard.impactSeconds, 0, 60)
+      || !boundedInteger(hazard.cycle, 0, Number.MAX_SAFE_INTEGER)) return null;
+  }
+  for (const prop of value.routeProps) {
+    if (!recordHasOnly(prop, ['id', 'kind', 'spriteId', 'x', 'y', 'scale'])
+      || !safeRunToken(prop.id, 128) || !new Set(['route', 'event', 'treasure', 'shrine', 'secret']).has(prop.kind)
+      || !safeEncounterSprite(prop.spriteId) || !finiteEncounterNumber(prop.x, -24_000, 24_000)
+      || !finiteEncounterNumber(prop.y, -24_000, 24_000) || !finiteEncounterNumber(prop.scale, 0.05, 20)) return null;
+  }
+  if (value.escort !== null) {
+    const escort = value.escort;
+    if (!recordHasOnly(escort, ['actorId', 'idleSpriteId', 'walkSpriteId', 'x', 'y', 'hp', 'maxHp', 'nextCheckpointIndex', 'checkpointXs', 'moving'])
+      || !safeRunToken(escort.actorId, 128) || !safeEncounterSprite(escort.idleSpriteId)
+      || !safeEncounterSprite(escort.walkSpriteId) || !finiteEncounterNumber(escort.x, -24_000, 24_000)
+      || !finiteEncounterNumber(escort.y, -24_000, 24_000)
+      || !finiteEncounterNumber(escort.maxHp, 1, 1_000_000_000) || !finiteEncounterNumber(escort.hp, 0, escort.maxHp)
+      || !boundedInteger(escort.nextCheckpointIndex, 0, ENCOUNTER_LIMITS.maxWorldObjects)
+      || !Array.isArray(escort.checkpointXs) || escort.checkpointXs.length > ENCOUNTER_LIMITS.maxWorldObjects
+      || !escort.checkpointXs.every(x => finiteEncounterNumber(x, -24_000, 24_000))
+      || typeof escort.moving !== 'boolean') return null;
+  }
+  for (const explosion of value.pendingExplosions) {
+    if (!recordHasOnly(explosion, ['id', 'x', 'y', 'radius', 'playerDamage', 'enemyDamage'])
+      || !safeRunToken(explosion.id, 128) || !finiteEncounterNumber(explosion.x, -24_000, 24_000)
+      || !finiteEncounterNumber(explosion.y, -24_000, 24_000) || !finiteEncounterNumber(explosion.radius, 1, 4_000)
+      || !finiteEncounterNumber(explosion.playerDamage, 0, 9_999)
+      || !finiteEncounterNumber(explosion.enemyDamage, 0, 9_999)) return null;
+  }
+  return value;
 }
 
 function socketIdentity(socket, data = {}) {
@@ -1520,20 +1825,59 @@ io.on('connection', (socket) => {
     if (!p || !p.room) return;
     const room = rooms[p.room];
     if (!room || p.actorId !== room.hostActorId) return;
+    if (data.protocolVersion !== undefined && data.protocolVersion !== RUN_SYNC_PROTOCOL_VERSION) return;
     if (!Array.isArray(data.enemies) || data.enemies.length > 128) return;
     if (!Number.isInteger(data.waveIndex) || data.waveIndex < 0 || data.waveIndex > 100000) return;
     if (!Number.isInteger(data.dungeonIndex) || data.dungeonIndex < 0 || data.dungeonIndex > 10000) return;
     if (!safeId(data.dungeonId, 64)) return;
+    if (data.dungeonId !== room.dungeonId) return;
+    const runState = data.runState === undefined
+      ? undefined
+      : sanitizeDungeonRunState(data.runState, data.dungeonId);
+    if (data.runState !== undefined && !runState) return;
+    const encounterSnapshot = data.encounterSnapshot === undefined
+      ? undefined
+      : sanitizeDungeonEncounterSnapshot(data.encounterSnapshot, runState?.currentRoomId);
+    if (data.encounterSnapshot !== undefined && !encounterSnapshot) return;
 
     const requesterId = data.requesterId;
     const requester = requesterId && players[requesterId];
     if (!requester || requester.room !== p.room || requester.actorId === p.actorId) return;
     io.to(requesterId).emit('full_sync', {
+      protocolVersion: RUN_SYNC_PROTOCOL_VERSION,
       requesterId,
       waveIndex: data.waveIndex,
       dungeonIndex: data.dungeonIndex,
       dungeonId: data.dungeonId,
       enemies: data.enemies,
+      ...(runState ? { runState } : {}),
+      ...(encounterSnapshot ? { encounterSnapshot } : {}),
+    });
+  });
+
+  // Host-owned deterministic run state. This is separate from high-frequency
+  // enemy_sync so branching/objective/relic revisions can be versioned and
+  // applied atomically by guests.
+  socket.on('run_sync', (data = {}) => {
+    const p = players[socket.id];
+    if (!isRoomHost(p) || !p.room || !isPayloadWithin(data, RUN_SYNC_MAX_BYTES)) return;
+    const room = rooms[p.room];
+    if (!room
+      || !room.started
+      || !room.members.includes(p.actorId)
+      || p.isTownMode
+      || p.sceneId !== room.dungeonId) return;
+    if (data.protocolVersion !== RUN_SYNC_PROTOCOL_VERSION) return;
+    const runState = sanitizeDungeonRunState(data.runState, room.dungeonId);
+    if (!runState) return;
+    const encounterSnapshot = data.encounterSnapshot === undefined
+      ? undefined
+      : sanitizeDungeonEncounterSnapshot(data.encounterSnapshot, runState.currentRoomId);
+    if (data.encounterSnapshot !== undefined && !encounterSnapshot) return;
+    socket.to(p.room).emit('run_sync', {
+      protocolVersion: RUN_SYNC_PROTOCOL_VERSION,
+      runState,
+      ...(encounterSnapshot ? { encounterSnapshot } : {}),
     });
   });
 
@@ -1583,6 +1927,47 @@ io.on('connection', (socket) => {
         facing: data.facing < 0 ? -1 : 1,
       });
     }
+  });
+
+  // A guest resolves its own dodge/parry window, then reports only the bounded
+  // result for the host's specific attack intent. The server stamps identity;
+  // guests cannot choose which host or party receives the result.
+  socket.on('combat_defense', (data = {}) => {
+    const p = players[socket.id];
+    if (!p || !p.room || isRoomHost(p) || !isPayloadWithin(data, 1024)) return;
+    const room = rooms[p.room];
+    if (!room
+      || !room.started
+      || !room.members.includes(p.actorId)
+      || p.isTownMode
+      || p.sceneId !== room.dungeonId) return;
+    if (!safeRunToken(data.intentId, 96) || !safeRunToken(data.sourceEnemyId, 160)) return;
+    if (!COMBAT_DEFENSE_OUTCOMES.has(data.outcome)) return;
+
+    const hostSid = socketIdForActor(room.hostActorId);
+    const host = hostSid ? players[hostSid] : null;
+    if (!host
+      || host.room !== p.room
+      || host.actorId !== room.hostActorId
+      || host.isTownMode
+      || host.sceneId !== room.dungeonId) return;
+
+    const now = Date.now();
+    const seen = socket.data.combatDefenseIntentIds || new Map();
+    socket.data.combatDefenseIntentIds = seen;
+    for (const [intentId, receivedAt] of seen) {
+      if (now - receivedAt > 15_000) seen.delete(intentId);
+    }
+    if (seen.has(data.intentId)) return;
+    seen.set(data.intentId, now);
+    while (seen.size > 512) seen.delete(seen.keys().next().value);
+
+    io.to(hostSid).emit('combat_defense', {
+      socketId: socket.id,
+      intentId: data.intentId,
+      sourceEnemyId: data.sourceEnemyId,
+      outcome: data.outcome,
+    });
   });
 
   // In-Game Sync Events
@@ -1858,6 +2243,15 @@ io.on('connection', (socket) => {
     if (data.knockbackDir !== -1 && data.knockbackDir !== 1) return;
     if (data.isTownMode !== false || data.sceneId !== p.sceneId) return;
 
+    const intentFields = [data.parryability, data.intentId, data.sourceEnemyId, data.profileId];
+    const hasIntentMetadata = intentFields.some(value => value !== undefined);
+    if (hasIntentMetadata && (
+      !ATTACK_DEFENSE_TYPES.has(data.parryability)
+      || !safeRunToken(data.intentId, 96)
+      || !safeRunToken(data.sourceEnemyId, 160)
+      || !ENEMY_ATTACK_PROFILE_IDS.has(data.profileId)
+    )) return;
+
     const status = data.status === undefined ? undefined : sanitizePlayerDamageStatus(data.status);
     if (data.status !== undefined && !status) return;
 
@@ -1879,6 +2273,12 @@ io.on('connection', (socket) => {
       isTownMode: false,
       sceneId: p.sceneId,
       status,
+      ...(hasIntentMetadata ? {
+        parryability: data.parryability,
+        intentId: data.intentId,
+        sourceEnemyId: data.sourceEnemyId,
+        profileId: data.profileId,
+      } : {}),
     });
   });
 

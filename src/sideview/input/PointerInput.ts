@@ -35,6 +35,21 @@ export interface PointerBindingOptions {
   beforePress?: () => void;
 }
 
+/**
+ * Touch controls are deliberately multi-pointer: one thumb can hold movement
+ * while the other attacks. Browsers mark only the first active contact as the
+ * primary pointer, so primary-only filtering is valid for mouse/pen but would
+ * discard normal two-thumb touch input.
+ */
+export function isActionPointerStart(
+  event: Pick<PointerEvent, 'isPrimary' | 'pointerType' | 'button'>,
+  mouseButton = 0,
+): boolean {
+  if (event.pointerType === 'touch') return true;
+  if (!event.isPrimary) return false;
+  return event.pointerType !== 'mouse' || event.button === mouseButton;
+}
+
 /** DOM adapter kept separate from the pure gesture gate for fixture testing. */
 export function bindPointerAction(
   element: HTMLElement,
@@ -45,28 +60,46 @@ export function bindPointerAction(
   vibrate?: (duration: number) => void,
 ): () => void {
   let activeToken: string | null = null;
+  let activePointerId: number | null = null;
   let activeSource: InputSource = 'pointer';
   const allowedType = (type: string) => !options.pointerTypes || options.pointerTypes.includes(type as never);
 
+  const releaseActive = () => {
+    if (!activeToken) return;
+    const pointerId = activePointerId;
+    router.release(action, activeSource, activeToken);
+    activeToken = null;
+    activePointerId = null;
+    if (pointerId !== null) {
+      try { element.releasePointerCapture(pointerId); } catch { /* detached or already released */ }
+    }
+  };
+
   const down = (event: PointerEvent) => {
-    if (!event.isPrimary || !allowedType(event.pointerType)) return;
-    if (event.pointerType === 'mouse' && event.button !== (options.mouseButton ?? 0)) return;
+    if (!allowedType(event.pointerType) || !isActionPointerStart(event, options.mouseButton ?? 0)) return;
+    // One element represents one action hold. A second contact on that same
+    // element must not replace the pointer whose release owns the hold.
+    if (activeToken) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     if (!gate.pointerDown(action, event.pointerId)) return;
     event.preventDefault();
     event.stopPropagation();
     options.beforePress?.();
     activeSource = event.pointerType === 'touch' ? 'touch' : 'pointer';
-    activeToken = `${activeSource}:${event.pointerId}:${action}`;
-    router.press(action, activeSource, activeToken);
+    const token = `${activeSource}:${event.pointerId}:${action}`;
+    if (!router.press(action, activeSource, token)) return;
+    activeToken = token;
+    activePointerId = event.pointerId;
     if (options.vibrateMs) vibrate?.(options.vibrateMs);
     try { element.setPointerCapture(event.pointerId); } catch { /* detached or unsupported */ }
   };
 
   const release = (event: PointerEvent) => {
-    if (!activeToken) return;
-    router.release(action, activeSource, activeToken);
-    activeToken = null;
-    try { element.releasePointerCapture(event.pointerId); } catch { /* already released */ }
+    if (!activeToken || event.pointerId !== activePointerId) return;
+    releaseActive();
   };
 
   const click = (event: MouseEvent) => {
@@ -96,7 +129,9 @@ export function bindPointerAction(
   element.addEventListener('keydown', keydown);
 
   return () => {
-    if (activeToken) router.release(action, activeSource, activeToken);
+    // A HUD re-render can detach this element before pointerup/pointercancel.
+    // Releasing here prevents an orphaned token from holding an action forever.
+    releaseActive();
     element.removeEventListener('pointerdown', down);
     element.removeEventListener('pointerup', release);
     element.removeEventListener('pointercancel', release);

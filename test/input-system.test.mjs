@@ -35,6 +35,42 @@ function pad(index, axes = [0], pressed = [], count = 17) {
   return { index, connected: true, axes, buttons: buttons(count, pressed), id: `Pad ${index}` };
 }
 
+class FakePointerElement {
+  tagName = 'BUTTON';
+  listeners = new Map();
+  captures = new Set();
+
+  addEventListener(type, listener) {
+    const listeners = this.listeners.get(type) || [];
+    listeners.push(listener);
+    this.listeners.set(type, listeners);
+  }
+
+  removeEventListener(type, listener) {
+    this.listeners.set(type, (this.listeners.get(type) || []).filter(entry => entry !== listener));
+  }
+
+  setPointerCapture(pointerId) { this.captures.add(pointerId); }
+  releasePointerCapture(pointerId) { this.captures.delete(pointerId); }
+
+  emit(type, event) {
+    for (const listener of [...(this.listeners.get(type) || [])]) listener(event);
+  }
+}
+
+function pointerEvent(overrides = {}) {
+  return {
+    isPrimary: true,
+    pointerType: 'touch',
+    pointerId: 1,
+    button: 0,
+    detail: 0,
+    preventDefault() {},
+    stopPropagation() {},
+    ...overrides,
+  };
+}
+
 test('contexts gate actions and release held gameplay state on transition', () => {
   const router = new input.InputRouter();
   const events = [];
@@ -187,6 +223,64 @@ test('pointer gate drops compatibility clicks but keeps keyboard activation', ()
   assert.equal(gate.click('skill1', 1, 1_800), true, 'a later independent click is accepted');
 });
 
+test('secondary touch pointers work during two-thumb play without replacing the active hold', () => {
+  assert.equal(input.isActionPointerStart(pointerEvent({ isPrimary: false, pointerType: 'touch' })), true);
+  assert.equal(input.isActionPointerStart(pointerEvent({ isPrimary: false, pointerType: 'pen' })), false);
+  assert.equal(input.isActionPointerStart(pointerEvent({ pointerType: 'mouse', button: 1 })), false);
+
+  const router = new input.InputRouter();
+  const gate = new input.PointerGestureGate();
+  const element = new FakePointerElement();
+  const events = [];
+  router.subscribe(event => events.push(event));
+  const dispose = input.bindPointerAction(element, 'skill2', router, gate);
+
+  element.emit('pointerdown', pointerEvent({ pointerId: 22, isPrimary: false }));
+  assert.equal(router.isHeld('skill2'), true, 'the right thumb casts while another touch is primary');
+  assert.equal(element.captures.has(22), true);
+
+  element.emit('pointerdown', pointerEvent({ pointerId: 23, isPrimary: false }));
+  element.emit('pointerup', pointerEvent({ pointerId: 23, isPrimary: false }));
+  assert.equal(router.isHeld('skill2'), true, 'a second contact cannot steal or release the active hold');
+
+  element.emit('pointerup', pointerEvent({ pointerId: 22, isPrimary: false }));
+  element.emit('click', pointerEvent({ pointerType: 'mouse', detail: 1 }));
+  assert.equal(router.isHeld('skill2'), false);
+  assert.equal(events.filter(event => event.phase === 'pressed').length, 1,
+    'the compatibility click after touch must not double-cast');
+
+  element.emit('click', pointerEvent({ pointerType: 'mouse', detail: 0 }));
+  assert.equal(events.filter(event => event.phase === 'pressed').length, 2,
+    'keyboard-generated native clicks remain accessible');
+
+  dispose();
+  element.emit('pointerdown', pointerEvent({ pointerId: 24, isPrimary: false }));
+  assert.equal(events.filter(event => event.phase === 'pressed').length, 2, 'dispose removes the DOM binding');
+});
+
+test('disposing a detached HUD pointer binding releases its active hold and pointer capture', () => {
+  const router = new input.InputRouter();
+  const gate = new input.PointerGestureGate();
+  const element = new FakePointerElement();
+  const events = [];
+  router.subscribe(event => events.push(event));
+  const dispose = input.bindPointerAction(element, 'basicAttack', router, gate, { hold: true });
+
+  element.emit('pointerdown', pointerEvent({ pointerId: 41 }));
+  assert.equal(router.isHeld('basicAttack'), true);
+  assert.equal(element.captures.has(41), true);
+
+  dispose();
+  assert.equal(router.isHeld('basicAttack'), false, 'detaching the HUD control releases the router token');
+  assert.equal(element.captures.has(41), false, 'dispose releases capture owned by the detached element');
+  assert.equal(events.filter(event => event.action === 'basicAttack' && event.phase === 'released').length, 1);
+
+  dispose();
+  element.emit('pointerup', pointerEvent({ pointerId: 41 }));
+  assert.equal(events.filter(event => event.action === 'basicAttack' && event.phase === 'released').length, 1,
+    'dispose is idempotent and stale pointerup cannot release twice');
+});
+
 test('focus routing enters chat and returns to the resolved menu context', () => {
   const controller = new input.InputController({ storage: null, context: () => 'menu' });
   assert.equal(controller.refreshContext({ tagName: 'INPUT', type: 'text', isContentEditable: false }), 'chat');
@@ -279,7 +373,9 @@ test('game loop reuses one callback and HUD actions use the shared layer', () =>
   assert.match(game, /readonly boundGameLoop = \(timestamp: number\) => this\.gameLoop\(timestamp\)/);
   assert.doesNotMatch(game, /requestAnimationFrame\(this\.gameLoop\.bind\(this\)\)/);
   assert.equal((game.match(/requestAnimationFrame\(this\.boundGameLoop\)/g) || []).length, 2);
-  assert.match(hud, /bindInputAction\(potionSlot, 'quickHeal'/);
-  assert.match(hud, /bindInputAction\(slot as HTMLElement, action/);
+  assert.match(hud, /bindActionControl\(potionSlot, 'quickHeal'/);
+  assert.match(hud, /bindActionControl\(slot as HTMLElement, action/);
+  assert.match(hud, /this\.disposeActionBindings\(\);\s*this\.resetDetachedTouchControls\(\);\s*this\.container\.innerHTML/);
+  assert.match(hud, /this\.actionBindingDisposers\.add\(this\.game\.bindInputAction/);
   assert.doesNotMatch(hud, /potionSlot\?\.addEventListener\('pointerdown'/);
 });

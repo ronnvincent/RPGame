@@ -4,6 +4,23 @@
 
 import { ItemData, getRandomLoot } from '../items/ItemDatabase';
 import { getZoneSpawnLayout } from '../maps/ZoneContent';
+import {
+  ENEMY_ROLE_TACTICS,
+  buildFormation,
+  chooseFormation,
+  combineEliteStats,
+  selectEliteModifiers,
+  type EliteModifierId,
+  type EnemyRoleId,
+  type FormationId,
+} from './EnemyTactics';
+import { createGuardStaggerState, type GuardStaggerState } from '../combat/DefenseMechanics';
+import {
+  DEFAULT_ATTACK_PROFILE_BY_ROLE,
+  type EnemyAttackIntent,
+  type EnemyAttackProfileId,
+  type EnemyRole,
+} from '../combat/EnemyAttackProfiles';
 
 /**
  * Monster health multiplier applied at spawn.
@@ -54,6 +71,20 @@ export interface EnemyStats {
   bossCastName?: string;
   bossCastTimer?: number;
   bossCastDuration?: number;
+  /** Data-authored tactical identity; visuals and AI both resolve from this id. */
+  role?: EnemyRole;
+  formationId?: FormationId;
+  formationSlotId?: string;
+  eliteModifiers?: EliteModifierId[];
+  guardState?: GuardStaggerState;
+  attackProfileId?: EnemyAttackProfileId;
+  attackIntent?: EnemyAttackIntent;
+  intentSequence?: number;
+  roleActionCooldown?: number;
+  summonOwnerId?: string;
+  /** Objective props reuse damage collision but never enter hostile AI. */
+  objectiveEntity?: boolean;
+  featureSpriteId?: string;
 }
 
 
@@ -622,6 +653,13 @@ export function spawnWaveEnemies(
 
   const instances: EnemyInstance[] = [];
   const spawnLayout = getZoneSpawnLayout(dungeon.theme, waveIndex, arenaWidth);
+  const encounterSeed = `${dungeon.id}:${waveIndex}`;
+  const formationId = chooseFormation(encounterSeed, waveIndex);
+  const formationFacing: -1 | 1 = playerX <= arenaWidth * 0.5 ? -1 : 1;
+  const formationAnchor = formationFacing < 0
+    ? Math.max(playerX + spawnLayout.minimumSeparation, arenaWidth - 180)
+    : Math.min(playerX - spawnLayout.minimumSeparation, 180);
+  const formationSlots = buildFormation(formationId, formationAnchor, formationFacing, encounterSeed);
   const authoredEnemySpawns = spawnLayout.enemies.filter(
     x => Math.abs(x - playerX) >= spawnLayout.minimumSeparation,
   );
@@ -639,11 +677,26 @@ export function spawnWaveEnemies(
     for (let i = 0; i < enemyTemplate.count; i++) {
       // Bosses and elites are already special; only the rank and file are
       // promoted, and never the whole wave.
-      const isElite = enemyTemplate.type === 'mob' && Math.random() < ELITE_SPAWN_CHANCE;
+      const eliteRoll = stableEncounterUnit(`${encounterSeed}:${enemyTemplate.name}:${i}:elite`);
+      const isElite = enemyTemplate.type === 'mob' && eliteRoll < ELITE_SPAWN_CHANCE;
+      const formationSlot = formationSlots[spawnOffsetIndex % Math.max(1, formationSlots.length)];
+      const role: EnemyRole = enemyTemplate.type === 'boss'
+        ? 'boss'
+        : (formationSlot?.role || 'shield-tank');
+      const tactic = role === 'boss' ? null : ENEMY_ROLE_TACTICS[role as EnemyRoleId];
+      const modifierCount = (isElite || enemyTemplate.type === 'elite')
+        ? (waveIndex >= 4 ? 2 : 1)
+        : 0;
+      const eliteModifiers = role === 'boss'
+        ? []
+        : selectEliteModifiers(`${encounterSeed}:${enemyTemplate.name}:${i}`, role as EnemyRoleId, modifierCount);
+      const eliteStats = combineEliteStats(eliteModifiers);
       const fallbackX = Math.max(120, Math.min(arenaWidth - 120, arenaWidth * 0.75));
       const authoredX = enemyTemplate.type === 'boss'
         ? spawnLayout.boss
-        : (spawnPool[spawnOffsetIndex % Math.max(1, spawnPool.length)] ?? fallbackX);
+        : (formationSlot?.worldX
+          ?? spawnPool[spawnOffsetIndex % Math.max(1, spawnPool.length)]
+          ?? fallbackX);
       const repeatedPass = spawnPool.length > 0 ? Math.floor(spawnOffsetIndex / spawnPool.length) : 0;
       const repeatedOffset = repeatedPass > 0
         ? repeatedPass * 32 * (spawnOffsetIndex % 2 === 0 ? -1 : 1)
@@ -679,8 +732,14 @@ export function spawnWaveEnemies(
         ? getRandomLoot('mid')
         : (Math.random() < MOB_DROP_CHANCE ? getRandomLoot('low') : undefined);
 
+      const baseHp = enemyTemplate.maxHp * ENEMY_HP_SCALE * (isElite ? 2.4 : 1) * eliteStats.hp;
+      const guardCapacity = tactic?.guard?.capacity || 0;
+      const attackProfileId: EnemyAttackProfileId = role === 'boss'
+        ? 'boss-slam'
+        : DEFAULT_ATTACK_PROFILE_BY_ROLE[role as EnemyRoleId];
+
       instances.push({
-        id: `enemy_${waveIndex}_${enemyTemplate.name}_${i}_${Date.now()}`,
+        id: `enemy_${dungeon.id}_${waveIndex}_${spawnOffsetIndex}_${slugEnemyId(enemyTemplate.name)}`,
         name: isElite ? `Elite ${enemyTemplate.name}` : enemyTemplate.name,
         isElite,
         type: enemyTemplate.type,
@@ -689,21 +748,33 @@ export function spawnWaveEnemies(
         // Scaled at spawn rather than by rewriting every table: monsters died
         // to a single mid-tier skill, which is what made a run end in a minute
         // with nothing at stake.
-        maxHp: Math.round(enemyTemplate.maxHp * ENEMY_HP_SCALE * (isElite ? 2.4 : 1)),
-        hp: Math.round(enemyTemplate.maxHp * ENEMY_HP_SCALE * (isElite ? 2.4 : 1)),
-        atk: Math.round(enemyTemplate.atk * (isElite ? 1.45 : 1)),
-        def: Math.round(enemyTemplate.def * (isElite ? 1.3 : 1)),
-        speed: enemyTemplate.speed,
-        expReward: Math.round(enemyTemplate.expReward * (isElite ? 2.5 : 1)),
-        goldReward: Math.round(enemyTemplate.goldReward * (isElite ? 3 : 1)),
+        maxHp: Math.max(1, Math.round(baseHp)),
+        hp: Math.max(1, Math.round(baseHp)),
+        atk: Math.round(enemyTemplate.atk * (isElite ? 1.45 : 1) * eliteStats.attack),
+        def: Math.round(enemyTemplate.def * (isElite ? 1.3 : 1) * eliteStats.defence),
+        speed: enemyTemplate.speed * (tactic?.moveSpeedMultiplier || 1) * eliteStats.speed,
+        expReward: Math.round(enemyTemplate.expReward * (isElite ? 2.5 : 1) * eliteStats.reward),
+        goldReward: Math.round(enemyTemplate.goldReward * (isElite ? 3 : 1) * eliteStats.reward),
         width: enemyTemplate.width,
         height: enemyTemplate.height,
-        attackRange: enemyTemplate.type === 'boss' ? 90 : 60,
-        attackCooldown: enemyTemplate.type === 'boss' ? 1.8 : 2.2,
-        attackTimer: Math.random() * 1.5,
+        attackRange: enemyTemplate.type === 'boss' ? 90 : Math.max(60, tactic?.preferredRange || 60),
+        attackCooldown: enemyTemplate.type === 'boss' ? 1.8 : Math.max(1.4, tactic?.action.cooldownSeconds || 2.2),
+        attackTimer: stableEncounterUnit(`${encounterSeed}:${spawnOffsetIndex}:attack`) * 1.5,
         phases: enemyTemplate.phases,
         currentPhase: 1,
         specialAttackTimer: 0,
+        role,
+        formationId,
+        formationSlotId: formationSlot?.id,
+        eliteModifiers,
+        guardState: createGuardStaggerState({
+          maxGuard: guardCapacity,
+          staggerThreshold: tactic?.stagger.threshold || (enemyTemplate.type === 'boss' ? 180 : 90),
+          guarding: guardCapacity > 0,
+        }),
+        attackProfileId,
+        intentSequence: 0,
+        roleActionCooldown: stableEncounterUnit(`${encounterSeed}:${spawnOffsetIndex}:role`) * 2,
         isActive: spawnDelay <= 0,
         spawnDelay,
         x,
@@ -723,4 +794,17 @@ export function spawnWaveEnemies(
   });
 
   return instances;
+}
+
+function stableEncounterUnit(value: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) / 4_294_967_296;
+}
+
+function slugEnemyId(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 48) || 'mob';
 }

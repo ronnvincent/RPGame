@@ -13,6 +13,8 @@ const hud = readFileSync('src/sideview/ui/GameHUD.ts', 'utf8');
 const game = readFileSync('src/sideview/SideViewGame.ts', 'utf8');
 const bindings = readFileSync('src/sideview/input/InputBindings.ts', 'utf8');
 const dungeons = readFileSync('src/sideview/dungeons/DungeonManager.ts', 'utf8');
+const tactics = readFileSync('src/sideview/dungeons/EnemyTactics.ts', 'utf8');
+const manifest = readFileSync('src/sideview/assets/GameplaySpriteManifest.ts', 'utf8');
 
 let failures = 0;
 const check = (l, c) => { console.log(`  ${c ? 'PASS' : 'FAIL'}  ${l}`); if (!c) failures++; };
@@ -75,11 +77,17 @@ if (chance) {
   console.log(`        elite chance ${pct}% of ordinary monsters`);
   check('rare enough to be an event', pct > 0 && pct <= 20);
 }
-check('only the rank and file are promoted', /enemyTemplate\.type === 'mob' && Math\.random\(\)/.test(dungeons));
+check('only the rank and file are promoted', /enemyTemplate\.type === 'mob' && eliteRoll < ELITE_SPAWN_CHANCE/.test(dungeons));
 check('an elite is tougher', /ENEMY_HP_SCALE \* \(isElite \? 2\.4 : 1\)/.test(dungeons));
 check('and hits harder', /isElite \? 1\.45 : 1/.test(dungeons));
 check('it is named as one', /Elite \$\{enemyTemplate\.name\}/.test(dungeons));
-check('it is marked on screen before you engage it', /isElite/.test(engine) && /rgba\(248, 113, 113/.test(engine));
+check(
+  'it is marked on screen before you engage it',
+  /enemy\.eliteModifiers/.test(engine)
+    && /ELITE_MODIFIERS\[modifierId\]\.visualSprite/.test(engine)
+    && /elite\.bulwark/.test(manifest)
+    && /visualSprite/.test(tactics),
+);
 check('and it pays better', /isElite \? 2\.5 : 1/.test(dungeons) && /isElite \? 3 : 1/.test(dungeons));
 check('with a better drop table', /isElite\s*\n?\s*\? getRandomLoot\('mid'\)/.test(dungeons));
 

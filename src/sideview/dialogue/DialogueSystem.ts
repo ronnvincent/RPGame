@@ -80,7 +80,7 @@ export class DialogueSystem {
         background-size: 100% 100%;
         border-style: solid;
         border-width: 14px;
-        border-image: url('/assets/runtime/ui/fantasy-borders/default-panel/panel-000.png') 16 fill / 14px / 0 stretch;
+        border-image: url('/assets/runtime/ui/fantasy-borders/default-panel/panel-000.png') 16 / 14px / 0 stretch;
         box-shadow: 0 12px 35px rgba(0, 0, 0, 0.85);
         padding: 12px 16px 14px 16px;
         display: flex;

@@ -168,6 +168,70 @@ test('ranged basics create projectiles instead of melee combos or plunges', () =
   }
 });
 
+test('town keeps combat buttons functional for harmless practice casts', () => {
+  const engine = new game.SideViewEngine(character('warrior'));
+  engine.isTownMode = true;
+  const skill = engine.player.characterClass.skills[1];
+  const beforeCooldown = engine.player.skillCooldowns[skill.id] || 0;
+  const beforeMana = engine.player.mp;
+  const beforeHp = engine.player.hp;
+
+  engine.castSkill(1);
+  engine.applyZoneHazardToPlayer({
+    id: 'town-practice-hazard',
+    kind: 'ember-geyser',
+    telegraph: 'test',
+    damageCooldownMs: 0,
+    anchors: [engine.player.x],
+    radius: 200,
+    safeMargin: 0,
+    y: engine.player.y,
+  });
+
+  assert.ok(engine.player.skillCooldowns[skill.id] > beforeCooldown);
+  assert.ok(engine.player.mp < beforeMana);
+  assert.ok(engine.player.attackTimer > 0, 'the town button must visibly animate instead of silently returning');
+  assert.equal(engine.player.hp, beforeHp, 'town hazards must remain harmless while practice casting is enabled');
+  engine.resetRunStats();
+  assert.equal(engine.player.mp, engine.player.maxMp, 'a dungeon run starts with practice mana restored');
+  assert.equal(engine.player.skillCooldowns[skill.id], 0, 'town practice cooldowns do not carry into the run');
+});
+
+test('scene transitions recycle every gameplay carrier without changing downed cancellation', () => {
+  const engine = new game.SideViewEngine(character('archer'));
+  engine.isTownMode = true;
+  engine.castSkill(0);
+  assert.ok(engine.particles.projectiles.length > 0, 'town practice creates the normal projectile carrier');
+
+  const poolBefore = engine.particles.getPerformanceMetrics().pools.projectiles;
+  engine.particles.shadowClones.push({ id: 'clone' });
+  engine.particles.summonedMinions.push({ id: 'minion' });
+  engine.particles.groundTraps.push({ id: 'trap' });
+  engine.particles.groundZones.push({ id: 'zone' });
+
+  engine.cancelDelayedCombatTasks();
+  assert.equal(engine.particles.summonedMinions.length, 1, 'downed/defeat cancellation preserves active gameplay entities');
+
+  engine.resetCombatScene();
+  assert.deepEqual({
+    projectiles: engine.particles.projectiles.length,
+    shadowClones: engine.particles.shadowClones.length,
+    summonedMinions: engine.particles.summonedMinions.length,
+    groundTraps: engine.particles.groundTraps.length,
+    groundZones: engine.particles.groundZones.length,
+  }, {
+    projectiles: 0,
+    shadowClones: 0,
+    summonedMinions: 0,
+    groundTraps: 0,
+    groundZones: 0,
+  });
+  assert.ok(
+    engine.particles.getPerformanceMetrics().pools.projectiles > poolBefore,
+    'transitioned projectiles return to the bounded pool',
+  );
+});
+
 test('fast projectiles use swept collision instead of tunnelling on a long frame', () => {
   const engine = new game.SideViewEngine(character('archer'));
   engine.isTownMode = false;

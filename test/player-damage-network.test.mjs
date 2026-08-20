@@ -148,6 +148,10 @@ test('only the room host can send bounded damage to one same-scene guest', async
       isTownMode: false,
       sceneId: 'goblin_catacombs',
       status: { kind: 'poison', duration: 4, magnitude: 0.1, tickInterval: 1, rawTickDamage: 8 },
+      parryability: 'parryable',
+      intentId: 'intent:pd:valid:1',
+      sourceEnemyId: 'enemy:pd:melee:1',
+      profileId: 'melee-light',
     };
     const delivered = waitFor(guest, 'player_damage');
     const leaked = waitFor(observer, 'player_damage', 300);
@@ -157,6 +161,10 @@ test('only the room host can send bounded damage to one same-scene guest', async
     assert.equal(received?.rawDamage, validPacket.rawDamage);
     assert.equal(received?.sceneId, 'goblin_catacombs');
     assert.equal(received?.status?.kind, 'poison');
+    assert.equal(received?.parryability, 'parryable');
+    assert.equal(received?.intentId, 'intent:pd:valid:1');
+    assert.equal(received?.sourceEnemyId, 'enemy:pd:melee:1');
+    assert.equal(received?.profileId, 'melee-light');
     assert.equal(await leaked, null, 'non-target party members must not receive the hit');
 
     const forged = waitFor(observer, 'player_damage', 300);
@@ -193,6 +201,14 @@ test('only the room host can send bounded damage to one same-scene guest', async
       status: { kind: 'godmode', duration: 999, magnitude: 99 },
     });
     assert.equal(await invalidStatus, null, 'non-allowlisted status payloads are rejected');
+
+    const partialIntent = waitFor(guest, 'player_damage', 300);
+    host.emit('player_damage', {
+      ...validPacket,
+      hitId: 'pd_partial_intent',
+      profileId: undefined,
+    });
+    assert.equal(await partialIntent, null, 'partial or unknown enemy intent metadata is rejected');
   } finally {
     host.close();
     guest.close();

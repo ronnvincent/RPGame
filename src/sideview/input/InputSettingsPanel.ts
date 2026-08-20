@@ -327,7 +327,7 @@ export class InputSettingsPanel {
         display: flex; flex-direction: column;
         background: linear-gradient(rgba(16,21,29,.96),rgba(8,11,16,.99));
         border: 16px solid transparent;
-        border-image: url('/assets/runtime/ui/fantasy-borders/default-panel/panel-000.png') 16 fill / 16px / 0 stretch;
+        border-image: url('/assets/runtime/ui/fantasy-borders/default-panel/panel-000.png') 16 / 16px / 0 stretch;
         image-rendering: pixelated; box-shadow: 0 20px 70px #000;
       }
       .input-settings-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; border-bottom:1px solid rgba(231,189,85,.25); }

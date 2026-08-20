@@ -9,6 +9,27 @@ import { SideViewEngine } from './engine/SideViewEngine';
 import { CharacterSelectUI } from './ui/CharacterSelectUI';
 import { GameHUD } from './ui/GameHUD';
 import { DUNGEONS, DungeonDefinition, spawnWaveEnemies } from './dungeons/DungeonManager';
+import {
+  createDungeonEncounterRuntime,
+  type DungeonEncounterSnapshot,
+  type EncounterUpdateResult,
+} from './dungeons/DungeonEncounterRuntime';
+import {
+  DEFAULT_DUNGEON_RUN_BLUEPRINT,
+  DUNGEON_RUN_CONTENT,
+  DungeonRunController,
+  RelicRegistry,
+  RUN_RELIC_DEFINITIONS,
+  generateDungeonRun,
+  stableHash,
+  type DungeonRoomNode,
+  type DungeonRunCommand,
+  type DungeonRunEffect,
+  type DungeonRunState,
+  type ObjectiveEvent,
+} from './dungeons/run';
+import { gameplaySprites } from './engine/GameplaySpriteRenderer';
+import { getGameplaySpriteFiles, type GameplaySpriteId } from './assets/GameplaySpriteManifest';
 import { audio } from './engine/AudioManager';
 import { canvasDprForQuality } from './engine/RenderResolution';
 import type { VfxQuality } from './engine/ParticleSystem';
@@ -31,6 +52,12 @@ import {
   PointerBindingOptions,
   skillIndexForAction,
 } from './input';
+
+type RunCommandBody = DungeonRunCommand extends infer Command
+  ? Command extends DungeonRunCommand
+    ? Omit<Command, 'commandId' | 'authorityEpoch' | 'sequence'>
+    : never
+  : never;
 
 /** Single source of truth for discrete keyboard-to-skill routing. */
 export function skillIndexForInput(code: string): number | null {
@@ -65,6 +92,15 @@ export class SideViewGame {
   public coopLobby: CoopLobbyUI | null = null;
   private currentDungeonIndex: number = 0;
   private currentWaveIndex: number = 0;
+  private readonly runRelics = new RelicRegistry(RUN_RELIC_DEFINITIONS);
+  private readonly encounter = createDungeonEncounterRuntime(gameplaySprites);
+  private runController: DungeonRunController | null = null;
+  private runRoomId: string | null = null;
+  private runSyncAccumulator = 0;
+  /** Host wall-clock time batched into bounded 4 Hz controller updates. */
+  private runTickAccumulatorMs = 0;
+  private pendingDungeonInteraction: 'choice' | 'route' | 'world-object' | null = null;
+  private runDialogueKey: string | null = null;
   /** Deepest endless wave ever cleared on this device. */
   private bestEndlessWave: number = Number(localStorage.getItem('bestEndlessWave')) || 0;
   private waveActive: boolean = false;
@@ -385,7 +421,9 @@ export class SideViewGame {
           waveIndex: this.currentWaveIndex,
           dungeonIndex: this.currentDungeonIndex,
           dungeonId: dungeon?.id || this.engine.currentDungeonId,
-          enemies: this.engine.enemies
+          enemies: this.engine.enemies,
+          runState: this.runController?.getSnapshot(),
+          encounterSnapshot: this.encounter.snapshot() ?? undefined,
         }, this.engine.groundY);
       });
 
@@ -394,6 +432,19 @@ export class SideViewGame {
         if (!this.engine || this.engine.isHost) return;
         console.log('[NET] Applying full_sync from host:', snapshot.enemies?.length, 'enemies');
         this.applyEnemySnapshot(snapshot.enemies, snapshot.waveIndex, snapshot.dungeonIndex, snapshot.dungeonId);
+        if (snapshot.runState) this.applyRunSnapshot(snapshot.runState);
+        if (snapshot.encounterSnapshot) this.applyEncounterSnapshot(snapshot.encounterSnapshot);
+      });
+
+      mod.network.onRunSync((runState, encounterSnapshot) => {
+        if (!this.engine || this.engine.isHost) return;
+        this.applyRunSnapshot(runState);
+        if (encounterSnapshot) this.applyEncounterSnapshot(encounterSnapshot);
+      });
+
+      mod.network.onCombatDefense((result) => {
+        if (!this.engine?.isHost) return;
+        this.engine.applyRemoteCombatDefense(result);
       });
 
       // Role changes are server-driven; a fresh guest pulls state immediately.
@@ -574,11 +625,21 @@ export class SideViewGame {
 
   public loadTownHub(broadcastParty: boolean = true) {
     if (!this.engine) return;
-    this.engine.cancelDelayedCombatTasks();
+    this.engine.resetCombatScene();
+    this.engine.setDungeonEncounterRuntime(null);
+    this.engine.onPlayerWorldHit = null;
+    this.engine.onEnemyDefeatedEvent = null;
+    this.encounter.reset();
+    this.runController = null;
+    this.runRoomId = null;
+    this.pendingDungeonInteraction = null;
+    this.runDialogueKey = null;
+    this.hud?.setDungeonObjective(null);
+    this.hud?.setDungeonRelics([]);
+    this.hud?.setDungeonContextAction(null);
     this.waveActive = false;
     this.engine.isTownMode = true;
     this.engine.enemies = [];
-    this.engine.particles.summonedMinions = [];
     this.engine.player.x = 450;
     this.engine.player.y = this.engine.groundY;
     this.engine.player.vx = 0;
@@ -638,26 +699,69 @@ export class SideViewGame {
     const seen = new Set<string>();
 
     for (const raw of incoming) {
-      const inc = { ...raw, y: raw.y + groundY };
+      const inc = {
+        ...raw,
+        y: raw.y + groundY,
+        attackIntent: raw.attackIntent ? {
+          ...raw.attackIntent,
+          sourceY: typeof raw.attackIntent.sourceY === 'number' ? raw.attackIntent.sourceY + groundY : groundY,
+          target: raw.attackIntent.target ? {
+            ...raw.attackIntent.target,
+            y: typeof raw.attackIntent.target.y === 'number' ? raw.attackIntent.target.y + groundY : groundY,
+          } : raw.attackIntent.target,
+        } : undefined,
+      };
       seen.add(inc.id);
 
       const existing = this.engine.enemies.find(e => e.id === inc.id);
       if (existing) {
+        existing.name = inc.name;
+        existing.type = inc.type;
+        existing.icon = inc.icon;
+        existing.color = inc.color;
         existing.x = inc.x;
         existing.y = inc.y;
         existing.vx = inc.vx;
         existing.vy = inc.vy;
         existing.hp = inc.hp;
         existing.maxHp = inc.maxHp;
+        existing.atk = inc.atk;
+        existing.def = inc.def;
+        existing.speed = inc.speed;
+        existing.expReward = inc.expReward;
+        existing.goldReward = inc.goldReward;
+        existing.width = inc.width;
+        existing.height = inc.height;
+        existing.attackRange = inc.attackRange;
+        existing.attackCooldown = inc.attackCooldown;
         existing.facing = inc.facing;
         existing.isGrounded = inc.isGrounded;
         existing.isAttacking = inc.isAttacking;
+        existing.isActive = inc.isActive;
+        existing.spawnDelay = inc.spawnDelay;
         existing.hitStun = inc.hitStun;
         existing.isDead = inc.isDead;
         existing.attackTimer = inc.attackTimer;
-        if (inc.lootDrop && !existing.lootDrop) {
-          existing.lootDrop = inc.lootDrop;
-        }
+        existing.isElite = inc.isElite;
+        existing.phases = inc.phases;
+        existing.currentPhase = inc.currentPhase;
+        existing.specialAttackTimer = inc.specialAttackTimer;
+        existing.bossCastName = inc.bossCastName;
+        existing.bossCastTimer = inc.bossCastTimer;
+        existing.bossCastDuration = inc.bossCastDuration;
+        existing.role = inc.role;
+        existing.formationId = inc.formationId;
+        existing.formationSlotId = inc.formationSlotId;
+        existing.eliteModifiers = inc.eliteModifiers;
+        existing.guardState = inc.guardState;
+        existing.attackProfileId = inc.attackProfileId;
+        existing.attackIntent = inc.attackIntent;
+        existing.intentSequence = inc.intentSequence;
+        existing.roleActionCooldown = inc.roleActionCooldown;
+        existing.summonOwnerId = inc.summonOwnerId;
+        existing.objectiveEntity = inc.objectiveEntity;
+        existing.featureSpriteId = inc.featureSpriteId;
+        if (inc.lootDrop !== undefined) existing.lootDrop = inc.lootDrop;
       } else {
         this.engine.enemies.push(inc);
       }
@@ -706,7 +810,6 @@ export class SideViewGame {
     this.engine.player.y = this.engine.groundY;
     this.engine.player.vx = 0;
     this.engine.player.vy = 0;
-    this.engine.particles.summonedMinions = [];
     // A fresh tally per run, and one rescue per run: entering the dungeon is
     // where both are reset, not clearing it.
     this.engine.resetRunStats();
@@ -724,6 +827,15 @@ export class SideViewGame {
       audio.playDungeonBGM(dungeon.theme);
     }
 
+    this.engine.setDungeonEncounterRuntime(this.encounter);
+    this.encounter.reset();
+    this.runController = null;
+    this.runRoomId = null;
+    this.pendingDungeonInteraction = null;
+    this.runDialogueKey = null;
+    this.runSyncAccumulator = 0;
+    this.runTickAccumulatorMs = 0;
+
     if (this.engine.isHost || prevDungeonIndex !== this.currentDungeonIndex) {
       this.currentWaveIndex = 0;
       this.engine.currentWaveIndex = 0;
@@ -732,13 +844,464 @@ export class SideViewGame {
     
     // Only Host spawns waves
     if (this.engine.isHost) {
-      this.spawnNextWave();
+      if (!this.initializeDungeonRun(dungeon)) this.spawnNextWave();
       if (broadcastParty && dungeon) {
         Promise.resolve({ network }).then(mod => {
           mod.network.sendPartyNextDungeon(dungeon.id, this.currentDungeonIndex);
         });
       }
     }
+  }
+
+  private localRunActorId(): string {
+    return network.mySocketId || localStorage.getItem('playerShortId') || 'solo-player';
+  }
+
+  private activeRunActorIds(): string[] {
+    const activeRemoteIds = Object.entries(network.remotePlayers)
+      .filter(([, player]) => player.isTownMode !== true)
+      .map(([id]) => id);
+    const ids = [this.localRunActorId(), ...activeRemoteIds]
+      .filter((id, index, all) => Boolean(id) && all.indexOf(id) === index)
+      .sort();
+    return ids.slice(0, 8);
+  }
+
+  private spriteFile(spriteId: GameplaySpriteId): string {
+    return getGameplaySpriteFiles(spriteId)[0] || '';
+  }
+
+  /** Starts a seeded, replayable graph. Failure falls back to the legacy waves. */
+  private initializeDungeonRun(dungeon?: DungeonDefinition): boolean {
+    if (!this.engine || !this.engine.isHost || !dungeon) return false;
+    try {
+      const actorId = this.localRunActorId();
+      const seed = stableHash(`${dungeon.id}:${actorId}:${Date.now()}`);
+      const blueprint = {
+        ...DEFAULT_DUNGEON_RUN_BLUEPRINT,
+        id: `${DEFAULT_DUNGEON_RUN_BLUEPRINT.id}:${dungeon.id}`,
+        dungeonId: dungeon.id,
+      };
+      const generated = generateDungeonRun({
+        blueprint,
+        content: DUNGEON_RUN_CONTENT,
+        seed,
+        runId: `run:${dungeon.id}:${seed.toString(16)}`,
+      });
+      this.runController = DungeonRunController.create(generated, this.activeRunActorIds(), this.runRelics);
+      this.configureRunRoom(this.runController.getSnapshot(), true);
+      network.sendRunSync(this.runController.getSnapshot(), this.encounter.snapshot());
+      return true;
+    } catch (error) {
+      console.error('[RUN] Deterministic run initialization failed; using endless-wave fallback.', error);
+      this.runController = null;
+      this.encounter.reset();
+      this.engine.setDungeonEncounterRuntime(null);
+      return false;
+    }
+  }
+
+  private applyRunSnapshot(runState: DungeonRunState): void {
+    if (!this.engine || this.engine.isHost || !runState) return;
+    const current = this.runController?.getSnapshot();
+    if (current?.runId === runState.runId && current.revision >= runState.revision) return;
+    try {
+      this.runController = new DungeonRunController(runState, this.runRelics);
+      const changedRoom = this.runRoomId !== runState.currentRoomId;
+      this.configureRunRoom(runState, false, changedRoom);
+      this.lastEnemySyncAt = performance.now();
+    } catch (error) {
+      console.warn('[RUN] Rejected incompatible run snapshot.', error);
+    }
+  }
+
+  /** Applies live host room state after run state, so configureRunRoom cannot overwrite it. */
+  private applyEncounterSnapshot(snapshot: DungeonEncounterSnapshot): void {
+    if (!this.engine || this.engine.isHost) return;
+    const runState = this.runController?.getSnapshot();
+    if (runState && snapshot.room.id !== runState.currentRoomId) return;
+    try {
+      this.encounter.applySnapshot(snapshot);
+      this.runRoomId = snapshot.room.id;
+      this.engine.setDungeonEncounterRuntime(this.encounter);
+      this.lastEnemySyncAt = performance.now();
+    } catch (error) {
+      console.warn('[RUN] Rejected incompatible encounter snapshot.', error);
+    }
+  }
+
+  private dispatchRun(command: RunCommandBody, requestImmediateSync = true): boolean {
+    if (!this.runController || !this.engine?.isHost) return false;
+    const before = this.runController.getStateView();
+    const transition = this.runController.dispatch({
+      ...command,
+      commandId: `${before.runId}:${before.lastCommandSequence + 1}:${command.type}`,
+      authorityEpoch: before.authorityEpoch,
+      sequence: before.lastCommandSequence + 1,
+    } as DungeonRunCommand);
+    if (!transition.accepted) {
+      console.warn('[RUN] Command rejected:', transition.reason, command);
+      return false;
+    }
+    this.updateRunHud(transition.state);
+    this.handleRunEffects(transition.effects);
+    if (requestImmediateSync) this.runSyncAccumulator = Math.max(this.runSyncAccumulator, 0.25);
+    return true;
+  }
+
+  private currentRunNode(state = this.runController?.getStateView()): DungeonRoomNode | null {
+    if (!state) return null;
+    return state.graph.nodes.find(node => node.id === state.currentRoomId) || null;
+  }
+
+  private configureRunRoom(state: DungeonRunState, spawnEnemies: boolean, force = true): void {
+    if (!this.engine) return;
+    const node = this.currentRunNode(state);
+    if (!node) return;
+    if (force || this.runRoomId !== node.id) {
+      this.runRoomId = node.id;
+      this.runDialogueKey = null;
+      this.pendingDungeonInteraction = null;
+      this.encounter.configureRoom(node, this.engine.arenaWidth, this.engine.groundY, `${state.seed}:${node.id}`);
+      this.engine.setDungeonEncounterRuntime(this.encounter);
+      this.engine.onPlayerWorldHit = (area, damage) => {
+        if (!this.engine?.isHost || this.engine.isTownMode) return;
+        this.consumeEncounterResult(this.encounter.hitWorldObjects(area, damage));
+      };
+      this.engine.onEnemyDefeatedEvent = this.engine.isHost
+        ? (enemyId) => {
+          if (this.currentRunNode()?.objective?.type !== 'kill_all') return;
+          this.dispatchRun({ type: 'objective_event', event: { type: 'enemy_defeated', enemyId } });
+        }
+        : null;
+
+      this.currentWaveIndex = Math.max(0, node.depth);
+      this.engine.currentWaveIndex = this.currentWaveIndex;
+      const dungeon = DUNGEONS[this.currentDungeonIndex];
+      if (spawnEnemies && dungeon && node.enemyGroupIds.length > 0) {
+        const waveIndex = node.kind === 'boss'
+          ? Math.max(0, dungeon.waves.length - 1)
+          : node.depth % Math.max(1, dungeon.waves.length);
+        this.engine.enemies = spawnWaveEnemies(dungeon, waveIndex, this.engine.arenaWidth, this.engine.player.x);
+        this.engine.prepareEnemiesForRunRoom(node.kind);
+        this.waveActive = true;
+        const boss = this.engine.enemies.find(enemy => enemy.type === 'boss');
+        if (boss) this.dialogue?.showBossBanner(boss.name, dungeon.subtitle);
+        network.sendEnemySync(this.engine.enemies, this.engine.groundY, this.currentWaveIndex, this.currentDungeonIndex, dungeon.id);
+      } else if (spawnEnemies) {
+        this.engine.enemies = [];
+        this.waveActive = Boolean(node.objective);
+      }
+
+      if (this.engine.isHost && (node.completion.type === 'party_choice' || node.completion.type === 'actor_choices')) {
+        this.pendingDungeonInteraction = 'choice';
+      } else if (this.engine.isHost && node.objective?.type === 'destroy_nests') {
+        this.pendingDungeonInteraction = 'world-object';
+      }
+      audio.playSlash('heavy');
+    }
+    this.updateRunHud(state);
+  }
+
+  private handleRunEffects(effects: readonly DungeonRunEffect[]): void {
+    if (!this.engine || !this.runController) return;
+    for (const effect of effects) {
+      if (effect.type === 'room_entered') {
+        this.configureRunRoom(this.runController.getSnapshot(), true);
+      } else if (effect.type === 'choice_resolved') {
+        if (effect.effectIds.includes('effect.restore-party')) this.engine.applyPartyPercentHeal(0.25, 'Ancient blessing');
+        if (effect.effectIds.includes('effect.roll-treasure')) {
+          this.engine.player.gold += 120 + this.currentWaveIndex * 20;
+          this.hud?.showToast('Treasure secured');
+        }
+        if (effect.effectIds.includes('effect.offer-relic')) this.createRunRelicOffer(`choice:${effect.roomId}`);
+      } else if (effect.type === 'room_completed') {
+        this.waveActive = false;
+        const state = this.runController.getSnapshot();
+        const node = state.graph.nodes.find(candidate => candidate.id === effect.roomId);
+        if (node && (node.kind === 'elite' || node.kind === 'miniboss')) {
+          this.createRunRelicOffer(`clear:${effect.roomId}`);
+        }
+        if (state.status === 'active') {
+          this.pendingDungeonInteraction = 'route';
+          this.hud?.showToast('Room clear - choose your route');
+        }
+      } else if (effect.type === 'relic_offer_created') {
+        this.showRelicOffer(effect.offer.id);
+      } else if (effect.type === 'relic_granted') {
+        this.syncRunRelics(this.runController.getSnapshot());
+        const relic = this.runRelics.get(effect.relicId);
+        this.hud?.showToast(relic ? this.humanize(relic.nameKey) : 'Relic acquired');
+      } else if (effect.type === 'secret_revealed') {
+        this.hud?.showToast('A secret route has opened');
+      } else if (effect.type === 'run_completed') {
+        this.pendingDungeonInteraction = null;
+        network.sendRunSync(this.runController.getSnapshot(), this.encounter.snapshot());
+        network.sendWaveSync({ waveIndex: this.currentWaveIndex, cleared: true });
+        this.onDungeonCleared();
+      } else if (effect.type === 'run_failed') {
+        this.pendingDungeonInteraction = null;
+        this.onRunLost();
+      }
+    }
+  }
+
+  private createRunRelicOffer(sourceId: string): void {
+    const actorId = this.localRunActorId();
+    const state = this.runController?.getSnapshot();
+    if (!state || state.relicOffers.some(offer => offer.actorId === actorId && offer.sourceId === sourceId)) return;
+    this.dispatchRun({ type: 'create_relic_offer', actorId, sourceId, count: 3 });
+  }
+
+  private showRelicOffer(offerId: string): void {
+    const state = this.runController?.getSnapshot();
+    const offer = state?.relicOffers.find(candidate => candidate.id === offerId && !candidate.chosenRelicId);
+    if (!offer || !this.dialogue || !this.engine?.isHost) return;
+    const key = `relic:${offer.id}`;
+    if (this.runDialogueKey === key && this.dialogue.isOpen) return;
+    this.runDialogueKey = key;
+    const first = this.runRelics.get(offer.relicIds[0]);
+    this.dialogue.showDialogue({
+      speakerName: 'Relic Altar',
+      speakerTitle: 'Choose one blessing',
+      portraitIcon: first ? this.spriteFile(first.iconSpriteId as GameplaySpriteId) : '',
+      sentences: ['The relics answer your deeds. Choose carefully; your build changes for the rest of this run.'],
+      options: offer.relicIds.map(relicId => {
+        const relic = this.runRelics.get(relicId)!;
+        return {
+          label: this.humanize(relic.nameKey),
+          icon: this.spriteFile(relic.iconSpriteId as GameplaySpriteId),
+          type: 'custom' as const,
+          onSelect: () => {
+            this.dialogue?.close();
+            this.runDialogueKey = null;
+            this.dispatchRun({ type: 'choose_relic', actorId: offer.actorId, offerId: offer.id, relicId });
+          },
+        };
+      }),
+    });
+  }
+
+  private humanize(key: string): string {
+    const last = key.split('.').filter(Boolean).slice(-2, -1)[0] || key;
+    return last.split(/[-_]/g).map(word => word ? word[0].toUpperCase() + word.slice(1) : '').join(' ');
+  }
+
+  private showRunRoomChoices(): boolean {
+    const state = this.runController?.getSnapshot();
+    const node = this.currentRunNode(state);
+    if (!state || !node || !node.choices.length || !this.dialogue || !this.engine?.isHost) return false;
+    const key = `choice:${node.id}`;
+    if (this.dialogue.isOpen || this.runDialogueKey === key) return true;
+    this.runDialogueKey = key;
+    this.dialogue.showDialogue({
+      speakerName: node.kind === 'shrine' ? 'Risk Shrine' : node.kind === 'treasure' ? 'Sealed Treasury' : 'Dungeon Event',
+      speakerTitle: 'Your decision changes this run',
+      portraitIcon: this.spriteFile(node.sprites.roomIconSpriteId as GameplaySpriteId),
+      sentences: ['Choose how the party will proceed. The host decision is shared with the expedition.'],
+      options: node.choices.map(choice => ({
+        label: this.humanize(choice.titleKey),
+        icon: this.spriteFile(choice.iconSpriteId as GameplaySpriteId),
+        type: 'custom' as const,
+        onSelect: () => {
+          this.dialogue?.close();
+          this.runDialogueKey = null;
+          this.pendingDungeonInteraction = null;
+          this.dispatchRun({ type: 'resolve_room_choice', actorId: this.localRunActorId(), choiceId: choice.id });
+        },
+      })),
+    });
+    return true;
+  }
+
+  private showRunRouteChoices(): boolean {
+    const state = this.runController?.getSnapshot();
+    const node = this.currentRunNode(state);
+    if (!state || !node || !this.dialogue || !this.engine?.isHost) return false;
+    const runtime = state.roomStates[node.id];
+    if (runtime?.status !== 'completed' || state.status !== 'active') return false;
+    const exits = state.graph.exits.filter(exit => exit.fromRoomId === node.id);
+    if (!exits.length) return false;
+    const key = `route:${node.id}:${state.revealedSecretRoomIds.length}`;
+    if (this.dialogue.isOpen || this.runDialogueKey === key) return true;
+    this.runDialogueKey = key;
+    const available = exits.filter(exit => {
+      const target = state.graph.nodes.find(candidate => candidate.id === exit.toRoomId);
+      return target?.access !== 'secret' || state.revealedSecretRoomIds.includes(target.id);
+    });
+    const hidden = exits.find(exit => {
+      const target = state.graph.nodes.find(candidate => candidate.id === exit.toRoomId);
+      return exit.kind === 'secret' && target && !state.revealedSecretRoomIds.includes(target.id);
+    });
+    const options = available.map(exit => {
+      const target = state.graph.nodes.find(candidate => candidate.id === exit.toRoomId)!;
+      return {
+        label: `${exit.kind === 'secret' ? 'Secret: ' : ''}${this.humanize(target.kind)} route`,
+        icon: this.spriteFile(exit.doorSpriteId as GameplaySpriteId),
+        type: 'custom' as const,
+        onSelect: () => {
+          this.dialogue?.close();
+          this.runDialogueKey = null;
+          this.pendingDungeonInteraction = null;
+          this.dispatchRun({ type: 'choose_exit', exitId: exit.id });
+        },
+      };
+    });
+    if (hidden) options.push({
+      label: 'Search the hidden wall',
+      icon: this.spriteFile(hidden.lockedSpriteId as GameplaySpriteId),
+      type: 'custom' as const,
+      onSelect: () => {
+        this.dialogue?.close();
+        this.runDialogueKey = null;
+        this.dispatchRun({ type: 'reveal_secret', exitId: hidden.id });
+      },
+    });
+    this.dialogue.showDialogue({
+      speakerName: 'Crossroads',
+      speakerTitle: 'Choose the next chamber',
+      portraitIcon: this.spriteFile(node.sprites.exitDoorSpriteId as GameplaySpriteId),
+      sentences: ['The dungeon branches ahead. Safer roads and hidden rewards demand different risks.'],
+      options,
+    });
+    return true;
+  }
+
+  private consumeEncounterResult(result: EncounterUpdateResult): void {
+    if (!this.engine?.isHost || !this.runController) return;
+    for (const damage of result.playerDamage) {
+      if (damage.targetId === this.localRunActorId()) {
+        this.engine.applyEncounterPlayerDamage(damage.amount, damage.x);
+      } else if (network.remotePlayers[damage.targetId]) {
+        network.sendPlayerDamage(damage.targetId, {
+          hitId: `hazard:${damage.sequence}:${damage.sourceId}`.slice(0, 96),
+          rawDamage: damage.amount,
+          sourceX: damage.x,
+          knockbackDir: damage.x <= network.remotePlayers[damage.targetId].x ? 1 : -1,
+          isTownMode: false,
+          sceneId: this.engine.networkSceneId,
+          parryability: 'dodge-only',
+          intentId: `hazard:${damage.sequence}`.slice(0, 96),
+          sourceEnemyId: damage.sourceId.slice(0, 160),
+          profileId: 'ranged-shot',
+        });
+      }
+    }
+    for (const damage of result.enemyDamage) {
+      const enemy = this.engine.enemies.find(candidate => candidate.id === damage.targetId && !candidate.isDead);
+      if (enemy) this.engine.applyDamageToEnemy(enemy, damage.amount, false, enemy.x >= damage.x ? 1 : -1);
+    }
+    for (const event of result.objectiveEvents) {
+      if (event.type === 'tick') continue;
+      this.dispatchRun({ type: 'objective_event', event });
+    }
+  }
+
+  private updateDungeonRun(dt: number): void {
+    if (!this.engine || !this.runController || this.engine.isTownMode) return;
+    // This view is owned by the controller and is read-only here. A deep
+    // snapshot is created only at the 4 Hz network boundary, not every frame.
+    const state = this.runController.getStateView();
+    if (this.engine.isHost && state.status === 'active') {
+      const actorIds = this.activeRunActorIds();
+      if (actorIds.join('|') !== state.activeActorIds.join('|')) {
+        this.dispatchRun({ type: 'set_active_actors', actorIds });
+      }
+      const result = this.encounter.update(dt, {
+        localActor: { actorId: this.localRunActorId(), x: this.engine.player.x, y: this.engine.player.y, active: !this.engine.player.downed },
+        remoteActors: Object.entries(network.remotePlayers).map(([actorId, player]) => ({ actorId, x: player.x, y: player.y + this.engine!.groundY, active: !player.isTownMode })),
+        enemies: this.engine.enemies.map(enemy => ({
+          enemyId: enemy.id,
+          x: enemy.x,
+          y: enemy.y,
+          alive: !enemy.isDead,
+          objectiveDamagePerSecond: Math.max(12, enemy.atk * 0.18),
+        })),
+        spawnsSealed: !this.engine.hasPendingEnemyReinforcements(),
+      });
+      this.consumeEncounterResult(result);
+      if (this.runController.getStateView().status !== 'active') return;
+
+      // Objective time is wall-clock time, but reducing/cloning the whole run
+      // graph at 60 Hz was one of the largest avoidable combat allocations.
+      // Batch the exact accumulated milliseconds into the same 4 Hz cadence as
+      // snapshots; maxTickMs still bounds a resumed/background frame.
+      this.runTickAccumulatorMs += Math.min(1_000, Math.max(0, dt * 1_000));
+      this.runSyncAccumulator += dt;
+      if (this.runTickAccumulatorMs >= 250) {
+        const elapsedMs = Math.min(1_000, Math.max(1, Math.floor(this.runTickAccumulatorMs)));
+        this.runTickAccumulatorMs -= elapsedMs;
+        this.dispatchRun({ type: 'advance_time', deltaMs: elapsedMs }, false);
+        if (this.runController.getStateView().status !== 'active') return;
+      }
+      if (this.runSyncAccumulator >= 0.25) {
+        this.runSyncAccumulator = 0;
+        network.sendRunSync(this.runController.getSnapshot(), this.encounter.snapshot());
+      }
+    }
+    this.updateRunHud(this.runController.getStateView());
+  }
+
+  private updateRunHud(state: DungeonRunState): void {
+    this.syncRunRelics(state);
+    const node = this.currentRunNode(state);
+    if (!node) return;
+    const runtime = state.roomStates[node.id];
+    const objective = runtime?.objectiveState;
+    if (!objective) {
+      this.hud?.setDungeonObjective({
+        kind: 'kill-all', title: this.humanize(node.kind), progressText: runtime?.status === 'completed' ? 'Complete' : 'Explore',
+        complete: runtime?.status === 'completed', spriteId: node.sprites.roomIconSpriteId as GameplaySpriteId,
+      });
+    } else {
+      let current = 0;
+      let target = 1;
+      let progressText = '';
+      let kind: 'kill-all' | 'defend-relic' | 'escort-npc' | 'survive-waves' | 'destroy-nests' | 'timed-escape' = 'kill-all';
+      if (objective.type === 'kill_all') {
+        current = objective.defeatedEnemyIds.length; target = Math.max(1, objective.spawnedEnemyIds.length); progressText = `${current}/${target} defeated`;
+      } else if (objective.type === 'defend_relic') {
+        kind = 'defend-relic'; current = objective.elapsedMs; target = node.objective?.type === 'defend_relic' ? node.objective.durationMs : 1; progressText = `Relic ${Math.ceil(objective.targetHp)} HP`;
+      } else if (objective.type === 'escort') {
+        kind = 'escort-npc'; current = objective.reachedCheckpointIds.length; target = node.objective?.type === 'escort' ? node.objective.checkpointIds.length : 1; progressText = `${current}/${target} checkpoints - ${Math.ceil(objective.hp)} HP`;
+      } else if (objective.type === 'survive') {
+        kind = 'survive-waves'; current = objective.elapsedMs; target = node.objective?.type === 'survive' ? node.objective.durationMs : 1; progressText = `${Math.ceil((target - current) / 1000)}s remaining`;
+      } else if (objective.type === 'destroy_nests') {
+        kind = 'destroy-nests'; current = objective.destroyedNestIds.length; target = node.objective?.type === 'destroy_nests' ? node.objective.nestObjectIds.length : 1; progressText = `${current}/${target} nests destroyed`;
+      } else if (objective.type === 'timed_escape') {
+        kind = 'timed-escape'; current = objective.escapedActorIds.length; target = Math.max(1, objective.activeActorIds.length); const duration = node.objective?.type === 'timed_escape' ? node.objective.durationMs : 0; progressText = `${current}/${target} escaped - ${Math.ceil(Math.max(0, duration - objective.elapsedMs) / 1000)}s`;
+      }
+      this.hud?.setDungeonObjective({
+        kind,
+        title: this.humanize(objective.type),
+        current,
+        target,
+        progressPercent: Math.min(100, (current / Math.max(1, target)) * 100),
+        progressText,
+        complete: objective.status === 'succeeded',
+        spriteId: node.sprites.objectiveMarkerSpriteId as GameplaySpriteId,
+      });
+    }
+    const owned = state.relicsByActorId[this.localRunActorId()] || [];
+    const counts = new Map<string, number>();
+    for (const id of owned) counts.set(id, (counts.get(id) || 0) + 1);
+    this.hud?.setDungeonRelics([...counts].map(([id, stacks]) => {
+      const relic = this.runRelics.get(id)!;
+      return { id, name: this.humanize(relic.nameKey), stacks, spriteId: relic.iconSpriteId as GameplaySpriteId };
+    }));
+    this.hud?.setDungeonContextAction(this.pendingDungeonInteraction
+      ? { label: this.pendingDungeonInteraction === 'route' ? 'ROUTE' : this.pendingDungeonInteraction === 'choice' ? 'CHOOSE' : 'STRIKE OBJECT', spriteId: node.sprites.objectiveMarkerSpriteId as GameplaySpriteId }
+      : null);
+    const dungeon = DUNGEONS[this.currentDungeonIndex];
+    if (dungeon) this.hud?.setWaveInfo(`${dungeon.name} - Room ${node.depth + 1}`, this.engine?.enemies.filter(enemy => !enemy.isDead).length || 0);
+  }
+
+  private syncRunRelics(state: DungeonRunState): void {
+    if (!this.engine) return;
+    const definitions = (state.relicsByActorId[this.localRunActorId()] || [])
+      .map(id => this.runRelics.get(id))
+      .filter((relic): relic is NonNullable<typeof relic> => Boolean(relic));
+    this.engine.setRunRelics(definitions);
   }
 
   /** "Wave 12" in an endless run; "Wave 2/4" everywhere else. */
@@ -1030,6 +1593,25 @@ export class SideViewGame {
     }
   }
 
+  private interactInDungeon(): boolean {
+    if (!this.engine || this.engine.isTownMode) return false;
+    // A held rescue always wins over a tap-only room action or parry.
+    if (this.engine.nearestDownedAlly()) return true;
+    if (this.pendingDungeonInteraction === 'choice' && this.showRunRoomChoices()) return true;
+    if (this.pendingDungeonInteraction === 'route' && this.showRunRouteChoices()) return true;
+    if (this.pendingDungeonInteraction === 'world-object' && this.engine.isHost) {
+      const result = this.encounter.hitWorldObjects({
+        x: this.engine.player.x + this.engine.player.facing * 46,
+        y: this.engine.player.y - 24,
+        radius: 82,
+        sourceId: this.localRunActorId(),
+      }, Math.max(35, this.engine.player.totalAtk * 1.5));
+      this.consumeEncounterResult(result);
+      return result.worldDamage.length > 0;
+    }
+    return this.engine.parryPlayer();
+  }
+
   /** Current control context. Gameplay actions cannot leak through a modal. */
   private resolveInputContext(): InputContext {
     if (this.dialogue?.isOpen || this.coopLobby?.isOpen || this.hud?.isInputBlocking()) return 'menu';
@@ -1050,10 +1632,11 @@ export class SideViewGame {
 
     switch (event.action) {
       case 'basicAttack':
-        if (!this.engine.isTownMode) this.engine.castSkill(0);
+        this.engine.castSkill(0);
         break;
       case 'interact':
-        this.interactWithActiveNpc();
+        if (this.engine.isTownMode) this.interactWithActiveNpc();
+        else this.interactInDungeon();
         break;
       case 'quickHeal': {
         const result = this.engine.quickHeal();
@@ -1219,6 +1802,7 @@ export class SideViewGame {
         this.engine.particles.recordFrameTime(rawDt * 1000);
         this.syncRenderResolution();
         this.engine.update(dt);
+        if (!this.engine.isTownMode && this.runController) this.updateDungeonRun(dt);
         // Smooth network snapshots into render positions once per active
         // frame. Rendering reads these interpolated coordinates directly.
         network.updateRemotePlayers(dt);
@@ -1266,8 +1850,9 @@ export class SideViewGame {
               }
             }
 
-            // Only Host progresses wave
-            if (this.engine.isHost && this.waveActive && livingEnemies.length === 0) {
+            // Deterministic runs progress from their objective state. Legacy
+            // wave-only progression remains as a safe fallback for old saves.
+            if (!this.runController && this.engine.isHost && this.waveActive && livingEnemies.length === 0) {
               this.waveActive = false;
               this.currentWaveIndex++;
               this.engine.currentWaveIndex = this.currentWaveIndex;

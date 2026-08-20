@@ -17,6 +17,10 @@ export {
 } from '../src/sideview/input/InputBindings';
 export { InputRouter } from '../src/sideview/input/InputRouter';
 export { GamepadInput, applyDeadzone } from '../src/sideview/input/GamepadInput';
-export { PointerGestureGate } from '../src/sideview/input/PointerInput';
+export {
+  PointerGestureGate,
+  bindPointerAction,
+  isActionPointerStart,
+} from '../src/sideview/input/PointerInput';
 export { InputController } from '../src/sideview/input/InputController';
 export { InputPreferenceStore } from '../src/sideview/input/InputPreferences';

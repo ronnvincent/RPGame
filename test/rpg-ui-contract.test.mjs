@@ -66,3 +66,26 @@ test('runtime fantasy frame assets referenced by the shared theme exist locally'
     assert.ok(existsSync(`public${path}`), `missing local UI asset ${path}`);
   }
 });
+
+test('opaque white fantasy masks are border-only on every dark RPG surface', () => {
+  const theme = read('src/sideview/ui/RpgUiTheme.ts');
+  const directSurfaces = [
+    read('src/sideview/ui/CoopLobbyUI.ts'),
+    hud,
+    read('src/sideview/input/InputSettingsPanel.ts'),
+    dialogue,
+  ].join('\n');
+
+  assert.doesNotMatch(
+    theme,
+    /border-image:\s*var\(--rpg-panel-image\)[^;]*\bfill\b/,
+    'the shared dark panel background must not be covered by the white asset center',
+  );
+  assert.doesNotMatch(
+    directSurfaces,
+    /border-image:[^;]*runtime\/ui\/fantasy-borders\/default-panel[^;]*\bfill\b/,
+    'direct dark surfaces must use only the decorative border slices',
+  );
+  assert.match(theme, /background:\s*linear-gradient\(rgba\(16, 21, 29, \.96\), rgba\(9, 12, 17, \.98\)\)/);
+  assert.match(directSurfaces, /\.cl-pane, \.cl-crest, \.cl-syn[\s\S]{0,240}border-image:[^;]+16 \/ 10px/);
+});

@@ -7,3 +7,4 @@ export { network } from '../src/sideview/network/NetworkManager';
 export { skillIndexForInput } from '../src/sideview/SideViewGame';
 export { bossSkillsFor } from '../src/sideview/dungeons/BossSkills';
 export { SKILL_IDS, SKILL_IDENTITY_MATRIX } from '../src/sideview/combat/SkillMechanics';
+export { COMBAT_STATUS_KINDS, ELEMENTAL_REACTIONS } from '../src/sideview/combat/CombatStatusRegistry';

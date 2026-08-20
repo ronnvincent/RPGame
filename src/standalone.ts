@@ -43,7 +43,7 @@ function showLoginScreen(mountPoint: HTMLElement) {
   const box = document.createElement('div');
   box.className = 'rpg-panel rpg-stack';
   box.setAttribute('role', 'form');
-  box.setAttribute('aria-describedby', 'login-help login-error');
+  box.setAttribute('aria-describedby', 'login-error');
   box.style.background = "url('/assets/kenney-rpg-ui/panel_brown.png') repeat";
   box.style.backgroundSize = "100% 100%";
   box.style.padding = 'clamp(18px, 6vw, 40px)';
@@ -67,7 +67,7 @@ function showLoginScreen(mountPoint: HTMLElement) {
   userIn.className = 'rpg-input';
   userIn.type = 'text';
   userIn.autocomplete = 'username';
-  userIn.setAttribute('aria-describedby', 'login-help login-error');
+  userIn.setAttribute('aria-describedby', 'login-error');
   userIn.placeholder = 'Username / Adventurer Name';
   userIn.style.width = '100%';
   userIn.style.padding = '10px';
@@ -91,7 +91,7 @@ function showLoginScreen(mountPoint: HTMLElement) {
   passIn.className = 'rpg-input';
   passIn.type = 'password';
   passIn.autocomplete = 'current-password';
-  passIn.setAttribute('aria-describedby', 'login-help login-error');
+  passIn.setAttribute('aria-describedby', 'login-error');
   passIn.placeholder = 'Password (Leave blank for Guest)';
   passIn.style.width = '100%';
   passIn.style.padding = '10px';
@@ -108,11 +108,6 @@ function showLoginScreen(mountPoint: HTMLElement) {
   passLabel.htmlFor = passIn.id;
   passLabel.textContent = 'Password';
   passLabel.appendChild(passIn);
-
-  const helpText = document.createElement('p');
-  helpText.id = 'login-help';
-  helpText.className = 'rpg-help';
-  helpText.textContent = 'Returning adventurers enter both fields. New adventurers choose a name, then create a guest account.';
 
   const loginBtn = document.createElement('button');
   loginBtn.className = 'rpg-button rpg-button--primary';
@@ -290,7 +285,6 @@ function showLoginScreen(mountPoint: HTMLElement) {
   box.appendChild(title);
   box.appendChild(userLabel);
   box.appendChild(passLabel);
-  box.appendChild(helpText);
   box.appendChild(loginBtn);
   box.appendChild(guestBtn);
   box.appendChild(errorText);

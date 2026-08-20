@@ -510,6 +510,25 @@ export class ParticleSystem {
     return removed;
   }
 
+  /**
+   * Remove gameplay-bearing entities when changing scenes.
+   *
+   * This is intentionally separate from cancelDelayedTasks(): that lighter
+   * cancellation also runs when a player is downed, where existing summons and
+   * zones must keep participating in the fight. Projectiles are returned to the
+   * pool instead of discarded so town practice cannot create allocation spikes
+   * in the first dungeon room.
+   */
+  public clearGameplayEntities() {
+    while (this.projectiles.length > 0) {
+      this.removeProjectileAt(this.projectiles.length - 1);
+    }
+    this.shadowClones.length = 0;
+    this.summonedMinions.length = 0;
+    this.groundTraps.length = 0;
+    this.groundZones.length = 0;
+  }
+
   private trimOldest<T>(items: T[], budget: number, recycle?: (item: T) => void) {
     while (items.length > budget) {
       const removed = items.shift();

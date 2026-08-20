@@ -184,7 +184,10 @@ test('host melee selects the nearest eligible same-scene remote target', () => {
   try {
     const enemy = enemyAt(100, engine.groundY);
     engine.enemies = [enemy];
+    // First frame authors the readable intent; damage resolves only after its
+    // telegraph reaches the active phase.
     engine.updateEnemies(1 / 60);
+    engine.updateEnemies(0.43);
     assert.equal(sent.length, 1);
     assert.equal(sent[0].targetSocketId, 'guest');
     assert.equal(sent[0].payload.sceneId, 'goblin_catacombs');
@@ -217,6 +220,7 @@ test('cross-scene remotes are not aggro targets and host local damage still work
     engine.enemies = [enemy];
     const before = engine.player.hp;
     engine.updateEnemies(1 / 60);
+    engine.updateEnemies(0.43);
     assert.equal(sent.length, 0);
     assert.ok(engine.player.hp < before, 'the host player retains the local damage path');
   } finally {
@@ -261,4 +265,70 @@ test('boss area skills resolve every affected local and remote target and apply 
     game.network.sendPlayerDamage = originalSend;
     resetNetwork();
   }
+});
+
+test('owned run relics alter real stats and mitigation without compounding recomputes', () => {
+  const engine = new game.SideViewEngine(character());
+  engine.isTownMode = false;
+  engine.player.totalDef = 0;
+  const baseAttack = engine.player.totalAtk;
+  const baseMaxHp = engine.player.maxHp;
+  const relics = [{
+    id: 'relic.glass-edge',
+    effects: [
+      { type: 'multiply_stat', statId: 'attack', multiplierPermille: 1450 },
+      { type: 'multiply_stat', statId: 'max-hp', multiplierPermille: 700 },
+    ],
+  }, {
+    id: 'relic.guardian-sigil',
+    effects: [{ type: 'flat_stat', statId: 'guard-capacity', amount: 18 }],
+  }];
+
+  engine.setRunRelics(relics);
+  const relicAttack = engine.player.totalAtk;
+  assert.equal(relicAttack, Math.round(baseAttack * 1.45));
+  assert.equal(engine.player.maxHp, Math.round(baseMaxHp * 0.7));
+  engine.recalculateStats();
+  assert.equal(engine.player.totalAtk, relicAttack, 'recompute does not compound relic multipliers');
+
+  engine.player.totalDef = 0;
+  const before = engine.player.hp;
+  assert.equal(engine.applyEncounterPlayerDamage(100, engine.player.x - 10), 97);
+  assert.equal(before - engine.player.hp, 97, 'guard-capacity provides bounded mitigation');
+
+  engine.setRunRelics([]);
+  assert.equal(engine.player.totalAtk, baseAttack);
+  assert.equal(engine.player.maxHp, baseMaxHp);
+});
+
+test('enemy defeat emits one objective event before corpse removal', () => {
+  const engine = new game.SideViewEngine(character());
+  const defeated = [];
+  engine.onEnemyDefeatedEvent = enemyId => defeated.push(enemyId);
+  const enemy = enemyAt(100, engine.groundY, { id: 'objective-enemy' });
+  engine.onEnemyDefeated(enemy);
+  assert.deepEqual(defeated, ['objective-enemy']);
+});
+
+test('kill-all sealing waits for every explicit reinforcement source', () => {
+  const engine = new game.SideViewEngine(character());
+  const summoner = enemyAt(100, engine.groundY, { role: 'summoner' });
+  engine.enemies = [summoner];
+  assert.equal(engine.hasPendingEnemyReinforcements(), true);
+
+  const elite = enemyAt(120, engine.groundY, { role: 'healer', eliteModifiers: ['summoning'] });
+  engine.enemies = [elite];
+  assert.equal(engine.hasPendingEnemyReinforcements(), true);
+
+  const miniboss = enemyAt(140, engine.groundY, { featureSpriteId: 'run:miniboss', roleActionCooldown: 0 });
+  engine.enemies = [miniboss];
+  engine.miniBossTriggered.set(miniboss.id, new Set());
+  assert.equal(engine.hasPendingEnemyReinforcements(), true, 'untriggered health-gate summon keeps roster open');
+  engine.miniBossTriggered.set(miniboss.id, new Set(['reinforcements']));
+  miniboss.roleActionCooldown = 1.2;
+  assert.equal(engine.hasPendingEnemyReinforcements(), true, 'telegraphed delayed spawn keeps roster open');
+  miniboss.roleActionCooldown = 0;
+  assert.equal(engine.hasPendingEnemyReinforcements(), false, 'roster seals after the delayed spawn window');
+  miniboss.isDead = true;
+  assert.equal(engine.hasPendingEnemyReinforcements(), false);
 });

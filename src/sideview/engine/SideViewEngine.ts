@@ -37,6 +37,51 @@ import type {
   SkillMechanics,
   StatusApplication,
 } from '../combat/SkillMechanics';
+import {
+  COMBAT_STATUS_REGISTRY,
+  resolveElementalReactions,
+  type ReactionStatusSnapshot,
+} from '../combat/CombatStatusRegistry';
+import {
+  createGuardStaggerState,
+  createPlayerDefenseState,
+  resolveGuardStaggerImpact,
+  resolveIncomingDefense,
+  setGuarding,
+  startDodge,
+  startParry,
+  tickGuardStaggerState,
+  tickPlayerDefenseState,
+  type IncomingAttackDefense,
+  type PlayerDefenseState,
+} from '../combat/DefenseMechanics';
+import {
+  DEFAULT_ATTACK_PROFILE_BY_ROLE,
+  BOSS_ATTACK_PROFILE_BY_KIND,
+  advanceEnemyAttackIntent,
+  canResolveEnemyAttackIntent,
+  createEnemyAttackIntent,
+  enemyAttackIntentPhase,
+  getEnemyAttackProfile,
+  markEnemyAttackIntentResolved,
+  type EnemyAttackProfileId,
+} from '../combat/EnemyAttackProfiles';
+import {
+  ELITE_MODIFIERS,
+  ENEMY_ROLE_TACTICS,
+  MINIBOSS_MECHANICS,
+  type MiniBossMechanicId,
+  type EnemyRoleId,
+} from '../dungeons/EnemyTactics';
+import {
+  COMBAT_FEEDBACK_SPRITES,
+  ELEMENT_REACTION_SPRITES,
+  ENEMY_ROLE_SPRITES,
+  GAMEPLAY_SPRITES,
+  type GameplaySpriteId,
+} from '../assets/GameplaySpriteManifest';
+import { gameplaySprites } from './GameplaySpriteRenderer';
+import type { RelicDefinition } from '../dungeons/run/RunTypes';
 
 interface ActivePlayerBuff {
   stat: PlayerBuffStat;
@@ -76,6 +121,36 @@ interface CombatPlayerTarget {
   socketId: string | null;
   x: number;
   y: number;
+  facing: -1 | 1;
+}
+
+interface CombatSpriteEffect {
+  id: GameplaySpriteId;
+  x: number;
+  y: number;
+  facing: -1 | 1;
+  elapsed: number;
+  duration: number;
+  scale: number;
+}
+
+interface IncomingAttackContext {
+  parryability: IncomingAttackDefense;
+  intentId?: string;
+  sourceEnemyId?: string;
+  profileId?: EnemyAttackProfileId;
+}
+
+interface EncounterRuntimeBridge {
+  render(ctx: CanvasRenderingContext2D, time: number): number;
+  getDynamicPlatforms(): Array<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    active: boolean;
+  }>;
+  getObjectiveTargetForEnemy(): { x: number; y: number; targetId: string } | null;
 }
 
 export type ZoneHazardPhase = 'idle' | 'telegraph' | 'active' | 'cooldown';
@@ -324,18 +399,29 @@ export class SideViewEngine {
 
   /** Wipe the run tally. Called when a dungeon starts, not when it ends. */
   public resetRunStats() {
-    this.cancelDelayedCombatTasks();
+    this.resetCombatScene();
+    this.player.revivesUsed = 0;
     this.enemyStatuses.clear();
     this.playerNegativeStatuses.length = 0;
     this.enemyPlayerTargets.clear();
     this.receivedPlayerDamageHits.clear();
+    this.playerDefense = createPlayerDefenseState();
+    this.resolvedReactionKeys.clear();
+    this.combatSpriteEffects.length = 0;
     this.damageDealt = 0;
     this.damageTaken = 0;
     this.killCount = 0;
     this.revivesGiven = 0;
     this.player.downed = false;
     this.player.downTimer = 0;
-    this.player.revivesUsed = 0;
+    this.player.mp = this.player.maxMp;
+    Object.keys(this.player.skillCooldowns).forEach(skillId => {
+      this.player.skillCooldowns[skillId] = 0;
+    });
+    this.player.activeBuffs.length = 0;
+    this.player.stealthTimer = 0;
+    this.player.iframeTimer = 0;
+    this.recomputeStats();
   }
 
   /** Cancel delayed hits/VFX owned by the previous scene or run. */
@@ -345,6 +431,67 @@ export class SideViewEngine {
     this.delayedCombatTasks.clear();
     this.particles.cancelDelayedTasks();
     this.ultimate.cancel();
+  }
+
+  /** Full transition boundary for town/dungeon changes, never for a downed tick. */
+  public resetCombatScene() {
+    this.cancelDelayedCombatTasks();
+    this.particles.clearGameplayEntities();
+    this.combatSpriteEffects.length = 0;
+    this.resolvedReactionKeys.clear();
+    this.playerDefense = createPlayerDefenseState();
+    this.miniBossTriggered.clear();
+    if (this.runRelicFingerprint) {
+      this.runRelicFingerprint = '';
+      this.runRelicAttackMultiplier = 1;
+      this.runRelicMaxHpMultiplier = 1;
+      this.runRelicGuardCapacity = 0;
+      this.runRelicReactionPower.clear();
+      this.recomputeStats();
+      this.player.hp = Math.min(this.player.hp, this.player.maxHp);
+    }
+  }
+
+  /** Small bounded sprite queue shared by defense, reactions, and enemy intents. */
+  private addCombatSpriteEffect(
+    id: GameplaySpriteId,
+    x: number,
+    y: number,
+    duration: number = 0.45,
+    facing: number = this.player.facing,
+    scale: number = 1,
+  ) {
+    if (this.combatSpriteEffects.length >= 48) this.combatSpriteEffects.shift();
+    this.combatSpriteEffects.push({
+      id,
+      x: Number.isFinite(x) ? x : this.player.x,
+      y: Number.isFinite(y) ? y : this.player.y,
+      facing: facing < 0 ? -1 : 1,
+      elapsed: 0,
+      duration: Math.max(0.08, Math.min(3, duration)),
+      scale: Math.max(0.1, Math.min(4, scale)),
+    });
+    gameplaySprites.warm([id]);
+  }
+
+  private updateCombatSpriteEffects(dt: number) {
+    for (let index = this.combatSpriteEffects.length - 1; index >= 0; index -= 1) {
+      const effect = this.combatSpriteEffects[index];
+      effect.elapsed += Math.max(0, dt);
+      if (effect.elapsed >= effect.duration) this.combatSpriteEffects.splice(index, 1);
+    }
+  }
+
+  private drawCombatSpriteEffects(ctx: CanvasRenderingContext2D) {
+    for (const effect of this.combatSpriteEffects) {
+      gameplaySprites.draw(ctx, effect.id, effect.x, effect.y, {
+        time: effect.elapsed,
+        normalizedProgress: effect.elapsed / effect.duration,
+        facing: effect.facing,
+        scale: effect.scale,
+        alpha: Math.min(1, (effect.duration - effect.elapsed) * 5),
+      });
+    }
   }
 
   /** Schedule work that is safe to discard when the combat scene changes. */
@@ -359,6 +506,10 @@ export class SideViewEngine {
   }
   /** Raised when the player dies with no revive left. */
   public onRunLost: (() => void) | null = null;
+  /** Authored destructibles consume the same area hits as enemies. */
+  public onPlayerWorldHit: ((area: { x: number; y: number; radius: number }, damage: number) => void) | null = null;
+  /** Objective controllers need an event even when the next frame removes the corpse. */
+  public onEnemyDefeatedEvent: ((enemyId: string) => void) | null = null;
   /** Which of a boss's abilities comes next, per boss. */
   private bossRotation = new Map<string, number>();
   /** Stable aggro target per enemy; invalid/downed/cross-scene targets are replaced. */
@@ -394,16 +545,135 @@ export class SideViewEngine {
   public readonly enemyStatuses = new Map<string, EnemyCombatStatus[]>();
   /** Future enemy skills can use this same list; Purge Flame already cleans it. */
   public readonly playerNegativeStatuses: PlayerNegativeStatus[] = [];
+  /** Pure timing state for dodge/parry; rendering resolves through sprite ids. */
+  private playerDefense: PlayerDefenseState = createPlayerDefenseState();
+  /** One elemental reaction per cast/target/reaction, including multi-hit skills. */
+  private readonly resolvedReactionKeys = new Set<string>();
+  /** Bounded sprite-only combat feedback; no procedural warning geometry. */
+  private readonly combatSpriteEffects: CombatSpriteEffect[] = [];
+  private combatIntentNonce = 0;
+  private readonly miniBossTriggered = new Map<string, Set<MiniBossMechanicId>>();
+  private runRelicAttackMultiplier = 1;
+  private runRelicMaxHpMultiplier = 1;
+  private runRelicGuardCapacity = 0;
+  private readonly runRelicReactionPower = new Map<string, number>();
+  private runRelicFingerprint = '';
+  /** Optional authored room simulation injected by SideViewGame. */
+  private dungeonEncounterRuntime: EncounterRuntimeBridge | null = null;
 
   constructor(characterClass: CharacterClass) {
     this.particles = new ParticleSystem();
     this.player = this.createInitialPlayer(characterClass);
     this.recomputeStats();
     this.buildMapPlatforms(this.battleTheme);
+    gameplaySprites.warmEncounterSprites();
   }
 
   public recalculateStats() {
     this.recomputeStats();
+  }
+
+  public setDungeonEncounterRuntime(runtime: EncounterRuntimeBridge | null) {
+    this.dungeonEncounterRuntime = runtime;
+  }
+
+  /** Applies the owned, already-validated run relic definitions exactly once. */
+  public setRunRelics(relics: readonly RelicDefinition[]) {
+    const fingerprint = relics.map(relic => relic.id).sort().join('|');
+    if (fingerprint === this.runRelicFingerprint) return;
+    const oldMaxHp = Math.max(1, this.player.maxHp);
+    const hpRatio = this.player.hp / oldMaxHp;
+    this.runRelicFingerprint = fingerprint;
+    this.runRelicAttackMultiplier = 1;
+    this.runRelicMaxHpMultiplier = 1;
+    this.runRelicGuardCapacity = 0;
+    this.runRelicReactionPower.clear();
+
+    for (const relic of relics.slice(0, 24)) {
+      for (const effect of relic.effects) {
+        if (effect.type === 'multiply_stat') {
+          const multiplier = Math.max(0.25, Math.min(3, effect.multiplierPermille / 1_000));
+          if (effect.statId === 'attack') this.runRelicAttackMultiplier *= multiplier;
+          if (effect.statId === 'max-hp') this.runRelicMaxHpMultiplier *= multiplier;
+        } else if (effect.type === 'flat_stat' && effect.statId === 'guard-capacity') {
+          this.runRelicGuardCapacity += Math.max(0, Math.min(250, effect.amount));
+        } else if (effect.type === 'status_combo') {
+          const prior = this.runRelicReactionPower.get(effect.comboId) || 0;
+          this.runRelicReactionPower.set(
+            effect.comboId,
+            Math.min(1.5, prior + Math.max(0, effect.powerPermille / 1_000)),
+          );
+        }
+      }
+    }
+    this.runRelicAttackMultiplier = Math.max(0.25, Math.min(4, this.runRelicAttackMultiplier));
+    this.runRelicMaxHpMultiplier = Math.max(0.4, Math.min(3, this.runRelicMaxHpMultiplier));
+    this.runRelicGuardCapacity = Math.min(600, this.runRelicGuardCapacity);
+    this.recomputeStats();
+    this.player.hp = Math.max(1, Math.min(this.player.maxHp, Math.round(this.player.maxHp * hpRatio)));
+  }
+
+  /** Applies authored run-room rank without coupling DungeonManager to run nodes. */
+  public prepareEnemiesForRunRoom(kind: string) {
+    const living = this.enemies.filter(enemy => !enemy.isDead && !enemy.objectiveEntity);
+    if (!living.length) return;
+    if (kind === 'elite') {
+      for (const enemy of living) {
+        enemy.isElite = true;
+        if (enemy.type === 'mob') enemy.type = 'elite';
+      }
+      return;
+    }
+    if (kind !== 'miniboss') return;
+    const champion = [...living].sort((a, b) => b.maxHp - a.maxHp)[0];
+    if (!champion || champion.featureSpriteId === 'run:miniboss') return;
+    champion.featureSpriteId = 'run:miniboss';
+    champion.type = 'elite';
+    champion.isElite = true;
+    champion.maxHp = Math.max(1, Math.round(champion.maxHp * 1.85));
+    champion.hp = champion.maxHp;
+    champion.atk = Math.max(1, Math.round(champion.atk * 1.25));
+    champion.def = Math.max(0, Math.round(champion.def * 1.2));
+    champion.expReward = Math.max(1, Math.round(champion.expReward * 2));
+    champion.goldReward = Math.max(0, Math.round(champion.goldReward * 2));
+    this.miniBossTriggered.set(champion.id, new Set());
+  }
+
+  /**
+   * Whether a living enemy can still add members to the current encounter.
+   * Kill-all objectives use this authority signal before sealing their spawn
+   * roster, so delayed mini-boss mechanics and elite summons cannot appear
+   * after the room has already declared itself complete.
+   */
+  public hasPendingEnemyReinforcements(): boolean {
+    return this.enemies.some(enemy => {
+      if (enemy.isDead) return false;
+      if (enemy.role === 'summoner' || enemy.eliteModifiers?.includes('summoning')) return true;
+      if (enemy.featureSpriteId !== 'run:miniboss') return false;
+
+      const triggered = this.miniBossTriggered.get(enemy.id);
+      // roleActionCooldown spans the reinforcement telegraph and its delayed
+      // spawn callback, keeping the roster open until the new ids are visible
+      // to DungeonEncounterRuntime on a subsequent host update.
+      return !triggered?.has('reinforcements') || (enemy.roleActionCooldown || 0) > 0;
+    });
+  }
+
+  private collisionPlatforms(): Platform[] {
+    const dynamic = this.dungeonEncounterRuntime?.getDynamicPlatforms() || [];
+    if (!dynamic.length) return this.platforms;
+    return [
+      ...this.platforms,
+      ...dynamic.filter(platform => platform.active).map(platform => ({
+        // Encounter objects use their sprite centre; engine platforms use a
+        // left edge and a top surface.
+        x: platform.x - platform.width / 2,
+        y: platform.y,
+        width: platform.width,
+        height: platform.height,
+        type: 'one-way' as const,
+      })),
+    ];
   }
 
   /** Receives the shared input settings once per frame without polling DOM/storage in hot paths. */
@@ -506,7 +776,10 @@ export class SideViewEngine {
     // recompute, which happens on equipping anything. The purchase count is the
     // durable record of it.
     const forgedHp = 50 * (Number(localStorage.getItem('forge_hp')) || 0);
-    p.maxHp = Math.round((p.characterClass.stats.maxHp + bonusHp) * lvlMultiplier) + forgedHp;
+    p.maxHp = Math.max(1, Math.round(
+      (Math.round((p.characterClass.stats.maxHp + bonusHp) * lvlMultiplier) + forgedHp)
+      * this.runRelicMaxHpMultiplier,
+    ));
     p.maxMp = Math.round((p.characterClass.stats.maxMp + bonusMp) * lvlMultiplier);
     
     let atk = (p.baseAtk + bonusAtk) * lvlMultiplier;
@@ -524,7 +797,7 @@ export class SideViewEngine {
       if (buff.stat === 'attackSpeed') attackSpeed *= buff.multiplier;
     });
 
-    p.totalAtk = Math.round(atk);
+    p.totalAtk = Math.round(atk * this.runRelicAttackMultiplier);
     p.totalDef = Math.round(def);
     p.totalSpeed = Number(spd.toFixed(1));
     p.totalCrit = Number(crit.toFixed(2));
@@ -808,19 +1081,49 @@ export class SideViewEngine {
     }
   }
 
-  public dashPlayer() {
+  public dashPlayer(): boolean {
     // Downed players are out of the fight until somebody reaches them.
-    if (this.player.downed || this.playerStatusMagnitude('stun') > 0) return;
+    if (this.player.downed || this.playerStatusMagnitude('stun') > 0) return false;
 
     const p = this.player;
-    if (p.dashTimer > 0 || p.isDashing || (p.dashCooldown || 0) > 0) return;
+    if (p.dashTimer > 0 || p.isDashing) return false;
+    const dodge = startDodge(this.playerDefense);
+    if (!dodge.started) return false;
+    this.playerDefense = dodge.state;
     p.isDashing = true;
     p.dashTimer = 0.25;
-    p.dashCooldown = 2.5;
-    p.iframeTimer = 0.35;
+    p.dashCooldown = this.playerDefense.dodgeCooldownRemaining;
+    // I-frames are resolved by the defense state, while this timer preserves
+    // blink feedback and compatibility with legacy hazards.
+    p.iframeTimer = this.playerDefense.dodgeWindowRemaining;
     p.vx = p.facing * (p.totalSpeed * 2.6);
     audio.playDash();
+    this.addCombatSpriteEffect(COMBAT_FEEDBACK_SPRITES.dodge, p.x, p.y, 0.34, p.facing, 0.82);
     this.particles.addGhostTrail(p.x, p.y, p.facing, p.characterClass.id, 'run', 0, p.characterClass.accentColor);
+    return true;
+  }
+
+  /** Context action in combat: a short front-facing parry window. */
+  public parryPlayer(): boolean {
+    if (this.isTownMode || this.player.downed || this.playerStatusMagnitude('stun') > 0) return false;
+    const parry = startParry(this.playerDefense);
+    if (!parry.started) return false;
+    this.playerDefense = parry.state;
+    this.player.vx *= 0.25;
+    this.addCombatSpriteEffect(
+      COMBAT_FEEDBACK_SPRITES.parry,
+      this.player.x + this.player.facing * 18,
+      this.player.y - 12,
+      0.3,
+      this.player.facing,
+      0.85,
+    );
+    audio.playId('metal_ring', 0.72);
+    return true;
+  }
+
+  public getDefenseState(): Readonly<PlayerDefenseState> {
+    return { ...this.playerDefense };
   }
 
   private getSkillCastSoundProfile(skill: SkillDefinition, classId: string): SkillCastProcProfile {
@@ -1311,8 +1614,7 @@ export class SideViewEngine {
   private castSkillFromMechanics(skillIndex: number) {
     const p = this.player;
     if (
-      this.isTownMode
-      || p.downed
+      p.downed
       || this.runOver
       || p.hp <= 0
       || this.castLock > 0
@@ -1917,6 +2219,10 @@ export class SideViewEngine {
     castToken: number,
     movementOriginX?: number,
   ) {
+    this.onPlayerWorldHit?.(
+      { x: centerX, y: centerY, radius: Math.max(24, skill.aoeRadius || skill.range * 0.45) },
+      Math.max(1, Math.round(damage)),
+    );
     const targets = this.targetsForArea(skill, centerX, centerY, movementOriginX);
     targets.forEach(target => this.hitEnemyWithSkill(target, skill, damage, rolledCrit, castToken));
     if (targets.length) {
@@ -1935,6 +2241,14 @@ export class SideViewEngine {
     virtualHitDamages?: readonly number[],
   ) {
     const payload = skill.mechanics.payload;
+    // Reactions may only consume a status that existed before this hit. That
+    // prevents a single skill from applying and detonating its own setup.
+    const statusesBeforeHit: ReactionStatusSnapshot[] = this.statusesForEnemy(enemy).map(status => ({
+      kind: status.kind,
+      remaining: status.remaining,
+      remainingDamage: status.damageRemaining,
+      sourceSkillId: status.sourceSkillId,
+    }));
     const executeMultiplier = payload.executeBelowHp
       && enemy.hp / Math.max(1, enemy.maxHp) <= payload.executeBelowHp
       ? (payload.executeMultiplier ?? 1)
@@ -1972,11 +2286,90 @@ export class SideViewEngine {
       this.player.hp = Math.min(this.player.maxHp, this.player.hp + heal);
       this.particles.addFloatingText(this.player.x, this.player.y - 34, `+${heal} HP`, '#e879f9', true, 15);
     }
+    if (dealt > 0 && payload.reactionTags?.length) {
+      this.applyElementalReactions(enemy, skill, dealt, castToken, statusesBeforeHit);
+    }
     const directShare = payload.directDamageShare ?? 1;
     const preDirectPotency = directShare > 0 ? damage / directShare : damage;
-    for (const status of payload.statuses || []) {
+    for (const status of enemy.isDead ? [] : (payload.statuses || [])) {
       this.applyEnemyStatus(enemy, status, skill, preDirectPotency, castToken);
     }
+  }
+
+  private applyElementalReactions(
+    enemy: EnemyInstance,
+    skill: SkillDefinition,
+    dealt: number,
+    castToken: number,
+    statusesBeforeHit: readonly ReactionStatusSnapshot[],
+  ) {
+    const resolutions = resolveElementalReactions({
+      targetId: enemy.id,
+      castToken,
+      sourceDamage: dealt,
+      triggerTags: skill.mechanics.payload.reactionTags || [],
+      statusesBeforeHit,
+      nearbyTargets: this.enemies
+        .filter(candidate => !candidate.isDead && candidate.id !== enemy.id)
+        .map(candidate => ({ id: candidate.id, distance: Math.hypot(candidate.x - enemy.x, candidate.y - enemy.y) })),
+      alreadyResolvedKeys: this.resolvedReactionKeys,
+      sourceKind: 'skill',
+    });
+
+    for (const resolution of resolutions) {
+      const relicScale = 1 + (this.runRelicReactionPower.get(resolution.reactionId) || 0);
+      this.resolvedReactionKeys.add(resolution.dedupeKey);
+      const consumed = new Set<EnemyStatusKind>(resolution.consumeStatusKinds);
+      const remaining = (this.enemyStatuses.get(enemy.id) || []).filter(status => !consumed.has(status.kind));
+      if (remaining.length) this.enemyStatuses.set(enemy.id, remaining);
+      else this.enemyStatuses.delete(enemy.id);
+
+      for (const damageEvent of resolution.damageEvents) {
+        const target = this.enemies.find(candidate => candidate.id === damageEvent.targetId && !candidate.isDead);
+        if (!target || damageEvent.amount <= 0) continue;
+        const direction = target.x >= this.player.x ? 1 : -1;
+        this.applyDamageToEnemy(
+          target,
+          Math.min(250_000, Math.max(1, Math.round(damageEvent.amount * relicScale))),
+          false,
+          direction,
+        );
+      }
+
+      if (resolution.healing > 0) {
+        const before = this.player.hp;
+        const healing = Math.min(250_000, Math.max(1, Math.round(resolution.healing * relicScale)));
+        this.player.hp = Math.min(this.player.maxHp, this.player.hp + healing);
+        const restored = this.player.hp - before;
+        if (restored > 0) {
+          this.particles.addFloatingText(this.player.x, this.player.y - 38, `+${restored} HP`, '#e879f9', true, 15);
+        }
+      }
+
+      if (resolution.staggerDamage > 0 && enemy.guardState && !enemy.isDead) {
+        const staggerDamage = Math.min(10_000, Math.round(resolution.staggerDamage * relicScale));
+        const impact = resolveGuardStaggerImpact(enemy.guardState, {
+          incomingDamage: 0,
+          guardDamage: staggerDamage,
+          staggerDamage,
+          sourceDirection: enemy.x >= this.player.x ? -1 : 1,
+          defenderFacing: enemy.facing < 0 ? -1 : 1,
+          bypassGuard: true,
+        });
+        enemy.guardState = impact.state;
+        if (impact.interrupted) enemy.attackIntent = undefined;
+      }
+
+      const spriteId = ELEMENT_REACTION_SPRITES[resolution.reactionId].payoff;
+      this.addCombatSpriteEffect(spriteId, enemy.x, enemy.y - 10, 0.7, this.player.facing, 1);
+      this.particles.playVfx(resolution.impactSpriteId, enemy.x, enemy.y - 20, { facing: this.player.facing });
+      this.particles.addFloatingText(enemy.x, enemy.y - enemy.height - 22, resolution.displayName.toUpperCase(), '#fef3c7', true, 13);
+      audio.playId(resolution.soundId, 0.9);
+    }
+
+    // Cast ids are monotonic; old dedupe keys no longer serve a purpose once
+    // the bounded cache grows past several encounters.
+    if (this.resolvedReactionKeys.size > 512) this.resolvedReactionKeys.clear();
   }
 
   private getClosestEnemy(maxRange: number = 400): EnemyInstance | null {
@@ -2073,6 +2466,9 @@ export class SideViewEngine {
       stun: '#fde047',
       frailty: '#c084fc',
       taunt: '#facc15',
+      wet: '#38bdf8',
+      freeze: '#a5f3fc',
+      curse: '#d946ef',
     } satisfies Record<EnemyStatusKind, string>)[kind];
   }
 
@@ -2293,7 +2689,33 @@ export class SideViewEngine {
   }
 
   public applyDamageToEnemy(enemy: EnemyInstance, rawDamage: number, isCrit: boolean, knockbackDir: number, fromRemote: boolean = false): number {
-    const finalDamage = this.resolveEnemyDamage(enemy, rawDamage, fromRemote);
+    let finalDamage = this.resolveEnemyDamage(enemy, rawDamage, fromRemote);
+    if (enemy.guardState) {
+      const directional = knockbackDir !== 0;
+      const impact = resolveGuardStaggerImpact(enemy.guardState, {
+        incomingDamage: finalDamage,
+        guardDamage: Math.max(8, rawDamage * 0.9),
+        staggerDamage: Math.max(5, rawDamage * 0.48),
+        sourceDirection: knockbackDir > 0 ? -1 : 1,
+        defenderFacing: enemy.facing < 0 ? -1 : 1,
+        bypassGuard: !directional,
+      });
+      enemy.guardState = impact.state;
+      finalDamage = impact.resolvedDamage;
+      if (impact.guarded) {
+        this.addCombatSpriteEffect('combat.guard', enemy.x, enemy.y - 8, 0.26, enemy.facing, 0.75);
+      }
+      if (impact.guardBroken) {
+        this.addCombatSpriteEffect(COMBAT_FEEDBACK_SPRITES['guard-break'], enemy.x, enemy.y - 18, 0.7, enemy.facing, 1);
+        this.particles.addFloatingText(enemy.x, enemy.y - enemy.height - 10, 'GUARD BREAK', '#fbbf24', true, 13);
+        audio.playId('hit_blunt', 1.05);
+      } else if (impact.staggered && impact.interrupted) {
+        this.addCombatSpriteEffect(COMBAT_FEEDBACK_SPRITES.stagger, enemy.x, enemy.y - 20, 0.62, enemy.facing, 0.9);
+        this.particles.addFloatingText(enemy.x, enemy.y - enemy.height - 10, 'STAGGERED', '#fde047', true, 12);
+      }
+      if (impact.interrupted) enemy.attackIntent = undefined;
+    }
+    if (finalDamage <= 0) return 0;
     return this.applyResolvedDamageToEnemy(enemy, finalDamage, isCrit, knockbackDir, fromRemote);
   }
 
@@ -2309,13 +2731,16 @@ export class SideViewEngine {
     // blow arriving for replay, and crediting it would hand everyone the same
     // total and make the summary meaningless.
     if (!fromRemote) this.damageDealt += finalDamage;
-    enemy.hitStun = 0.25;
+    enemy.hitStun = enemy.guardState?.staggeredRemaining
+      ? Math.max(0.25, enemy.guardState.staggeredRemaining)
+      : enemy.guardState?.guarding ? 0.06 : 0.25;
     // Knockback used to be a flat 3.5 on every hit, including the basic attack -
     // and the basic attack is the one you use continuously, so monsters were
     // shoved out of reach faster than they could walk back in. It now follows
     // the weight of the blow: a poke barely moves them, an ultimate still
     // throws them.
-    const knockback = Math.min(3.2, 0.7 + finalDamage / 90);
+    const knockbackScale = enemy.guardState?.guarding ? 0.25 : 1;
+    const knockback = Math.min(3.2, 0.7 + finalDamage / 90) * knockbackScale;
     enemy.vx = knockbackDir * knockback;
     enemy.vy = -Math.min(2.2, 0.4 + knockback * 0.45);
 
@@ -2357,6 +2782,25 @@ export class SideViewEngine {
   public onEnemyDefeated(enemy: EnemyInstance) {
     enemy.isDead = true;
     enemy.hp = 0;
+    this.onEnemyDefeatedEvent?.(enemy.id);
+    this.miniBossTriggered.delete(enemy.id);
+
+    if (this.isHost && enemy.eliteModifiers?.includes('volatile')) {
+      const profile = getEnemyAttackProfile('boss-nova');
+      const intentId = `volatile_${enemy.id}_${++this.combatIntentNonce}`;
+      this.addCombatSpriteEffect(ELEMENT_REACTION_SPRITES['burn-explosion'].payoff, enemy.x, enemy.y, 0.72, enemy.facing, 1.05);
+      this.eligibleCombatPlayerTargets()
+        .filter(target => Math.hypot(target.x - enemy.x, (target.y - enemy.y) * 0.5) <= 145)
+        .forEach(target => this.enemyAttackCombatTarget(
+          enemy,
+          target,
+          1.1,
+          { kind: 'burn', duration: 2.5, magnitude: 0.08, tickInterval: 1, rawTickDamage: Math.max(1, Math.round(enemy.atk * 0.12)) },
+          'dodge-only',
+          intentId,
+          profile.id,
+        ));
+    }
     
     if (this.isHost) {
       network.sendEnemyDied({
@@ -2570,6 +3014,8 @@ export class SideViewEngine {
     // meaning after one cast it never reached zero and every skill button went
     // dead for the rest of the run.
     if (this.castLock > 0) this.castLock = Math.max(0, this.castLock - dt);
+    this.playerDefense = tickPlayerDefenseState(this.playerDefense, dt);
+    this.updateCombatSpriteEffects(dt);
 
     // 0. Hit-Stop Micro Freeze check (Crunchy combat impact feeling)
     if (this.hitStopTimer > 0) {
@@ -2714,7 +3160,7 @@ export class SideViewEngine {
     // Platform landing check
     let landedOnPlatform = false;
     if (p.vy >= 0 && (!p.dropThroughTimer || p.dropThroughTimer <= 0)) {
-      for (const plat of this.platforms) {
+      for (const plat of this.collisionPlatforms()) {
         if (p.x >= plat.x - 12 && p.x <= plat.x + plat.width + 12) {
           const prevY = p.y - p.vy * dtFrame;
           if (prevY <= plat.y + 4 && p.y >= plat.y) {
@@ -3252,7 +3698,7 @@ export class SideViewEngine {
     const p = this.player;
 
     if (!p.downed && !this.runOver && p.hp > 0 && p.stealthTimer <= 0) {
-      targets.push({ kind: 'local', socketId: null, x: p.x, y: p.y });
+      targets.push({ kind: 'local', socketId: null, x: p.x, y: p.y, facing: p.facing < 0 ? -1 : 1 });
     }
 
     if (!network.room) return targets;
@@ -3264,7 +3710,13 @@ export class SideViewEngine {
       const x = typeof remote.targetX === 'number' ? remote.targetX : remote.x;
       const relativeY = typeof remote.targetY === 'number' ? remote.targetY : remote.y;
       if (!Number.isFinite(x) || !Number.isFinite(relativeY)) continue;
-      targets.push({ kind: 'remote', socketId, x, y: relativeY + this.groundY });
+      targets.push({
+        kind: 'remote',
+        socketId,
+        x,
+        y: relativeY + this.groundY,
+        facing: remote.facing < 0 ? -1 : 1,
+      });
     }
     return targets;
   }
@@ -3290,6 +3742,7 @@ export class SideViewEngine {
 
   private updateEnemies(dt: number) {
     const dtFrame = dt * this.physicsFrameScale;
+    const pendingSummons: EnemyInstance[] = [];
 
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const enemy = this.enemies[i];
@@ -3299,9 +3752,38 @@ export class SideViewEngine {
         continue;
       }
 
+      if (enemy.isActive === false) {
+        enemy.spawnDelay = Math.max(0, (Number(enemy.spawnDelay) || 0) - dt);
+        if (enemy.spawnDelay <= 0) {
+          enemy.isActive = true;
+          const spawnSprite = enemy.role && enemy.role !== 'boss' && enemy.role !== 'bruiser'
+            ? ENEMY_ROLE_SPRITES[enemy.role].signature
+            : COMBAT_FEEDBACK_SPRITES['area-telegraph'];
+          this.addCombatSpriteEffect(spawnSprite, enemy.x, enemy.y, 0.65, enemy.facing, 0.8);
+        } else {
+          continue;
+        }
+      }
+
+      if (enemy.guardState) {
+        enemy.guardState = tickGuardStaggerState(enemy.guardState, dt);
+      }
+      enemy.roleActionCooldown = Math.max(0, (enemy.roleActionCooldown || 0) - dt);
+
+      // Guests advance the last host snapshot for smooth animation, but never
+      // resolve its gameplay. The next authoritative packet reconciles time.
+      if (!this.isHost && enemy.attackIntent) {
+        enemy.attackIntent = advanceEnemyAttackIntent(enemy.attackIntent, dt);
+        const phase = enemyAttackIntentPhase(enemy.attackIntent).phase;
+        enemy.isAttacking = phase === 'active';
+        if (phase === 'complete') enemy.attackIntent = undefined;
+      }
+
       // Hit stun
-      if (enemy.hitStun > 0) {
+      if (enemy.hitStun > 0 || (enemy.guardState?.staggeredRemaining || 0) > 0) {
         enemy.hitStun -= dt;
+        enemy.vx *= 0.4;
+        enemy.isAttacking = false;
       } else if (this.isHost) {
         // The host owns aggro for every same-scene party member. Remote Y is
         // normalized back into this canvas's world coordinates above.
@@ -3310,6 +3792,14 @@ export class SideViewEngine {
         let isDecoy = false;
         const taunted = this.statusMagnitude(enemy, 'taunt') > 0
           || this.statusesForEnemy(enemy).some(status => status.kind === 'taunt');
+        const objectiveTarget = this.dungeonEncounterRuntime?.getObjectiveTargetForEnemy() || null;
+        const attacksObjective = objectiveTarget && !taunted
+          && (enemy.role === 'shield-tank' || enemy.role === 'assassin')
+          && ((enemy.id.length + (enemy.intentSequence || 0)) % 3 !== 1);
+        if (attacksObjective && objectiveTarget) {
+          targetX = objectiveTarget.x;
+          isDecoy = true;
+        }
         if (!target && !taunted && this.particles.summonedMinions.length > 0) {
           targetX = this.particles.summonedMinions[0].x;
           isDecoy = true;
@@ -3321,29 +3811,80 @@ export class SideViewEngine {
 
         const dx = targetX - enemy.x;
         const dist = Math.abs(dx);
-        const verticalDistance = target ? Math.abs(target.y - enemy.y) : 0;
+        const verticalDistance = attacksObjective && objectiveTarget
+          ? Math.abs(objectiveTarget.y - enemy.y)
+          : target ? Math.abs(target.y - enemy.y) : 0;
         enemy.facing = dx > 0 ? 1 : -1;
 
-        if (dist > enemy.attackRange || verticalDistance > 110) {
-          const slow = Math.min(0.9, this.statusMagnitude(enemy, 'slow'));
-          enemy.vx = enemy.facing * enemy.speed * (1 - slow);
-          enemy.isAttacking = false;
-        } else {
+        const role = enemy.role || (enemy.type === 'boss' ? 'boss' : 'bruiser');
+        const tactic = role !== 'boss' && role !== 'bruiser'
+          ? ENEMY_ROLE_TACTICS[role as EnemyRoleId]
+          : null;
+        const slow = Math.min(0.9, this.statusMagnitude(enemy, 'slow'));
+
+        if (enemy.guardState && role === 'shield-tank') {
+          enemy.guardState = setGuarding(enemy.guardState, !enemy.attackIntent && dist <= enemy.attackRange * 1.4);
+        }
+
+        if (enemy.attackIntent) {
+          enemy.attackIntent = advanceEnemyAttackIntent(enemy.attackIntent, dt);
+          const phase = enemyAttackIntentPhase(enemy.attackIntent).phase;
+          enemy.isAttacking = phase === 'active';
           enemy.vx = 0;
-          // The swing timer runs on every client so guests see the animation
-          // too; only the host resolves the damage.
-          enemy.attackTimer -= dt;
-          if (enemy.attackTimer <= 0) {
-            enemy.attackTimer = enemy.attackCooldown;
-            if (!isDecoy && target) this.enemyAttackCombatTarget(enemy, target);
+          if (canResolveEnemyAttackIntent(enemy.attackIntent)) {
+            this.resolveEnemyIntent(enemy, target, pendingSummons);
+            enemy.attackIntent = markEnemyAttackIntentResolved(enemy.attackIntent);
           }
-          // isAttacking existed on the enemy but nothing ever set it, so the
-          // attack sheets could never be reached. The flag is the window just
-          // after a swing starts, which is how long the animation runs.
-          enemy.isAttacking = enemy.attackTimer > enemy.attackCooldown - ENEMY_ATTACK_ANIM;
+          if (phase === 'complete') {
+            enemy.attackIntent = undefined;
+            enemy.attackTimer = enemy.attackCooldown;
+            enemy.isAttacking = false;
+          }
+        } else {
+          enemy.attackTimer = Math.max(0, enemy.attackTimer - dt);
+          const preferredRange = tactic?.preferredRange ?? enemy.attackRange;
+          const retreatRange = tactic?.retreatRange ?? 0;
+          const withinVerticalRange = verticalDistance <= 110;
+          const canBeginIntent = !isDecoy && target && withinVerticalRange
+            && dist <= Math.max(enemy.attackRange, preferredRange)
+            && enemy.attackTimer <= 0;
+
+          if (canBeginIntent && target) {
+            const profileId = enemy.attackProfileId
+              || DEFAULT_ATTACK_PROFILE_BY_ROLE[role];
+            const profile = getEnemyAttackProfile(profileId);
+            enemy.intentSequence = (enemy.intentSequence || 0) + 1;
+            enemy.attackIntent = createEnemyAttackIntent({
+              intentId: `intent_${enemy.id}_${enemy.intentSequence}_${++this.combatIntentNonce}`,
+              profileId,
+              sourceEnemyId: enemy.id,
+              sourceX: enemy.x,
+              sourceY: enemy.y,
+              facing: enemy.facing < 0 ? -1 : 1,
+              target: {
+                actorId: target.socketId || 'local',
+                x: profile.targetMode === 'self' ? enemy.x : target.x,
+                y: profile.targetMode === 'self' ? enemy.y : target.y,
+              },
+              sceneEpoch: this.combatTaskEpoch,
+            });
+            enemy.isAttacking = false;
+            enemy.vx = 0;
+            audio.playId(profile.chargeSoundId, 0.62);
+          } else if (retreatRange > 0 && dist < retreatRange) {
+            enemy.vx = -enemy.facing * enemy.speed * (1 - slow);
+            enemy.isAttacking = false;
+          } else if (dist > Math.max(40, preferredRange * 0.88) || !withinVerticalRange) {
+            enemy.vx = enemy.facing * enemy.speed * (1 - slow);
+            enemy.isAttacking = false;
+          } else {
+            enemy.vx = 0;
+            enemy.isAttacking = false;
+          }
         }
 
         if (enemy.type === 'boss' && this.isHost) this.updateBossSkills(enemy, dt);
+        if (enemy.featureSpriteId === 'run:miniboss') this.updateMiniBossMechanics(enemy);
       }
 
       // Physics
@@ -3362,6 +3903,198 @@ export class SideViewEngine {
       enemy.vx *= Math.pow(0.85, dtFrame);
       enemy.x = Math.max(40, Math.min(this.arenaWidth - 40, enemy.x));
     }
+
+    if (pendingSummons.length) {
+      const capacity = Math.max(0, 24 - this.enemies.filter(enemy => !enemy.isDead).length);
+      this.enemies.push(...pendingSummons.slice(0, capacity));
+    }
+  }
+
+  private updateMiniBossMechanics(enemy: EnemyInstance) {
+    if (!this.isHost || enemy.isDead || (enemy.roleActionCooldown || 0) > 0) return;
+    const triggered = this.miniBossTriggered.get(enemy.id) || new Set<MiniBossMechanicId>();
+    this.miniBossTriggered.set(enemy.id, triggered);
+    const hpRatio = enemy.hp / Math.max(1, enemy.maxHp);
+    const next = (Object.entries(MINIBOSS_MECHANICS) as Array<[
+      MiniBossMechanicId,
+      typeof MINIBOSS_MECHANICS[MiniBossMechanicId],
+    ]>).find(([id, mechanic]) => !triggered.has(id) && hpRatio <= mechanic.healthGate);
+    if (!next) return;
+    const [mechanicId, mechanic] = next;
+    triggered.add(mechanicId);
+    enemy.roleActionCooldown = 1.8;
+    this.addCombatSpriteEffect(mechanic.visualSprite, enemy.x, enemy.y, mechanic.telegraphSeconds + 0.45, enemy.facing, 1.1);
+    this.particles.addFloatingText(enemy.x, enemy.y - enemy.height - 24, mechanicId.toUpperCase(), '#fef3c7', true, 14);
+    audio.playId('ult_charge', 0.72);
+
+    this.scheduleCombatTask(() => {
+      if (enemy.isDead || enemy.featureSpriteId !== 'run:miniboss') return;
+      if (mechanicId === 'enrage') {
+        enemy.atk = Math.round(enemy.atk * 1.22);
+        enemy.speed *= 1.18;
+        audio.playBossRoar();
+      } else if (mechanicId === 'fortify') {
+        enemy.guardState = createGuardStaggerState({
+          maxGuard: Math.max(140, Math.round(enemy.maxHp * 0.12)),
+          staggerThreshold: 170,
+          guarding: true,
+        });
+      } else if (mechanicId === 'reinforcements') {
+        const current = this.enemies.filter(candidate => !candidate.isDead && candidate.summonOwnerId === enemy.id).length;
+        const capacity = Math.max(0, Math.min(2 - current, 24 - this.enemies.filter(candidate => !candidate.isDead).length));
+        for (let index = 0; index < capacity; index += 1) {
+          this.enemies.push(this.createEnemySummon(enemy, current + index));
+        }
+      } else if (mechanicId === 'nova') {
+        const profile = getEnemyAttackProfile('boss-nova');
+        const intentId = `miniboss_${enemy.id}_${++this.combatIntentNonce}`;
+        this.eligibleCombatPlayerTargets()
+          .filter(target => Math.hypot(target.x - enemy.x, (target.y - enemy.y) * 0.5) <= profile.radius)
+          .forEach(target => this.enemyAttackCombatTarget(
+            enemy,
+            target,
+            profile.damageMultiplier,
+            undefined,
+            profile.defense,
+            intentId,
+            profile.id,
+          ));
+        this.particles.playVfx(profile.impactSpriteId, enemy.x, enemy.y - 24, { scale: 1.35 });
+      }
+    }, mechanic.telegraphSeconds * 1000);
+  }
+
+  private resolveEnemyIntent(
+    enemy: EnemyInstance,
+    fallbackTarget: CombatPlayerTarget | null,
+    pendingSummons: EnemyInstance[],
+  ) {
+    const intent = enemy.attackIntent;
+    if (!intent || intent.sceneEpoch !== this.combatTaskEpoch) return;
+    const profile = getEnemyAttackProfile(intent.profileId);
+    const role = enemy.role || profile.role;
+
+    if (enemy.eliteModifiers?.includes('summoning')) {
+      const current = this.enemies.filter(candidate => !candidate.isDead && candidate.summonOwnerId === enemy.id).length
+        + pendingSummons.filter(candidate => candidate.summonOwnerId === enemy.id).length;
+      if (current < 1) pendingSummons.push(this.createEnemySummon(enemy, current));
+    }
+
+    if (role === 'healer') {
+      const ally = this.enemies
+        .filter(candidate => !candidate.isDead && candidate.id !== enemy.id && candidate.hp < candidate.maxHp)
+        .sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
+      if (ally && Math.abs(ally.x - enemy.x) <= profile.range) {
+        const heal = Math.max(1, Math.round(ally.maxHp * ENEMY_ROLE_TACTICS.healer.action.magnitude));
+        ally.hp = Math.min(ally.maxHp, ally.hp + heal);
+        this.addCombatSpriteEffect(ENEMY_ROLE_SPRITES.healer.signature, ally.x, ally.y, 0.7, ally.facing, 0.8);
+        this.particles.addFloatingText(ally.x, ally.y - ally.height, `+${heal}`, '#86efac', true, 13);
+      }
+      audio.playId(profile.impactSoundId, 0.75);
+      return;
+    }
+
+    if (role === 'summoner') {
+      const summonLimit = ENEMY_ROLE_TACTICS.summoner.action.maxActiveSummons || 2;
+      const current = this.enemies.filter(candidate => !candidate.isDead && candidate.summonOwnerId === enemy.id).length
+        + pendingSummons.filter(candidate => candidate.summonOwnerId === enemy.id).length;
+      if (current < summonLimit) {
+        pendingSummons.push(this.createEnemySummon(enemy, current));
+        this.addCombatSpriteEffect(ENEMY_ROLE_SPRITES.summoner.signature, enemy.x, enemy.y, 0.9, enemy.facing, 0.85);
+      }
+      audio.playId(profile.impactSoundId, 0.8);
+      return;
+    }
+
+    const target = this.eligibleCombatPlayerTargets().find(candidate => (
+      (candidate.socketId || 'local') === intent.target.actorId
+    )) || fallbackTarget;
+    if (!target) return;
+
+    const hit = profile.targetMode === 'locked-position'
+      ? Math.hypot(target.x - intent.target.x, (target.y - intent.target.y) * 0.45) <= Math.max(profile.radius, 32)
+      : Math.abs(target.x - enemy.x) <= profile.range + profile.radius
+        && Math.abs(target.y - enemy.y) <= 130;
+    if (!hit) return;
+
+    if (role === 'assassin') {
+      enemy.x = Math.max(40, Math.min(this.arenaWidth - 40, target.x - enemy.facing * 42));
+    }
+    this.enemyAttackCombatTarget(
+      enemy,
+      target,
+      profile.damageMultiplier,
+      enemy.eliteModifiers?.includes('frostbound')
+        ? { kind: 'slow', duration: 2.4, magnitude: 0.3 }
+        : undefined,
+      profile.defense,
+      intent.intentId,
+      profile.id,
+    );
+    this.particles.playVfx(profile.impactSpriteId, target.x, target.y - 20, { facing: enemy.facing });
+    audio.playId(profile.impactSoundId, 0.82);
+
+    if (enemy.eliteModifiers?.includes('vampiric')) {
+      const heal = Math.max(1, Math.round(enemy.maxHp * 0.035));
+      enemy.hp = Math.min(enemy.maxHp, enemy.hp + heal);
+    }
+    if (enemy.eliteModifiers?.includes('stormbound')) {
+      this.eligibleCombatPlayerTargets()
+        .filter(candidate => (
+          (candidate.socketId || 'local') !== (target.socketId || 'local')
+          && Math.abs(candidate.x - target.x) <= 190
+        ))
+        .slice(0, 2)
+        .forEach((candidate, index) => this.enemyAttackCombatTarget(
+          enemy,
+          candidate,
+          profile.damageMultiplier * 0.45,
+          undefined,
+          'parryable',
+          `${intent.intentId}:chain:${index}`,
+          profile.id,
+        ));
+    }
+  }
+
+  private createEnemySummon(owner: EnemyInstance, index: number): EnemyInstance {
+    const maxHp = Math.max(1, Math.round(owner.maxHp * 0.22));
+    return {
+      id: `${owner.id}:summon:${owner.intentSequence || 0}:${index}`,
+      name: `${owner.name} Minion`,
+      type: 'mob',
+      icon: owner.icon,
+      color: owner.color,
+      maxHp,
+      hp: maxHp,
+      atk: Math.max(1, Math.round(owner.atk * 0.48)),
+      def: Math.max(0, Math.round(owner.def * 0.4)),
+      speed: Math.max(2.8, owner.speed * 1.15),
+      expReward: Math.max(1, Math.round(owner.expReward * 0.08)),
+      goldReward: 0,
+      width: Math.max(28, owner.width * 0.72),
+      height: Math.max(32, owner.height * 0.72),
+      attackRange: ENEMY_ROLE_TACTICS.assassin.preferredRange,
+      attackCooldown: 2.1,
+      attackTimer: 0.7,
+      role: 'assassin',
+      attackProfileId: DEFAULT_ATTACK_PROFILE_BY_ROLE.assassin,
+      intentSequence: 0,
+      summonOwnerId: owner.id,
+      formationId: owner.formationId,
+      eliteModifiers: [],
+      isActive: true,
+      spawnDelay: 0,
+      x: Math.max(40, Math.min(this.arenaWidth - 40, owner.x + (index === 0 ? -56 : 56))),
+      y: owner.y,
+      vx: 0,
+      vy: -2,
+      isGrounded: false,
+      facing: owner.facing,
+      isAttacking: false,
+      hitStun: 0,
+      isDead: false,
+    };
   }
 
   /**
@@ -3445,6 +4178,8 @@ export class SideViewEngine {
     const targetX = skill.kind === 'slam' ? (primaryTarget?.x ?? enemy.x) : enemy.x;
     const facing = enemy.facing;
     const status = this.playerStatusForBossSkill(enemy, skill);
+    const attackProfile = getEnemyAttackProfile(BOSS_ATTACK_PROFILE_BY_KIND[skill.kind]);
+    const bossIntentId = `boss_${enemy.id}_${++this.combatIntentNonce}`;
     enemy.bossCastName = skill.name;
     enemy.bossCastTimer = skill.telegraph;
     enemy.bossCastDuration = skill.telegraph;
@@ -3462,7 +4197,9 @@ export class SideViewEngine {
             this.particles.playVfx(skill.vfx, ox, this.groundY - 30, { facing, scale: 0.9 });
             this.eligibleCombatPlayerTargets()
               .filter(target => Math.abs(target.x - ox) < 70 && Math.abs(target.y - this.groundY) < 130)
-              .forEach(target => this.enemyAttackCombatTarget(enemy, target, dmg, status));
+              .forEach(target => this.enemyAttackCombatTarget(
+                enemy, target, dmg, status, attackProfile.defense, bossIntentId, attackProfile.id,
+              ));
           }, i * 110);
         }
       } else if (skill.kind === 'beam') {
@@ -3476,18 +4213,24 @@ export class SideViewEngine {
             && Math.abs(target.x - enemy.x) < 460
             && Math.abs(target.y - enemy.y) < 140
           ))
-          .forEach(target => this.enemyAttackCombatTarget(enemy, target, dmg, status));
+          .forEach(target => this.enemyAttackCombatTarget(
+            enemy, target, dmg, status, attackProfile.defense, bossIntentId, attackProfile.id,
+          ));
       } else if (skill.kind === 'nova') {
         this.particles.playVfx(skill.vfx, enemy.x, this.groundY - 50, { facing, scale: 1.6 });
         this.eligibleCombatPlayerTargets()
           .filter(target => Math.abs(target.x - enemy.x) < 190 && Math.abs(target.y - enemy.y) < 140)
-          .forEach(target => this.enemyAttackCombatTarget(enemy, target, dmg, status));
+          .forEach(target => this.enemyAttackCombatTarget(
+            enemy, target, dmg, status, attackProfile.defense, bossIntentId, attackProfile.id,
+          ));
       } else {
         // slam - lands where the player was standing when it started.
         this.particles.playVfx(skill.vfx, targetX, this.groundY - 40, { facing, scale: 1.5 });
         this.eligibleCombatPlayerTargets()
           .filter(target => Math.abs(target.x - targetX) < 120 && Math.abs(target.y - this.groundY) < 140)
-          .forEach(target => this.enemyAttackCombatTarget(enemy, target, dmg, status));
+          .forEach(target => this.enemyAttackCombatTarget(
+            enemy, target, dmg, status, attackProfile.defense, bossIntentId, attackProfile.id,
+          ));
       }
 
       this.particles.triggerScreenShake(skill.kind === 'volley' ? 6 : 12, 0.3);
@@ -3948,7 +4691,9 @@ export class SideViewEngine {
   }
 
   private incomingDamageMultiplier(): number {
-    let multiplier = 1;
+    // Guardian Sigil's authored guard-capacity becomes bounded passive chip
+    // mitigation; parry still remains the full skill-based answer.
+    let multiplier = 1 - Math.min(0.35, this.runRelicGuardCapacity / 600);
     for (const buff of this.player.activeBuffs) {
       if (buff.stat === 'damageReduction') multiplier *= Math.max(0.05, buff.multiplier);
     }
@@ -3986,6 +4731,7 @@ export class SideViewEngine {
     rawDamage: number,
     sourceX: number,
     status?: PlayerDamageStatus,
+    attack?: IncomingAttackContext,
   ): number {
     const p = this.player;
     // Committing to an ultimate should never get you punished for it - the
@@ -3993,7 +4739,66 @@ export class SideViewEngine {
     // Already down: the bleed-out clock is the threat now, not the boss. Being
     // finished off while helpless would just shorten a window meant for rescue.
     if (p.downed || this.runOver || p.hp <= 0) return 0;
-    if (p.iframeTimer > 0 || p.stealthTimer > 0 || this.ultimate.invulnerable) return 0;
+    if (p.iframeTimer > 0 && !attack) return 0;
+    if (p.stealthTimer > 0 || this.ultimate.invulnerable) return 0;
+
+    if (attack) {
+      const defense = resolveIncomingDefense(this.playerDefense, {
+        parryability: attack.parryability,
+        sourceDirection: sourceX >= p.x ? 1 : -1,
+        defenderFacing: p.facing < 0 ? -1 : 1,
+      });
+      this.playerDefense = defense.state;
+      if (defense.negatesDamage) {
+        const perfect = defense.outcome === 'perfect-dodge';
+        const parried = defense.outcome === 'parry';
+        const feedbackId = parried ? COMBAT_FEEDBACK_SPRITES.parry : COMBAT_FEEDBACK_SPRITES.dodge;
+        this.addCombatSpriteEffect(feedbackId, p.x + p.facing * 14, p.y - 8, parried ? 0.4 : 0.34, p.facing, parried ? 1 : 0.82);
+        p.iframeTimer = Math.max(p.iframeTimer, parried ? 0.22 : 0.16);
+        if (!this.isHost && network.room && attack.intentId && attack.sourceEnemyId) {
+          network.sendCombatDefense({
+            intentId: attack.intentId,
+            sourceEnemyId: attack.sourceEnemyId,
+            outcome: defense.outcome,
+          });
+        }
+
+        if (perfect) {
+          const mp = Math.max(1, Math.round(p.maxMp * 0.06));
+          p.mp = Math.min(p.maxMp, p.mp + mp);
+          Object.keys(p.skillCooldowns).forEach(skillId => {
+            p.skillCooldowns[skillId] = Math.max(0, (p.skillCooldowns[skillId] || 0) - 0.45);
+          });
+          this.particles.addFloatingText(p.x, p.y - 48, `PERFECT DODGE +${mp} MP`, '#67e8f9', true, 14);
+          audio.playId('blink', 0.85);
+        } else if (parried) {
+          this.particles.addFloatingText(p.x, p.y - 48, 'PARRY', '#fde68a', true, 15);
+          audio.playId('metal_ring', 1);
+          const attacker = attack.sourceEnemyId
+            ? this.enemies.find(enemy => enemy.id === attack.sourceEnemyId && !enemy.isDead)
+            : undefined;
+          if (attacker?.guardState) {
+            const impact = resolveGuardStaggerImpact(attacker.guardState, {
+              incomingDamage: 0,
+              guardDamage: defense.attackerGuardDamage,
+              staggerDamage: defense.attackerStaggerDamage,
+              sourceDirection: p.x >= attacker.x ? 1 : -1,
+              defenderFacing: attacker.facing < 0 ? -1 : 1,
+              bypassGuard: true,
+            });
+            attacker.guardState = impact.state;
+            attacker.attackIntent = undefined;
+            attacker.hitStun = Math.max(attacker.hitStun, impact.state.staggeredRemaining, 0.35);
+            this.addCombatSpriteEffect(COMBAT_FEEDBACK_SPRITES.stagger, attacker.x, attacker.y - 20, 0.65, attacker.facing, 0.9);
+          }
+        }
+        return 0;
+      }
+    }
+
+    // Legacy skill movement and shields can still grant i-frames outside the
+    // explicit dodge state.
+    if (p.iframeTimer > 0) return 0;
 
     const mitigated = Math.max(1, Math.round(afterDefence(rawDamage, p.totalDef) * this.incomingDamageMultiplier()));
     const { hpDamage: finalDamage, absorbed } = this.absorbPlayerDamage(mitigated);
@@ -4024,6 +4829,50 @@ export class SideViewEngine {
     return finalDamage;
   }
 
+  /** Host-authored room hazards use this narrow public damage boundary. */
+  public applyEncounterPlayerDamage(rawDamage: number, sourceX: number): number {
+    if (this.isTownMode || !Number.isFinite(rawDamage) || rawDamage <= 0) return 0;
+    return this.applyIncomingPlayerDamage(
+      Math.min(9_999, rawDamage),
+      Number.isFinite(sourceX) ? sourceX : this.player.x,
+      undefined,
+      { parryability: 'dodge-only' },
+    );
+  }
+
+  /** Host-side replay of a guest's server-validated defensive result. */
+  public applyRemoteCombatDefense(result: {
+    socketId: string;
+    intentId: string;
+    sourceEnemyId: string;
+    outcome: 'dodge' | 'perfect-dodge' | 'parry';
+  }): boolean {
+    if (!this.isHost || this.isTownMode || !result?.socketId) return false;
+    const enemy = this.enemies.find(candidate => candidate.id === result.sourceEnemyId && !candidate.isDead);
+    const intent = enemy?.attackIntent;
+    if (!enemy || !intent || intent.intentId !== result.intentId) return false;
+    if (intent.target.actorId !== result.socketId) return false;
+    const phase = enemyAttackIntentPhase(intent).phase;
+    if (phase !== 'active' && phase !== 'recovery') return false;
+    if (result.outcome !== 'parry') return true;
+
+    if (enemy.guardState) {
+      const impact = resolveGuardStaggerImpact(enemy.guardState, {
+        incomingDamage: 0,
+        guardDamage: 60,
+        staggerDamage: 45,
+        sourceDirection: enemy.facing < 0 ? -1 : 1,
+        defenderFacing: enemy.facing < 0 ? -1 : 1,
+        bypassGuard: true,
+      });
+      enemy.guardState = impact.state;
+    }
+    enemy.attackIntent = undefined;
+    enemy.hitStun = Math.max(enemy.hitStun, enemy.guardState?.staggeredRemaining || 0, 0.35);
+    this.addCombatSpriteEffect(COMBAT_FEEDBACK_SPRITES.stagger, enemy.x, enemy.y - 20, 0.65, enemy.facing, 0.9);
+    return true;
+  }
+
   /**
    * Guest-side endpoint for one server-verified host hit. It deliberately
    * receives raw attack power: this device owns its defence, shield, i-frames,
@@ -4049,7 +4898,18 @@ export class SideViewEngine {
       this.receivedPlayerDamageHits.delete(oldest);
     }
 
-    return this.applyIncomingPlayerDamage(packet.rawDamage, packet.sourceX, packet.status);
+    const extended = packet as PlayerDamagePacket & Partial<{
+      parryability: IncomingAttackDefense;
+      intentId: string;
+      sourceEnemyId: string;
+      profileId: EnemyAttackProfileId;
+    }>;
+    return this.applyIncomingPlayerDamage(packet.rawDamage, packet.sourceX, packet.status, extended.parryability ? {
+      parryability: extended.parryability,
+      intentId: extended.intentId,
+      sourceEnemyId: extended.sourceEnemyId,
+      profileId: extended.profileId,
+    } : undefined);
   }
 
   private enemyAttackCombatTarget(
@@ -4057,11 +4917,19 @@ export class SideViewEngine {
     target: CombatPlayerTarget,
     multiplier: number = 1,
     status?: PlayerDamageStatus,
+    parryability: IncomingAttackDefense = 'parryable',
+    intentId?: string,
+    profileId?: EnemyAttackProfileId,
   ) {
     if (!this.isHost || this.isTownMode) return;
     const rawDamage = this.rollEnemyRawDamage(enemy, multiplier);
     if (target.kind === 'local') {
-      this.applyIncomingPlayerDamage(rawDamage, enemy.x, status);
+      this.applyIncomingPlayerDamage(rawDamage, enemy.x, status, {
+        parryability,
+        intentId,
+        sourceEnemyId: enemy.id,
+        profileId,
+      });
       return;
     }
     if (!target.socketId) return;
@@ -4073,6 +4941,10 @@ export class SideViewEngine {
       isTownMode: false,
       sceneId: this.networkSceneId,
       status,
+      parryability,
+      intentId,
+      sourceEnemyId: enemy.id,
+      profileId,
     });
   }
 
@@ -4358,6 +5230,62 @@ export class SideViewEngine {
     }
   }
 
+  private drawEnemyIntent(ctx: CanvasRenderingContext2D, enemy: EnemyInstance) {
+    const intent = enemy.attackIntent;
+    if (!intent) return;
+    const phase = enemyAttackIntentPhase(intent);
+    if (phase.phase !== 'telegraph' && phase.phase !== 'active') return;
+    const profile = getEnemyAttackProfile(intent.profileId);
+    const role = enemy.role;
+    const roleSprites = role && role !== 'boss' && role !== 'bruiser'
+      ? ENEMY_ROLE_SPRITES[role]
+      : null;
+    const id = roleSprites?.telegraph || (
+      profile.hitShape === 'line'
+        ? COMBAT_FEEDBACK_SPRITES['ranged-telegraph']
+        : profile.hitShape === 'contact' || profile.hitShape === 'cone'
+          ? COMBAT_FEEDBACK_SPRITES['melee-telegraph']
+          : COMBAT_FEEDBACK_SPRITES['area-telegraph']
+    );
+    const targetX = profile.targetMode === 'self' ? enemy.x : intent.target.x;
+    const targetY = profile.targetMode === 'self' ? enemy.y : intent.target.y;
+    const authoredWidth = profile.hitShape === 'line'
+      ? Math.max(90, Math.min(profile.range, 360))
+      : Math.max(72, profile.radius * 2);
+    gameplaySprites.draw(ctx, id, targetX, targetY, {
+      time: intent.elapsed,
+      normalizedProgress: phase.progress,
+      facing: intent.facing,
+      width: authoredWidth,
+      alpha: phase.phase === 'active' ? 0.95 : 0.55 + phase.progress * 0.4,
+    });
+  }
+
+  private drawTacticalEnemy(ctx: CanvasRenderingContext2D, enemy: EnemyInstance): boolean {
+    const role = enemy.role;
+    if (!role || role === 'boss' || role === 'bruiser') return false;
+    const set = ENEMY_ROLE_SPRITES[role];
+    const spriteId = enemy.hitStun > 0 || (enemy.guardState?.staggeredRemaining || 0) > 0
+      ? set.hit
+      : enemy.isAttacking
+        ? set.attack
+        : Math.abs(enemy.vx) > 0.1 ? set.move : set.idle;
+    return gameplaySprites.draw(ctx, spriteId, enemy.x, enemy.y, {
+      time: this.zoneHazardClock,
+      facing: enemy.facing < 0 ? -1 : 1,
+      height: Math.max(44, enemy.height * 1.25),
+      alpha: enemy.hitStun > 0 ? 0.82 : 1,
+    });
+  }
+
+  private gameplayStatusSprite(kind: EnemyStatusKind): GameplaySpriteId | null {
+    if (kind === 'wet') return 'status.wet';
+    if (kind === 'burn') return 'status.burn';
+    if (kind === 'freeze') return 'status.freeze';
+    if (kind === 'curse') return 'status.curse';
+    return null;
+  }
+
   /**
    * Render side-view world, player, enemies, loot, and spell animations
    */
@@ -4409,6 +5337,7 @@ export class SideViewEngine {
 
     // 1.5 Draw Multi-Level Platforms
     sprites.drawPlatforms(ctx, this.platforms, currentTheme);
+    this.dungeonEncounterRuntime?.render(ctx, this.zoneHazardClock);
     this.drawZoneHazards(ctx, camX, virtualWidth, visualPreferences);
 
     // 2. Render Dropped Loot with Rarity Beacons & Cached Sprites
@@ -4505,49 +5434,44 @@ export class SideViewEngine {
       this.renderTownEntities(ctx);
     } else {
       for (const enemy of this.enemies) {
-        if (enemy.isDead) continue;
+        if (enemy.isDead || !enemy.isActive) continue;
+
+        this.drawEnemyIntent(ctx, enemy);
         
-        // An elite is announced before it is fought. A monster that is quietly
-        // three times as strong is not a surprise, it is a misunderstanding.
-        if ((enemy as any).isElite) {
-          const pulse = 0.55 + Math.sin(Date.now() / 220) * 0.18;
-          ctx.save();
-          const aura = ctx.createRadialGradient(enemy.x, enemy.y - 22, 4, enemy.x, enemy.y - 22, 46);
-          aura.addColorStop(0, `rgba(248, 113, 113, ${0.38 * pulse})`);
-          aura.addColorStop(1, 'transparent');
-          ctx.fillStyle = aura;
-          ctx.beginPath();
-          ctx.arc(enemy.x, enemy.y - 22, 46, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
+        // Elite identity is catalogue-backed, so each modifier is visible and
+        // not an anonymous procedural glow.
+        for (const modifierId of enemy.eliteModifiers || []) {
+          gameplaySprites.draw(ctx, ELITE_MODIFIERS[modifierId].visualSprite, enemy.x, enemy.y, {
+            time: this.zoneHazardClock,
+            facing: enemy.facing < 0 ? -1 : 1,
+            height: Math.max(54, enemy.height * 1.18),
+            alpha: 0.72,
+          });
         }
 
         // Draw Animated Mob Sprite
-        sprites.drawMob(
-          ctx,
-          enemy.x,
-          enemy.y,
-          enemy.name,
-          // The attack sheets were never asked for: only hit, run and idle were
-          // ever passed, so no monster in the game had ever played an attack.
-          enemy.hitStun > 0 ? 'hit'
-            : enemy.isAttacking ? 'attack'
-            : (Math.abs(enemy.vx) > 0.1 ? 'run' : 'idle'),
-          enemy.facing,
-          enemy.type === 'boss',
-          enemy.hitStun
-        );
+        if (!this.drawTacticalEnemy(ctx, enemy)) {
+          sprites.drawMob(
+            ctx,
+            enemy.x,
+            enemy.y,
+            enemy.name,
+            enemy.hitStun > 0 ? 'hit'
+              : enemy.isAttacking ? 'attack'
+              : (Math.abs(enemy.vx) > 0.1 ? 'run' : 'idle'),
+            enemy.facing,
+            enemy.type === 'boss',
+            enemy.hitStun,
+          );
+        }
 
-        // Telegraphed Attack Warning Glint above charging enemies
-        if (enemy.attackTimer <= 0.4 && enemy.attackTimer > 0) {
-          ctx.save();
-          ctx.font = 'bold 16px "Cinzel", sans-serif';
-          ctx.fillStyle = '#ef4444';
-          ctx.shadowColor = '#dc2626';
-          ctx.shadowBlur = 10;
-          ctx.textAlign = 'center';
-          ctx.fillText('DANGER', enemy.x, enemy.y - enemy.height - 12);
-          ctx.restore();
+        if (enemy.guardState?.guarding && enemy.role && enemy.role !== 'boss' && enemy.role !== 'bruiser') {
+          gameplaySprites.draw(ctx, ENEMY_ROLE_SPRITES[enemy.role].signature, enemy.x, enemy.y - 4, {
+            time: this.zoneHazardClock,
+            facing: enemy.facing < 0 ? -1 : 1,
+            height: Math.max(44, enemy.height),
+            alpha: 0.74,
+          });
         }
 
         // Enemy Health Bar
@@ -4576,6 +5500,14 @@ export class SideViewEngine {
           ctx.font = '900 9px "Outfit", sans-serif';
           statuses.forEach((status, index) => {
             const markerX = startX + index * 13;
+            const spriteId = this.gameplayStatusSprite(status.kind);
+            if (spriteId) {
+              gameplaySprites.draw(ctx, spriteId, markerX, markerY + 6, {
+                time: this.zoneHazardClock,
+                height: 13,
+              });
+              return;
+            }
             ctx.fillStyle = 'rgba(2, 6, 23, 0.88)';
             ctx.beginPath();
             ctx.arc(markerX, markerY, 6, 0, Math.PI * 2);
@@ -4666,6 +5598,7 @@ export class SideViewEngine {
 
     // 5. Render Particle System (VFX, Projectiles, Minions, Clones, Zones, Floating Text)
     this.particles.draw(ctx);
+    this.drawCombatSpriteEffects(ctx);
 
     // 6. Undergrowth and canopy the pack means to pass in front of everything.
     sprites.drawEnvironmentForeground(

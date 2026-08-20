@@ -82,6 +82,59 @@ test('the canonical contract enumerates exactly the 60 rendered skills', () => {
   }
 });
 
+test('elemental status providers and reaction triggers are explicit skill data', () => {
+  const elementalStatuses = new Set(['wet', 'freeze', 'curse']);
+  const statusProviders = Object.fromEntries(Object.entries(game.SKILL_IDENTITY_MATRIX)
+    .map(([id, entry]) => [id, (entry.mechanics.payload.statuses || [])
+      .map(status => status.kind)
+      .filter(kind => elementalStatuses.has(kind))])
+    .filter(([, statuses]) => statuses.length));
+  assert.deepEqual(statusProviders, {
+    m_2: ['freeze'],
+    m_5: ['freeze'],
+    n_4: ['curse'],
+    pr_1: ['wet'],
+    pr_5: ['wet'],
+  });
+
+  const reactionTriggers = Object.fromEntries(Object.entries(game.SKILL_IDENTITY_MATRIX)
+    .filter(([, entry]) => entry.mechanics.payload.reactionTags?.length)
+    .map(([id, entry]) => [id, [...entry.mechanics.payload.reactionTags]]));
+  assert.deepEqual(reactionTriggers, {
+    w_3: ['shatter'],
+    w_6: ['shatter'],
+    m_3: ['lightning'],
+    m_6: ['detonate'],
+    p_6: ['shatter'],
+    ar_4: ['detonate'],
+    n_2: ['siphon'],
+    b_3: ['shatter'],
+    ni_5: ['lightning'],
+    ni_6: ['shatter'],
+    d_2: ['shatter'],
+    d_6: ['detonate'],
+  });
+
+  const registeredStatuses = new Set(game.COMBAT_STATUS_KINDS);
+  const registeredTags = new Set(Object.values(game.ELEMENTAL_REACTIONS).map(reaction => reaction.triggerTag));
+  for (const entry of Object.values(game.SKILL_IDENTITY_MATRIX)) {
+    for (const status of entry.mechanics.payload.statuses || []) {
+      assert.ok(registeredStatuses.has(status.kind), `unregistered status ${status.kind}`);
+    }
+    for (const tag of entry.mechanics.payload.reactionTags || []) {
+      assert.ok(registeredTags.has(tag), `unregistered reaction tag ${tag}`);
+    }
+  }
+
+  assert.equal(game.SKILL_IDENTITY_MATRIX.ar_4.mechanics.payload.statuses, undefined,
+    'Burning Arrow detonates existing Burn but cannot apply and trigger Burn itself');
+  for (const id of ['m_6', 'd_6']) {
+    assert.ok(game.SKILL_IDENTITY_MATRIX[id].mechanics.payload.statuses.some(status => status.kind === 'burn'));
+    assert.match(game.SKILL_IDENTITY_MATRIX[id].description, /pre-existing Burn/i,
+      `${id} must disclose the pre-hit reaction contract`);
+  }
+});
+
 test('every skill has a unique identity and every class keeps its own palette/silhouette grammar', () => {
   const skills = game.CHARACTER_CLASSES.flatMap(cls => cls.skills);
   assert.equal(new Set(skills.map(skill => skill.vfx.identity.id)).size, 60);

@@ -866,7 +866,7 @@ export class CoopLobbyUI {
       .cl-quick { min-height: 48px; color: #171006; background: linear-gradient(#ffe39a,#d8a83b 52%,#a66f20 53%); box-shadow: 0 4px #07080b; }
       .cl-pane, .cl-crest, .cl-syn {
         border: 10px solid transparent;
-        border-image: url('/assets/runtime/ui/fantasy-borders/default-panel/panel-016.png') 16 fill / 10px / 0 stretch;
+        border-image: url('/assets/runtime/ui/fantasy-borders/default-panel/panel-016.png') 16 / 10px / 0 stretch;
         image-rendering: pixelated;
       }
       .cl-crest { border-width: 8px; border-image-width: 8px; }
