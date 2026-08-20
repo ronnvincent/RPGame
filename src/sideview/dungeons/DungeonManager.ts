@@ -11,9 +11,9 @@ import {
   combineEliteStats,
   selectEliteModifiers,
   type EliteModifierId,
-  type EnemyRoleId,
   type FormationId,
 } from './EnemyTactics';
+import type { EnemyRoleId } from '../assets/GameplaySpriteManifest';
 import { createGuardStaggerState, type GuardStaggerState } from '../combat/DefenseMechanics';
 import {
   DEFAULT_ATTACK_PROFILE_BY_ROLE,

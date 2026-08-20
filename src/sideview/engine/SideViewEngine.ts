@@ -71,13 +71,13 @@ import {
   ENEMY_ROLE_TACTICS,
   MINIBOSS_MECHANICS,
   type MiniBossMechanicId,
-  type EnemyRoleId,
 } from '../dungeons/EnemyTactics';
 import {
   COMBAT_FEEDBACK_SPRITES,
   ELEMENT_REACTION_SPRITES,
   ENEMY_ROLE_SPRITES,
   GAMEPLAY_SPRITES,
+  type EnemyRoleId,
   type GameplaySpriteId,
 } from '../assets/GameplaySpriteManifest';
 import { gameplaySprites } from './GameplaySpriteRenderer';
@@ -4749,7 +4749,7 @@ export class SideViewEngine {
         defenderFacing: p.facing < 0 ? -1 : 1,
       });
       this.playerDefense = defense.state;
-      if (defense.negatesDamage) {
+      if (defense.negatesDamage && defense.outcome !== 'hit') {
         const perfect = defense.outcome === 'perfect-dodge';
         const parried = defense.outcome === 'parry';
         const feedbackId = parried ? COMBAT_FEEDBACK_SPRITES.parry : COMBAT_FEEDBACK_SPRITES.dodge;

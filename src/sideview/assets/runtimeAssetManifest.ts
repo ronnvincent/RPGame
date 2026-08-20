@@ -129,7 +129,8 @@ export function isRuntimeAssetManifest(value: unknown): value is RuntimeAssetMan
   }
 
   const budgets = value.policy.budgets;
-  if (!isRecord(budgets.byPreloadTier)) return false;
+  const byPreloadTier = budgets.byPreloadTier;
+  if (!isRecord(byPreloadTier)) return false;
 
   return (
     value.schemaVersion === 1 &&
@@ -139,7 +140,7 @@ export function isRuntimeAssetManifest(value: unknown): value is RuntimeAssetMan
     isStringArray(value.policy.allowedAssetExtensions) &&
     isPositiveInteger(budgets.totalBytes) &&
     isPositiveInteger(budgets.perFileBytes) &&
-    PRELOAD_TIERS.every((tier) => isPositiveInteger(budgets.byPreloadTier[tier])) &&
+    PRELOAD_TIERS.every((tier) => isPositiveInteger(byPreloadTier[tier])) &&
     Array.isArray(value.packs) &&
     value.packs.length > 0 &&
     value.packs.every(isRuntimeAssetPack) &&

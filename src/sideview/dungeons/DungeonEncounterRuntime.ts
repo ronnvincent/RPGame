@@ -13,6 +13,7 @@ import {
   OBJECTIVE_SPRITES,
   isGameplaySpriteId,
   type GameplaySpriteId,
+// @ts-expect-error Native Node ESM tests require the explicit TypeScript extension.
 } from '../assets/GameplaySpriteManifest.ts';
 import type { GameplaySpriteRenderer } from '../engine/GameplaySpriteRenderer.ts';
 import type {
@@ -22,6 +23,7 @@ import type {
   RoomAccess,
   RoomKind,
 } from './run/RunTypes.ts';
+// @ts-expect-error Native Node ESM tests require the explicit TypeScript extension.
 import { SeededRng, normalizeSeed } from './run/SeededRng.ts';
 
 export const ENCOUNTER_RUNTIME_SCHEMA_VERSION = 1 as const;
@@ -480,7 +482,7 @@ export class DungeonEncounterRuntime {
   private readonly renderer: EncounterSpriteRenderer;
   private room: RoomSnapshot | null = null;
   private seed = 0;
-  private arenaWidth = ENCOUNTER_RUNTIME_LIMITS.minArenaWidth;
+  private arenaWidth: number = ENCOUNTER_RUNTIME_LIMITS.minArenaWidth;
   private groundY = 0;
   private elapsedSeconds = 0;
   private objectiveElapsedMs = 0;

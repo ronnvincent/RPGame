@@ -3614,7 +3614,7 @@ export class GameHUD {
       declineBtn.style.cursor = 'pointer';
       declineBtn.style.fontWeight = 'bold';
 
-      let releaseFocus = () => undefined;
+      let releaseFocus: () => void = () => undefined;
       const dismiss = () => {
         releaseFocus();
         overlay.remove();

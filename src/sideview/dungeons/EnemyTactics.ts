@@ -11,7 +11,7 @@ import {
   type EnemyRoleId,
   type GameplaySpriteId,
   isGameplaySpriteId,
-} from '../assets/GameplaySpriteManifest.ts';
+} from '../assets/GameplaySpriteManifest';
 
 export type TacticalLane = 'frontline' | 'support' | 'backline' | 'flank';
 export type TargetRule = 'nearest-player' | 'lowest-health-ally' | 'farthest-visible-player' | 'isolated-player';
@@ -257,17 +257,21 @@ export function selectEliteModifiers(
   requestedCount: number = 1,
 ): EliteModifierId[] {
   const candidates = (Object.keys(ELITE_MODIFIERS) as EliteModifierId[])
-    .filter((id) => ELITE_MODIFIERS[id].allowedRoles.includes(role));
+    .filter((id) => {
+      const definition: EliteModifierDefinition = ELITE_MODIFIERS[id];
+      return definition.allowedRoles.includes(role);
+    });
   const count = Math.max(0, Math.min(2, Math.floor(requestedCount), candidates.length));
   const selected: EliteModifierId[] = [];
   const start = candidates.length ? Math.floor(deterministicUnit(seed, `elite:${role}`) * candidates.length) : 0;
 
   for (let offset = 0; offset < candidates.length && selected.length < count; offset += 1) {
     const id = candidates[(start + offset) % candidates.length];
-    const definition = ELITE_MODIFIERS[id];
-    const conflicts = selected.some((other) => (
-      definition.incompatibleWith.includes(other) || ELITE_MODIFIERS[other].incompatibleWith.includes(id)
-    ));
+    const definition: EliteModifierDefinition = ELITE_MODIFIERS[id];
+    const conflicts = selected.some((other) => {
+      const otherDefinition: EliteModifierDefinition = ELITE_MODIFIERS[other];
+      return definition.incompatibleWith.includes(other) || otherDefinition.incompatibleWith.includes(id);
+    });
     if (!conflicts) selected.push(id);
   }
   return selected;
