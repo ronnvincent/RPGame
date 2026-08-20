@@ -184,7 +184,15 @@ export class GameplaySpriteRenderer {
     const alpha = clamp01(finite(options.alpha, 1));
     const facing: -1 | 1 = options.facing === -1 ? -1 : 1;
     const dx = -metrics.displayWidth / 2;
-    const dy = clip.anchor === 'center' ? -metrics.displayHeight / 2 : -metrics.displayHeight;
+    // Actor sheets keep generous transparent gutters below their feet. Anchor
+    // the measured foot line to world Y rather than the bottom of the PNG
+    // frame; otherwise a correctly grounded enemy visibly floats above it.
+    const feetGap = clip.anchor === 'feet'
+      ? Math.max(0, finite(clip.feetGap, 0)) * (metrics.displayHeight / rect.sh)
+      : 0;
+    const dy = clip.anchor === 'center'
+      ? -metrics.displayHeight / 2
+      : -metrics.displayHeight + feetGap;
 
     ctx.save();
     ctx.globalAlpha *= alpha;

@@ -193,16 +193,33 @@ function safeElapsed(value: number): number {
   return Number.isFinite(value) ? Math.max(0, Math.min(MAX_INTENT_ELAPSED, value)) : 0;
 }
 
-export function getEnemyAttackProfile(profileId: EnemyAttackProfileId): EnemyAttackProfile {
-  return ENEMY_ATTACK_PROFILES[profileId];
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function isEnemyAttackProfileId(value: unknown): value is EnemyAttackProfileId {
+  return typeof value === 'string'
+    && Object.prototype.hasOwnProperty.call(ENEMY_ATTACK_PROFILES, value);
+}
+
+/**
+ * Network snapshots and older live clients are runtime data even when the
+ * local TypeScript type says otherwise. Never let an unknown profile take the
+ * render/update loop down; normalize it to the basic readable melee tell.
+ */
+export function getEnemyAttackProfile(profileId: unknown): EnemyAttackProfile {
+  return isEnemyAttackProfileId(profileId)
+    ? ENEMY_ATTACK_PROFILES[profileId]
+    : ENEMY_ATTACK_PROFILES['melee-light'];
 }
 
 export function createEnemyAttackIntent(
   options: CreateEnemyAttackIntentOptions,
 ): EnemyAttackIntent {
+  const profileId = getEnemyAttackProfile(options.profileId).id;
   return {
     intentId: safeId(options.intentId),
-    profileId: options.profileId,
+    profileId,
     sourceEnemyId: safeId(options.sourceEnemyId),
     sourceX: safeCoordinate(options.sourceX),
     sourceY: safeCoordinate(options.sourceY),
@@ -215,6 +232,29 @@ export function createEnemyAttackIntent(
     elapsed: 0,
     sceneEpoch: Number.isFinite(options.sceneEpoch) ? Math.max(0, Math.trunc(options.sceneEpoch)) : 0,
     hasResolved: false,
+  };
+}
+
+/** Validate an intent received from an untyped network snapshot. */
+export function sanitizeEnemyAttackIntent(value: unknown): EnemyAttackIntent | undefined {
+  if (!isRecord(value) || !isRecord(value.target)
+    || typeof value.intentId !== 'string' || typeof value.sourceEnemyId !== 'string') return undefined;
+  const target = value.target;
+  return {
+    intentId: safeId(value.intentId),
+    profileId: getEnemyAttackProfile(value.profileId).id,
+    sourceEnemyId: safeId(value.sourceEnemyId),
+    sourceX: safeCoordinate(Number(value.sourceX)),
+    sourceY: safeCoordinate(Number(value.sourceY)),
+    facing: Number(value.facing) < 0 ? -1 : 1,
+    target: {
+      ...(typeof target.actorId === 'string' && target.actorId ? { actorId: safeId(target.actorId) } : {}),
+      x: safeCoordinate(Number(target.x)),
+      y: safeCoordinate(Number(target.y)),
+    },
+    elapsed: safeElapsed(Number(value.elapsed)),
+    sceneEpoch: Number.isFinite(Number(value.sceneEpoch)) ? Math.max(0, Math.trunc(Number(value.sceneEpoch))) : 0,
+    hasResolved: value.hasResolved === true,
   };
 }
 

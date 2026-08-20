@@ -59,6 +59,30 @@ test('authored catalogue generates a bounded deterministic graph with special an
   assert.deepEqual(JSON.parse(JSON.stringify(first)), first, 'generated runs must be plain JSON data');
 });
 
+test('generic middle slots never consume rooms reserved for required encounters', () => {
+  const requiredKinds = run.DEFAULT_DUNGEON_RUN_BLUEPRINT.criticalPath.requiredKinds;
+  const routeSignatures = new Set();
+  for (let seed = 0; seed < 512; seed++) {
+    let result;
+    assert.doesNotThrow(() => { result = generated(seed); }, `seed ${seed} should generate a complete run`);
+    assert.ok(result);
+    const criticalRoomIds = new Set([result.graph.entryRoomId]);
+    let roomId = result.graph.entryRoomId;
+    while (roomId !== result.graph.finaleRoomId) {
+      const exit = result.graph.exits.find(candidate => candidate.fromRoomId === roomId && candidate.kind === 'critical');
+      assert.ok(exit, `seed ${seed} should retain a connected critical route`);
+      roomId = exit.toRoomId;
+      criticalRoomIds.add(roomId);
+    }
+    const criticalNodes = result.graph.nodes.filter(node => criticalRoomIds.has(node.id));
+    for (const kind of requiredKinds) {
+      assert.ok(criticalNodes.some(node => node.kind === kind), `seed ${seed} should include required ${kind}`);
+    }
+    routeSignatures.add(criticalNodes.map(node => node.templateId).join('|'));
+  }
+  assert.ok(routeSignatures.size > 1, 'reserving required encounters must preserve seeded route variety');
+});
+
 function objective(type) {
   const found = run.DUNGEON_RUN_CONTENT.roomTemplates.find(room => room.objective?.type === type)?.objective;
   assert.ok(found, `missing authored ${type} objective`);

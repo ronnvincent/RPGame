@@ -320,3 +320,23 @@ test('intent construction is deterministic and clamps untrusted coordinates/timi
   assert.equal(first.sceneEpoch, 0);
   assert.equal(combat.advanceEnemyAttackIntent(first, Number.POSITIVE_INFINITY).elapsed, 0);
 });
+
+test('legacy or malformed network intents cannot crash the telegraph state machine', () => {
+  const legacy = combat.sanitizeEnemyAttackIntent({
+    intentId: 'legacy-intent',
+    sourceEnemyId: 'legacy-enemy',
+    profileId: 'removed-profile',
+    sourceX: 100,
+    sourceY: 200,
+    facing: 1,
+    target: { actorId: 'player-1', x: 140, y: 200 },
+    elapsed: 0.1,
+    sceneEpoch: 2,
+    hasResolved: false,
+  });
+  assert.ok(legacy);
+  assert.equal(legacy.profileId, 'melee-light');
+  assert.doesNotThrow(() => combat.enemyAttackIntentPhase(legacy));
+  assert.equal(combat.getEnemyAttackProfile(undefined).id, 'melee-light');
+  assert.equal(combat.sanitizeEnemyAttackIntent({ profileId: 'melee-light' }), undefined);
+});

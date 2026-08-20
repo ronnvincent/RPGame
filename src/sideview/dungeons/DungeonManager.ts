@@ -646,7 +646,8 @@ export function spawnWaveEnemies(
   dungeon: DungeonDefinition,
   waveIndex: number,
   arenaWidth: number,
-  playerX: number = 300
+  playerX: number = 300,
+  groundY: number = 350,
 ): EnemyInstance[] {
   const wave = dungeon.waves[waveIndex] || (dungeon.endless ? buildEndlessWave(dungeon, waveIndex) : undefined);
   if (!wave) return [];
@@ -778,7 +779,7 @@ export function spawnWaveEnemies(
         isActive: spawnDelay <= 0,
         spawnDelay,
         x,
-        y: 350,
+        y: Number.isFinite(groundY) ? groundY : 350,
         vx: 0,
         vy: 0,
         isGrounded: true,

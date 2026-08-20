@@ -84,6 +84,8 @@ export interface GameplaySpriteClip {
   fps: number;
   loop: boolean;
   scale: number;
+  /** Transparent source pixels below an actor's measured feet. */
+  feetGap?: number;
   src?: string;
   layout: SpriteLayout;
 }
@@ -108,13 +110,14 @@ function strip(
   frameWidth: number,
   frameHeight: number,
   frameCount: number,
-  options: Partial<Pick<GameplaySpriteClip, 'preload' | 'anchor' | 'fps' | 'loop' | 'scale'>> = {},
+  options: Partial<Pick<GameplaySpriteClip, 'preload' | 'anchor' | 'fps' | 'loop' | 'scale' | 'feetGap'>> = {},
 ): GameplaySpriteClip {
   return {
     label, sourceId, src,
     layout: { kind: 'strip', frameWidth, frameHeight, frameCount, direction: 'horizontal' },
     preload: options.preload ?? 'on-demand', anchor: options.anchor ?? 'feet',
     fps: options.fps ?? 10, loop: options.loop ?? true, scale: options.scale ?? 1,
+    ...(options.feetGap !== undefined ? { feetGap: options.feetGap } : {}),
   };
 }
 
@@ -168,36 +171,36 @@ const gothicNpcFrames = (animation: 'idle' | 'walk', count: number) => Array.fro
 
 export const GAMEPLAY_SPRITES = Object.freeze({
   // Enemy role actors. Every role has a complete readable combat set.
-  'enemy.shield-tank.idle': strip('Shield tank idle', 'luizmelo-fantasy-1', '/assets/monsters/Skeleton/Idle.png', 150, 150, 4),
-  'enemy.shield-tank.move': strip('Shield tank walk', 'luizmelo-fantasy-1', '/assets/monsters/Skeleton/Walk.png', 150, 150, 4, { fps: 9 }),
-  'enemy.shield-tank.attack': strip('Shield tank attack', 'luizmelo-fantasy-1', '/assets/monsters/Skeleton/Attack.png', 150, 150, 8, { fps: 12, loop: false }),
-  'enemy.shield-tank.guard': strip('Shield tank guard', 'luizmelo-fantasy-1', '/assets/monsters/Skeleton/Shield.png', 150, 150, 4, { fps: 8 }),
-  'enemy.shield-tank.hit': strip('Shield tank hit', 'luizmelo-fantasy-1', '/assets/monsters/Skeleton/Take Hit.png', 150, 150, 4, { fps: 11, loop: false }),
-  'enemy.shield-tank.death': strip('Shield tank death', 'luizmelo-fantasy-1', '/assets/monsters/Skeleton/Death.png', 150, 150, 4, { fps: 7, loop: false }),
+  'enemy.shield-tank.idle': strip('Shield tank idle', 'luizmelo-fantasy-1', '/assets/monsters/Skeleton/Idle.png', 150, 150, 4, { feetGap: 49 }),
+  'enemy.shield-tank.move': strip('Shield tank walk', 'luizmelo-fantasy-1', '/assets/monsters/Skeleton/Walk.png', 150, 150, 4, { fps: 9, feetGap: 49 }),
+  'enemy.shield-tank.attack': strip('Shield tank attack', 'luizmelo-fantasy-1', '/assets/monsters/Skeleton/Attack.png', 150, 150, 8, { fps: 12, loop: false, feetGap: 49 }),
+  'enemy.shield-tank.guard': strip('Shield tank guard', 'luizmelo-fantasy-1', '/assets/monsters/Skeleton/Shield.png', 150, 150, 4, { fps: 8, feetGap: 49 }),
+  'enemy.shield-tank.hit': strip('Shield tank hit', 'luizmelo-fantasy-1', '/assets/monsters/Skeleton/Take Hit.png', 150, 150, 4, { fps: 11, loop: false, feetGap: 49 }),
+  'enemy.shield-tank.death': strip('Shield tank death', 'luizmelo-fantasy-1', '/assets/monsters/Skeleton/Death.png', 150, 150, 4, { fps: 7, loop: false, feetGap: 49 }),
 
-  'enemy.healer.idle': strip('Healer idle', 'luizmelo-fantasy-1', '/assets/monsters/Goblin/Idle.png', 150, 150, 4),
-  'enemy.healer.move': strip('Healer run', 'luizmelo-fantasy-1', '/assets/monsters/Goblin/Run.png', 150, 150, 8, { fps: 11 }),
-  'enemy.healer.attack': strip('Healer cast', 'luizmelo-fantasy-1', '/assets/monsters/Goblin/Attack.png', 150, 150, 8, { fps: 12, loop: false }),
-  'enemy.healer.hit': strip('Healer hit', 'luizmelo-fantasy-1', '/assets/monsters/Goblin/Take Hit.png', 150, 150, 4, { fps: 11, loop: false }),
-  'enemy.healer.death': strip('Healer death', 'luizmelo-fantasy-1', '/assets/monsters/Goblin/Death.png', 150, 150, 4, { fps: 7, loop: false }),
+  'enemy.healer.idle': strip('Healer idle', 'luizmelo-fantasy-1', '/assets/monsters/Goblin/Idle.png', 150, 150, 4, { feetGap: 49 }),
+  'enemy.healer.move': strip('Healer run', 'luizmelo-fantasy-1', '/assets/monsters/Goblin/Run.png', 150, 150, 8, { fps: 11, feetGap: 49 }),
+  'enemy.healer.attack': strip('Healer cast', 'luizmelo-fantasy-1', '/assets/monsters/Goblin/Attack.png', 150, 150, 8, { fps: 12, loop: false, feetGap: 49 }),
+  'enemy.healer.hit': strip('Healer hit', 'luizmelo-fantasy-1', '/assets/monsters/Goblin/Take Hit.png', 150, 150, 4, { fps: 11, loop: false, feetGap: 49 }),
+  'enemy.healer.death': strip('Healer death', 'luizmelo-fantasy-1', '/assets/monsters/Goblin/Death.png', 150, 150, 4, { fps: 7, loop: false, feetGap: 49 }),
 
-  'enemy.ranged-sniper.idle': strip('Ranged sniper idle', 'luizmelo-huntress', '/assets/huntress/Sprites/Idle.png', 150, 150, 8, { scale: 0.92 }),
-  'enemy.ranged-sniper.move': strip('Ranged sniper run', 'luizmelo-huntress', '/assets/huntress/Sprites/Run.png', 150, 150, 8, { fps: 12, scale: 0.92 }),
-  'enemy.ranged-sniper.attack': strip('Ranged sniper attack', 'luizmelo-huntress', '/assets/huntress/Sprites/Attack2.png', 150, 150, 5, { fps: 11, loop: false, scale: 0.92 }),
-  'enemy.ranged-sniper.hit': strip('Ranged sniper hit', 'luizmelo-huntress', '/assets/huntress/Sprites/Take hit.png', 150, 150, 3, { fps: 11, loop: false, scale: 0.92 }),
-  'enemy.ranged-sniper.death': strip('Ranged sniper death', 'luizmelo-huntress', '/assets/huntress/Sprites/Death.png', 150, 150, 8, { fps: 8, loop: false, scale: 0.92 }),
+  'enemy.ranged-sniper.idle': strip('Ranged sniper idle', 'luizmelo-huntress', '/assets/huntress/Sprites/Idle.png', 150, 150, 8, { scale: 0.92, feetGap: 53 }),
+  'enemy.ranged-sniper.move': strip('Ranged sniper run', 'luizmelo-huntress', '/assets/huntress/Sprites/Run.png', 150, 150, 8, { fps: 12, scale: 0.92, feetGap: 53 }),
+  'enemy.ranged-sniper.attack': strip('Ranged sniper attack', 'luizmelo-huntress', '/assets/huntress/Sprites/Attack2.png', 150, 150, 5, { fps: 11, loop: false, scale: 0.92, feetGap: 53 }),
+  'enemy.ranged-sniper.hit': strip('Ranged sniper hit', 'luizmelo-huntress', '/assets/huntress/Sprites/Take hit.png', 150, 150, 3, { fps: 11, loop: false, scale: 0.92, feetGap: 53 }),
+  'enemy.ranged-sniper.death': strip('Ranged sniper death', 'luizmelo-huntress', '/assets/huntress/Sprites/Death.png', 150, 150, 8, { fps: 8, loop: false, scale: 0.92, feetGap: 53 }),
 
-  'enemy.summoner.idle': strip('Summoner idle', 'luizmelo-evil-wizard', '/assets/evil-wizard/Sprites/Idle.png', 150, 150, 8, { scale: 0.9 }),
-  'enemy.summoner.move': strip('Summoner move', 'luizmelo-evil-wizard', '/assets/evil-wizard/Sprites/Move.png', 150, 150, 8, { fps: 10, scale: 0.9 }),
-  'enemy.summoner.attack': strip('Summoner cast', 'luizmelo-evil-wizard', '/assets/evil-wizard/Sprites/Attack.png', 150, 150, 8, { fps: 12, loop: false, scale: 0.9 }),
-  'enemy.summoner.hit': strip('Summoner hit', 'luizmelo-evil-wizard', '/assets/evil-wizard/Sprites/Take Hit.png', 150, 150, 4, { fps: 11, loop: false, scale: 0.9 }),
-  'enemy.summoner.death': strip('Summoner death', 'luizmelo-evil-wizard', '/assets/evil-wizard/Sprites/Death.png', 150, 150, 5, { fps: 8, loop: false, scale: 0.9 }),
+  'enemy.summoner.idle': strip('Summoner idle', 'luizmelo-evil-wizard', '/assets/evil-wizard/Sprites/Idle.png', 150, 150, 8, { scale: 0.9, feetGap: 49 }),
+  'enemy.summoner.move': strip('Summoner move', 'luizmelo-evil-wizard', '/assets/evil-wizard/Sprites/Move.png', 150, 150, 8, { fps: 10, scale: 0.9, feetGap: 49 }),
+  'enemy.summoner.attack': strip('Summoner cast', 'luizmelo-evil-wizard', '/assets/evil-wizard/Sprites/Attack.png', 150, 150, 8, { fps: 12, loop: false, scale: 0.9, feetGap: 49 }),
+  'enemy.summoner.hit': strip('Summoner hit', 'luizmelo-evil-wizard', '/assets/evil-wizard/Sprites/Take Hit.png', 150, 150, 4, { fps: 11, loop: false, scale: 0.9, feetGap: 49 }),
+  'enemy.summoner.death': strip('Summoner death', 'luizmelo-evil-wizard', '/assets/evil-wizard/Sprites/Death.png', 150, 150, 5, { fps: 8, loop: false, scale: 0.9, feetGap: 49 }),
 
-  'enemy.assassin.idle': strip('Assassin idle', 'luizmelo-martial-hero', '/assets/martial-hero/Sprites/Idle.png', 200, 200, 8, { scale: 0.82 }),
-  'enemy.assassin.move': strip('Assassin run', 'luizmelo-martial-hero', '/assets/martial-hero/Sprites/Run.png', 200, 200, 8, { fps: 14, scale: 0.82 }),
-  'enemy.assassin.attack': strip('Assassin attack', 'luizmelo-martial-hero', '/assets/martial-hero/Sprites/Attack1.png', 200, 200, 6, { fps: 14, loop: false, scale: 0.82 }),
-  'enemy.assassin.hit': strip('Assassin hit', 'luizmelo-martial-hero', '/assets/martial-hero/Sprites/Take Hit.png', 200, 200, 4, { fps: 12, loop: false, scale: 0.82 }),
-  'enemy.assassin.death': strip('Assassin death', 'luizmelo-martial-hero', '/assets/martial-hero/Sprites/Death.png', 200, 200, 6, { fps: 8, loop: false, scale: 0.82 }),
+  'enemy.assassin.idle': strip('Assassin idle', 'luizmelo-martial-hero', '/assets/martial-hero/Sprites/Idle.png', 200, 200, 8, { scale: 0.82, feetGap: 78 }),
+  'enemy.assassin.move': strip('Assassin run', 'luizmelo-martial-hero', '/assets/martial-hero/Sprites/Run.png', 200, 200, 8, { fps: 14, scale: 0.82, feetGap: 78 }),
+  'enemy.assassin.attack': strip('Assassin attack', 'luizmelo-martial-hero', '/assets/martial-hero/Sprites/Attack1.png', 200, 200, 6, { fps: 14, loop: false, scale: 0.82, feetGap: 78 }),
+  'enemy.assassin.hit': strip('Assassin hit', 'luizmelo-martial-hero', '/assets/martial-hero/Sprites/Take Hit.png', 200, 200, 4, { fps: 12, loop: false, scale: 0.82, feetGap: 78 }),
+  'enemy.assassin.death': strip('Assassin death', 'luizmelo-martial-hero', '/assets/martial-hero/Sprites/Death.png', 200, 200, 6, { fps: 8, loop: false, scale: 0.82, feetGap: 78 }),
 
   // Combat tells and reactions are sprites, never generated warning geometry.
   'combat.telegraph.area': image('Area telegraph', 'kenney-particle-pack', '/assets/runtime/vfx/particles/circle.png', { preload: 'encounter', scale: 0.34 }),
@@ -390,6 +393,10 @@ export function validateGameplaySpriteManifest(): string[] {
     if (!Number.isFinite(clip.fps) || clip.fps <= 0 || !Number.isFinite(clip.scale) || clip.scale <= 0) {
       errors.push(`${id}: invalid playback metadata`);
     }
+    if (clip.feetGap !== undefined && (
+      !Number.isFinite(clip.feetGap) || clip.feetGap < 0
+      || (clip.layout.kind === 'strip' && clip.feetGap >= clip.layout.frameHeight)
+    )) errors.push(`${id}: invalid feet gap`);
     if (clip.layout.kind === 'strip' && (
       clip.layout.frameWidth <= 0 || clip.layout.frameHeight <= 0 || clip.layout.frameCount <= 0
     )) errors.push(`${id}: invalid strip layout`);

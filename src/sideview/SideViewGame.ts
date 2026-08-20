@@ -33,6 +33,7 @@ import { getGameplaySpriteFiles, type GameplaySpriteId } from './assets/Gameplay
 import { audio } from './engine/AudioManager';
 import { canvasDprForQuality } from './engine/RenderResolution';
 import type { VfxQuality } from './engine/ParticleSystem';
+import { sanitizeEnemyAttackIntent } from './combat/EnemyAttackProfiles';
 import { network } from './network/NetworkManager';
 import { sprites } from './engine/SpriteManager';
 import { TownHub } from './town/TownHub';
@@ -702,14 +703,14 @@ export class SideViewGame {
       const inc = {
         ...raw,
         y: raw.y + groundY,
-        attackIntent: raw.attackIntent ? {
+        attackIntent: raw.attackIntent ? sanitizeEnemyAttackIntent({
           ...raw.attackIntent,
           sourceY: typeof raw.attackIntent.sourceY === 'number' ? raw.attackIntent.sourceY + groundY : groundY,
           target: raw.attackIntent.target ? {
             ...raw.attackIntent.target,
             y: typeof raw.attackIntent.target.y === 'number' ? raw.attackIntent.target.y + groundY : groundY,
           } : raw.attackIntent.target,
-        } : undefined,
+        }) : undefined,
       };
       seen.add(inc.id);
 
@@ -982,7 +983,13 @@ export class SideViewGame {
         const waveIndex = node.kind === 'boss'
           ? Math.max(0, dungeon.waves.length - 1)
           : node.depth % Math.max(1, dungeon.waves.length);
-        this.engine.enemies = spawnWaveEnemies(dungeon, waveIndex, this.engine.arenaWidth, this.engine.player.x);
+        this.engine.enemies = spawnWaveEnemies(
+          dungeon,
+          waveIndex,
+          this.engine.arenaWidth,
+          this.engine.player.x,
+          this.engine.groundY,
+        );
         this.engine.prepareEnemiesForRunRoom(node.kind);
         this.waveActive = true;
         const boss = this.engine.enemies.find(enemy => enemy.type === 'boss');
@@ -1365,7 +1372,8 @@ export class SideViewGame {
       dungeon,
       this.currentWaveIndex,
       this.engine.arenaWidth,
-      this.engine.player.x
+      this.engine.player.x,
+      this.engine.groundY,
     );
     this.engine.enemies = enemies;
     this.waveActive = true;

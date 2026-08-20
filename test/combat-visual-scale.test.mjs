@@ -10,6 +10,14 @@ const particlesSource = readFileSync(
   new URL('../src/sideview/engine/ParticleSystem.ts', import.meta.url),
   'utf8',
 );
+const dungeonSource = readFileSync(
+  new URL('../src/sideview/dungeons/DungeonManager.ts', import.meta.url),
+  'utf8',
+);
+const gameSource = readFileSync(
+  new URL('../src/sideview/SideViewGame.ts', import.meta.url),
+  'utf8',
+);
 
 test('tactical enemy art uses manifest presentation scale, not collision height', () => {
   const start = engineSource.indexOf('private drawTacticalEnemy');
@@ -31,5 +39,14 @@ test('catalogue VFX do not add preview-page magnification before camera zoom', (
     particlesSource,
     /scale:\s*def\.scale\s*\*\s*\(opts\.scale\s*\?\?\s*1\)\s*\*\s*ParticleSystem\.VFX_SCALE/,
     'effect definitions and callsite modifiers remain data driven',
+  );
+});
+
+test('new enemies spawn on the current world ground before their first sync', () => {
+  assert.match(dungeonSource, /playerX: number = 300,\s*groundY: number = 350/);
+  assert.match(dungeonSource, /y: Number\.isFinite\(groundY\) \? groundY : 350/);
+  assert.ok(
+    gameSource.match(/spawnWaveEnemies\([\s\S]{0,220}this\.engine\.groundY/g)?.length >= 2,
+    'run rooms and ordinary waves must both pass the live ground line',
   );
 });

@@ -110,6 +110,28 @@ test('all requested gameplay systems are represented by sprite ids, not placehol
   assert.doesNotMatch(JSON.stringify({ GAMEPLAY_SPRITES, references }), /\p{Extended_Pictographic}/u);
 });
 
+test('tactical actor clips use one measured feet baseline per role', () => {
+  const actorStates = ['idle', 'move', 'attack', 'hit', 'death'];
+  for (const [role, set] of Object.entries(ENEMY_ROLE_SPRITES)) {
+    const gaps = actorStates.map((state) => {
+      const clip = GAMEPLAY_SPRITES[set[state]];
+      assert.equal(clip.anchor, 'feet', `${role} ${state} must use a feet anchor`);
+      assert.ok(clip.feetGap > 0, `${role} ${state} needs a measured transparent gutter`);
+      assert.ok(clip.layout.kind === 'strip' && clip.feetGap < clip.layout.frameHeight);
+      return clip.feetGap;
+    });
+    assert.equal(new Set(gaps).size, 1, `${role} animation changes must not move its feet`);
+  }
+
+  const renderer = readFileSync(
+    new URL('../src/sideview/engine/GameplaySpriteRenderer.ts', import.meta.url),
+    'utf8',
+  );
+  assert.match(renderer, /clip\.feetGap/);
+  assert.match(renderer, /metrics\.displayHeight \/ rect\.sh/);
+  assert.match(renderer, /-metrics\.displayHeight \+ feetGap/);
+});
+
 test('destroy-nest uses a bounded atlas crop and banned terrain or hive art stays unavailable', () => {
   const nest = GAMEPLAY_SPRITES['objective.root-nest'];
   assert.equal(nest.src, '/assets/swamp/props.png');

@@ -175,6 +175,33 @@ function weightedTemplate(
   return selected;
 }
 
+/**
+ * Reserve authored requirements before filling generic slots. A generic slot
+ * must never consume the last elite/miniboss/etc. template needed by a later
+ * required slot simply because the shuffled route placed it first.
+ *
+ * Selection still uses the run RNG and nodes are emitted in the original
+ * shuffled order, so a seed remains deterministic and route order stays
+ * varied.
+ */
+function weightedTemplatesForSlots(
+  rng: SeededRng,
+  pool: RoomPoolDefinition,
+  templates: Map<string, RoomTemplateDefinition>,
+  usage: Map<string, number>,
+  slots: Array<RoomKind | undefined>,
+): RoomTemplateDefinition[] {
+  const selected = new Array<RoomTemplateDefinition>(slots.length);
+  for (let index = 0; index < slots.length; index++) {
+    const requiredKind = slots[index];
+    if (requiredKind) selected[index] = weightedTemplate(rng, pool, templates, usage, requiredKind);
+  }
+  for (let index = 0; index < slots.length; index++) {
+    if (!slots[index]) selected[index] = weightedTemplate(rng, pool, templates, usage);
+  }
+  return selected;
+}
+
 export function generateDungeonRun(input: GenerateDungeonRunInput): GeneratedDungeonRun {
   validateRunDefinition(input.blueprint, input.content);
   const seed = normalizeSeed(input.seed);
@@ -228,8 +255,15 @@ export function generateDungeonRun(input: GenerateDungeonRunInput): GeneratedDun
   const shuffledSlots = rng.shuffle(middleSlots);
   const criticalNodes: DungeonRoomNode[] = [];
   criticalNodes.push(addNode(weightedTemplate(rng, pools.get(input.blueprint.criticalPath.entryPoolId)!, templates, usage), 'normal', 0));
-  for (let index = 0; index < shuffledSlots.length; index++) {
-    criticalNodes.push(addNode(weightedTemplate(rng, pools.get(input.blueprint.criticalPath.middlePoolId)!, templates, usage, shuffledSlots[index]), 'normal', index + 1));
+  const middleTemplates = weightedTemplatesForSlots(
+    rng,
+    pools.get(input.blueprint.criticalPath.middlePoolId)!,
+    templates,
+    usage,
+    shuffledSlots,
+  );
+  for (let index = 0; index < middleTemplates.length; index++) {
+    criticalNodes.push(addNode(middleTemplates[index], 'normal', index + 1));
   }
   criticalNodes.push(addNode(weightedTemplate(rng, pools.get(input.blueprint.criticalPath.finalePoolId)!, templates, usage), 'normal', criticalCount - 1));
   for (let index = 0; index < criticalNodes.length - 1; index++) addExit(criticalNodes[index], criticalNodes[index + 1], 'critical');
@@ -250,8 +284,9 @@ export function generateDungeonRun(input: GenerateDungeonRunInput): GeneratedDun
         ...rule.requiredKinds,
         ...Array.from({ length: length - rule.requiredKinds.length }, () => undefined),
       ]);
-      const branchNodes: DungeonRoomNode[] = slots.map((kind, index) => addNode(
-        weightedTemplate(rng, pools.get(rule.poolId)!, templates, usage, kind),
+      const branchTemplates = weightedTemplatesForSlots(rng, pools.get(rule.poolId)!, templates, usage, slots);
+      const branchNodes: DungeonRoomNode[] = branchTemplates.map((template, index) => addNode(
+        template,
         rule.access === 'secret' && index === 0 ? 'secret' : 'normal',
         sourceDepth + (index + 1) / (length + 1),
       ));
