@@ -3014,7 +3014,10 @@ export class GameHUD {
           if (playMode === 'solo') {
             this.game?.onSelectLocation(d.id, true);
           } else {
-            network.createLobby(d.id, d.minLevel || 1, () => {}, () => {});
+            // Dungeon start has one standing listener in SideViewGame. Passing
+            // an empty callback here used to replace it, so START reached the
+            // server but the host stayed on this screen.
+            network.createLobby(d.id, d.minLevel || 1);
             this.game?.showScreen('lobby');
           }
         });
@@ -3628,12 +3631,7 @@ export class GameHUD {
         // Join room and wait for dungeon_start
         // Accepting puts you in the party LOBBY. The run begins only when the
         // leader presses START, which arrives as dungeon_start below.
-        network.acceptInvite(inviteData.roomId, (roomData) => {
-          if (this.game) {
-             // network.isHost was set from this same packet by NetworkManager.
-             this.game.onSelectLocation(roomData.dungeonId, network.isHost);
-          }
-        });
+        network.acceptInvite(inviteData.roomId);
         this.game?.showScreen('lobby');
       };
 

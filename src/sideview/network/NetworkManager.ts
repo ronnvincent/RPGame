@@ -753,11 +753,10 @@ export class NetworkManager {
     this.socket?.emit('profile_update', profile);
   }
 
-  public createLobby(dungeonId: string, minLevel: number, onUpdate: (lobbyData: any) => void, onStart: (roomData: any) => void) {
+  public createLobby(dungeonId: string, minLevel: number, onUpdate?: (lobbyData: any) => void) {
     if (!this.socket) this.connect();
 
-    this.onLobbyUpdateCb = onUpdate;
-    this.onDungeonStartCb = onStart;
+    if (onUpdate) this.onLobbyUpdateCb = onUpdate;
 
     const uuid = localStorage.getItem('playerUUID');
     const name = localStorage.getItem('playerName');
@@ -791,15 +790,9 @@ export class NetworkManager {
     });
   }
 
-  /**
-   * Quick join enters through here too, and passes no callback: it must not
-   * clobber the one the invite path already registered, or accepting an invite
-   * after a quick join would start nothing.
-   */
-  public acceptInvite(roomId: string, onStart?: (roomData: any) => void) {
+  /** Join a room; dungeon launch is always handled by the standing listener. */
+  public acceptInvite(roomId: string) {
     if (!this.socket) this.connect();
-
-    if (onStart) this.onDungeonStartCb = onStart;
 
     const uuid = localStorage.getItem('playerUUID');
     const name = localStorage.getItem('playerName');
@@ -1071,10 +1064,12 @@ export class NetworkManager {
     this.socket.emit('lobby_ready', { ready });
   }
 
-  /** Host only - launches the run for everyone. */
-  public startMatch() {
-    if (!this.socket || !this.room) return;
+  /** Host only - launches the run for everyone. Reports a missing transport so
+   * the UI can explain why a press could not be sent instead of looking dead. */
+  public startMatch(): boolean {
+    if (!this.socket || !this.room) return false;
     this.socket.emit('lobby_start');
+    return true;
   }
 
   public leaveLobby() {

@@ -1332,14 +1332,12 @@ export class ParticleSystem {
   // read from verified data instead of guessed from the sprite key.
 
   /**
-   * Global multiplier on every catalogue effect.
-   *
-   * The preview page (public/vfx-preview.html) renders at def.scale x 2, and
-   * that is the size that was signed off. In-game was drawing at def.scale
-   * alone, i.e. exactly half - which is why the reworked skills still read as
-   * the old ones. Tune here rather than editing 140 catalogue entries.
+   * Catalogue definitions already author their world-space scale. The game
+   * canvas then applies its own 1.65-2.5x camera zoom; carrying the preview
+   * page's extra 2x multiplier into this path made ordinary 128px effects fill
+   * most of a mobile viewport and stack over combat tells.
    */
-  private static readonly VFX_SCALE = 2.0;
+  private static readonly VFX_SCALE = 1.0;
 
   private spriteVfx: SpriteVfxInstance[] = [];
   private sheetCache: Map<string, SpriteSheet> = new Map();

@@ -328,9 +328,8 @@ export const VFX: Record<string, VfxDef> = {
   // ---------- ULTIMATES ----------
   // Imported from the Gigapack using its own asset_list.txt for frame sizes,
   // plus CraftPix 256px explosions and the FX Bundle. All play at the 15 FPS
-  // the Gigapack guide specifies. Scale 1.0 here because these are already
-  // large - 0.55 here lands them near 1.1x once the global VFX_SCALE (2.0)
-  // is applied. At 1.0 they were drawing 800px wide and stalling phones.
+  // the Gigapack guide specifies. These definitions are intentionally compact:
+  // the normal game camera supplies the final display zoom on every device.
   ult_epic_explosion_001: { src: `${ULT}/ult_epic_explosion_001.png`, layout: hstrip(128, 128, 13), fps: 15, scale: 0.55, blend: 'lighter' },
   ult_epic_explosion_002: { src: `${ULT}/ult_epic_explosion_002.png`, layout: hstrip(192, 192, 15), fps: 15, scale: 0.55, blend: 'lighter' },
   ult_stylized_explosion_003: { src: `${ULT}/ult_stylized_explosion_003.png`, layout: hstrip(128, 96, 14), fps: 15, scale: 0.55, blend: 'lighter' },

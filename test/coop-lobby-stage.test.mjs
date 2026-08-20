@@ -32,7 +32,6 @@ const waitFor = (s, ev, ms = T(2000)) => new Promise(res => {
 });
 
 const lobby = readFileSync('src/sideview/ui/CoopLobbyUI.ts', 'utf8');
-const synergy = readFileSync('src/sideview/network/PartySynergy.ts', 'utf8');
 const mobileCss = readFileSync('src/sideview/ui/MobileUI.ts', 'utf8');
 const net = readFileSync('src/sideview/network/NetworkManager.ts', 'utf8');
 const game = readFileSync('src/sideview/SideViewGame.ts', 'utf8');
@@ -46,7 +45,8 @@ const run = async () => {
 
   // --- The stage ---------------------------------------------------------
   check('there is a stage rather than a panel', /cl-stage/.test(lobby) && /cl-topo/.test(lobby));
-  check('the party slots are crests', /clip-path: polygon/.test(lobby));
+  check('the party slots do not put a heavy mask over the heroes',
+    !/clip-path: polygon/.test(lobby) && !/\.cl-pane, \.cl-crest/.test(lobby));
   check('your character stands on it', /cl-hero-img/.test(lobby) && /heroFrame\(cls, 'idle'/.test(lobby));
   check('and breathes, rather than being one still frame',
     /setInterval/.test(lobby) && /this\.idleFrame\+\+/.test(lobby));
@@ -57,7 +57,7 @@ const run = async () => {
   check('and typing in a box does not trigger those keys', /tagName === 'INPUT'/.test(lobby));
   check('the key listener is removed on close, so it cannot pile up',
     /removeEventListener\('keydown', this\.keyHandler\)/.test(lobby));
-  check('a member crest shows what they bring', /cl-crest-power/.test(lobby) && /PWR/.test(lobby));
+  check('a member slot keeps its identity below the hero', /cl-crest-caption/.test(lobby));
 
   // --- It is a screen, not a dialog ---------------------------------------
   // Measured in the browser: the lobby came out 1229px wide in a 1280 viewport,
@@ -78,16 +78,14 @@ const run = async () => {
   check('the cards keep their width instead of collapsing', /flex: none;/.test(lobby));
 
   // --- Somebody is always listening for the start --------------------------
-  // The start handler was set only by createLobby and by an accepted invite.
-  // Quick join deliberately passes none, so anyone who had not been invited yet
-  // this session had it null: the host pressed START, the rest of the party
-  // entered the dungeon, and that player sat in the lobby watching nothing.
+  // Dungeon launch has one standing handler. Lobby creation used to replace it
+  // with GameHUD's empty callback, so the packet arrived but changed no screen.
   check('there is a standing dungeon-start handler', /public onDungeonStart\(/.test(net));
   check('and it is registered once at startup, not per invite',
     /mod\.network\.onDungeonStart\(/.test(game));
-  check('so quick join can pass none without leaving nobody to receive it',
-    /if \(data\?\.roomId\) this\.acceptInvite\(data\.roomId\);/.test(net)
-    && /if \(onStart\) this\.onDungeonStartCb = onStart;/.test(net));
+  check('create and join cannot overwrite that standing handler',
+    !/public createLobby[\s\S]{0,360}onDungeonStartCb/.test(net)
+    && !/public acceptInvite[\s\S]{0,260}onDungeonStartCb/.test(net));
 
   // Power moves when you equip or forge, while the level stands still.
   check('a power change alone still reaches the party cards',
@@ -106,13 +104,10 @@ const run = async () => {
     !/\.cl-pane \{[^}]*flex: 1;[^}]*max-height: 460px/.test(lobby));
 
   // --- Centred, and honest about the device -------------------------------
-  // Measured in the browser at 812x375: the crest row and the bonus banner both
-  // sit on the column's centre line, 0px off.
+  // The roster remains centred after removing the bonus block below it.
   check('the crests are centred in their column', /justify-content: center;/.test(lobby));
-  check('and the bonus banner with them',
-    /\.cl-syn \{[^}]*align-self: center/.test(lobby));
-  check('its accent moved off the left edge, which reads lopsided when centred',
-    /border-top: 3px solid/.test(lobby) && !/\.cl-syn \{[^}]*border-left/.test(lobby));
+  check('the bonus banner and bonus fact are gone',
+    !/cl-syn/.test(lobby) && !/this\.fact\('Bonus'/.test(lobby));
 
   // The footer legend told a phone to press ESC and ENTER. Confirmed in the
   // browser: the rule parses and resolves the cap to display:none when the
@@ -127,18 +122,13 @@ const run = async () => {
   check('a teammate gets a character too', lobby.includes('heroIdleSrc(m.classId)'));
   check('and the idle loop advances every card, not just the first',
     lobby.includes("querySelectorAll('.cl-hero-img')"));
-  check('each card carries its own class for that', lobby.includes('data-class="${m.classId'));
+  check('each card carries its own escaped class for that', lobby.includes('data-class="${escapeHtmlAttribute(classId)}'));
   check('a class with no sprite set still falls back to its mark',
     lobby.includes('if (!set) return null;'));
 
   // A phone has nothing to press ESC or ENTER with.
   check('the footer actions are real buttons on touch',
     /@media \(hover: none\)[\s\S]{0,700}\.cl-key \{[\s\S]{0,200}border-radius: 4px;/.test(lobby));
-
-  // --- Composition means something ---------------------------------------
-  check('a party of one gets no bonus', /present\.length < 2\) return NO_SYNERGY/.test(synergy));
-  check('the strongest bonus applies rather than a stack', /Read in order, best first/.test(synergy));
-  check('and a party of clones trades safety for damage', /warband/.test(synergy) && /def: 0\.95/.test(synergy));
 
   // --- Joining without knowing anybody -----------------------------------
   const a = await connect(); a.emit('register_player', HOST);

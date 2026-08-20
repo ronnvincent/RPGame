@@ -87,5 +87,5 @@ test('opaque white fantasy masks are border-only on every dark RPG surface', () 
     'direct dark surfaces must use only the decorative border slices',
   );
   assert.match(theme, /background:\s*linear-gradient\(rgba\(16, 21, 29, \.96\), rgba\(9, 12, 17, \.98\)\)/);
-  assert.match(directSurfaces, /\.cl-pane, \.cl-crest, \.cl-syn[\s\S]{0,240}border-image:[^;]+16 \/ 10px/);
+  assert.match(directSurfaces, /\.cl-pane \{[\s\S]{0,240}border-image:[^;]+16 \/ 10px/);
 });

@@ -5273,7 +5273,12 @@ export class SideViewEngine {
     return gameplaySprites.draw(ctx, spriteId, enemy.x, enemy.y, {
       time: this.zoneHazardClock,
       facing: enemy.facing < 0 ? -1 : 1,
-      height: Math.max(44, enemy.height * 1.25),
+      // Role sheets contain generous transparent gutters (the Goblin art is
+      // only 36px tall inside a 150px frame).  `enemy.height` is the combat
+      // hitbox, not an authored sprite-frame height; forcing that 48px hitbox
+      // onto the whole frame reduced the visible actor to roughly 12px.  Let
+      // the manifest's measured frame size and per-clip scale own presentation
+      // while collision dimensions remain untouched.
       alpha: enemy.hitStun > 0 ? 0.82 : 1,
     });
   }

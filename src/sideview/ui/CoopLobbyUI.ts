@@ -20,7 +20,6 @@ import { voice } from '../network/VoiceChat';
 import { CHARACTER_CLASSES } from '../classes/ClassDefinitions';
 import { DUNGEONS } from '../dungeons/DungeonManager';
 import { HERO_SPRITES, heroFrame } from '../engine/HeroSprites';
-import { synergyFor } from '../network/PartySynergy';
 import {
   escapeHtml,
   escapeHtmlAttribute,
@@ -193,7 +192,6 @@ export class CoopLobbyUI {
     const dungeon = DUNGEONS.find(d => d.id === st?.dungeonId);
     const iAmHost = network.isHost;
     const everyoneReady = members.length > 0 && members.every(m => m.ready);
-    const synergy = synergyFor(members);
     const heroSrc = this.heroIdleSrc();
 
     // Four cards, and yours is the first of them. Standing your character off
@@ -239,23 +237,13 @@ export class CoopLobbyUI {
               ${this.fact('Dungeon', dungeon ? dungeon.name : (st?.dungeonId || 'Not chosen'))}
               ${this.fact('Network', network.socket?.connected ? 'CONNECTED' : 'OFFLINE')}
               ${this.fact('Party', `${members.length}/${max}`)}
-              ${this.fact('Bonus', synergy.label, synergy.id !== 'none')}
               ${this.fact('Your ID', localStorage.getItem('playerShortId') || 'Not assigned')}
             </div>
           </aside>
 
           <section class="cl-right" aria-live="polite">
             ${this.tab === 'party' ? `
-              <div class="cl-crests">${crests.join('')}</div>
-              <div class="cl-syn ${synergy.id !== 'none' ? 'on' : ''}">
-                <div class="cl-syn-label">${synergy.label}</div>
-                <div class="cl-syn-detail">${synergy.detail}</div>
-                ${synergy.id !== 'none' ? `<div class="cl-syn-nums">
-                  ${synergy.atk !== 1 ? `<span>ATK ${this.pct(synergy.atk)}</span>` : ''}
-                  ${synergy.def !== 1 ? `<span>DEF ${this.pct(synergy.def)}</span>` : ''}
-                  ${synergy.exp !== 1 ? `<span>EXP ${this.pct(synergy.exp)}</span>` : ''}
-                </div>` : ''}
-              </div>` : ''}
+              <div class="cl-crests">${crests.join('')}</div>` : ''}
 
             ${this.tab === 'public' ? this.publicPanel() : ''}
             ${this.tab === 'friends' ? this.friendsPanel() : ''}
@@ -278,11 +266,6 @@ export class CoopLobbyUI {
     if (invite) invite.value = inviteDraft;
     if (friend) friend.value = friendDraft;
     if (focusKey) requestAnimationFrame(() => this.root?.querySelector<HTMLElement>(`[data-focus-key="${CSS.escape(focusKey)}"]`)?.focus());
-  }
-
-  private pct(mult: number): string {
-    const d = Math.round((mult - 1) * 100);
-    return `${d > 0 ? '+' : ''}${d}%`;
   }
 
   private tabBtn(id: Tab, label: string): string {
@@ -321,14 +304,13 @@ export class CoopLobbyUI {
       ? `<img class="cl-hero-img" data-class="${escapeHtmlAttribute(classId)}" src="${escapeHtmlAttribute(src)}" alt="" />`
       : iconPath ? `<img src="${escapeHtmlAttribute(iconPath)}" alt="" />` : '';
     const level = Math.max(1, Math.trunc(finiteNumber(m.level, 1)));
-    const power = Math.max(0, Math.trunc(finiteNumber(m.power)));
     return `
       <div class="cl-crest filled ${mine ? 'is-me' : ''} ${m.ready ? 'is-ready' : ''}" style="--accent:${accent}">
         <div class="cl-crest-art ${src ? 'cl-crest-hero' : ''}">${art}</div>
-        <div class="cl-crest-name">${escapeHtml(m.name)}${m.online ? '' : ' <i>(offline)</i>'}</div>
-        <div class="cl-crest-meta">Lv ${level} &middot; ${escapeHtml(cls ? cls.name : 'Choosing')}</div>
-        ${power ? `<div class="cl-crest-power">${power.toLocaleString()} PWR</div>` : ''}
-        <div class="cl-crest-state">${escapeHtml(state)}</div>
+        <div class="cl-crest-caption">
+          <div class="cl-crest-name">${escapeHtml(m.name)}${m.online ? '' : ' <i>(offline)</i>'}</div>
+          <div class="cl-crest-meta">Lv ${level} &middot; ${escapeHtml(cls ? cls.name : 'Choosing')} <span class="cl-crest-state">${escapeHtml(state)}</span></div>
+        </div>
       </div>`;
   }
 
@@ -457,7 +439,7 @@ export class CoopLobbyUI {
       this.close();
     });
 
-    q<HTMLButtonElement>('.cl-start')?.addEventListener('click', () => network.startMatch());
+    q<HTMLButtonElement>('.cl-start')?.addEventListener('click', () => this.startRun());
 
     q<HTMLButtonElement>('.cl-ready')?.addEventListener('click', () => {
       this.localReady = true;
@@ -522,6 +504,14 @@ export class CoopLobbyUI {
   }
 
   /**
+   * One launch path for mouse, touch and keyboard. A missing room used to make
+   * START look dead because NetworkManager silently returned without emitting.
+   */
+  private startRun() {
+    if (!network.startMatch()) this.toast('Party connection is not ready yet. Try again.');
+  }
+
+  /**
    * The key legend along the bottom is a promise that those keys work, so they
    * are bound rather than decorative. One listener, replaced on each render, or
    * they accumulate every time the lobby repaints.
@@ -531,7 +521,8 @@ export class CoopLobbyUI {
     const order: Tab[] = ['party', 'public', 'friends'];
     this.keyHandler = (e: KeyboardEvent) => {
       if (!this.root) return;
-      const typing = (e.target as HTMLElement)?.tagName === 'INPUT';
+      const target = e.target as HTMLElement | null;
+      const typing = target?.tagName === 'INPUT';
       if (typing) return;
 
       const at = order.indexOf(this.tab);
@@ -544,7 +535,11 @@ export class CoopLobbyUI {
         this.localReady = !this.localReady;
         network.sendReady(this.localReady);
       } else if (e.code === 'Enter' && network.isHost) {
-        network.startMatch();
+        // Enter on a focused button already generates its native click. Do not
+        // emit lobby_start a second time from the global shortcut.
+        if (target?.closest('button')) return;
+        e.preventDefault();
+        this.startRun();
       }
     };
     window.addEventListener('keydown', this.keyHandler);
@@ -636,12 +631,14 @@ export class CoopLobbyUI {
          so the frame is cropped to the figure rather than scaled to fit - at
          fit-size the character would be a quarter of the card. */
       .cl-crest-art.cl-crest-hero {
-        width: 100%; height: 150px;
+        flex: 1 1 auto;
+        width: 100%; height: auto; min-height: 0;
         overflow: hidden;
         display: flex; align-items: flex-end; justify-content: center;
       }
       .cl-crest-art img.cl-hero-img {
-        height: 228px; width: auto; max-width: none;
+        display: block;
+        height: 150%; width: auto; max-width: none;
         image-rendering: pixelated;
         filter: drop-shadow(0 8px 10px rgba(0,0,0,0.7));
       }
@@ -654,69 +651,54 @@ export class CoopLobbyUI {
 
       .cl-right { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
 
-      /* The party tab had the crests pinned to the top of a tall column with
-         the rest of it empty. They fill it now. Only this tab grows - the other
-         two are lists, and a list stretched to fill reads as padding. */
+      /* Party slots use the whole column. There is deliberately no bonus panel
+         below them: on short landscape screens it compressed the sprite art
+         until only a small strip of the hero remained visible. */
       .cl-crests {
         display: flex; gap: 16px;
         align-items: stretch;
         justify-content: center;
         flex: 1; min-height: 0;
-        max-height: 460px;
+        overflow-x: auto; overflow-y: hidden;
       }
 
-      /* The crest shape from the reference: a shield tapering to a point. */
+      /* Keep the roster grouping without putting a heavy framed card over each
+         character. The identity strip sits below the art, never on top of it. */
       .cl-crest {
-        /* Do not let the row squeeze them. A fourth card was added and flex
-           items shrink by default, so at narrow widths all four collapsed to
-           slivers rather than the row simply running out of space. */
         flex: none;
         width: 150px; min-height: 0;
-        padding: 14px 8px 22px;
-        display: flex; flex-direction: column; align-items: center; gap: 5px;
+        padding: 2px 6px 8px;
+        display: flex; flex-direction: column; align-items: center;
         text-align: center;
-        clip-path: polygon(0 0, 100% 0, 100% 82%, 50% 100%, 0 82%);
-        background: rgba(255,255,255,0.035);
-        border: 1px solid rgba(255,255,255,0.10);
+        overflow: hidden;
+        background: none;
+        border: 0;
       }
-      .cl-crest.empty { color: #565c66; }
-      .cl-crest-plus { font-size: 34px; opacity: 0.5; margin-top: auto; }
+      .cl-crest.empty {
+        justify-content: center;
+        color: #565c66;
+        border: 1px dashed rgba(255,255,255,0.14);
+        background: rgba(255,255,255,0.018);
+      }
+      .cl-crest-plus { font-size: 34px; opacity: 0.5; }
       .cl-crest.filled {
-        background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(0,0,0,0.35));
-        box-shadow: inset 0 0 0 1px var(--accent, #6b7280);
+        background: linear-gradient(180deg, transparent 56%, rgba(0,0,0,0.42));
+        border-bottom: 2px solid var(--accent, #6b7280);
       }
-      .cl-crest.is-ready { box-shadow: inset 0 0 0 2px #4ade80; }
+      .cl-crest.is-ready { border-bottom-color: #4ade80; }
       /* Yours reads as yours at a glance across four near-identical cards. */
-      .cl-crest.is-me { box-shadow: inset 0 0 0 2px #d4af37; }
-      .cl-crest.is-me.is-ready { box-shadow: inset 0 0 0 2px #4ade80, inset 0 0 0 4px rgba(212,175,55,0.5); }
+      .cl-crest.is-me { border-bottom-color: #d4af37; }
+      .cl-crest.is-me.is-ready { border-bottom-color: #4ade80; }
       .cl-crest-art { width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; }
       .cl-crest-art img { width: 44px; height: 44px; image-rendering: pixelated; }
+      .cl-crest-caption { flex: none; width: 100%; min-height: 34px; padding-top: 3px; }
       .cl-crest-name { font-size: 14px; font-weight: 800; color: #eef1f5; }
       .cl-crest-name i { font-style: normal; color: #6f7681; font-size: 10px; }
       .cl-crest-meta { font-size: 11.5px; color: #8a9099; }
-      .cl-crest-power { font-size: 12px; font-weight: 800; color: #ffd98a; letter-spacing: 0.5px; }
       .cl-crest-state {
-        margin-top: auto; font-size: 11px; font-weight: 800;
-        letter-spacing: 1px; color: #b9c0c9;
+        margin-left: 3px; font-size: 9.5px; font-weight: 800;
+        letter-spacing: .6px; color: #d9bb6d;
       }
-
-      /* Centred under the crests rather than pinned to the left of a wide
-         column. A left accent bar reads as lopsided once the block is centred,
-         so the accent runs along the top instead. */
-      .cl-syn {
-        align-self: center;
-        width: min(560px, 100%);
-        padding: 11px 16px;
-        text-align: center;
-        border-top: 3px solid rgba(255,255,255,0.14);
-        background: rgba(255,255,255,0.03);
-      }
-      .cl-syn.on { border-top-color: #ffd98a; background: rgba(120, 95, 30, 0.18); }
-      .cl-syn-label { font-family: 'Cinzel', serif; font-weight: 800; font-size: 13px; letter-spacing: 1.2px; color: #e8ecf1; }
-      .cl-syn.on .cl-syn-label { color: #ffd98a; }
-      .cl-syn-detail { font-size: 11px; color: #8a9099; margin-top: 2px; }
-      .cl-syn-nums { display: flex; gap: 12px; margin-top: 6px; justify-content: center; }
-      .cl-syn-nums span { font-size: 11px; font-weight: 800; color: #7dd3fc; }
 
       .cl-pane {
         flex: 1; min-height: 0; overflow-y: auto;
@@ -832,14 +814,13 @@ export class CoopLobbyUI {
         .cl-tabs { padding: 8px 10px 6px; }
         .cl-tab { padding: 5px 10px; font-size: 11.5px; }
         .cl-quick { padding: 8px 16px; font-size: 11px; }
-        .cl-crest { width: 96px; min-height: 0; padding: 10px 5px 18px; }
-        .cl-crest-art.cl-crest-hero { height: 104px; }
-        .cl-crest-art img.cl-hero-img { height: 158px; }
-        .cl-crest-plus { margin-top: 36px; font-size: 20px; }
+        .cl-crest { width: 96px; min-height: 0; padding: 1px 4px 5px; }
+        .cl-crest-plus { font-size: 20px; }
         .cl-crest-art { width: 40px; height: 40px; }
         .cl-crest-art img { width: 34px; height: 34px; }
         .cl-crest-name { font-size: 12px; }
-        .cl-crests { gap: 9px; max-height: none; }
+        .cl-crest-meta { font-size: 9.5px; white-space: nowrap; }
+        .cl-crests { gap: 9px; }
         .cl-fact { font-size: 10.5px; }
         .cl-fact-k { width: 60px; }
         .cl-foot { padding: 8px 14px 10px; }
@@ -864,12 +845,11 @@ export class CoopLobbyUI {
       .cl-tab { min-height: 44px; border: 1px solid transparent; }
       .cl-tab.on { color: var(--rpg-gold-bright); border-color: rgba(231,189,85,.45); background: rgba(231,189,85,.1); }
       .cl-quick { min-height: 48px; color: #171006; background: linear-gradient(#ffe39a,#d8a83b 52%,#a66f20 53%); box-shadow: 0 4px #07080b; }
-      .cl-pane, .cl-crest, .cl-syn {
+      .cl-pane {
         border: 10px solid transparent;
         border-image: url('/assets/runtime/ui/fantasy-borders/default-panel/panel-016.png') 16 / 10px / 0 stretch;
         image-rendering: pixelated;
       }
-      .cl-crest { border-width: 8px; border-image-width: 8px; }
       .cl-mini, .cl-key { min-height: 44px; touch-action: manipulation; }
       .cl-mini { color: var(--rpg-paper); border-color: rgba(231,189,85,.32); background: linear-gradient(#302c34,#15161d); }
       .cl-row input { min-height: 44px; border-color: rgba(231,189,85,.34); }
@@ -891,11 +871,9 @@ export class CoopLobbyUI {
         .cl-facts { display: grid; grid-template-columns: 1fr 1fr; }
         .cl-fact { gap: 5px; }
         .cl-fact-k { width: auto; }
-        .cl-right { min-height: 380px; }
-        .cl-crests { justify-content: flex-start; min-height: 270px; overflow-x: auto; padding-bottom: 5px; }
-        .cl-crest { width: 126px; min-height: 250px; }
-        .cl-crest-art.cl-crest-hero { height: 120px; }
-        .cl-crest-art img.cl-hero-img { height: 184px; }
+        .cl-right { min-height: 300px; }
+        .cl-crests { justify-content: flex-start; min-height: 220px; padding-bottom: 5px; }
+        .cl-crest { width: 126px; min-height: 210px; }
         .cl-pane { width: 100%; max-width: none; min-height: 300px; }
         .cl-foot { position: sticky; bottom: 0; flex-wrap: wrap; padding: 8px 5px; z-index: 4; }
         .cl-foot-right { margin-left: 0; }

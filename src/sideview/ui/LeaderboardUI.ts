@@ -38,7 +38,7 @@ export class LeaderboardUI {
     root.setAttribute('aria-modal', 'true');
     root.setAttribute('aria-labelledby', 'leaderboard-title');
     root.innerHTML = `<div class="rpg-screen__backdrop" aria-hidden="true"></div>
-      <section class="rpg-panel rpg-dialog rpg-dialog--compact lb-panel" tabindex="-1">
+      <section class="rpg-dialog rpg-dialog--compact lb-panel" tabindex="-1">
         <header class="rpg-dialog__header lb-head">
           <div><p class="rpg-kicker">Hall of Champions</p><h2 class="rpg-title lb-title" id="leaderboard-title">Power Rankings</h2><p class="rpg-help">Levels, equipment, and forge upgrades all count.</p></div>
           <button class="rpg-icon-button lb-close" type="button" aria-label="Close rankings">&times;</button>
@@ -47,7 +47,7 @@ export class LeaderboardUI {
           <button class="rpg-tab lb-tab lb-tab-on" type="button" role="tab" aria-selected="true" data-sort="power">Power</button>
           <button class="rpg-tab lb-tab" type="button" role="tab" aria-selected="false" data-sort="level">Level</button>
         </div>
-        <div class="rpg-card lb-mine"><span class="rpg-label" id="lb-mine-label">Your Power</span><strong class="lb-mine-value" id="lb-mine-value">${this.myPower.toLocaleString()}</strong></div>
+        <div class="lb-mine"><span class="rpg-label" id="lb-mine-label">Your Power</span><strong class="lb-mine-value" id="lb-mine-value">${this.myPower.toLocaleString()}</strong></div>
         <div class="rpg-dialog__body lb-list" id="lb-list" role="list" aria-live="polite" aria-busy="true"><div class="rpg-empty lb-empty">Loading rankings...</div></div>
       </section>`;
     this.parent.appendChild(root);
@@ -109,7 +109,7 @@ export class LeaderboardUI {
         const meta = this.sort === 'level'
           ? `${entry.className || 'Adventurer'} · ${powerText} power`
           : `${entry.className || 'Adventurer'} · Level ${entry.level}`;
-        return `<article class="rpg-card lb-row${mine ? ' lb-row-me' : ''}${entry.rank <= 3 && !unranked ? ' lb-row-top' : ''}${unranked ? ' lb-row-unranked' : ''}" role="listitem">
+        return `<article class="lb-row${mine ? ' lb-row-me' : ''}${entry.rank <= 3 && !unranked ? ' lb-row-top' : ''}${unranked ? ' lb-row-unranked' : ''}" role="listitem">
           <span class="lb-rank" aria-label="Rank ${entry.rank}">${entry.rank}</span>
           <span class="lb-name">${escapeHtml(entry.name)}${mine ? ' <span class="lb-you">You</span>' : ''}<span class="lb-meta">${escapeHtml(meta)}</span></span>
           <strong class="lb-power">${escapeHtml(figure)}</strong>
@@ -154,11 +154,12 @@ export class LeaderboardUI {
     const style = document.createElement('style');
     style.id = STYLE_ID;
     style.textContent = `
-      .lb-panel{height:min(88dvh,760px)}.lb-head p{margin:4px 0 0}.lb-close{font-size:1.4rem;cursor:pointer}.lb-tabs{padding-top:4px}.lb-tabs .lb-tab{flex:1}
-      .lb-mine{display:flex;align-items:center;justify-content:space-between;margin:9px 0;padding:9px 13px;border-width:9px;border-image-width:9px}.lb-mine-value{color:var(--rpg-gold-bright);font:900 1.6rem/1 'Cinzel',serif;font-variant-numeric:tabular-nums}
-      .lb-list{display:grid;gap:5px;padding:2px}.lb-row{display:grid;grid-template-columns:36px 1fr auto;align-items:center;gap:9px;padding:8px 10px;border-width:8px;border-image-width:8px}.lb-row-top{box-shadow:inset 3px 0 var(--rpg-gold)}.lb-row-me{outline:1px solid #5fd28b;outline-offset:-3px}.lb-row-unranked{opacity:.62}
-      .lb-rank{color:var(--rpg-gold);font:900 1rem/1 'Cinzel',serif;text-align:center}.lb-name{display:flex;flex-wrap:wrap;align-items:center;gap:5px;color:var(--rpg-paper);font-weight:900}.lb-meta{flex-basis:100%;color:var(--rpg-muted);font-size:.7rem;font-weight:600}.lb-you{padding:2px 5px;color:#07180d;background:#63d68a;font-size:.6rem;font-weight:900;text-transform:uppercase}.lb-power{color:var(--rpg-gold-bright);font-variant-numeric:tabular-nums}.lb-empty p{margin:5px 0 12px}.lb-retry{min-width:120px}
-      @media(max-width:520px){.lb-panel{height:96dvh}.lb-row{grid-template-columns:28px 1fr}.lb-power{grid-column:2}.lb-head .rpg-help{display:none}}
+      .lb-panel{width:min(600px,calc(100vw - 24px));height:min(88dvh,760px);max-height:calc(100dvh - 24px);padding:clamp(12px,2.2vw,22px);border:1px solid rgba(231,189,85,.4);border-image:none;border-radius:8px;background:linear-gradient(rgba(16,21,29,.98),rgba(9,12,17,.99));box-shadow:0 22px 60px rgba(0,0,0,.68),inset 0 0 0 1px rgba(245,233,202,.06)}.lb-head>div{min-width:0}.lb-head p{margin:4px 0 0}.lb-close{font-size:1.4rem;cursor:pointer}.lb-tabs{flex:0 0 auto;padding-top:4px}.lb-tabs .lb-tab{flex:1}
+      .lb-mine{display:flex;flex:0 0 auto;align-items:center;justify-content:space-between;gap:12px;min-height:48px;margin:8px 0;padding:9px 13px;border:1px solid rgba(231,189,85,.32);border-image:none;border-radius:4px;background:linear-gradient(rgba(19,25,35,.96),rgba(11,15,21,.98));box-shadow:inset 3px 0 rgba(231,189,85,.42)}.lb-mine-value{color:var(--rpg-gold-bright);font:900 1.6rem/1 'Cinzel',serif;font-variant-numeric:tabular-nums;white-space:nowrap}
+      .lb-list{display:grid;flex:1 1 auto;align-content:start;grid-auto-rows:max-content;gap:6px;min-height:0;padding:2px 5px 2px 2px;overflow-y:auto}.lb-row{display:grid;grid-template-columns:36px minmax(0,1fr) auto;align-items:center;gap:9px;min-height:54px;padding:8px 10px;border:1px solid rgba(183,169,139,.3);border-image:none;border-radius:4px;background:linear-gradient(rgba(16,21,29,.94),rgba(9,12,17,.97));box-shadow:0 3px 8px rgba(0,0,0,.28)}.lb-row-top{border-color:rgba(231,189,85,.5);box-shadow:inset 3px 0 var(--rpg-gold),0 3px 8px rgba(0,0,0,.28)}.lb-row-me{outline:1px solid #5fd28b;outline-offset:-3px}.lb-row-unranked{opacity:.62}
+      .lb-rank{color:var(--rpg-gold);font:900 1rem/1 'Cinzel',serif;text-align:center}.lb-name{display:flex;min-width:0;flex-wrap:wrap;align-items:center;gap:5px;color:var(--rpg-paper);font-weight:900;overflow-wrap:anywhere}.lb-meta{min-width:0;flex-basis:100%;overflow:hidden;color:var(--rpg-muted);font-size:.7rem;font-weight:600;text-overflow:ellipsis;white-space:nowrap}.lb-you{padding:2px 5px;color:#07180d;background:#63d68a;font-size:.6rem;font-weight:900;text-transform:uppercase}.lb-power{color:var(--rpg-gold-bright);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}.lb-empty p{margin:5px 0 12px}.lb-retry{min-width:120px}
+      @media(max-height:520px){.lb-panel{width:min(680px,calc(100vw - 16px));height:calc(100dvh - 16px);max-height:calc(100dvh - 16px);padding:8px 10px}.lb-head{padding-bottom:3px}.lb-head .rpg-kicker,.lb-head .rpg-help{display:none}.lb-title{font-size:1.2rem}.lb-tabs{padding:2px 0 6px}.lb-mine{min-height:42px;margin:6px 0;padding:6px 10px}.lb-mine-value{font-size:1.3rem}.lb-list{gap:4px}.lb-row{min-height:46px;padding:6px 9px}}
+      @media(max-width:520px){.lb-panel{width:calc(100vw - 16px);height:calc(100dvh - 16px);max-height:calc(100dvh - 16px)}.lb-row{grid-template-columns:28px minmax(0,1fr)}.lb-power{grid-column:2;justify-self:start}.lb-head .rpg-help{display:none}}
     `;
     document.head.appendChild(style);
   }

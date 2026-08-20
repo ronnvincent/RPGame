@@ -1634,7 +1634,10 @@ io.on('connection', (socket) => {
     const p = players[socket.id];
     if (!p || !p.room) return;
     const room = rooms[p.room];
-    if (!room) return;
+    // A focused START button also receives the browser's native Enter click.
+    // Even with client-side de-duplication, make launch idempotent at the
+    // authoritative boundary so one input cannot emit dungeon_start twice.
+    if (!room || room.started) return;
 
     if (p.actorId !== room.hostActorId) {
       socket.emit('lobby_error', { msg: 'Only the party leader can start.' });
