@@ -23,6 +23,17 @@ import { quests } from '../quests/QuestManager';
 import { QuestLogUI } from './QuestLogUI';
 import { WorldMapUI } from './WorldMapUI';
 import { DUNGEONS } from '../dungeons/DungeonManager';
+import {
+  DIFFICULTY_CONFIGS,
+  getActiveDifficulty,
+  getDifficultyConfig,
+  setActiveDifficulty,
+  type DungeonDifficulty,
+} from '../dungeons/Difficulty';
+import { affixLabel } from '../items/darkrise/affixes';
+import { ensureSockets, getGemById, isSocketable } from '../items/darkrise/gems';
+import { getCardById } from '../items/darkrise/cards';
+import { computeGearScore } from '../items/darkrise/rarities';
 import { InputSettingsPanel, isActionPointerStart, skillAction } from '../input';
 import { SKILL_IDENTITY_MATRIX, isSkillId } from '../combat/SkillMechanics';
 import {
@@ -833,6 +844,15 @@ export class GameHUD {
         font-size: 12px; letter-spacing: 1.2px;
       }
       .play-mode.is-on { color: #ffd700; border-color: #d4af37; background: rgba(212,175,55,0.16); }
+      .play-diff {
+        flex: 1; padding: 7px; cursor: pointer;
+        background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.14);
+        border-radius: 3px; color: #9b8a68;
+        font-family: 'Cinzel', serif; font-weight: 800;
+        font-size: 11px; letter-spacing: 1px;
+      }
+      .play-diff[data-diff="hard"].is-on { color: #fbbf24; border-color: #fbbf24; background: rgba(251,191,36,0.14); }
+      .play-diff[data-diff="fatal"].is-on { color: #f87171; border-color: #f87171; background: rgba(248,113,113,0.14); }
       .play-row {
         display: flex; align-items: center; gap: 10px;
         padding: 9px 10px; margin-bottom: 6px;
@@ -2166,6 +2186,16 @@ export class GameHUD {
         box-shadow: 0 0 14px rgba(251, 191, 36, 0.85);
         animation: legendaryPulse 2s infinite alternate;
       }
+      .rarity-mythical {
+        border: 1.5px solid #22d3ee !important;
+        box-shadow: 0 0 16px rgba(34, 211, 238, 0.9);
+        animation: mythicalPulse 2s infinite alternate;
+      }
+
+      @keyframes mythicalPulse {
+        from { box-shadow: 0 0 8px rgba(34, 211, 238, 0.55); }
+        to { box-shadow: 0 0 18px rgba(34, 211, 238, 0.95); }
+      }
 
       @keyframes legendaryPulse {
         from { box-shadow: 0 0 8px rgba(251, 191, 36, 0.6); }
@@ -2623,6 +2653,11 @@ export class GameHUD {
             <button class="play-mode is-on" type="button" data-mode="solo">SOLO</button>
             <button class="play-mode" type="button" data-mode="party">MULTIPLAYER</button>
           </div>
+          <div class="play-modes" id="difficulty-modes">
+            <button class="play-diff is-on" type="button" data-diff="normal">NORMAL</button>
+            <button class="play-diff" type="button" data-diff="hard">HARD</button>
+            <button class="play-diff" type="button" data-diff="fatal">FATAL 🔑×10</button>
+          </div>
           <div class="pause-label" id="play-hint">Choose where to go</div>
           <div id="play-list"></div>
           <div class="pause-foot">
@@ -3009,6 +3044,18 @@ export class GameHUD {
           const idx = Number((btn as HTMLElement).dataset.idx);
           const d = DUNGEONS[idx];
           if (!d) return;
+          // Fatal consumes Keys of Power at the door.
+          if (getActiveDifficulty() === 'fatal') {
+            const keys = this.engine?.player.keysOfPower ?? 0;
+            if (keys < getDifficultyConfig().keyCost) {
+              audio.playTone(200, 0.15);
+              const hint = this.container.querySelector('#play-hint');
+              if (hint) hint.textContent = `Fatal needs ${getDifficultyConfig().keyCost} Keys of Power — you have ${keys}`;
+              return;
+            }
+            this.engine!.player.keysOfPower = keys - getDifficultyConfig().keyCost;
+            this.engine?.triggerSave();
+          }
           this.closeHudDialog(playBack);
           audio.playTeleport();
           if (playMode === 'solo') {
@@ -3030,6 +3077,19 @@ export class GameHUD {
         playMode = (btn as HTMLElement).dataset.mode === 'party' ? 'party' : 'solo';
         this.container.querySelectorAll('.play-mode').forEach(b => b.classList.remove('is-on'));
         btn.classList.add('is-on');
+      });
+    });
+
+    // Difficulty tiers, Darkrise-style: Normal / Hard / Fatal. Fatal eats ten
+    // Keys of Power per run and pays the best loot.
+    this.container.querySelectorAll('.play-diff').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const diff = (btn as HTMLElement).dataset.diff as DungeonDifficulty;
+        setActiveDifficulty(diff === 'fatal' ? 'fatal' : diff === 'hard' ? 'hard' : 'normal');
+        this.container.querySelectorAll('.play-diff').forEach(b => b.classList.remove('is-on'));
+        btn.classList.add('is-on');
+        audio.playClick();
       });
     });
 
@@ -3961,6 +4021,29 @@ export class GameHUD {
       if (item.stats.crit) statChips.push(`<span class="stat-chip">${GameHUD.glyph('spark')} +${Math.round(item.stats.crit * 100)}% CRIT</span>`);
       if (item.stats.speed) statChips.push(`<span class="stat-chip">${GameHUD.glyph('wind')} +${item.stats.speed} SPD</span>`);
     }
+
+    // Darkrise gear layers: rolled affixes, seated gems, slotted card,
+    // enchant level - all folded into one Gear Score.
+    const extraChips: string[] = [];
+    (item.affixes || []).forEach(affix => {
+      extraChips.push(`<span class="stat-chip" style="color:#7dd3fc;">◆ ${escapeHtml(affixLabel(affix))}</span>`);
+    });
+    if (isSocketable(item)) {
+      ensureSockets(item).forEach(socketId => {
+        if (!socketId) return;
+        const gem = getGemById(socketId);
+        if (!gem) return;
+        extraChips.push(`<span class="stat-chip" style="color:#facc15;">◇ ${escapeHtml(gem.name)}</span>`);
+      });
+    }
+    const card = item.cardId ? getCardById(item.cardId) : null;
+    if (card) {
+      extraChips.push(`<span class="stat-chip" style="color:#c084fc;">🃏 ${escapeHtml(card.name)}</span>`);
+    }
+    if (item.enchantLevel) {
+      extraChips.push(`<span class="stat-chip" style="color:#f87171;">✦ Enchant +${item.enchantLevel}</span>`);
+    }
+    const gearScore = computeGearScore(item);
     // Against what you are already wearing.
     //
     // The core loop is kill, loot, equip, and deciding whether a drop is an
@@ -3989,10 +4072,13 @@ export class GameHUD {
           <div class="inspector-rarity-pill">
             <span style="color: ${rConfig.color};">${rConfig.name}</span>
             <span style="color: #64748b;">&middot; ${escapeHtml(item.type.toUpperCase())}</span>
+            ${isSocketable(item) ? `<span style="color:#fbbf24;">&middot; GS ${gearScore}</span>` : ''}
+            ${item.enchantLevel ? `<span style="color:#f87171;">&middot; +${item.enchantLevel}</span>` : ''}
           </div>
         </div>
       </div>
       ${statChips.length > 0 ? `<div class="inspector-stats-grid">${statChips.join('')}</div>` : ''}
+      ${extraChips.length > 0 ? `<div class="inspector-stats-grid">${extraChips.join('')}</div>` : ''}
       ${comparison}
       <div class="inspector-desc">${escapeHtml(item.description)}</div>
       <div class="inspector-actions">

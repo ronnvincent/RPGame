@@ -9,6 +9,7 @@ import { SideViewEngine } from './engine/SideViewEngine';
 import { CharacterSelectUI } from './ui/CharacterSelectUI';
 import { GameHUD } from './ui/GameHUD';
 import { DUNGEONS, DungeonDefinition, spawnWaveEnemies } from './dungeons/DungeonManager';
+import { recordEvent } from './quests/DailyMissions';
 import {
   createDungeonEncounterRuntime,
   type DungeonEncounterSnapshot,
@@ -1448,7 +1449,9 @@ export class SideViewGame {
   private onDungeonCleared() {
     if (!this.engine) return;
     this.waveActive = false;
-    
+
+    recordEvent('dungeons_cleared');
+
     // Update max cleared dungeon for progression gating
     if (this.currentDungeonIndex >= (this.engine.player.maxDungeonCleared || 0)) {
       this.engine.player.maxDungeonCleared = this.currentDungeonIndex + 1;

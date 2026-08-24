@@ -3,6 +3,8 @@
  */
 
 import { ItemData, getRandomLoot } from '../items/ItemDatabase';
+import { getDifficultyConfig } from './Difficulty';
+import { rollGemDrop, GEM_DROP_CHANCE } from '../items/darkrise/gems';
 import { getZoneSpawnLayout } from '../maps/ZoneContent';
 import {
   ENEMY_ROLE_TACTICS,
@@ -652,6 +654,11 @@ export function spawnWaveEnemies(
   const wave = dungeon.waves[waveIndex] || (dungeon.endless ? buildEndlessWave(dungeon, waveIndex) : undefined);
   if (!wave) return [];
 
+  // Difficulty tiers (Normal/Hard/Fatal) scale the authored tables at spawn
+  // time instead of duplicating every wave list per tier.
+  const diffCfg = getDifficultyConfig();
+
+
   const instances: EnemyInstance[] = [];
   const spawnLayout = getZoneSpawnLayout(dungeon.theme, waveIndex, arenaWidth);
   const encounterSeed = `${dungeon.id}:${waveIndex}`;
@@ -725,7 +732,15 @@ export function spawnWaveEnemies(
       // time, so loot arrived faster than it could mean anything. A boss still
       // always drops - that is the reward for the fight - but everything below
       // is now uncommon enough to be worth picking up.
-      const loot = enemyTemplate.type === 'boss'
+      // Gems ride the same slot: bosses double the chance, rank-and-file halve it.
+      const gemChance = enemyTemplate.type === 'boss'
+        ? GEM_DROP_CHANCE * 2
+        : (enemyTemplate.type === 'elite' || isElite)
+        ? GEM_DROP_CHANCE
+        : GEM_DROP_CHANCE * 0.5;
+      const loot = Math.random() < gemChance
+        ? rollGemDrop()
+        : enemyTemplate.type === 'boss'
         ? getRandomLoot('boss')
         : enemyTemplate.type === 'elite'
         ? (Math.random() < ELITE_DROP_CHANCE ? getRandomLoot('mid') : undefined)
@@ -733,7 +748,7 @@ export function spawnWaveEnemies(
         ? getRandomLoot('mid')
         : (Math.random() < MOB_DROP_CHANCE ? getRandomLoot('low') : undefined);
 
-      const baseHp = enemyTemplate.maxHp * ENEMY_HP_SCALE * (isElite ? 2.4 : 1) * eliteStats.hp;
+      const baseHp = enemyTemplate.maxHp * ENEMY_HP_SCALE * (isElite ? 2.4 : 1) * eliteStats.hp * diffCfg.hpMult;
       const guardCapacity = tactic?.guard?.capacity || 0;
       const attackProfileId: EnemyAttackProfileId = role === 'boss'
         ? 'boss-slam'
@@ -751,11 +766,11 @@ export function spawnWaveEnemies(
         // with nothing at stake.
         maxHp: Math.max(1, Math.round(baseHp)),
         hp: Math.max(1, Math.round(baseHp)),
-        atk: Math.round(enemyTemplate.atk * (isElite ? 1.45 : 1) * eliteStats.attack),
-        def: Math.round(enemyTemplate.def * (isElite ? 1.3 : 1) * eliteStats.defence),
+        atk: Math.round(enemyTemplate.atk * (isElite ? 1.45 : 1) * eliteStats.attack * diffCfg.atkMult),
+        def: Math.round(enemyTemplate.def * (isElite ? 1.3 : 1) * eliteStats.defence * diffCfg.defMult),
         speed: enemyTemplate.speed * (tactic?.moveSpeedMultiplier || 1) * eliteStats.speed,
-        expReward: Math.round(enemyTemplate.expReward * (isElite ? 2.5 : 1) * eliteStats.reward),
-        goldReward: Math.round(enemyTemplate.goldReward * (isElite ? 3 : 1) * eliteStats.reward),
+        expReward: Math.round(enemyTemplate.expReward * (isElite ? 2.5 : 1) * eliteStats.reward * diffCfg.expMult),
+        goldReward: Math.round(enemyTemplate.goldReward * (isElite ? 3 : 1) * eliteStats.reward * diffCfg.goldMult),
         width: enemyTemplate.width,
         height: enemyTemplate.height,
         attackRange: enemyTemplate.type === 'boss' ? 90 : Math.max(60, tactic?.preferredRange || 60),

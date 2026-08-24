@@ -328,7 +328,7 @@ export class AudioManager {
     this.playSFX('/assets/audio/sfx/wind.ogg', 0.1);
   }
 
-  public playLoot(rarity: 'common' | 'rare' | 'epic' | 'legendary' = 'common') {
+  public playLoot(rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'mythical' = 'common') {
     if (rarity === 'legendary') this.playSFX('/assets/audio/sfx/interlude.ogg', 0.25);
     else if (rarity === 'epic') this.playSFX('/assets/audio/sfx/interlude2.ogg', 0.2);
     else this.playSFX('/assets/audio/sfx/magicdrop.ogg', 0.15);

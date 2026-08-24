@@ -8,6 +8,11 @@ import { DialogueSystem, DialogueOption } from '../dialogue/DialogueSystem';
 import { quests } from '../quests/QuestManager';
 import { audio } from '../engine/AudioManager';
 import { ITEM_DATABASE, ItemData } from '../items/ItemDatabase';
+import {
+  openAnvilServicesModal,
+  openJewelerModal,
+  openMissionBoardModal,
+} from './TownServices';
 
 export interface TownNPC {
   id: string;
@@ -80,6 +85,34 @@ export class TownHub {
       color: '#10b981',
       lore: [
         "Alchemist Morwenna: My potions are distilled from starlight and rare root extracts. Always keep an Elixir or Resurrection Feather on your hotbar!"
+      ]
+    },
+    {
+      id: 'jeweler_sable',
+      name: 'Jeweler Sable',
+      title: 'Cutter of Stones, Seater of Gems',
+      portrait: '/assets/ui_sprites/portrait_9.png',
+      x: 2230,
+      y: 0,
+      width: 46,
+      height: 62,
+      color: '#22d3ee',
+      lore: [
+        "Jeweler Sable: A socket carved true is worth more than any enchant. Bring me gems - three of a kind and I'll fuse you something finer."
+      ]
+    },
+    {
+      id: 'herald_timo',
+      name: 'Herald Timo',
+      title: "Keeper of the Mayor's Missions",
+      portrait: '/assets/ui_sprites/portrait_5.png',
+      x: 730,
+      y: 0,
+      width: 46,
+      height: 62,
+      color: '#f59e0b',
+      lore: [
+        "Herald Timo: The mayor pays in Unification Stones for daily work, and the hourly hunt earns Keys of Power. Fatal gates need ten of them!"
       ]
     },
     {
@@ -188,6 +221,39 @@ export class TownHub {
         onSelect: () => {
           dialogue.close();
           this.openBlacksmithModal(engine);
+        }
+      });
+      options.push({
+        label: "Anvil Services (Enchant · Melt · Unify · Cards)",
+        icon: '⚒️',
+        type: 'open_shop',
+        onSelect: () => {
+          dialogue.close();
+          openAnvilServicesModal(engine);
+        }
+      });
+    }
+
+    if (npc.id === 'jeweler_sable') {
+      options.push({
+        label: 'Jeweler Bench (Sockets & Gems)',
+        icon: '/assets/rpg-icons/32x32/gem_01b.png',
+        type: 'open_shop',
+        onSelect: () => {
+          dialogue.close();
+          openJewelerModal(engine);
+        }
+      });
+    }
+
+    if (npc.id === 'herald_timo') {
+      options.push({
+        label: 'Mission Board (Dailies & Hourlies)',
+        icon: '📜',
+        type: 'open_shop',
+        onSelect: () => {
+          dialogue.close();
+          openMissionBoardModal(engine);
         }
       });
     }

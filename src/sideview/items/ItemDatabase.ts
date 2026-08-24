@@ -6,8 +6,17 @@
  * Built using the Weighted Drop Tables & Rarity Tiers pattern from SKILL.md.
  */
 
-export type ItemRarity = 'common' | 'rare' | 'epic' | 'legendary';
-export type ItemType = 'helmet' | 'armor' | 'boots' | 'weapon' | 'wings' | 'ring' | 'amulet' | 'shield' | 'consumable';
+import {
+  RARITY_ORDER,
+  RARITY_WEIGHTS_BY_TIER,
+  computeGearScore,
+  weightedRarityRoll,
+} from './darkrise/rarities';
+import { rollAffixes } from './darkrise/affixes';
+import { getDifficultyConfig } from '../dungeons/Difficulty';
+
+export type ItemRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'mythical';
+export type ItemType = 'helmet' | 'armor' | 'boots' | 'weapon' | 'wings' | 'ring' | 'amulet' | 'shield' | 'consumable' | 'gem' | 'card' | 'material';
 
 export interface ItemStats {
   hp?: number;
@@ -16,6 +25,18 @@ export interface ItemStats {
   def?: number;
   crit?: number; // 0.05 = +5%
   speed?: number;
+}
+
+/**
+ * Rolled bonus stats (see darkrise/affixes). Part of the item once dropped, so
+ * two drops of the same catalog entry are never quite equal - Darkrise's
+ * "randomly generated stats".
+ */
+export interface ItemAffixData {
+  id: string;
+  label: string;
+  stat: string;
+  value: number;
 }
 
 export interface ItemData {
@@ -33,6 +54,16 @@ export interface ItemData {
     value: number;
     duration?: number;
   };
+  /** Randomly rolled bonuses from the drop roll. */
+  affixes?: ItemAffixData[];
+  /** Socket array; null = empty slot, string = seated gem id. */
+  sockets?: Array<string | null>;
+  /** Slotted monster card id (darkrise/cards). */
+  cardId?: string;
+  /** Blacksmith enchant level, +8% item stats per level. */
+  enchantLevel?: number;
+  /** One-number upgrade check, recomputed on drop and on any change. */
+  gearScore?: number;
 }
 
 export interface RarityConfig {
@@ -54,6 +85,15 @@ export const RARITY_CONFIGS: Record<ItemRarity, RarityConfig> = {
     glowColor: 'rgba(148, 163, 184, 0.4)',
     beamColor: 'rgba(203, 213, 225, 0.5)',
     textColor: '#f1f5f9'
+  },
+  uncommon: {
+    name: 'Uncommon',
+    color: '#4ade80',
+    bgColor: 'rgba(74, 222, 128, 0.18)',
+    borderColor: '#16a34a',
+    glowColor: 'rgba(74, 222, 128, 0.5)',
+    beamColor: 'rgba(134, 239, 172, 0.6)',
+    textColor: '#dcfce7'
   },
   rare: {
     name: 'Rare',
@@ -81,6 +121,15 @@ export const RARITY_CONFIGS: Record<ItemRarity, RarityConfig> = {
     glowColor: 'rgba(251, 191, 36, 0.95)',
     beamColor: 'rgba(251, 191, 36, 0.9)',
     textColor: '#fef3c7'
+  },
+  mythical: {
+    name: 'Mythical',
+    color: '#22d3ee',
+    bgColor: 'rgba(34, 211, 238, 0.3)',
+    borderColor: '#0891b2',
+    glowColor: 'rgba(34, 211, 238, 1)',
+    beamColor: 'rgba(103, 232, 249, 0.95)',
+    textColor: '#cffafe'
   }
 };
 
@@ -547,28 +596,45 @@ export function rollDrop(table: WeightedDrop[]): ItemData | null {
 
 /**
  * Generates balanced weighted drop tables per tier with guaranteed totals.
+ *
+ * Darkrise-style drops: rarity comes from the tier table (extended to six
+ * rarities and re-rolled upward on Hard/Fatal), then the item gets freshly
+ * rolled affixes, a chance of open sockets, and a gear score. The catalog
+ * entry itself is never mutated - every drop is a copy.
  */
 export function getRandomLoot(tier: LootTier = 'mid'): ItemData {
-  const legendaries = ITEM_DATABASE.filter(i => i.rarity === 'legendary');
-  const epics = ITEM_DATABASE.filter(i => i.rarity === 'epic');
-  const rares = ITEM_DATABASE.filter(i => i.rarity === 'rare');
-  const commons = ITEM_DATABASE.filter(i => i.rarity === 'common');
+  const base = weightedRarityRoll(RARITY_WEIGHTS_BY_TIER[tier]);
 
-  // Weights for (Legendary, Epic, Rare, Common)
-  let weights = { leg: 2, epic: 10, rare: 35, com: 53 };
-  if (tier === 'boss') {
-    weights = { leg: 25, epic: 40, rare: 25, com: 10 };
-  } else if (tier === 'mid') {
-    weights = { leg: 6, epic: 20, rare: 44, com: 30 };
+  // Hard/Fatal can promote a roll up the ladder. One roll per promotion step
+  // keeps Fatal's mythical chance small but real.
+  const config = getDifficultyConfig();
+  let rarity = base;
+  for (let i = 0; i < 2; i++) {
+    if (rarity !== 'mythical' && Math.random() < config.lootUpgradeChance * 0.5) {
+      const idx = RARITY_ORDER.indexOf(rarity);
+      rarity = RARITY_ORDER[Math.min(RARITY_ORDER.length - 1, idx + 1)];
+    }
   }
 
-  const table: WeightedDrop[] = [
-    ...legendaries.map(i => ({ item: i, weight: weights.leg / Math.max(1, legendaries.length) })),
-    ...epics.map(i => ({ item: i, weight: weights.epic / Math.max(1, epics.length) })),
-    ...rares.map(i => ({ item: i, weight: weights.rare / Math.max(1, rares.length) })),
-    ...commons.map(i => ({ item: i, weight: weights.com / Math.max(1, commons.length) }))
-  ];
+  const pool = ITEM_DATABASE.filter(i => i.rarity === rarity && !['consumable', 'gem', 'card', 'material'].includes(i.type));
+  if (!pool.length) return ITEM_DATABASE[0];
+  const source = pool[Math.floor(Math.random() * pool.length)];
 
-  return rollDrop(table) || ITEM_DATABASE[0];
+  const drop: ItemData = { ...source, stats: source.stats ? { ...source.stats } : undefined };
+  drop.affixes = rollAffixes(rarity);
+  if (drop.affixes.length === 0 && Math.random() < config.bonusAffixChance) {
+    drop.affixes = rollAffixes('uncommon');
+  }
+
+  // Drops may arrive with carved sockets already in place - better rarities
+  // come pre-slotted, like Darkrise's higher-tier gear.
+  const socketChance = { common: 0, uncommon: 0.15, rare: 0.3, epic: 0.5, legendary: 0.7, mythical: 1 }[rarity];
+  if (Math.random() < socketChance) {
+    const count = rarity === 'mythical' ? 3 : rarity === 'legendary' ? 2 : 1;
+    drop.sockets = Array(count).fill(null);
+  }
+
+  computeGearScore(drop);
+  return drop;
 }
 

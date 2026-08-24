@@ -9,6 +9,11 @@ import { POLY_SHEETS, POLY_PROPS, POLY_HOUSES, POLY_NATURE } from './MapLibrary'
 import { bossSkillsFor, BossSkill } from '../dungeons/BossSkills';
 import { BattleTheme, EnemyInstance } from '../dungeons/DungeonManager';
 import { ItemData, RARITY_CONFIGS } from '../items/ItemDatabase';
+import { getCardById, getCardForDungeon, makeCardItem, BOSS_CARD_DROP_CHANCE } from '../items/darkrise/cards';
+import { socketBonusStats } from '../items/darkrise/gems';
+import { enchantMultiplier } from '../items/darkrise/services';
+import { WALLET_DEFAULTS } from '../items/darkrise/currencies';
+import { recordEvent } from '../quests/DailyMissions';
 import { ParticleSystem } from './ParticleSystem';
 import { FX_COLOUR_ROW } from './VfxLibrary';
 import { UltimateDirector, ULTIMATE_LINES } from './UltimateDirector';
@@ -263,6 +268,12 @@ export interface PlayerState {
   skillLevels?: { [skillId: string]: number };
   equipment: PlayerEquipment;
   inventory: ItemData[];
+  // Darkrise-style currencies beyond gold. Optional so old saves load as
+  // "never had any" and createState seeds the starting values.
+  diamonds?: number;
+  keysOfPower?: number;
+  unificationStones?: number;
+  magicSubstance?: number;
   comboCount: number;
   comboTimer: number;
   comboStep: number;
@@ -703,7 +714,11 @@ export class SideViewEngine {
       level: 1,
       exp: 0,
       maxExp: 100,
-      gold: 50,
+      gold: WALLET_DEFAULTS.gold,
+      diamonds: WALLET_DEFAULTS.diamonds,
+      keysOfPower: WALLET_DEFAULTS.keysOfPower,
+      unificationStones: WALLET_DEFAULTS.unificationStones,
+      magicSubstance: WALLET_DEFAULTS.magicSubstance,
       x: 240,
       y: this.groundY,
       vx: 0,
@@ -757,15 +772,44 @@ export class SideViewEngine {
     let bonusCrit = 0;
     let bonusSpeed = 0;
 
-    // Equipment bonuses
+    // Equipment bonuses. An item's contribution is base stats x enchant level,
+    // plus its rolled affixes, seated gems and slotted card - the four layers
+    // Darkrise stacks on every piece of gear.
     Object.values(p.equipment).forEach((item?: ItemData) => {
-      if (item && item.stats) {
-        if (item.stats.hp) bonusHp += item.stats.hp;
-        if (item.stats.mp) bonusMp += item.stats.mp;
-        if (item.stats.atk) bonusAtk += item.stats.atk;
-        if (item.stats.def) bonusDef += item.stats.def;
-        if (item.stats.crit) bonusCrit += item.stats.crit;
-        if (item.stats.speed) bonusSpeed += item.stats.speed;
+      if (!item) return;
+      const mult = enchantMultiplier(item);
+      if (item.stats) {
+        if (item.stats.hp) bonusHp += Math.round(item.stats.hp * mult);
+        if (item.stats.mp) bonusMp += Math.round(item.stats.mp * mult);
+        if (item.stats.atk) bonusAtk += Math.round(item.stats.atk * mult);
+        if (item.stats.def) bonusDef += Math.round(item.stats.def * mult);
+        if (item.stats.crit) bonusCrit += item.stats.crit * mult;
+        if (item.stats.speed) bonusSpeed += item.stats.speed * mult;
+      }
+      (item.affixes || []).forEach(affix => {
+        const value = affix.value;
+        if (affix.stat === 'hp') bonusHp += value;
+        else if (affix.stat === 'mp') bonusMp += value;
+        else if (affix.stat === 'atk') bonusAtk += value;
+        else if (affix.stat === 'def') bonusDef += value;
+        else if (affix.stat === 'crit') bonusCrit += value;
+        else if (affix.stat === 'speed') bonusSpeed += value;
+      });
+      const gemStats = socketBonusStats(item);
+      if (gemStats.hp) bonusHp += gemStats.hp;
+      if (gemStats.mp) bonusMp += gemStats.mp;
+      if (gemStats.atk) bonusAtk += gemStats.atk;
+      if (gemStats.def) bonusDef += gemStats.def;
+      if (gemStats.crit) bonusCrit += gemStats.crit;
+      if (gemStats.speed) bonusSpeed += gemStats.speed;
+      const card = item.cardId ? getCardById(item.cardId) : null;
+      if (card?.stats) {
+        if (card.stats.hp) bonusHp += card.stats.hp;
+        if (card.stats.mp) bonusMp += card.stats.mp;
+        if (card.stats.atk) bonusAtk += card.stats.atk;
+        if (card.stats.def) bonusDef += card.stats.def;
+        if (card.stats.crit) bonusCrit += card.stats.crit;
+        if (card.stats.speed) bonusSpeed += card.stats.speed;
       }
     });
 
@@ -2818,6 +2862,10 @@ export class SideViewEngine {
 
     // Trigger quest kill tracker
     quests.onEnemyKilled(enemy.name, enemy.type === 'boss');
+    // Daily/hourly mission counters
+    recordEvent('enemies_killed');
+    if (enemy.type === 'boss') recordEvent('bosses_killed');
+    if (enemy.isElite || enemy.type === 'elite') recordEvent('elites_killed');
 
     // Track corpse position for Necromancer Corpse Explosion
     this.recentCorpsePositions.push({ x: enemy.x, y: enemy.y });
@@ -2833,6 +2881,16 @@ export class SideViewEngine {
     // Spawn Loot Drop
     if (enemy.lootDrop) {
       this.spawnDroppedLoot(enemy.lootDrop, enemy.x, enemy.y);
+    }
+
+    // Bosses can drop their own monster card - Darkrise's "farm the boss for
+    // its card" loop. The card matches the dungeon, so it is always a chase.
+    if (enemy.type === 'boss' && Math.random() < BOSS_CARD_DROP_CHANCE) {
+      const card = getCardForDungeon(this.currentDungeonId);
+      if (card) {
+        this.spawnDroppedLoot(makeCardItem(card), enemy.x + 18, enemy.y - 6);
+        this.particles.addFloatingText(enemy.x, enemy.y - 70, `${card.name}!`, '#c084fc', true, 20);
+      }
     }
 
     // Death VFX & SFX
@@ -2915,6 +2973,11 @@ export class SideViewEngine {
     if (ps.exp) this.player.exp = ps.exp;
     if (ps.maxExp) this.player.maxExp = ps.maxExp;
     if (ps.gold) this.player.gold = ps.gold;
+    // Currencies default to their starting values when a save predates them.
+    if (typeof ps.diamonds === 'number') this.player.diamonds = ps.diamonds;
+    if (typeof ps.keysOfPower === 'number') this.player.keysOfPower = ps.keysOfPower;
+    if (typeof ps.unificationStones === 'number') this.player.unificationStones = ps.unificationStones;
+    if (typeof ps.magicSubstance === 'number') this.player.magicSubstance = ps.magicSubstance;
     if (data.maxDungeonCleared) this.player.maxDungeonCleared = data.maxDungeonCleared;
     if (data.inventory) this.player.inventory = data.inventory;
 
@@ -4654,7 +4717,8 @@ export class SideViewEngine {
     // you are doing this second, so it is rebuilt here from the permanent parts:
     // base stats (which is where forge upgrades live), equipment, and level.
     let gearAtk = 0, gearDef = 0, gearHp = 0, gearMp = 0, gearCrit = 0, gearSpeed = 0;
-    const rarityValue: Record<string, number> = { common: 15, rare: 45, epic: 110, legendary: 260 };
+    // Six-tier ladder now - the two new tiers sit where they belong on it.
+    const rarityValue: Record<string, number> = { common: 15, uncommon: 28, rare: 45, epic: 110, legendary: 260, mythical: 600 };
     let rarity = 0;
 
     for (const slot of Object.values(p.equipment)) {
@@ -5115,6 +5179,19 @@ export class SideViewEngine {
         this.particles.addFloatingText(p.x, p.y - 24, 'RESURRECTED', '#ef4444', true, 16);
       }
 
+      audio.playClick();
+      return;
+    }
+
+    // Gems, cards and crafting materials are not equippable - they are used at
+    // town services. Clicking one in the bag just explains that instead of
+    // silently writing a gem into a weapon slot.
+    if (item.type === 'gem' || item.type === 'card' || item.type === 'material') {
+      this.particles.addFloatingText(
+        p.x, p.y - 24,
+        item.type === 'card' ? 'Slot cards at the Blacksmith' : item.type === 'gem' ? 'Socket gems at the Jeweler' : 'Crafting material',
+        '#94a3b8', true, 13,
+      );
       audio.playClick();
       return;
     }
