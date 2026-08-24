@@ -282,6 +282,9 @@ export interface PlayerState {
   keysOfPower?: number;
   unificationStones?: number;
   magicSubstance?: number;
+  /** Owned companions and the currently summoned one. */
+  pets?: import('../pets/PetSystem').PetInstance[];
+  activePetId?: string;
   comboCount: number;
   comboTimer: number;
   comboStep: number;
@@ -727,6 +730,7 @@ export class SideViewEngine {
       keysOfPower: WALLET_DEFAULTS.keysOfPower,
       unificationStones: WALLET_DEFAULTS.unificationStones,
       magicSubstance: WALLET_DEFAULTS.magicSubstance,
+      pets: [],
       x: 240,
       y: this.groundY,
       vx: 0,
@@ -3008,6 +3012,8 @@ export class SideViewEngine {
     if (typeof ps.keysOfPower === 'number') this.player.keysOfPower = ps.keysOfPower;
     if (typeof ps.unificationStones === 'number') this.player.unificationStones = ps.unificationStones;
     if (typeof ps.magicSubstance === 'number') this.player.magicSubstance = ps.magicSubstance;
+    if (Array.isArray(ps.pets)) this.player.pets = ps.pets;
+    if (typeof ps.activePetId === 'string' || ps.activePetId === null) this.player.activePetId = ps.activePetId ?? undefined;
     if (data.maxDungeonCleared) this.player.maxDungeonCleared = data.maxDungeonCleared;
     if (data.inventory) this.player.inventory = data.inventory;
 

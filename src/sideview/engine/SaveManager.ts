@@ -45,6 +45,8 @@ export class SaveManager {
         keysOfPower: playerState.keysOfPower ?? 0,
         unificationStones: playerState.unificationStones ?? 0,
         magicSubstance: playerState.magicSubstance ?? 0,
+        pets: playerState.pets ?? [],
+        activePetId: playerState.activePetId ?? null,
         // Equipment was never saved. Equipping moves an item OUT of the
         // inventory and into a slot, and only the inventory was persisted - so
         // the moment you equipped something and reloaded, it was gone from both
