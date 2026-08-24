@@ -76,12 +76,16 @@ export class DialogueSystem {
 
       .dialogue-box-frame {
         width: min(880px, 92vw);
-        background: url('/assets/kenney-rpg-ui/panel_brown.png') repeat;
-        background-size: 100% 100%;
+        /* Darkrise panel: near-black, gilded rim, no brown wood. */
+        background: linear-gradient(180deg, rgba(13, 14, 22, 0.97), rgba(6, 7, 11, 0.98));
         border-style: solid;
-        border-width: 14px;
-        border-image: url('/assets/runtime/ui/fantasy-borders/default-panel/panel-000.png') 16 / 14px / 0 stretch;
-        box-shadow: 0 12px 35px rgba(0, 0, 0, 0.85);
+        border-width: 2px;
+        border-image: none;
+        border-radius: 4px;
+        box-shadow:
+          inset 0 0 0 1px rgba(231, 189, 85, 0.28),
+          inset 0 -10px 24px rgba(0, 0, 0, 0.55),
+          0 12px 35px rgba(0, 0, 0, 0.85);
         padding: 12px 16px 14px 16px;
         display: flex;
         flex-direction: column;

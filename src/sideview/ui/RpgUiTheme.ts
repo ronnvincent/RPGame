@@ -12,19 +12,20 @@ export function installRpgUiTheme(): void {
   style.id = RPG_UI_THEME_ID;
   style.textContent = `
     :root {
-      --rpg-ink-950: #07080b;
-      --rpg-ink-900: #0d1118;
-      --rpg-ink-850: #131923;
-      --rpg-ink-800: #1a2230;
-      --rpg-paper: #f5e9ca;
-      --rpg-muted: #b7a98b;
-      --rpg-gold: #e7bd55;
-      --rpg-gold-bright: #ffe39a;
+      --rpg-ink-950: #05060a;
+      --rpg-ink-900: #0a0c13;
+      --rpg-ink-850: #10131d;
+      --rpg-ink-800: #171b28;
+      --rpg-paper: #efe3c6;
+      --rpg-muted: #a89a7e;
+      --rpg-gold: #e0b64f;
+      --rpg-gold-bright: #ffdd8f;
       --rpg-danger: #ef5b55;
       --rpg-health: #d4453f;
       --rpg-mana: #3d8ae6;
       --rpg-stamina: #42b978;
       --rpg-focus: #fff0a8;
+      --rpg-shield: #a78bfa;
       --rpg-panel-image: url('/assets/runtime/ui/fantasy-borders/default-panel/panel-000.png');
       --rpg-panel-inset-image: url('/assets/runtime/ui/fantasy-borders/default-panel/panel-016.png');
       --rpg-divider-image: url('/assets/runtime/ui/fantasy-borders/default-divider/divider-000.png');
@@ -40,8 +41,9 @@ export function installRpgUiTheme(): void {
       font-family: 'Outfit', 'Inter', system-ui, sans-serif;
       font-size: calc(15px * var(--rpg-text-scale));
       background:
-        radial-gradient(circle at 50% 18%, rgba(91, 67, 122, .2), transparent 40%),
-        linear-gradient(145deg, rgba(5, 7, 11, .92), rgba(10, 13, 19, .98));
+        radial-gradient(ellipse at 50% -10%, rgba(124, 58, 237, .14), transparent 46%),
+        radial-gradient(circle at 50% 50%, transparent 52%, rgba(0, 0, 0, .55) 100%),
+        linear-gradient(160deg, rgba(4, 5, 9, .94), rgba(8, 10, 16, .98));
       padding: max(12px, env(safe-area-inset-top))
                max(12px, env(safe-area-inset-right))
                max(12px, env(safe-area-inset-bottom))
@@ -170,13 +172,14 @@ export function installRpgUiTheme(): void {
     .rpg-card,
     .rpg-tooltip {
       color: var(--rpg-paper);
-      background: linear-gradient(rgba(16, 21, 29, .96), rgba(9, 12, 17, .98));
+      background: linear-gradient(rgba(12, 14, 22, .96), rgba(6, 8, 13, .98));
       border: 16px solid transparent;
       /* These Kenney frames are opaque-white masks. Filling the center paints
          a white sheet over the dark surface; use only their border slices. */
       border-image: var(--rpg-panel-image) 16 / 16px / 0 stretch;
       image-rendering: pixelated;
       filter: drop-shadow(0 12px 22px rgba(0, 0, 0, .52));
+      box-shadow: inset 0 0 0 1px rgba(224, 182, 79, .18), inset 0 -10px 26px rgba(0, 0, 0, .5);
     }
 
     .rpg-card,
@@ -223,13 +226,14 @@ export function installRpgUiTheme(): void {
     .rpg-tab,
     .rpg-icon-button {
       min-height: 44px;
-      border: 1px solid rgba(231, 189, 85, .48);
-      border-radius: 5px;
+      border: 1px solid rgba(224, 182, 79, .55);
+      border-radius: 3px;
       color: var(--rpg-paper);
-      background: linear-gradient(#34303a, #181821 52%, #11131a 53%);
-      box-shadow: inset 0 0 0 2px rgba(0, 0, 0, .42), 0 4px 0 #07080b;
+      background: linear-gradient(#191d2b, #0e111b 52%, #0a0c13 53%);
+      box-shadow: inset 0 0 0 1px rgba(224, 182, 79, .12), 0 3px 0 #05060a;
       font: 800 .86rem/1 'Outfit', 'Inter', sans-serif;
-      letter-spacing: .04em;
+      letter-spacing: .05em;
+      text-transform: uppercase;
       text-shadow: 0 1px 2px #000;
       touch-action: manipulation;
     }
@@ -238,7 +242,11 @@ export function installRpgUiTheme(): void {
     .rpg-icon-button { width: 46px; min-width: 46px; padding: 8px; }
     .rpg-button:hover:not(:disabled),
     .rpg-tab:hover:not(:disabled),
-    .rpg-icon-button:hover:not(:disabled) { filter: brightness(1.18); }
+    .rpg-icon-button:hover:not(:disabled) {
+      filter: brightness(1.25);
+      border-color: var(--rpg-gold-bright);
+      box-shadow: inset 0 0 0 1px rgba(255, 221, 143, .28), 0 3px 0 #05060a, 0 0 14px rgba(224, 182, 79, .18);
+    }
     .rpg-button:active:not(:disabled),
     .rpg-tab:active:not(:disabled),
     .rpg-icon-button:active:not(:disabled) { transform: translateY(2px); box-shadow: inset 0 0 0 2px rgba(0, 0, 0, .5), 0 2px 0 #07080b; }
