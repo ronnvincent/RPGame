@@ -34,6 +34,7 @@ import { affixLabel } from '../items/darkrise/affixes';
 import { ensureSockets, getGemById, isSocketable } from '../items/darkrise/gems';
 import { getCardById } from '../items/darkrise/cards';
 import { computeGearScore } from '../items/darkrise/rarities';
+import { getSetById } from '../items/darkrise/sets';
 import { InputSettingsPanel, isActionPointerStart, skillAction } from '../input';
 import { SKILL_IDENTITY_MATRIX, isSkillId } from '../combat/SkillMechanics';
 import {
@@ -3964,8 +3965,9 @@ export class GameHUD {
     const stats: Array<[string, string, number]> = [
       [GameHUD.glyph('sword'), 'ATK', 1], [GameHUD.glyph('shield'), 'DEF', 1], [GameHUD.glyph('heart'), 'HP', 1],
       [GameHUD.glyph('orb'), 'MP', 1], [GameHUD.glyph('spark'), 'CRIT', 100], [GameHUD.glyph('wind'), 'SPD', 1],
+      [GameHUD.glyph('shield'), 'ES', 1], [GameHUD.glyph('spark'), 'RCH', 100], [GameHUD.glyph('sword'), 'PEN', 100],
     ];
-    const keys = ['atk', 'def', 'hp', 'mp', 'crit', 'speed'];
+    const keys = ['atk', 'def', 'hp', 'mp', 'crit', 'speed', 'energyShield', 'rechargeSpeed', 'armorPen'];
 
     let better = 0;
     let worse = 0;
@@ -4020,6 +4022,9 @@ export class GameHUD {
       if (item.stats.mp) statChips.push(`<span class="stat-chip">${GameHUD.glyph('orb')} +${item.stats.mp} MP</span>`);
       if (item.stats.crit) statChips.push(`<span class="stat-chip">${GameHUD.glyph('spark')} +${Math.round(item.stats.crit * 100)}% CRIT</span>`);
       if (item.stats.speed) statChips.push(`<span class="stat-chip">${GameHUD.glyph('wind')} +${item.stats.speed} SPD</span>`);
+      if (item.stats.energyShield) statChips.push(`<span class="stat-chip" style="color:#c4b5fd;">${GameHUD.glyph('shield')} +${item.stats.energyShield} ES</span>`);
+      if (item.stats.rechargeSpeed) statChips.push(`<span class="stat-chip" style="color:#7dd3fc;">${GameHUD.glyph('spark')} +${Math.round(item.stats.rechargeSpeed * 100)}% RECHARGE</span>`);
+      if (item.stats.armorPen) statChips.push(`<span class="stat-chip" style="color:#fca5a5;">${GameHUD.glyph('sword')} +${Math.round(item.stats.armorPen * 100)}% ARMOR PEN</span>`);
     }
 
     // Darkrise gear layers: rolled affixes, seated gems, slotted card,
@@ -4042,6 +4047,10 @@ export class GameHUD {
     }
     if (item.enchantLevel) {
       extraChips.push(`<span class="stat-chip" style="color:#f87171;">✦ Enchant +${item.enchantLevel}</span>`);
+    }
+    if (item.setId) {
+      const setDef = getSetById(item.setId);
+      if (setDef) extraChips.push(`<span class="stat-chip" style="color:#fde68a;">◈ Set: ${escapeHtml(setDef.name)}</span>`);
     }
     const gearScore = computeGearScore(item);
     // Against what you are already wearing.

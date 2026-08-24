@@ -31,6 +31,9 @@ const AFFIX_POOL: AffixDef[] = [
   { id: 'of_clarity', label: 'of Clarity', stat: 'mp', min: 8, max: 45 },
   { id: 'of_precision', label: 'of Precision', stat: 'crit', min: 0.02, max: 0.09 },
   { id: 'of_swiftness', label: 'of Swiftness', stat: 'speed', min: 2, max: 9 },
+  { id: 'of_siphoning', label: 'of Siphoning', stat: 'energyShield', min: 12, max: 70 },
+  { id: 'of_alacrity', label: 'of Alacrity', stat: 'rechargeSpeed', min: 0.03, max: 0.12 },
+  { id: 'of_piercing', label: 'of Piercing', stat: 'armorPen', min: 0.03, max: 0.15 },
 ];
 
 /** How many affixes a fresh drop rolls, per rarity. */
@@ -70,6 +73,9 @@ export function rerollAffixes(item: ItemData, rng: () => number = Math.random): 
 export function affixLabel(affix: { stat: string; value: number }): string {
   switch (affix.stat) {
     case 'crit': return `+${Math.round(affix.value * 100)}% CRIT`;
+    case 'rechargeSpeed': return `+${Math.round(affix.value * 100)}% Recharge`;
+    case 'armorPen': return `+${Math.round(affix.value * 100)}% Armor Pen`;
+    case 'energyShield': return `+${affix.value} Energy Shield`;
     case 'atk': return `+${affix.value} ATK`;
     case 'def': return `+${affix.value} DEF`;
     case 'hp': return `+${affix.value} HP`;

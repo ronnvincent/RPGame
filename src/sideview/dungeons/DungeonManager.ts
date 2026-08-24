@@ -46,6 +46,15 @@ const MOB_DROP_CHANCE = 0.16;
 /** Chance an elite leaves one. Bosses always do. */
 const ELITE_DROP_CHANCE = 0.55;
 
+/**
+ * Darkrise's "defective" monsters: they appear sometimes with random stats you
+ * cannot predict - anything from a pushover to a mini-elite.
+ */
+const DEFECTIVE_SPAWN_CHANCE = 0.05;
+
+/** Darkrise's invisible mobs: nearly unseen until they are on top of you. */
+const INVISIBLE_MOB_CHANCE = 0.04;
+
 export interface EnemyStats {
   name: string;
   type: 'mob' | 'elite' | 'boss';
@@ -87,6 +96,10 @@ export interface EnemyStats {
   /** Objective props reuse damage collision but never enter hostile AI. */
   objectiveEntity?: boolean;
   featureSpriteId?: string;
+  /** Darkrise "defective" mob: randomised stats, impossible to predict. */
+  defective?: boolean;
+  /** Darkrise invisible mob: near-transparent until it closes in. */
+  isCloaked?: boolean;
 }
 
 
@@ -687,6 +700,10 @@ export function spawnWaveEnemies(
       // promoted, and never the whole wave.
       const eliteRoll = stableEncounterUnit(`${encounterSeed}:${enemyTemplate.name}:${i}:elite`);
       const isElite = enemyTemplate.type === 'mob' && eliteRoll < ELITE_SPAWN_CHANCE;
+      const defectiveRoll = stableEncounterUnit(`${encounterSeed}:${enemyTemplate.name}:${i}:defective`);
+      const isDefective = enemyTemplate.type === 'mob' && !isElite && defectiveRoll < DEFECTIVE_SPAWN_CHANCE;
+      const cloakRoll = stableEncounterUnit(`${encounterSeed}:${enemyTemplate.name}:${i}:cloak`);
+      const isCloaked = enemyTemplate.type === 'mob' && !isElite && cloakRoll < INVISIBLE_MOB_CHANCE;
       const formationSlot = formationSlots[spawnOffsetIndex % Math.max(1, formationSlots.length)];
       const role: EnemyRole = enemyTemplate.type === 'boss'
         ? 'boss'
@@ -748,7 +765,12 @@ export function spawnWaveEnemies(
         ? getRandomLoot('mid')
         : (Math.random() < MOB_DROP_CHANCE ? getRandomLoot('low') : undefined);
 
-      const baseHp = enemyTemplate.maxHp * ENEMY_HP_SCALE * (isElite ? 2.4 : 1) * eliteStats.hp * diffCfg.hpMult;
+      // Defective monsters are a dice roll in both directions: 1x-3.5x HP,
+      // 1x-2.5x ATK, double gold. The name tag is the only warning.
+      const defectiveHpMult = isDefective ? 1 + stableEncounterUnit(`${encounterSeed}:${enemyTemplate.name}:${i}:defhp`) * 2.5 : 1;
+      const defectiveAtkMult = isDefective ? 1 + stableEncounterUnit(`${encounterSeed}:${enemyTemplate.name}:${i}:defatk`) * 1.5 : 1;
+
+      const baseHp = enemyTemplate.maxHp * ENEMY_HP_SCALE * (isElite ? 2.4 : 1) * eliteStats.hp * diffCfg.hpMult * defectiveHpMult;
       const guardCapacity = tactic?.guard?.capacity || 0;
       const attackProfileId: EnemyAttackProfileId = role === 'boss'
         ? 'boss-slam'
@@ -756,8 +778,10 @@ export function spawnWaveEnemies(
 
       instances.push({
         id: `enemy_${dungeon.id}_${waveIndex}_${spawnOffsetIndex}_${slugEnemyId(enemyTemplate.name)}`,
-        name: isElite ? `Elite ${enemyTemplate.name}` : enemyTemplate.name,
+        name: isDefective ? `Defective ${enemyTemplate.name}` : isElite ? `Elite ${enemyTemplate.name}` : enemyTemplate.name,
         isElite,
+        defective: isDefective,
+        isCloaked,
         type: enemyTemplate.type,
         icon: enemyTemplate.icon,
         color: enemyTemplate.color,
@@ -766,11 +790,11 @@ export function spawnWaveEnemies(
         // with nothing at stake.
         maxHp: Math.max(1, Math.round(baseHp)),
         hp: Math.max(1, Math.round(baseHp)),
-        atk: Math.round(enemyTemplate.atk * (isElite ? 1.45 : 1) * eliteStats.attack * diffCfg.atkMult),
+        atk: Math.round(enemyTemplate.atk * (isElite ? 1.45 : 1) * eliteStats.attack * diffCfg.atkMult * defectiveAtkMult),
         def: Math.round(enemyTemplate.def * (isElite ? 1.3 : 1) * eliteStats.defence * diffCfg.defMult),
         speed: enemyTemplate.speed * (tactic?.moveSpeedMultiplier || 1) * eliteStats.speed,
         expReward: Math.round(enemyTemplate.expReward * (isElite ? 2.5 : 1) * eliteStats.reward * diffCfg.expMult),
-        goldReward: Math.round(enemyTemplate.goldReward * (isElite ? 3 : 1) * eliteStats.reward * diffCfg.goldMult),
+        goldReward: Math.round(enemyTemplate.goldReward * (isElite ? 3 : 1) * (isDefective ? 2 : 1) * eliteStats.reward * diffCfg.goldMult),
         width: enemyTemplate.width,
         height: enemyTemplate.height,
         attackRange: enemyTemplate.type === 'boss' ? 90 : Math.max(60, tactic?.preferredRange || 60),

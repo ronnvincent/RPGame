@@ -25,6 +25,12 @@ export interface ItemStats {
   def?: number;
   crit?: number; // 0.05 = +5%
   speed?: number;
+  /** Flat absorb pool that soaks damage before HP, Darkrise-style. */
+  energyShield?: number;
+  /** Cooldown reduction as a fraction - 0.5 = skills recharge 50% faster. */
+  rechargeSpeed?: number;
+  /** Fraction of enemy defence ignored when you hit. */
+  armorPen?: number;
 }
 
 /**
@@ -64,6 +70,8 @@ export interface ItemData {
   enchantLevel?: number;
   /** One-number upgrade check, recomputed on drop and on any change. */
   gearScore?: number;
+  /** Set membership - see darkrise/sets. */
+  setId?: string;
 }
 
 export interface RarityConfig {
@@ -181,6 +189,7 @@ export const ITEM_DATABASE: ItemData[] = [
   },
   {
     id: 'wep_dragon_lance',
+    setId: 'set_dragon',
     name: 'Dragon King Greatlance',
     type: 'weapon',
     rarity: 'legendary',
@@ -249,6 +258,7 @@ export const ITEM_DATABASE: ItemData[] = [
   },
   {
     id: 'helm_valkyrie_crown',
+    setId: 'set_celestial',
     name: 'Valkyrie Winged Crown',
     type: 'helmet',
     rarity: 'legendary',
@@ -284,6 +294,7 @@ export const ITEM_DATABASE: ItemData[] = [
   },
   {
     id: 'armor_dragon_mail',
+    setId: 'set_dragon',
     name: 'Dragon Scale Hauberk',
     type: 'armor',
     rarity: 'epic',
@@ -295,6 +306,7 @@ export const ITEM_DATABASE: ItemData[] = [
   },
   {
     id: 'armor_celestial_vestment',
+    setId: 'set_celestial',
     name: 'Celestial Robe of Eternity',
     type: 'armor',
     rarity: 'legendary',
@@ -343,6 +355,7 @@ export const ITEM_DATABASE: ItemData[] = [
   // --- WINGS ---
   {
     id: 'wings_angelic',
+    setId: 'set_celestial',
     name: 'Angelic Seraph Wings',
     type: 'wings',
     rarity: 'legendary',
@@ -389,6 +402,7 @@ export const ITEM_DATABASE: ItemData[] = [
   },
   {
     id: 'ring_celestial_band',
+    setId: 'set_celestial',
     name: 'Celestial Starlight Band',
     type: 'ring',
     rarity: 'rare',
@@ -424,6 +438,7 @@ export const ITEM_DATABASE: ItemData[] = [
   },
   {
     id: 'amulet_dragons_heart',
+    setId: 'set_dragon',
     name: 'Dragon Heart Talisman',
     type: 'amulet',
     rarity: 'rare',

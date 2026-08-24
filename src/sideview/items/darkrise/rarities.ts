@@ -73,12 +73,16 @@ export function computeGearScore(item: ItemData): number {
     (s.atk || 0) * 2 +
     (s.def || 0) * 2 +
     Math.round((s.crit || 0) * 100) * 8 +
-    (s.speed || 0) * 10;
+    (s.speed || 0) * 10 +
+    (s.energyShield || 0) * 0.6 +
+    Math.round((s.rechargeSpeed || 0) * 100) * 9 +
+    Math.round((s.armorPen || 0) * 100) * 9;
   const affixScore = (item.affixes?.length || 0) * 25;
   const socketScore = (item.sockets?.filter(Boolean).length || 0) * 20;
   const enchantScore = (item.enchantLevel || 0) * 35;
   const cardScore = item.cardId ? 60 : 0;
-  const total = Math.round(statScore + RARITY_POWER_WEIGHT[item.rarity] + affixScore + socketScore + enchantScore + cardScore);
+  const setScore = item.setId ? 30 : 0;
+  const total = Math.round(statScore + RARITY_POWER_WEIGHT[item.rarity] + affixScore + socketScore + enchantScore + cardScore + setScore);
   // Stored so saves and tooltips agree without recomputing everywhere.
   item.gearScore = total;
   return total;

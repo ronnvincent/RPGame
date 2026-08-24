@@ -13,6 +13,7 @@ import { getCardById, getCardForDungeon, makeCardItem, BOSS_CARD_DROP_CHANCE } f
 import { socketBonusStats } from '../items/darkrise/gems';
 import { enchantMultiplier } from '../items/darkrise/services';
 import { WALLET_DEFAULTS } from '../items/darkrise/currencies';
+import { totalSetBonusStats } from '../items/darkrise/sets';
 import { recordEvent } from '../quests/DailyMissions';
 import { ParticleSystem } from './ParticleSystem';
 import { FX_COLOUR_ROW } from './VfxLibrary';
@@ -258,6 +259,13 @@ export interface PlayerState {
   totalSpeed: number;
   totalCrit: number;
   totalAttackSpeed: number;
+  /** Darkrise build stats: absorb pool, cooldown reduction fraction, defence-ignoring fraction. */
+  totalEnergyShield?: number;
+  totalRechargeSpeed?: number;
+  totalArmorPen?: number;
+  // Energy shield runtime state
+  maxEnergyShield: number;
+  energyShield: number;
   // Active Buffs
   activeBuffs: ActivePlayerBuff[];
   // Skill Cooldowns
@@ -754,6 +762,8 @@ export class SideViewEngine {
       totalSpeed: stats.speed,
       totalCrit: stats.critChance,
       totalAttackSpeed: 1,
+      maxEnergyShield: 0,
+      energyShield: 0,
       activeBuffs: [],
       skillCooldowns: cooldowns,
       equipment: {},
@@ -771,6 +781,21 @@ export class SideViewEngine {
     let bonusDef = 0;
     let bonusCrit = 0;
     let bonusSpeed = 0;
+    let bonusEnergyShield = 0;
+    let bonusRechargeSpeed = 0;
+    let bonusArmorPen = 0;
+
+    const addStat = (stat: string, value: number) => {
+      if (stat === 'hp') bonusHp += value;
+      else if (stat === 'mp') bonusMp += value;
+      else if (stat === 'atk') bonusAtk += value;
+      else if (stat === 'def') bonusDef += value;
+      else if (stat === 'crit') bonusCrit += value;
+      else if (stat === 'speed') bonusSpeed += value;
+      else if (stat === 'energyShield') bonusEnergyShield += value;
+      else if (stat === 'rechargeSpeed') bonusRechargeSpeed += value;
+      else if (stat === 'armorPen') bonusArmorPen += value;
+    };
 
     // Equipment bonuses. An item's contribution is base stats x enchant level,
     // plus its rolled affixes, seated gems and slotted card - the four layers
@@ -785,33 +810,22 @@ export class SideViewEngine {
         if (item.stats.def) bonusDef += Math.round(item.stats.def * mult);
         if (item.stats.crit) bonusCrit += item.stats.crit * mult;
         if (item.stats.speed) bonusSpeed += item.stats.speed * mult;
+        if (item.stats.energyShield) bonusEnergyShield += Math.round(item.stats.energyShield * mult);
+        if (item.stats.rechargeSpeed) bonusRechargeSpeed += item.stats.rechargeSpeed * mult;
+        if (item.stats.armorPen) bonusArmorPen += item.stats.armorPen * mult;
       }
-      (item.affixes || []).forEach(affix => {
-        const value = affix.value;
-        if (affix.stat === 'hp') bonusHp += value;
-        else if (affix.stat === 'mp') bonusMp += value;
-        else if (affix.stat === 'atk') bonusAtk += value;
-        else if (affix.stat === 'def') bonusDef += value;
-        else if (affix.stat === 'crit') bonusCrit += value;
-        else if (affix.stat === 'speed') bonusSpeed += value;
-      });
+      (item.affixes || []).forEach(affix => addStat(affix.stat, affix.value));
       const gemStats = socketBonusStats(item);
-      if (gemStats.hp) bonusHp += gemStats.hp;
-      if (gemStats.mp) bonusMp += gemStats.mp;
-      if (gemStats.atk) bonusAtk += gemStats.atk;
-      if (gemStats.def) bonusDef += gemStats.def;
-      if (gemStats.crit) bonusCrit += gemStats.crit;
-      if (gemStats.speed) bonusSpeed += gemStats.speed;
+      (Object.keys(gemStats) as Array<keyof typeof gemStats>).forEach(key => addStat(key, gemStats[key] || 0));
       const card = item.cardId ? getCardById(item.cardId) : null;
       if (card?.stats) {
-        if (card.stats.hp) bonusHp += card.stats.hp;
-        if (card.stats.mp) bonusMp += card.stats.mp;
-        if (card.stats.atk) bonusAtk += card.stats.atk;
-        if (card.stats.def) bonusDef += card.stats.def;
-        if (card.stats.crit) bonusCrit += card.stats.crit;
-        if (card.stats.speed) bonusSpeed += card.stats.speed;
+        (Object.keys(card.stats) as Array<keyof NonNullable<ItemData['stats']>>).forEach(key => addStat(key, card.stats![key] || 0));
       }
     });
+
+    // Set thresholds ride on top of per-item stats, Darkrise-style.
+    const setBonus = totalSetBonusStats(Object.values(p.equipment).map(item => item?.setId));
+    (Object.keys(setBonus.stats) as Array<keyof NonNullable<ItemData['stats']>>).forEach(key => addStat(key, setBonus.stats[key] || 0));
 
     // Level scaling (+8% per level)
     const lvlMultiplier = 1 + (p.level - 1) * 0.08;
@@ -825,7 +839,10 @@ export class SideViewEngine {
       * this.runRelicMaxHpMultiplier,
     ));
     p.maxMp = Math.round((p.characterClass.stats.maxMp + bonusMp) * lvlMultiplier);
-    
+    p.totalEnergyShield = Math.round(bonusEnergyShield);
+    p.totalRechargeSpeed = Number(Math.min(2.5, bonusRechargeSpeed).toFixed(3));
+    p.totalArmorPen = Number(Math.min(0.85, bonusArmorPen).toFixed(3));
+
     let atk = (p.baseAtk + bonusAtk) * lvlMultiplier;
     let def = (p.baseDef + bonusDef) * lvlMultiplier;
     let spd = p.baseSpeed + bonusSpeed;
@@ -846,6 +863,16 @@ export class SideViewEngine {
     p.totalSpeed = Number(spd.toFixed(1));
     p.totalCrit = Number(crit.toFixed(2));
     p.totalAttackSpeed = Number(attackSpeed.toFixed(2));
+
+    // Energy shield pool: grows like HP does and soaks damage before it.
+    // Equipping into a bigger pool tops you up; shrinking clamps the current.
+    const prevMaxEs = p.maxEnergyShield;
+    p.maxEnergyShield = Math.round(p.totalEnergyShield! * lvlMultiplier);
+    if (prevMaxEs !== p.maxEnergyShield) {
+      p.energyShield = p.maxEnergyShield;
+    } else {
+      p.energyShield = Math.min(p.energyShield, p.maxEnergyShield);
+    }
   }
 
   public setBattleTheme(theme: BattleTheme) {
@@ -1679,7 +1706,8 @@ export class SideViewEngine {
     }
 
     if (cost > 0) p.mp = Math.max(0, p.mp - cost);
-    p.skillCooldowns[skill.id] = skill.cooldown;
+    // Recharge speed (Darkrise's CDR stat) shortens the wait, not the tick.
+    p.skillCooldowns[skill.id] = skill.cooldown / (1 + (p.totalRechargeSpeed || 0));
     const attackSpeed = Math.max(0.5, p.totalAttackSpeed || 1);
     p.attackTimer = (skill.cooldown === 0 ? 0.22 : Math.min(0.7, 0.3 + skill.castTime * 1.2)) / attackSpeed;
     p.animState = 'attack';
@@ -2726,7 +2754,9 @@ export class SideViewEngine {
 
   private resolveEnemyDamage(enemy: EnemyInstance, rawDamage: number, fromRemote: boolean): number {
     const frailty = this.statusMagnitude(enemy, 'frailty');
-    const effectiveDef = enemy.def * (1 - frailty);
+    // Armor penetration (Darkrise stat) ignores a fraction of defence.
+    const pen = Math.min(0.85, this.player.totalArmorPen || 0);
+    const effectiveDef = enemy.def * (1 - frailty) * (1 - pen);
     return fromRemote
       ? Math.max(1, Math.round(rawDamage))
       : Math.max(1, Math.round(afterDefence(rawDamage, effectiveDef)));
@@ -3079,6 +3109,7 @@ export class SideViewEngine {
     if (this.castLock > 0) this.castLock = Math.max(0, this.castLock - dt);
     this.playerDefense = tickPlayerDefenseState(this.playerDefense, dt);
     this.updateCombatSpriteEffects(dt);
+    this.updateEnergyShield(dt);
 
     // 0. Hit-Stop Micro Freeze check (Crunchy combat impact feeling)
     if (this.hitStopTimer > 0) {
@@ -4768,10 +4799,31 @@ export class SideViewEngine {
     return Math.max(0.1, multiplier);
   }
 
+  /** Seconds since the player last lost HP or shield. Drives ES regen. */
+  private timeSincePlayerHit = 999;
+
+  /** Darkrise energy shield: quiet for 3s, then refills at 8%/s. */
+  private updateEnergyShield(dt: number): void {
+    this.timeSincePlayerHit += dt;
+    const p = this.player;
+    if (p.maxEnergyShield <= 0 || p.energyShield >= p.maxEnergyShield) return;
+    if (this.timeSincePlayerHit < 3) return;
+    p.energyShield = Math.min(p.maxEnergyShield, p.energyShield + p.maxEnergyShield * 0.08 * dt);
+  }
+
   private absorbPlayerDamage(incoming: number): { hpDamage: number; absorbed: number } {
     let remaining = incoming;
     let absorbed = 0;
-    for (const buff of this.player.activeBuffs) {
+    // Energy shield soaks first, like Darkrise: it is the purple bar above HP.
+    const p = this.player;
+    if (p.maxEnergyShield > 0 && p.energyShield > 0 && remaining > 0) {
+      const used = Math.min(p.energyShield, remaining);
+      p.energyShield -= used;
+      remaining -= used;
+      absorbed += used;
+      this.timeSincePlayerHit = 0;
+    }
+    for (const buff of p.activeBuffs) {
       if (buff.stat !== 'shield' || !buff.amount || remaining <= 0) continue;
       const used = Math.min(buff.amount, remaining);
       buff.amount -= used;
@@ -4779,6 +4831,7 @@ export class SideViewEngine {
       absorbed += used;
       if (buff.amount <= 0) buff.timer = 0;
     }
+    if (remaining > 0) this.timeSincePlayerHit = 0;
     return { hpDamage: remaining, absorbed };
   }
 
@@ -5518,6 +5571,13 @@ export class SideViewEngine {
       for (const enemy of this.enemies) {
         if (enemy.isDead || !enemy.isActive) continue;
 
+        // Darkrise's invisible mobs: a shimmer at range, solid up close.
+        const cloakAlpha = enemy.isCloaked
+          ? (Math.abs(enemy.x - this.player.x) < 170 ? 0.42 : 0.07)
+          : 1;
+        ctx.save();
+        ctx.globalAlpha = cloakAlpha;
+
         this.drawEnemyIntent(ctx, enemy);
         
         // Elite identity is catalogue-backed, so each modifier is visible and
@@ -5601,6 +5661,7 @@ export class SideViewEngine {
             ctx.fillText(status.kind[0].toUpperCase(), markerX, markerY + 3);
           });
         }
+        ctx.restore();
         ctx.restore();
       }
     }
