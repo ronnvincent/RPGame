@@ -380,8 +380,7 @@ function drawAboveEntities(
   viewportWidth: number,
   viewportHeight: number,
   groundY: number,
-) {
-  const alpha = Math.min(profile.frame.alpha, profile.readability.maxForegroundAlpha);
+) {  const alpha = Math.min(profile.frame.alpha, profile.readability.maxForegroundAlpha);
   const sideWidth = Math.min(
     viewportWidth * (1 - profile.readability.centerClearRatio) * 0.5,
     112,
@@ -425,6 +424,45 @@ function drawAboveEntities(
 }
 
 /**
+ * Darkrise-style per-zone color grade: one tint wash + corner vignette over
+ * everything, so every zone reads as its own place at a glance.
+ */
+const ZONE_GRADES: Partial<Record<BattleTheme, { tint: string; alpha: number; vignette: number }>> = {
+  town: { tint: '#3b5f8a', alpha: 0.05, vignette: 0.32 },
+  crypt: { tint: '#2a2350', alpha: 0.12, vignette: 0.55 },
+  inferno: { tint: '#7a2413', alpha: 0.12, vignette: 0.5 },
+};
+
+const DEFAULT_ZONE_GRADE = { tint: '#141a2b', alpha: 0.08, vignette: 0.44 };
+
+function drawZoneGrade(
+  ctx: CanvasRenderingContext2D,
+  theme: BattleTheme,
+  viewportWidth: number,
+  viewportHeight: number,
+): void {
+  const grade = ZONE_GRADES[theme] ?? DEFAULT_ZONE_GRADE;
+  ctx.save();
+  ctx.fillStyle = grade.tint;
+  ctx.globalAlpha = grade.alpha;
+  ctx.fillRect(0, 0, viewportWidth, viewportHeight);
+  const vignette = ctx.createRadialGradient(
+    viewportWidth * 0.5,
+    viewportHeight * 0.45,
+    Math.min(viewportWidth, viewportHeight) * 0.38,
+    viewportWidth * 0.5,
+    viewportHeight * 0.5,
+    Math.max(viewportWidth, viewportHeight) * 0.74,
+  );
+  vignette.addColorStop(0, 'transparent');
+  vignette.addColorStop(1, `rgba(0, 0, 0, ${grade.vignette})`);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, viewportWidth, viewportHeight);
+  ctx.restore();
+}
+
+/**
  * Draws a bounded, texture-free presentation pass. Call `behind-entities`
  * after the base parallax map and `above-entities` after world entities/VFX.
  */
@@ -454,6 +492,7 @@ export function drawZonePresentation(
     drawBehindEntities(ctx, profile, safeCameraX, width, height, safeGroundY, elapsed, metrics);
   } else {
     drawAboveEntities(ctx, profile, width, height, safeGroundY);
+    drawZoneGrade(ctx, theme, width, height);
   }
   return metrics;
 }
