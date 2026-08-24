@@ -15,6 +15,7 @@ import { enchantMultiplier } from '../items/darkrise/services';
 import { WALLET_DEFAULTS } from '../items/darkrise/currencies';
 import { totalSetBonusStats } from '../items/darkrise/sets';
 import { recordEvent } from '../quests/DailyMissions';
+import { getSpecies } from '../pets/PetSystem';
 import { ParticleSystem } from './ParticleSystem';
 import { FX_COLOUR_ROW } from './VfxLibrary';
 import { UltimateDirector, ULTIMATE_LINES } from './UltimateDirector';
@@ -2996,6 +2997,16 @@ export class SideViewEngine {
 
   public triggerSave() {
     SaveManager.saveGame(this.player, this.player.inventory, this.player.maxDungeonCleared, this.computePower());
+  }
+
+  /** Adopt a companion. Never duplicates; returns false if already owned or unknown species. */
+  public grantPet(speciesId: string): boolean {
+    const p = this.player;
+    p.pets = p.pets || [];
+    if (!getSpecies(speciesId) || p.pets.some(pet => pet.speciesId === speciesId)) return false;
+    p.pets.push({ speciesId, level: 1, exp: 0, kills: 0 });
+    this.triggerSave();
+    return true;
   }
 
   public loadSaveData(data: any) {
