@@ -507,13 +507,18 @@ export class GameHUD {
 
       .player-status-panel {
         position: relative;
-        background: url('/assets/kenney-rpg-ui/panel_brown.png') repeat;
-        background-size: 100% 100%;
+        /* Darkrise plate: near-black panel, gilded rim. */
+        background: linear-gradient(180deg, rgba(13, 13, 22, 0.95), rgba(5, 5, 9, 0.97));
+        border: 1px solid #8a6d2f;
+        border-radius: 4px;
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 215, 0, 0.14),
+          inset 0 -8px 18px rgba(0, 0, 0, 0.55),
+          0 4px 15px rgba(0, 0, 0, 0.9);
         padding: 8px 14px 10px 10px;
         display: flex;
         align-items: center;
         gap: 8px;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.9);
         pointer-events: auto;
         z-index: 10;
       }
@@ -527,6 +532,7 @@ export class GameHUD {
         align-items: center;
         justify-content: center;
         padding: 2px;
+        outline: 1px solid rgba(255, 215, 0, 0.35);
       }
 
       .player-portrait-canvas {
@@ -573,6 +579,43 @@ export class GameHUD {
         background: #f59e0b;
         transition: width 0.55s ease-out;
         z-index: 1;
+      }
+
+      /* Energy Shield - Darkrise's purple bar. */
+      .sprite-bar-frame--es { height: 8px; }
+      .sprite-bar-es {
+        background: linear-gradient(90deg, #7c3aed, #c4b5fd);
+        box-shadow: 0 0 6px rgba(124, 58, 237, 0.8);
+      }
+
+      /* Currency rail, under the menu button. */
+      .currency-stack {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 4px;
+        margin-top: 8px;
+        pointer-events: auto;
+      }
+      .currency-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        min-width: 74px;
+        justify-content: flex-end;
+        padding: 3px 8px;
+        background: rgba(10, 10, 14, 0.82);
+        border: 1px solid #8a6d2f;
+        border-radius: 3px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.8), inset 0 0 0 1px rgba(255, 215, 0, 0.12);
+      }
+      .currency-pill img { image-rendering: pixelated; }
+      .currency-pill b {
+        font-size: 11px;
+        font-weight: 900;
+        color: #ffd700;
+        text-shadow: 1px 1px 2px #000;
+        font-family: 'Outfit', sans-serif;
       }
 
       .sprite-bar-fill {
@@ -2552,6 +2595,12 @@ export class GameHUD {
             <span class="sprite-bar-value" id="hud-hp-text">${p.hp} / ${p.maxHp}</span>
           </div>
 
+          <!-- Energy shield, Darkrise-style: the purple bar that eats damage before HP. -->
+          <div class="sprite-bar-frame sprite-bar-frame--es" id="hud-es-track" title="Energy Shield" role="progressbar" aria-label="Energy Shield" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0" style="display:none">
+            <div class="sprite-bar-fill sprite-bar-es" id="hud-es-bar" style="width: 100%"></div>
+            <span class="sprite-bar-value sprite-bar-value--compact" id="hud-es-text">0</span>
+          </div>
+
           <div class="sprite-bar-frame" style="height: 10px;" title="Mana (MP)" role="progressbar" aria-label="Mana" aria-valuemin="0" aria-valuemax="${p.maxMp}" aria-valuenow="${p.mp}" id="hud-mp-track">
             <div class="sprite-bar-lag sprite-bar-lag-mp" id="hud-mp-lag" style="width: 100%; background: #60a5fa;"></div>
             <div class="sprite-bar-fill sprite-bar-mp" id="hud-mp-bar" style="width: 100%"></div>
@@ -2561,10 +2610,6 @@ export class GameHUD {
           <div class="player-status-chips" id="player-status-chips" aria-label="Active effects"></div>
 
           <div class="plate-meta">
-            <span class="plate-gold" title="Gold">
-              <img src="/assets/gui/PNG/iconCircle_brown.png" width="12" height="12" alt="" />
-              <span id="hud-gold-text">${finiteNumber(p.gold).toLocaleString()}</span>
-            </span>
             <span class="plate-power" id="hud-power" title="Total Power - every level, item and upgrade counts">${GameHUD.glyph('spark')} ${this.engine.computePower().toLocaleString()}</span>
             <span class="plate-id" title="Your Player ID - give this to a friend to be invited">ID <b id="hud-id-text">${escapeHtml(localStorage.getItem('playerShortId') || 'Not assigned')}</b></span>
           </div>
@@ -2637,6 +2682,14 @@ export class GameHUD {
         <button class="hud-menu-btn" id="hud-menu-btn" title="Menu (Esc)">
           ${GameHUD.glyph('menu')}
         </button>
+        <!-- Darkrise currency column: every wallet in one readable rail. -->
+        <div class="currency-stack" id="currency-stack">
+          <span class="currency-pill" title="Gold"><img src="/assets/gui/PNG/iconCircle_brown.png" width="14" height="14" alt="" /><b id="cur-gold">0</b></span>
+          <span class="currency-pill" title="Diamonds"><img src="/assets/ui_sprites/icons/I_Sapphire.png" width="14" height="14" alt="" /><b id="cur-diamonds">0</b></span>
+          <span class="currency-pill" title="Keys of Power - open Fatal gates"><img src="/assets/ui_sprites/icons/I_Key01.png" width="14" height="14" alt="" /><b id="cur-keys">0</b></span>
+          <span class="currency-pill" title="Unification Stones - fuse gear at the anvil"><img src="/assets/ui_sprites/icons/I_Ruby.png" width="14" height="14" alt="" /><b id="cur-stones">0</b></span>
+          <span class="currency-pill" title="Magic Substance - enchanting fuel"><img src="/assets/ui_sprites/icons/I_Eye.png" width="14" height="14" alt="" /><b id="cur-substance">0</b></span>
+        </div>
       </div>
 
       <!-- Skill levels.
@@ -3737,6 +3790,20 @@ export class GameHUD {
     if (mpBar) mpBar.style.width = `${mpPct}%`;
     if (mpLag) mpLag.style.width = `${mpPct}%`;
     if (expBar) expBar.style.width = `${expPct}%`;
+
+    // Energy shield bar: only exists once your gear grants a pool.
+    const maxEs = Math.max(0, finiteNumber(p.maxEnergyShield));
+    const esTrack = this.hudNode('hud-es-track');
+    const esBar = this.hudNode('hud-es-bar');
+    const esText = this.hudNode('hud-es-text');
+    if (esTrack) esTrack.style.display = maxEs > 0 ? 'flex' : 'none';
+    if (maxEs > 0) {
+      const esPct = clampPercent((finiteNumber(p.energyShield) / maxEs) * 100);
+      if (esBar) esBar.style.width = `${esPct}%`;
+      if (esText) esText.textContent = `${Math.ceil(finiteNumber(p.energyShield))}`;
+      esTrack?.setAttribute('aria-valuemax', String(Math.round(maxEs)));
+      esTrack?.setAttribute('aria-valuenow', String(Math.round(finiteNumber(p.energyShield))));
+    }
     const hpText = this.hudNode('hud-hp-text');
     const mpText = this.hudNode('hud-mp-text');
     if (hpText) hpText.textContent = `${Math.ceil(hp)} / ${Math.ceil(maxHp)}`;
@@ -3749,8 +3816,16 @@ export class GameHUD {
     mpTrack?.setAttribute('aria-valuemax', String(Math.round(maxMp)));
 
     if (slowPatch) {
-      const goldText = this.hudNode('hud-gold-text');
+      const goldText = this.hudNode('cur-gold');
       if (goldText) goldText.textContent = finiteNumber(p.gold).toLocaleString();
+      const paintCurrency = (id: string, value: number | undefined) => {
+        const node = this.hudNode(id);
+        if (node) node.textContent = finiteNumber(value ?? 0).toLocaleString();
+      };
+      paintCurrency('cur-diamonds', p.diamonds);
+      paintCurrency('cur-keys', p.keysOfPower);
+      paintCurrency('cur-stones', p.unificationStones);
+      paintCurrency('cur-substance', p.magicSubstance);
       const levelText = this.hudNode('hud-level-text');
       if (levelText) levelText.textContent = `Lv. ${Math.max(1, Math.trunc(finiteNumber(p.level, 1)))}`;
       this.paintPotionSlot();
