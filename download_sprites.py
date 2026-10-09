@@ -23,17 +23,17 @@ PACKS = {
         "https://opengameart.org/sites/default/files/LightEffects.zip",
         "CC-BY 3.0",
     ),
-    "monsters_sideview.zip": (
-        "https://opengameart.org/sites/default/files/Monsters_Sideview.zip",
+    "limbo_land_monsters_1.zip": (
+        "https://opengameart.org/sites/default/files/limbo%20land%20monster%20sprite%20sheets.zip",
         "CC0",
     ),
-    "creature_pack.zip": (
-        "https://opengameart.org/sites/default/files/creature_pack_0.zip",
+    "limbo_land_monsters_2.zip": (
+        "https://opengameart.org/sites/default/files/Limbo%20Land%20monster%20sprites%202.zip",
         "CC0",
     ),
-    "parallax_mountains.zip": (
-        "https://opengameart.org/sites/default/files/parallax_mountains_by_ez.png_.zip",
-        "CC-BY 3.0",
+    "fifty_monsters_pack.zip": (
+        "https://opengameart.org/sites/default/files/50_monsters_pack_2d_version_1.0.zip",
+        "CC0",
     ),
 }
 

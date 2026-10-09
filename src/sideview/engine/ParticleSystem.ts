@@ -45,9 +45,9 @@ export const PARTICLE_BUDGETS = Object.freeze({
 export type VfxQuality = 'high' | 'medium' | 'low';
 
 const VFX_QUALITY_PROFILES = Object.freeze({
-  high: { particleScale: 1, particles: 360, spriteVfx: 14, spellAnimations: 32, ghostTrails: 40, screenFlashes: 4, projectileTrailChance: 0.6 },
-  medium: { particleScale: 0.7, particles: 250, spriteVfx: 10, spellAnimations: 24, ghostTrails: 24, screenFlashes: 2, projectileTrailChance: 0.35 },
-  low: { particleScale: 0.45, particles: 160, spriteVfx: 7, spellAnimations: 16, ghostTrails: 10, screenFlashes: 1, projectileTrailChance: 0.16 },
+  high: { particleScale: 0.5, particles: 360, spriteVfx: 14, spellAnimations: 32, ghostTrails: 40, screenFlashes: 4, projectileTrailChance: 0.6 },
+  medium: { particleScale: 0.35, particles: 250, spriteVfx: 10, spellAnimations: 24, ghostTrails: 24, screenFlashes: 2, projectileTrailChance: 0.35 },
+  low: { particleScale: 0.25, particles: 160, spriteVfx: 7, spellAnimations: 16, ghostTrails: 10, screenFlashes: 1, projectileTrailChance: 0.16 },
 } as const);
 
 /** A catalogue effect currently playing at a world position. */

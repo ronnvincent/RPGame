@@ -336,18 +336,18 @@ const ENEMY_ATTACK_ANIM = 0.55;
  */
 const BALANCE = {
   /** Monster health, against the values written in the dungeon tables. */
-  enemyHp: 2.8,
+  enemyHp: 4.5,
   /** Monster damage. */
-  enemyAtk: 1.6,
+  enemyAtk: 2.2,
   /** Player skill damage - the single biggest cause of one-hit clears. */
-  playerDamage: 0.55,
+  playerDamage: 0.45,
   /** Crit was 1.8x on top of everything else. */
-  critMultiplier: 1.55,
+  critMultiplier: 1.4,
   /**
    * Softening constant for defence. mitigation = def / (def + K), so K is the
    * defence at which half of incoming damage is absorbed.
    */
-  defenceK: 90,
+  defenceK: 120,
 };
 
 /** Fraction of damage that gets through against a given defence. */
@@ -1082,7 +1082,7 @@ export class SideViewEngine {
       this.particles.triggerScreenShake(hpDamage > 0 ? 5 : 2, 0.18);
     }
     if (preferences.screenFlashes) {
-      this.particles.addScreenFlash('#ef4444', 0.12, 0.025);
+      this.particles.addScreenFlash('#ef4444', 0.05, 0.025);
     }
     if (absorbed > 0) {
       this.particles.addFloatingText(p.x, p.y - p.height / 2 - 14, `SHIELD -${absorbed}`, '#60a5fa', false, 14);
@@ -1425,7 +1425,7 @@ export class SideViewEngine {
 
     if (vfx.screen && !skill.isUltimate) {
       if (vfx.screen.shake) this.particles.triggerScreenShake(vfx.screen.shake, 0.4);
-      if (vfx.screen.flash) this.particles.addScreenFlash(vfx.screen.flash, 0.55, 0.05);
+      if (vfx.screen.flash) this.particles.addScreenFlash(vfx.screen.flash, 0.22, 0.05);
     }
 
     // Stateful summons are created by the mechanics executor (or as explicitly
@@ -1455,7 +1455,7 @@ export class SideViewEngine {
       this.hitStopTimer = 0.06;
       this.particles.triggerScreenShake(skill.vfx.screen?.shake ?? 26, 0.35);
       if (skill.vfx.screen?.flash) {
-        this.particles.addScreenFlash(skill.vfx.screen.flash, 0.7, 0.05);
+        this.particles.addScreenFlash(skill.vfx.screen.flash, 0.28, 0.05);
       }
     }
 
@@ -2494,7 +2494,7 @@ export class SideViewEngine {
     if (isCrit) baseDmg = Math.round(baseDmg * BALANCE.critMultiplier);
 
     if (skill.isUltimate) {
-      this.particles.triggerScreenShake(18, 0.65);
+      this.particles.triggerScreenShake(6, 0.65);
     }
 
     // Legacy per-skill sprite VFX lived here as a switch on skill.id and ran on
@@ -2931,7 +2931,7 @@ export class SideViewEngine {
     // Death VFX & SFX
     if (enemy.type === 'boss') {
       audio.playBossRoar();
-      this.particles.triggerScreenShake(14, 0.6);
+      this.particles.triggerScreenShake(4, 0.6);
       this.particles.addFloatingText(enemy.x, enemy.y - 50, 'BOSS DEFEATED!', '#ffd54f', true, 26);
     } else {
     }
@@ -3284,7 +3284,7 @@ export class SideViewEngine {
 
             // Plunging dive attack landing impact explosion
             if (p.attackTimer > 0 && p.animState === 'attack' && landingVy > 8) {
-              this.particles.triggerScreenShake(14, 0.4);
+              this.particles.triggerScreenShake(4, 0.4);
               this.particles.addGroundExplosion(p.x, plat.y - 20, 2.0);
               this.particles.addImpactBurst(p.x, plat.y, 30, '#ffd700', 'spark');
               const diveSkill = p.characterClass.skills[0];
@@ -3307,7 +3307,7 @@ export class SideViewEngine {
 
         // Plunging dive attack landing impact explosion on floor
         if (p.attackTimer > 0 && p.animState === 'attack' && landingVy > 8) {
-          this.particles.triggerScreenShake(14, 0.4);
+          this.particles.triggerScreenShake(4, 0.4);
           this.particles.addGroundExplosion(p.x, this.groundY - 20, 2.0);
           this.particles.addImpactBurst(p.x, this.groundY, 30, '#ffd700', 'spark');
           const diveSkill = p.characterClass.skills[0];
@@ -3490,7 +3490,7 @@ export class SideViewEngine {
               minion.state = 'attack2';
               minion.attackCooldown = 1.4;
               minion.skillCooldown = 4.5;
-              this.particles.triggerScreenShake(14, 0.45);
+              this.particles.triggerScreenShake(4, 0.45);
               this.particles.addFloatingText(minion.x, this.groundY - 180, 'MAGMA METEOR BARRAGE!', '#ff5722', true, 16);
 
               for (let m = 0; m < 3; m++) {
@@ -3512,7 +3512,7 @@ export class SideViewEngine {
               minion.state = 'attack';
               minion.attackCooldown = 1.2;
               minion.skillCooldown = 5.0;
-              this.particles.triggerScreenShake(16, 0.5);
+              this.particles.triggerScreenShake(5, 0.5);
               this.particles.addFloatingText(minion.x, this.groundY - 180, 'DRAGON TEMPEST!', '#f97316', true, 16);
               this.particles.addFireSpin(minion.x + minion.facing * 110, this.groundY - 30, 2.5);
 
@@ -3534,7 +3534,7 @@ export class SideViewEngine {
             if (minion.attackCooldown <= 0) {
               minion.state = 'attack';
               minion.attackCooldown = 1.1;
-              this.particles.triggerScreenShake(9, 0.35);
+              this.particles.triggerScreenShake(3, 0.35);
               this.particles.addFlameLash(minion.x + minion.facing * 90, this.groundY - 25, minion.facing, 2.5);
               this.particles.addFireLine(minion.x + minion.facing * 80, this.groundY - 20, minion.facing, 2.0);
               this.particles.addGroundExplosion(minion.x + minion.facing * 140, this.groundY - 20, 1.8);
@@ -3584,7 +3584,7 @@ export class SideViewEngine {
               minion.state = 'spell';
               minion.attackCooldown = 1.4;
               minion.skillCooldown = 4.5;
-              this.particles.triggerScreenShake(14, 0.45);
+              this.particles.triggerScreenShake(4, 0.45);
               this.particles.addFloatingText(minion.x, this.groundY - 150, 'VOID SINGULARITY!', '#a855f7', true, 16);
 
               const vortexX = minion.x + minion.facing * 130;
@@ -3605,7 +3605,7 @@ export class SideViewEngine {
               minion.state = 'cast';
               minion.attackCooldown = 1.2;
               minion.skillCooldown = 4.5;
-              this.particles.triggerScreenShake(16, 0.5);
+              this.particles.triggerScreenShake(5, 0.5);
               this.particles.addFloatingText(minion.x, this.groundY - 150, 'DEATH NOVA!', '#9333ea', true, 16);
 
               for (let s = 0; s < 3; s++) {
@@ -3632,7 +3632,7 @@ export class SideViewEngine {
             if (minion.attackCooldown <= 0) {
               minion.state = 'attack';
               minion.attackCooldown = 0.95;
-              this.particles.triggerScreenShake(8, 0.3);
+              this.particles.triggerScreenShake(2, 0.3);
               this.particles.addSpellSlash((targetEnemy as EnemyInstance).x, (targetEnemy as EnemyInstance).y - 20, minion.facing, 1.8, '#a855f7');
               this.particles.addImpactBurst((targetEnemy as EnemyInstance).x, (targetEnemy as EnemyInstance).y - 15, 20, '#c084fc', 'dark');
 
@@ -3678,7 +3678,7 @@ export class SideViewEngine {
             minion.state = 'attack';
             minion.attackCooldown = 1.1;
             minion.skillCooldown = 3.5;
-            this.particles.triggerScreenShake(18, 0.5);
+            this.particles.triggerScreenShake(6, 0.5);
             this.particles.addFloatingText(minion.x, this.groundY - 120, 'VOID TEMPEST!', '#a855f7', true, 16);
 
             const blastX = minion.x + minion.facing * 100;
@@ -3708,7 +3708,7 @@ export class SideViewEngine {
             if (minion.attackCooldown <= 0) {
               minion.state = 'attack';
               minion.attackCooldown = 0.85;
-              this.particles.triggerScreenShake(10, 0.35);
+              this.particles.triggerScreenShake(3, 0.35);
               this.particles.addSpellSlash((targetEnemy as EnemyInstance).x, (targetEnemy as EnemyInstance).y - 20, minion.facing, 2.0, '#a855f7');
               this.particles.addImpactBurst((targetEnemy as EnemyInstance).x, (targetEnemy as EnemyInstance).y - 15, 25, '#c084fc', 'dark');
 
@@ -4236,8 +4236,8 @@ export class SideViewEngine {
       enemy.speed = enemy.speed * 1.25;
       enemy.specialAttackTimer = 0.8;
       this.particles.addFloatingText(enemy.x, enemy.y - 100, `${enemy.name.toUpperCase()} IS ENRAGED`, '#ef4444', true, 20);
-      this.particles.triggerScreenShake(20, 0.7);
-      this.particles.addScreenFlash('#ef4444', 0.45, 0.08);
+      this.particles.triggerScreenShake(6, 0.7);
+      this.particles.addScreenFlash('#ef4444', 0.18, 0.08);
       audio.playBossRoar();
     }
 

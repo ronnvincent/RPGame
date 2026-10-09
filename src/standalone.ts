@@ -54,6 +54,7 @@ function showLoginScreen(mountPoint: HTMLElement) {
   box.style.width = 'min(350px, 92vw)';
   box.style.maxHeight = '92dvh';
   box.style.overflowY = 'auto';
+  box.style.boxSizing = 'border-box';
 
   const title = document.createElement('h2');
   title.id = 'login-title';
@@ -78,6 +79,7 @@ function showLoginScreen(mountPoint: HTMLElement) {
   userIn.style.background = '#000';
   userIn.style.color = '#fff';
   userIn.style.outline = 'none';
+  userIn.style.boxSizing = 'border-box';
   userIn.maxLength = 16;
 
   const userLabel = document.createElement('label');
@@ -102,6 +104,7 @@ function showLoginScreen(mountPoint: HTMLElement) {
   passIn.style.background = '#000';
   passIn.style.color = '#fff';
   passIn.style.outline = 'none';
+  passIn.style.boxSizing = 'border-box';
 
   const passLabel = document.createElement('label');
   passLabel.className = 'rpg-field';
@@ -123,6 +126,7 @@ function showLoginScreen(mountPoint: HTMLElement) {
   loginBtn.style.fontWeight = 'bold';
   loginBtn.style.width = '100%';
   loginBtn.style.marginBottom = '10px';
+  loginBtn.style.boxSizing = 'border-box';
 
   const guestBtn = document.createElement('button');
   guestBtn.className = 'rpg-button';
@@ -136,6 +140,7 @@ function showLoginScreen(mountPoint: HTMLElement) {
   guestBtn.style.cursor = 'pointer';
   guestBtn.style.fontWeight = 'bold';
   guestBtn.style.width = '100%';
+  guestBtn.style.boxSizing = 'border-box';
 
   const errorText = document.createElement('p');
   errorText.id = 'login-error';
