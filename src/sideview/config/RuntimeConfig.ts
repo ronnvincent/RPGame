@@ -10,7 +10,7 @@ declare global {
 }
 
 const LOCAL_SERVER_ORIGIN = 'http://localhost:3001';
-const DEFAULT_PRODUCTION_SERVER_ORIGIN = 'https://rpgame-production-3453.up.railway.app';
+const DEFAULT_PRODUCTION_SERVER_ORIGIN = 'https://rpgame-production.up.railway.app';
 
 type ViteRuntimeEnvironment = ImportMeta & {
   env?: Record<string, string | boolean | undefined>;
