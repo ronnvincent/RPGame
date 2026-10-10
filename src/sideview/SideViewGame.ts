@@ -220,7 +220,7 @@ export class SideViewGame {
     if (this.engine) {
       this.engine.canvasWidth = width;
       this.engine.canvasHeight = height;
-      this.engine.groundY = Math.floor(height - Math.min(100, Math.max(75, height * 0.16)));
+      this.engine.groundY = height;
       this.engine.arenaHeight = height;
     }
   }
@@ -236,7 +236,7 @@ export class SideViewGame {
 
   public startGame(selectedClass: CharacterClass, saveData: any = null) {
     this.engine = new SideViewEngine(selectedClass);
-    this.engine.groundY = this.viewHeight - 90;
+    this.engine.groundY = this.viewHeight;
 
     // Stream the VFX catalogue in the background so the first cast of a fight
     // already has its frames resident.
