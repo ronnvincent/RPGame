@@ -3,6 +3,7 @@ import { getGameApiBase } from './sideview/config/RuntimeConfig';
 import { installMobileStyles } from './sideview/ui/MobileUI';
 import { installLandscapeMode, LANDSCAPE_READY_EVENT } from './sideview/ui/Fullscreen';
 import { installRpgUiTheme } from './sideview/ui/RpgUiTheme';
+import { playCinematicIntro, shouldPlayIntro } from './sideview/ui/CinematicIntro';
 
 function generateShortId() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No I, O, 0, 1
@@ -185,6 +186,9 @@ function showLoginScreen(mountPoint: HTMLElement) {
         localStorage.setItem('playerShortId', data.shortId);
         if (data.token) localStorage.setItem('playerSessionToken', data.token);
         document.body.removeChild(overlay);
+        if (shouldPlayIntro()) {
+          await playCinematicIntro();
+        }
         startGame(mountPoint);
       } else {
         errorText.innerText = data.error || 'Invalid credentials';
@@ -271,8 +275,9 @@ function showLoginScreen(mountPoint: HTMLElement) {
         okBtn.style.color = '#fff';
         okBtn.style.cursor = 'pointer';
         okBtn.style.fontWeight = 'bold';
-        okBtn.onclick = () => {
+        okBtn.onclick = async () => {
           document.body.removeChild(overlay);
+          await playCinematicIntro();
           startGame(mountPoint);
         };
 
