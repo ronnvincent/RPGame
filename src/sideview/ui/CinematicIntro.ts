@@ -236,11 +236,11 @@ export function playCinematicIntro(): Promise<void> {
     const beat1 = document.createElement('div');
     beat1.className = 'ci-beat';
     beat1.innerHTML = `
-      <div class="ci-studio-name">PINGOL STUDIOS</div>
+      <div class="ci-studio-name">CECT STUDIO</div>
       <div class="ci-line"></div>
       <div class="ci-role">Lead Developer &amp; Game Designer</div>
       <div class="ci-person-name">Ronn Vincent Pingol</div>
-      <div class="ci-subtitle">A Pingol Studios Production</div>
+      <div class="ci-subtitle">A CECT Studio Production</div>
     `;
     overlay.appendChild(beat1);
 
