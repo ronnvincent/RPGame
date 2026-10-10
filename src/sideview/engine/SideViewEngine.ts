@@ -5444,7 +5444,7 @@ export class SideViewEngine {
   public render(ctx: CanvasRenderingContext2D, width: number, height: number) {
     // Dynamic virtual resolution with intelligent zoom scaling
     // Scales pixel sprites up 2x - 2.5x so they are large, clear, and heroic!
-    const zoom = Math.max(1.65, Math.min(2.5, height / 440));
+    const zoom = Math.max(1.65, Math.min(3.5, height / 360));
     const virtualWidth = width / zoom;
     const virtualHeight = height / zoom;
 

@@ -1245,7 +1245,7 @@ export class GameHUD {
       .mini-quest-tracker {
         position: absolute;
         /* Clear of a wrapped two-line button row. */
-        top: 78px;
+        top: 120px;
         right: 10px;
         width: 220px;
         background: url('/assets/kenney-rpg-ui/panel_brown.png') repeat;
@@ -2019,6 +2019,15 @@ export class GameHUD {
           bottom: calc(36px + env(safe-area-inset-bottom));
           right: 269px;
           left: auto;
+        }
+        .slot-key-badge {
+          font-size: 11px;
+          padding: 2px 4px;
+          top: -8px;
+          left: -8px;
+          border: 1px solid #ffd700;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.8);
+          background: rgba(20, 20, 20, 0.95);
         }
       }
 
@@ -2912,14 +2921,17 @@ export class GameHUD {
 
         <div class="mobile-action-hub">
           <button class="touch-action-btn touch-talk-btn" id="touch-talk-btn">
+            <span class="slot-key-badge">${escapeHtml(this.game?.inputBindingLabel('interact') || 'E')}</span>
             <span class="gameplay-sprite-icon touch-context-sprite" id="touch-context-sprite" aria-hidden="true"><img alt="" draggable="false" /></span>
             <span data-context-label>TALK</span>
           </button>
           <button class="touch-action-btn jump-touch-btn" id="touch-jump-btn">
+            <span class="slot-key-badge">${escapeHtml(this.game?.inputBindingLabel('jump') || 'Space')}</span>
             <img src="/assets/gui/PNG/arrowBrown_right.png" width="20" height="20" style="transform: rotate(-90deg);" />
             <span>JUMP</span>
           </button>
           <button class="touch-action-btn dash-touch-btn" id="touch-dash-btn">
+            <span class="slot-key-badge">${escapeHtml(this.game?.inputBindingLabel('dash') || 'Shift')}</span>
             <img src="/assets/gui/PNG/cursorSword_silver.png" width="20" height="20" />
             <span>DASH</span>
             <div class="dash-cooldown-overlay" id="dash-cooldown-overlay">0</div>
