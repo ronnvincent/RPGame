@@ -864,19 +864,21 @@ export class GameHUD {
       }
 
       .pause-panel {
-        width: min(520px, 92vw); max-height: 88vh; overflow-y: auto;
-        padding: 18px 22px;
-        background: url('/assets/kenney-rpg-ui/panelInset_brown.png') repeat;
-        background-size: 100% 100%;
-        border: 3px solid #d4af37; border-radius: 5px;
-        box-shadow: 0 18px 50px rgba(0,0,0,0.7);
+        width: min(560px, 92vw); max-height: 88vh; overflow-y: auto;
+        padding: 24px 30px;
+        background: linear-gradient(145deg, rgba(22, 18, 30, 0.95), rgba(12, 10, 18, 0.98));
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(212, 175, 55, 0.25);
+        border-top: 1px solid rgba(212, 175, 55, 0.6);
+        border-radius: 8px;
+        box-shadow: 0 24px 60px rgba(0,0,0,0.85), inset 0 2px 4px rgba(255,255,255,0.05);
       }
 
       .pause-title {
         font-family: 'Cinzel', serif; font-weight: 900;
-        font-size: 19px; letter-spacing: 3px; color: #ffd700;
-        text-align: center; margin-bottom: 14px;
-        text-shadow: 0 2px 6px rgba(0,0,0,0.9);
+        font-size: 26px; letter-spacing: 4px; color: #ffd700;
+        text-align: center; margin-bottom: 20px;
+        text-shadow: 0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(212,175,55,0.2);
       }
 
       .play-modes { display: flex; gap: 8px; margin-bottom: 12px; }
@@ -899,97 +901,132 @@ export class GameHUD {
       .play-diff[data-diff="hard"].is-on { color: #fbbf24; border-color: #fbbf24; background: rgba(251,191,36,0.14); }
       .play-diff[data-diff="fatal"].is-on { color: #f87171; border-color: #f87171; background: rgba(248,113,113,0.14); }
       .play-row {
-        display: flex; align-items: center; gap: 10px;
-        padding: 9px 10px; margin-bottom: 6px;
+        display: flex; align-items: center; gap: 14px;
+        padding: 12px 16px; margin-bottom: 8px;
         background: rgba(0,0,0,0.3);
-        border: 1px solid rgba(255,255,255,0.1); border-radius: 3px;
+        border: 1px solid rgba(255,255,255,0.08); border-radius: 6px;
+        transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+      .play-row:hover {
+        background: rgba(212,175,55,0.08);
+        border-color: rgba(212,175,55,0.3);
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.4);
       }
       .play-meta { flex: 1; min-width: 0; }
-      .play-name { font-size: 12.5px; font-weight: 800; color: #f3e6c8; }
-      .play-sub { font-size: 10.5px; color: #8a9099; }
+      .play-name { font-size: 15px; font-weight: 800; color: #fdf6e3; text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+      .play-sub { font-size: 12px; color: #94a3b8; font-family: 'Outfit', sans-serif; margin-top: 2px; }
       .play-go {
-        flex: none; padding: 7px 14px; cursor: pointer;
-        background: rgba(212,175,55,0.2); border: 1px solid #d4af37; border-radius: 3px;
-        color: #ffd700; font-weight: 800; font-size: 10.5px; letter-spacing: 0.8px;
+        flex: none; padding: 8px 18px; cursor: pointer;
+        background: linear-gradient(to bottom, rgba(212,175,55,0.25), rgba(212,175,55,0.1));
+        border: 1px solid rgba(212,175,55,0.6); border-radius: 4px;
+        color: #ffd700; font-weight: 800; font-size: 12px; letter-spacing: 1px;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+        transition: all 0.2s ease;
+      }
+      .play-go:hover:not(:disabled) {
+        background: linear-gradient(to bottom, rgba(212,175,55,0.35), rgba(212,175,55,0.15));
+        box-shadow: 0 0 12px rgba(212,175,55,0.3);
       }
       .play-go:disabled {
         opacity: 0.4; cursor: default;
         border-color: rgba(255,255,255,0.16); color: #8a7b5c; background: rgba(0,0,0,0.25);
       }
 
-      .sk-points { text-align: center; font-size: 12px; color: #c9b48a; margin-bottom: 12px; }
-      .sk-points b { color: #ffd700; font-size: 14px; }
+      .sk-points { text-align: center; font-size: 14px; color: #c9b48a; margin-bottom: 16px; font-family: 'Outfit', sans-serif; }
+      .sk-points b { color: #ffd700; font-size: 17px; font-weight: 900; }
       .sk-row {
-        display: flex; align-items: center; gap: 10px;
-        padding: 8px 10px; margin-bottom: 6px;
+        display: flex; align-items: center; gap: 14px;
+        padding: 10px 14px; margin-bottom: 8px;
         background: rgba(0,0,0,0.3);
-        border: 1px solid rgba(255,255,255,0.1); border-radius: 3px;
+        border: 1px solid rgba(255,255,255,0.08); border-radius: 6px;
+        transition: all 0.2s ease;
       }
-      .sk-row img { width: 26px; height: 26px; image-rendering: pixelated; flex: none; }
+      .sk-row:hover {
+        background: rgba(255,255,255,0.05);
+        border-color: rgba(255,255,255,0.15);
+      }
+      .sk-row img { width: 32px; height: 32px; image-rendering: pixelated; flex: none; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6)); }
       .sk-meta { flex: 1; min-width: 0; }
-      .sk-name { font-size: 12.5px; font-weight: 800; color: #f3e6c8; }
-      .sk-bonus { font-size: 10.5px; color: #7dd3fc; }
-      .sk-pips { display: flex; gap: 3px; flex: none; }
-      .sk-pip { width: 9px; height: 9px; border-radius: 2px; background: rgba(255,255,255,0.14); }
-      .sk-pip.on { background: #ffd700; }
+      .sk-name { font-size: 15px; font-weight: 800; color: #fdf6e3; text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+      .sk-bonus { font-size: 12px; color: #7dd3fc; margin-top: 2px; font-family: 'Outfit', sans-serif; }
+      .sk-pips { display: flex; gap: 4px; flex: none; }
+      .sk-pip { width: 10px; height: 10px; border-radius: 2px; background: rgba(255,255,255,0.1); box-shadow: inset 0 1px 2px rgba(0,0,0,0.5); }
+      .sk-pip.on { background: linear-gradient(135deg, #fef08a, #d4af37); box-shadow: 0 0 6px rgba(212,175,55,0.4); }
       .sk-up {
-        flex: none; width: 30px; height: 30px; cursor: pointer;
-        background: rgba(212,175,55,0.2); border: 1px solid #d4af37; border-radius: 3px;
-        color: #ffd700; font-weight: 900; font-size: 15px; line-height: 1;
+        flex: none; width: 34px; height: 34px; cursor: pointer;
+        background: linear-gradient(to bottom, rgba(212,175,55,0.25), rgba(212,175,55,0.1)); 
+        border: 1px solid rgba(212,175,55,0.6); border-radius: 4px;
+        color: #ffd700; font-weight: 900; font-size: 18px; line-height: 1;
+        transition: all 0.2s ease;
+      }
+      .sk-up:hover:not(:disabled) {
+        background: linear-gradient(to bottom, rgba(212,175,55,0.35), rgba(212,175,55,0.15));
+        box-shadow: 0 0 12px rgba(212,175,55,0.3);
       }
       .sk-up:disabled { opacity: 0.28; cursor: default; border-color: rgba(255,255,255,0.16); color: #8a7b5c; }
 
       .pause-group { margin-bottom: 14px; }
       .pause-label {
-        font-size: 10px; font-weight: 800; letter-spacing: 1.6px;
-        color: #9b8a68; margin-bottom: 7px;
+        font-size: 12px; font-weight: 800; letter-spacing: 2px;
+        color: #bfa87a; margin-bottom: 10px;
       }
 
       .pause-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(146px, 1fr));
-        gap: 8px;
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: 10px;
       }
 
       /* Tiles, not a row of text buttons - that row is what made the game read
          as a web page rather than a game. */
       .pause-tile {
-        display: flex; align-items: center; gap: 9px;
-        padding: 10px 12px; cursor: pointer;
+        display: flex; align-items: center; gap: 12px;
+        padding: 12px 14px; cursor: pointer;
         background: rgba(0,0,0,0.3);
-        border: 1px solid rgba(255,255,255,0.12);
-        border-radius: 3px;
-        color: #f3e6c8;
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 6px;
+        color: #fdf6e3;
         font-family: 'Outfit', sans-serif;
-        font-size: 12.5px; font-weight: 700; letter-spacing: 0.3px;
+        font-size: 14px; font-weight: 700; letter-spacing: 0.5px;
         text-align: left;
+        transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
       }
-      .pause-tile:hover { background: rgba(212, 175, 55, 0.16); border-color: #d4af37; }
-      .pause-tile:active { transform: translateY(1px); }
+      .pause-tile:hover { 
+        background: linear-gradient(135deg, rgba(212, 175, 55, 0.12), rgba(212, 175, 55, 0.05)); 
+        border-color: rgba(212,175,55,0.4); 
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+      }
+      .pause-tile:active { transform: translateY(0); }
       .pause-tile img {
-        width: 22px; height: 22px; flex: none;
-        image-rendering: pixelated;
+        width: 26px; height: 26px; flex: none;
+        image-rendering: pixelated; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.6));
       }
-      .pause-tile .hud-glyph { width: 22px; height: 22px; color: #d4af37; }
-      .pause-tile span { flex: 1; }
+      .pause-tile .hud-glyph { width: 24px; height: 24px; color: #d4af37; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.6)); }
+      .pause-tile span { flex: 1; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
 
       .pause-foot {
         display: flex; align-items: center; justify-content: space-between;
-        gap: 10px; padding-top: 10px;
-        border-top: 1px solid rgba(255,255,255,0.1);
+        gap: 12px; padding-top: 14px; margin-top: 8px;
+        border-top: 1px solid rgba(255,255,255,0.08);
       }
-      .pause-id { font-size: 11px; color: #9b8a68; letter-spacing: 0.5px; }
-      .pause-id b { color: #f3e6c8; letter-spacing: 1.5px; }
-      /* The one primary action in the panel, so it keeps a button plate while
-         the tiles stay flat. It carried .inv-btn for this, which is the class
-         that made Bag look permanently selected. */
+      .pause-id { font-size: 12px; color: #94a3b8; letter-spacing: 0.5px; font-family: 'Outfit', sans-serif; }
+      .pause-id b { color: #fdf6e3; letter-spacing: 1.5px; }
       .pause-close {
-        padding: 8px 20px; cursor: pointer;
-        border: none;
-        background: url('/assets/kenney-rpg-ui/buttonLong_brown.png') no-repeat center/100% 100%;
-        border: none; color: #fff8e1;
-        font-family: 'Cinzel', serif; font-weight: 800;
-        font-size: 12px; letter-spacing: 1.2px;
+        padding: 10px 24px; cursor: pointer;
+        background: linear-gradient(to bottom, #d4af37, #997a00);
+        border: 1px solid #ffd700; border-radius: 4px; color: #fff;
+        font-family: 'Cinzel', serif; font-weight: 900;
+        font-size: 13px; letter-spacing: 1.5px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        transition: all 0.2s ease;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+      }
+      .pause-close:hover {
+        background: linear-gradient(to bottom, #f2cd4a, #b38f00);
+        transform: translateY(-1px);
+        box-shadow: 0 6px 16px rgba(0,0,0,0.6);
       }
 
       /* The plate's footer: what the character is worth, not what they can
