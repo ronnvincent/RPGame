@@ -2638,32 +2638,6 @@ export class GameHUD {
         filter: brightness(1.2);
       }
 
-      /* Restrained exploration layout for a fine pointer: an original compact
-         action fan keeps the same combat hierarchy while giving more of the
-         world back to the player. Touch retains the larger ergonomic ring. */
-      @media (hover: hover) and (pointer: fine) and (min-width: 861px) {
-        .hotbar-slot { width: 44px; height: 44px; }
-        .hotbar-slot[data-skill-idx="0"] {
-          width: 68px; height: 68px;
-          bottom: calc(18px + env(safe-area-inset-bottom));
-          right: calc(22px + env(safe-area-inset-right));
-        }
-        .hotbar-slot[data-skill-idx="0"] .slot-icon-img { width: 38px; height: 38px; }
-        .hotbar-slot[data-skill-idx="1"], .hotbar-slot[data-skill-idx="2"],
-        .hotbar-slot[data-skill-idx="3"], .hotbar-slot[data-skill-idx="4"],
-        .hotbar-slot[data-skill-idx="5"] { width: 44px; height: 44px; }
-        .hotbar-slot[data-skill-idx="1"] { bottom: calc(22px + env(safe-area-inset-bottom)); right: calc(126px + env(safe-area-inset-right)); }
-        .hotbar-slot[data-skill-idx="2"] { bottom: calc(68px + env(safe-area-inset-bottom)); right: calc(117px + env(safe-area-inset-right)); }
-        .hotbar-slot[data-skill-idx="3"] { bottom: calc(105px + env(safe-area-inset-bottom)); right: calc(88px + env(safe-area-inset-right)); }
-        .hotbar-slot[data-skill-idx="4"] { bottom: calc(126px + env(safe-area-inset-bottom)); right: calc(47px + env(safe-area-inset-right)); }
-        .hotbar-slot[data-skill-idx="5"] { bottom: calc(122px + env(safe-area-inset-bottom)); right: calc(3px + env(safe-area-inset-right)); }
-        .potion-slot {
-          width: 48px; height: 48px;
-          bottom: calc(20px + env(safe-area-inset-bottom));
-          right: calc(183px + env(safe-area-inset-right));
-        }
-      }
-
       /* Accessibility preferences are persisted by the shared input layer and
          applied to the game root. They are hooks rather than device guesses. */
       .input-reduced-motion #game-hud-overlay *,
