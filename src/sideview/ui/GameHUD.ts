@@ -661,29 +661,30 @@ export class GameHUD {
         z-index: 10;
       }
 
+      }
+
       .leave-dungeon-btn {
-        display: none;
         padding: 4px 12px;
-        background: linear-gradient(180deg, rgba(60, 15, 15, 0.85) 0%, rgba(30, 8, 8, 0.9) 100%);
-        border: 1.5px solid rgba(239, 68, 68, 0.5);
+        background: linear-gradient(180deg, #7f1d1d 0%, #450a0a 100%);
+        border: 2px solid #ef4444;
         border-radius: 4px;
-        color: #fca5a5;
+        color: #fecaca;
         font-size: 10px;
-        font-weight: 800;
+        font-weight: 900;
         font-family: 'Outfit', sans-serif;
-        letter-spacing: 1px;
         text-transform: uppercase;
+        letter-spacing: 1px;
         cursor: pointer;
         pointer-events: auto;
-        text-shadow: 0 1px 2px rgba(0,0,0,0.9);
-        transition: all 0.15s ease;
-        z-index: 10;
+        box-shadow: 0 4px 10px rgba(239, 68, 68, 0.4);
+        display: none;
+        align-self: flex-start;
+        margin-left: 4px;
       }
       .leave-dungeon-btn:hover {
-        background: linear-gradient(180deg, rgba(80, 20, 20, 0.9) 0%, rgba(50, 12, 12, 0.95) 100%);
-        border-color: rgba(239, 68, 68, 0.8);
-        color: #fecaca;
-        box-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+        background: linear-gradient(180deg, #991b1b 0%, #7f1d1d 100%);
+        box-shadow: 0 4px 15px rgba(239, 68, 68, 0.6);
+        color: #fff;
       }
       .leave-dungeon-btn:active {
         transform: scale(0.95);
@@ -2738,6 +2739,10 @@ export class GameHUD {
         <div class="plate-exp" title="Experience (EXP)"><div class="plate-exp-fill" id="hud-exp-bar" style="width: 0%"></div></div>
       </div>
 
+      <button class="leave-dungeon-btn" id="leave-dungeon-btn" style="display: ${this.engine.isTownMode ? 'none' : 'block'};">
+        ✕ Leave Dungeon
+      </button>
+
       <!-- Who else is here.
            Almost no 2D side-scroller has a party HUD - the genre's references
            are single-player, so there is nothing to copy. Without this the
@@ -3178,6 +3183,13 @@ export class GameHUD {
     const townBtn = this.container.querySelector('#return-town-btn');
     townBtn?.addEventListener('click', (e) => {
       e.stopPropagation();
+      audio.playTeleport();
+      this.game?.loadTownHub();
+    });
+
+    this.container.querySelector('#leave-dungeon-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!confirm('Leave this dungeon and return to town? Progress in this run will be lost.')) return;
       audio.playTeleport();
       this.game?.loadTownHub();
     });
