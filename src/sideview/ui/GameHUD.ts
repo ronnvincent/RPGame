@@ -1298,6 +1298,38 @@ export class GameHUD {
         transition: transform 0.1s ease;
       }
 
+      .start-run-top-btn {
+        position: absolute;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 8px 24px;
+        background: linear-gradient(180deg, #ca8a04 0%, #854d0e 100%);
+        border: 2px solid #facc15;
+        border-radius: 6px;
+        color: #fefce8;
+        font-size: 14px;
+        font-weight: 900;
+        font-family: 'Outfit', sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        cursor: pointer;
+        pointer-events: auto;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6), 0 0 10px rgba(234, 179, 8, 0.4);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 20;
+      }
+      .start-run-top-btn:hover {
+        background: linear-gradient(180deg, #eab308 0%, #a16207 100%);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8), 0 0 15px rgba(234, 179, 8, 0.6);
+        color: #fff;
+      }
+      .start-run-top-btn:active {
+        transform: translateX(-50%) scale(0.95);
+      }
+
       /* MapleStory / Dark Souls Style Top Boss Health Bar */
       .epic-boss-banner {
         position: absolute;
@@ -2770,6 +2802,11 @@ export class GameHUD {
       </section>
       </div>
 
+      <!-- Top Center: Start Run Button in Town -->
+      <button class="start-run-top-btn" id="start-run-top-btn" style="display: ${this.engine.isTownMode ? 'flex' : 'none'};">
+        <img src="/assets/ui_sprites/icons/S_Sword01.png" width="16" height="16" style="margin-right: 6px; vertical-align: middle;"> START A RUN
+      </button>
+
       <!-- Top Center: Epic Boss Health Bar (MapleStory / Dark Souls Style) -->
       <div class="epic-boss-banner" id="epic-boss-banner" style="display: none;">
         <div class="boss-portrait-icon" id="boss-portrait-icon"><img src="/assets/gui/PNG/buttonSquare_brown.png" width="32" height="32" /></div>
@@ -3331,6 +3368,14 @@ export class GameHUD {
     });
 
     this.container.querySelector('#toggle-play-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      paintPlay();
+      this.openHudDialog(playBack, {
+        initialFocus: playBack?.querySelector<HTMLElement>('.play-mode.is-on'),
+      });
+    });
+
+    this.container.querySelector('#start-run-top-btn')?.addEventListener('click', (e) => {
       e.stopPropagation();
       paintPlay();
       this.openHudDialog(playBack, {
@@ -4111,6 +4156,11 @@ export class GameHUD {
     const leaveBtn = this.hudNode('leave-dungeon-btn');
     if (leaveBtn) {
       leaveBtn.style.display = this.engine.isTownMode ? 'none' : 'block';
+    }
+
+    const startRunBtn = this.hudNode('start-run-top-btn');
+    if (startRunBtn) {
+      startRunBtn.style.display = this.engine.isTownMode ? 'flex' : 'none';
     }
 
     // Update Skill Cooldowns
