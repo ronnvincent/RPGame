@@ -94,10 +94,10 @@ function showLoginScreen(mountPoint: HTMLElement) {
   passIn.type = 'password';
   passIn.autocomplete = 'current-password';
   passIn.setAttribute('aria-describedby', 'login-error');
-  passIn.placeholder = 'Password (Leave blank for Guest)';
+  passIn.placeholder = 'Password (Leave blank if New)';
   passIn.style.width = '100%';
   passIn.style.padding = '10px';
-  passIn.style.marginBottom = '20px';
+  passIn.style.marginBottom = '14px';
   passIn.style.fontSize = '14px';
   passIn.style.border = '2px solid #2e1a0b';
   passIn.style.borderRadius = '4px';
@@ -112,6 +112,12 @@ function showLoginScreen(mountPoint: HTMLElement) {
   passLabel.textContent = 'Password';
   passLabel.appendChild(passIn);
 
+  const btnRow = document.createElement('div');
+  btnRow.style.display = 'flex';
+  btnRow.style.gap = '10px';
+  btnRow.style.width = '100%';
+  btnRow.style.marginBottom = '10px';
+
   const loginBtn = document.createElement('button');
   loginBtn.className = 'rpg-button rpg-button--primary';
   loginBtn.type = 'button';
@@ -119,28 +125,31 @@ function showLoginScreen(mountPoint: HTMLElement) {
   loginBtn.style.background = "url('/assets/kenney-rpg-ui/buttonRound_blue.png') no-repeat center center";
   loginBtn.style.backgroundSize = "100% 100%";
   loginBtn.style.border = 'none';
-  loginBtn.style.padding = '12px 24px';
-  loginBtn.style.fontSize = '16px';
+  loginBtn.style.padding = '12px 10px';
+  loginBtn.style.fontSize = '14px';
   loginBtn.style.color = '#fff';
   loginBtn.style.cursor = 'pointer';
   loginBtn.style.fontWeight = 'bold';
-  loginBtn.style.width = '100%';
-  loginBtn.style.marginBottom = '10px';
+  loginBtn.style.flex = '1';
   loginBtn.style.boxSizing = 'border-box';
 
   const guestBtn = document.createElement('button');
   guestBtn.className = 'rpg-button';
   guestBtn.type = 'button';
-  guestBtn.innerText = 'PLAY AS GUEST';
+  guestBtn.innerText = 'NEW / GUEST';
   guestBtn.style.background = '#4a2c11';
   guestBtn.style.border = '2px solid #fff';
-  guestBtn.style.padding = '10px 24px';
+  guestBtn.style.borderRadius = '8px';
+  guestBtn.style.padding = '12px 10px';
   guestBtn.style.fontSize = '14px';
   guestBtn.style.color = '#fff';
   guestBtn.style.cursor = 'pointer';
   guestBtn.style.fontWeight = 'bold';
-  guestBtn.style.width = '100%';
+  guestBtn.style.flex = '1';
   guestBtn.style.boxSizing = 'border-box';
+
+  btnRow.appendChild(loginBtn);
+  btnRow.appendChild(guestBtn);
 
   const errorText = document.createElement('p');
   errorText.id = 'login-error';
@@ -191,11 +200,11 @@ function showLoginScreen(mountPoint: HTMLElement) {
   guestBtn.onclick = async () => {
     const username = userIn.value.trim();
     if (username.length < 3) {
-      errorText.innerText = "Name must be at least 3 characters.";
+      errorText.innerText = "Please enter an Adventurer name (at least 3 characters) to create a guest account.";
       return;
     }
 
-    guestBtn.innerText = 'Creating account...';
+    guestBtn.innerText = 'Creating...';
     loginBtn.disabled = true;
     guestBtn.disabled = true;
     try {
@@ -276,10 +285,17 @@ function showLoginScreen(mountPoint: HTMLElement) {
     } catch (err) {
       errorText.innerText = 'Failed to connect to server.';
     }
-    guestBtn.innerText = 'PLAY AS GUEST';
+    guestBtn.innerText = 'NEW / GUEST';
     loginBtn.disabled = false;
     guestBtn.disabled = false;
   };
+
+  const guestHint = document.createElement('p');
+  guestHint.style.fontSize = '11px';
+  guestHint.style.color = '#a0a0a0';
+  guestHint.style.marginTop = '0px';
+  guestHint.style.lineHeight = '1.3';
+  guestHint.innerText = 'Tap "NEW / GUEST" with a name to instantly play. A password will be generated for you.';
 
   [userIn, passIn].forEach(input => input.addEventListener('keydown', event => {
     if (event.key !== 'Enter') return;
@@ -290,8 +306,8 @@ function showLoginScreen(mountPoint: HTMLElement) {
   box.appendChild(title);
   box.appendChild(userLabel);
   box.appendChild(passLabel);
-  box.appendChild(loginBtn);
-  box.appendChild(guestBtn);
+  box.appendChild(btnRow);
+  box.appendChild(guestHint);
   box.appendChild(errorText);
   overlay.appendChild(box);
   document.body.appendChild(overlay);
