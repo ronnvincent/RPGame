@@ -1007,6 +1007,17 @@ export class GameHUD {
       .pause-tile .hud-glyph { width: 24px; height: 24px; color: #d4af37; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.6)); }
       .pause-tile span { flex: 1; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
 
+      .pause-tile--logout {
+        border: 1px solid rgba(239, 68, 68, 0.4) !important;
+        background: linear-gradient(180deg, rgba(60, 15, 15, 0.7) 0%, rgba(30, 8, 8, 0.8) 100%) !important;
+      }
+      .pause-tile--logout span { color: #fca5a5; }
+      .pause-tile--logout .hud-glyph { color: #ef4444 !important; }
+      .pause-tile--logout:hover {
+        border-color: rgba(239, 68, 68, 0.7) !important;
+        box-shadow: 0 0 12px rgba(239, 68, 68, 0.3);
+      }
+
       .pause-foot {
         display: flex; align-items: center; justify-content: space-between;
         gap: 12px; padding-top: 14px; margin-top: 8px;
@@ -2932,6 +2943,9 @@ export class GameHUD {
               <button class="pause-tile" id="toggle-controls-btn" title="Controls and accessibility">
                 ${GameHUD.glyph('box')}<span>Controls</span>
               </button>
+              <button class="pause-tile pause-tile--logout" id="logout-btn" title="Log out and return to login screen">
+                ${GameHUD.glyph('close')}<span>Log Out</span>
+              </button>
             </div>
           </div>
 
@@ -3453,6 +3467,15 @@ export class GameHUD {
       this.togglePauseMenu();
     });
     this.container.querySelector('#pause-close-btn')?.addEventListener('click', () => setMenu(false));
+
+    this.container.querySelector('#logout-btn')?.addEventListener('click', () => {
+      if (!confirm('Are you sure you want to log out? Make sure your progress is saved!')) return;
+      localStorage.removeItem('playerName');
+      localStorage.removeItem('playerUUID');
+      localStorage.removeItem('playerShortId');
+      localStorage.removeItem('playerSessionToken');
+      window.location.reload();
+    });
     // Clicking the darkened area outside the panel closes it too.
     pauseBack?.addEventListener('click', (e) => { if (e.target === pauseBack) setMenu(false); });
     if (!this.globalsBound) window.addEventListener('keydown', (e) => {
