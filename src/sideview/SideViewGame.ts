@@ -970,12 +970,7 @@ export class SideViewGame {
         if (!this.engine?.isHost || this.engine.isTownMode) return;
         this.consumeEncounterResult(this.encounter.hitWorldObjects(area, damage));
       };
-      this.engine.onEnemyDefeatedEvent = this.engine.isHost
-        ? (enemyId) => {
-          if (this.currentRunNode()?.objective?.type !== 'kill_all') return;
-          this.dispatchRun({ type: 'objective_event', event: { type: 'enemy_defeated', enemyId } });
-        }
-        : null;
+      this.engine.onEnemyDefeatedEvent = null;
 
       this.currentWaveIndex = Math.max(0, node.depth);
       this.engine.currentWaveIndex = this.currentWaveIndex;
@@ -1031,8 +1026,19 @@ export class SideViewGame {
           this.createRunRelicOffer(`clear:${effect.roomId}`);
         }
         if (state.status === 'active') {
-          this.pendingDungeonInteraction = 'route';
-          this.hud?.showToast('Room clear - choose your route');
+          const exits = state.graph.exits.filter(exit => exit.fromRoomId === effect.roomId);
+          const available = exits.filter(exit => {
+            const target = state.graph.nodes.find(candidate => candidate.id === exit.toRoomId);
+            return target?.access !== 'secret' || state.revealedSecretRoomIds.includes(target.id);
+          });
+          if (available.length === 1) {
+            this.pendingDungeonInteraction = null;
+            this.hud?.showToast('Advancing to next room...');
+            window.setTimeout(() => this.dispatchRun({ type: 'choose_exit', exitId: available[0].id }), 800);
+          } else {
+            this.pendingDungeonInteraction = 'route';
+            this.hud?.showToast('Room clear - choose your route');
+          }
         }
       } else if (effect.type === 'relic_offer_created') {
         this.showRelicOffer(effect.offer.id);

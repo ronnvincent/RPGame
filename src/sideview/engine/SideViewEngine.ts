@@ -5450,7 +5450,7 @@ export class SideViewEngine {
 
     this.canvasWidth = virtualWidth;
     this.canvasHeight = virtualHeight;
-    this.groundY = Math.round(virtualHeight - 75);
+    this.groundY = Math.round(virtualHeight - 20);
     const currentTheme = this.activeZoneTheme();
     const visualPreferences = this.zoneAccessibilityPreferences();
     const vfxQuality = this.particles.getVfxQuality();

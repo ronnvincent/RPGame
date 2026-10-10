@@ -638,11 +638,12 @@ export class CoopLobbyUI {
       }
       .cl-crest-art img.cl-hero-img {
         display: block;
-        height: 120%; width: auto; max-width: none;
-        object-fit: none;
+        height: 160px; width: auto; max-width: none;
+        object-fit: cover;
         object-position: center bottom;
         image-rendering: pixelated;
-        filter: drop-shadow(0 8px 10px rgba(0,0,0,0.7));
+        filter: drop-shadow(0 6px 12px rgba(0,0,0,0.8));
+        margin: 0 auto;
       }
 
       .cl-facts { display: flex; flex-direction: column; gap: 3px; }

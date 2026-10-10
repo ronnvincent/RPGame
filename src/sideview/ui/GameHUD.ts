@@ -882,13 +882,14 @@ export class GameHUD {
       }
 
       .play-modes { display: flex; gap: 8px; margin-bottom: 12px; }
-      .play-mode {
+      .play-mode, .play-join {
         flex: 1; padding: 9px; cursor: pointer;
         background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.14);
         border-radius: 3px; color: #9b8a68;
         font-family: 'Cinzel', serif; font-weight: 800;
         font-size: 12px; letter-spacing: 1.2px;
       }
+      .play-mode:hover, .play-join:hover { background: rgba(255,255,255,0.08); color: #fff; }
       .play-mode.is-on { color: #ffd700; border-color: #d4af37; background: rgba(212,175,55,0.16); }
       .play-diff {
         flex: 1; padding: 7px; cursor: pointer;
@@ -2743,7 +2744,8 @@ export class GameHUD {
           <div class="pause-heading"><h2 class="pause-title" id="play-title">START A RUN</h2></div>
           <div class="play-modes">
             <button class="play-mode is-on" type="button" data-mode="solo">SOLO</button>
-            <button class="play-mode" type="button" data-mode="party">MULTIPLAYER</button>
+            <button class="play-mode" type="button" data-mode="party">HOST PARTY</button>
+            <button class="play-join" type="button" id="play-join-lobby-btn">JOIN LOBBY</button>
           </div>
           <div class="play-modes" id="difficulty-modes">
             <button class="play-diff is-on" type="button" data-diff="normal">NORMAL</button>
@@ -3203,6 +3205,12 @@ export class GameHUD {
       this.openHudDialog(playBack, {
         initialFocus: playBack?.querySelector<HTMLElement>('.play-mode.is-on'),
       });
+    });
+
+    this.container.querySelector('#play-join-lobby-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.closeHudDialog(playBack);
+      this.game?.showScreen('lobby');
     });
 
     this.container.querySelector('#toggle-lobby-btn')?.addEventListener('click', (e) => {
