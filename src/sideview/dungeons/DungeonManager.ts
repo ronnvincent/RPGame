@@ -186,19 +186,12 @@ export const DUNGEONS: DungeonDefinition[] = [
       {
         waveNumber: 2,
         enemies: [
-          { name: 'Goblin Rogue', type: 'mob', icon: '👺', color: '#689f38', maxHp: 130, atk: 18, def: 8, speed: 3.5, expReward: 70, goldReward: 32, width: 38, height: 48, count: 3 },
-          { name: 'Goblin Shaman', type: 'mob', icon: '🧙‍♂️', color: '#33691e', maxHp: 110, atk: 22, def: 6, speed: 2.0, expReward: 84, goldReward: 45, width: 38, height: 48, count: 2 }
+          { name: 'Orc Berserker', type: 'elite', icon: '/assets/ui_sprites/icons/E_Bones03.png', color: '#d84315', maxHp: 350, atk: 30, def: 18, speed: 2.8, expReward: 210, goldReward: 117, width: 52, height: 60, count: 1 },
+          { name: 'Goblin Rogue', type: 'mob', icon: '👺', color: '#689f38', maxHp: 130, atk: 18, def: 8, speed: 3.5, expReward: 70, goldReward: 32, width: 38, height: 48, count: 3 }
         ]
       },
       {
         waveNumber: 3,
-        enemies: [
-          { name: 'Orc Berserker', type: 'elite', icon: '/assets/ui_sprites/icons/E_Bones03.png', color: '#d84315', maxHp: 350, atk: 30, def: 18, speed: 2.8, expReward: 210, goldReward: 117, width: 52, height: 60, count: 1 },
-          { name: 'Green Slime', type: 'mob', icon: '/assets/ui_sprites/icons/I_Crystal01.png', color: '#4caf50', maxHp: 95, atk: 14, def: 6, speed: 2.4, expReward: 49, goldReward: 26, width: 36, height: 32, count: 3 }
-        ]
-      },
-      {
-        waveNumber: 4,
         enemies: [
           { name: 'Chief Warlord Grimjaw', type: 'boss', icon: '👑', color: '#2e7d32', maxHp: 1000, atk: 42, def: 25, speed: 3.0, expReward: 700, goldReward: 455, width: 68, height: 80, count: 1, phases: 2 }
         ]
@@ -226,19 +219,13 @@ export const DUNGEONS: DungeonDefinition[] = [
       {
         waveNumber: 2,
         enemies: [
-          { name: 'Skeleton Archer', type: 'mob', icon: '🏹', color: '#b0bec5', maxHp: 150, atk: 26, def: 8, speed: 2.3, expReward: 91, goldReward: 52, width: 38, height: 50, count: 3 },
+          { name: 'Death Knight', type: 'elite', icon: '🛡️', color: '#4527a0', maxHp: 600, atk: 40, def: 28, speed: 2.5, expReward: 364, goldReward: 208, width: 56, height: 68, count: 1 },
+          { name: 'Skeleton Archer', type: 'mob', icon: '🏹', color: '#b0bec5', maxHp: 150, atk: 26, def: 8, speed: 2.3, expReward: 91, goldReward: 52, width: 38, height: 50, count: 2 },
           { name: 'Cursed Wraith', type: 'mob', icon: '👻', color: '#7e57c2', maxHp: 170, atk: 28, def: 10, speed: 3.2, expReward: 105, goldReward: 58, width: 44, height: 54, count: 2 }
         ]
       },
       {
         waveNumber: 3,
-        enemies: [
-          { name: 'Death Knight', type: 'elite', icon: '🛡️', color: '#4527a0', maxHp: 600, atk: 40, def: 28, speed: 2.5, expReward: 364, goldReward: 208, width: 56, height: 68, count: 1 },
-          { name: 'Skeleton Warrior', type: 'mob', icon: '/assets/ui_sprites/icons/I_Bone.png', color: '#e0e0e0', maxHp: 195, atk: 24, def: 14, speed: 2.6, expReward: 84, goldReward: 45, width: 40, height: 52, count: 3 }
-        ]
-      },
-      {
-        waveNumber: 4,
         enemies: [
           { name: 'Arch-Lich Malakar', type: 'boss', icon: '👑', color: '#6a1b9a', maxHp: 2400, atk: 68, def: 32, speed: 3.2, expReward: 1400, goldReward: 975, width: 72, height: 86, count: 1, phases: 2 }
         ]
@@ -266,18 +253,12 @@ export const DUNGEONS: DungeonDefinition[] = [
       {
         waveNumber: 2,
         enemies: [
-          { name: 'Fire Imp', type: 'mob', icon: '😈', color: '#f44336', maxHp: 260, atk: 48, def: 12, speed: 3.0, expReward: 154, goldReward: 97, width: 36, height: 44, count: 4 },
-          { name: 'Lava Golem', type: 'elite', icon: '🗿', color: '#bf360c', maxHp: 950, atk: 60, def: 35, speed: 1.8, expReward: 489, goldReward: 286, width: 62, height: 72, count: 1 }
+          { name: 'Fire Imp', type: 'mob', icon: '😈', color: '#f44336', maxHp: 260, atk: 48, def: 12, speed: 3.0, expReward: 154, goldReward: 97, width: 36, height: 44, count: 3 },
+          { name: 'Magma Drake', type: 'elite', icon: '🦎', color: '#d84315', maxHp: 1100, atk: 66, def: 38, speed: 3.4, expReward: 630, goldReward: 364, width: 66, height: 60, count: 1 }
         ]
       },
       {
         waveNumber: 3,
-        enemies: [
-          { name: 'Magma Drake', type: 'elite', icon: '🦎', color: '#d84315', maxHp: 1100, atk: 66, def: 38, speed: 3.4, expReward: 630, goldReward: 364, width: 66, height: 60, count: 2 }
-        ]
-      },
-      {
-        waveNumber: 4,
         enemies: [
           { name: 'Ancient Red Dragon Ignis', type: 'boss', icon: '👑', color: '#b71c1c', maxHp: 4200, atk: 88, def: 45, speed: 3.6, expReward: 2800, goldReward: 1950, width: 92, height: 90, count: 1, phases: 3 }
         ]

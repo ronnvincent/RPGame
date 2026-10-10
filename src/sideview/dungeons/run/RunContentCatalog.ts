@@ -51,7 +51,7 @@ const ROOM_TEMPLATES: RoomTemplateDefinition[] = [
     enemyGroupIds: ['encounter.relic-siege'], worldObjectIds: ['object.ancient-relic'], choices: [], tags: ['defend', 'waves'],
     objective: {
       id: 'objective.defend-relic', type: 'defend_relic', targetObjectId: 'object.ancient-relic',
-      durationMs: 45_000, maxHp: 1_200, spawnGroupIds: ['encounter.relic-siege'],
+      durationMs: 25_000, maxHp: 1_200, spawnGroupIds: ['encounter.relic-siege'],
     },
     completion: { type: 'objective' },
   },
@@ -71,7 +71,7 @@ const ROOM_TEMPLATES: RoomTemplateDefinition[] = [
     id: 'run-survive-ward', kind: 'objective', weight: 100, maxPerRun: 1, sceneId: 'run-survive-ward',
     sprites: roomSprites(OBJECTIVE_SPRITES['survive-waves'].active, OBJECTIVE_SPRITES['survive-waves'].primary),
     enemyGroupIds: ['encounter.survival-waves'], worldObjectIds: ['object.survival-ward'], choices: [], tags: ['survive', 'waves'],
-    objective: { id: 'objective.survive-ward', type: 'survive', durationMs: 60_000, spawnGroupIds: ['encounter.survival-waves'] },
+    objective: { id: 'objective.survive-ward', type: 'survive', durationMs: 30_000, spawnGroupIds: ['encounter.survival-waves'] },
     completion: { type: 'objective' },
   },
   {
@@ -90,7 +90,7 @@ const ROOM_TEMPLATES: RoomTemplateDefinition[] = [
     sprites: roomSprites(OBJECTIVE_SPRITES['timed-escape'].active, OBJECTIVE_SPRITES['timed-escape'].primary),
     enemyGroupIds: ['encounter.escape-pursuit'], worldObjectIds: ['trigger.escape-gate'], choices: [], tags: ['escape', 'timed'],
     objective: {
-      id: 'objective.timed-escape', type: 'timed_escape', durationMs: 35_000,
+      id: 'objective.timed-escape', type: 'timed_escape', durationMs: 20_000,
       exitTriggerId: 'trigger.escape-gate', participation: 'all_active',
     },
     completion: { type: 'objective' },
@@ -167,29 +167,21 @@ export const DEFAULT_DUNGEON_RUN_BLUEPRINT: RunBlueprintDefinition = {
   dungeonId: 'authored-sideview-run',
   contentVersion: '1.0.0',
   criticalPath: {
-    minRooms: 7,
-    maxRooms: 8,
+    minRooms: 4,
+    maxRooms: 5,
     entryPoolId: 'pool.entry',
     middlePoolId: 'pool.middle',
     finalePoolId: 'pool.finale',
-    requiredKinds: ['objective', 'elite', 'miniboss', 'escape'],
+    requiredKinds: ['elite'],
   },
   branches: [
     {
-      id: 'branch.event', poolId: 'pool.event', minCount: 1, maxCount: 1, minLength: 1, maxLength: 1,
-      minSourceDepth: 1, maxSourceDepth: 5, chancePermille: 1_000, access: 'normal', requiredKinds: ['event'],
-    },
-    {
       id: 'branch.treasure', poolId: 'pool.treasure', minCount: 1, maxCount: 1, minLength: 1, maxLength: 1,
-      minSourceDepth: 1, maxSourceDepth: 5, chancePermille: 1_000, access: 'normal', requiredKinds: ['treasure'],
+      minSourceDepth: 1, maxSourceDepth: 3, chancePermille: 1_000, access: 'normal', requiredKinds: ['treasure'],
     },
     {
-      id: 'branch.shrine', poolId: 'pool.shrine', minCount: 1, maxCount: 1, minLength: 1, maxLength: 1,
-      minSourceDepth: 1, maxSourceDepth: 5, chancePermille: 1_000, access: 'normal', requiredKinds: ['shrine'],
-    },
-    {
-      id: 'branch.secret', poolId: 'pool.secret', minCount: 1, maxCount: 1, minLength: 1, maxLength: 1,
-      minSourceDepth: 1, maxSourceDepth: 5, chancePermille: 1_000, access: 'secret', requiredKinds: [],
+      id: 'branch.shrine', poolId: 'pool.shrine', minCount: 0, maxCount: 1, minLength: 1, maxLength: 1,
+      minSourceDepth: 1, maxSourceDepth: 3, chancePermille: 600, access: 'normal', requiredKinds: ['shrine'],
     },
   ],
 };

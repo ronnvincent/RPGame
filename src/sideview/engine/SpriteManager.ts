@@ -440,6 +440,7 @@ export class SpriteManager {
     accent: string,
     alpha: number,
   ) {
+    return; // User explicitly requested these procedural background shapes be removed
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.translate(x, y);
