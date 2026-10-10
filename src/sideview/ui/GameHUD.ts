@@ -895,6 +895,7 @@ export class GameHUD {
         font-family: 'Cinzel', serif; font-weight: 800;
         font-size: 11px; letter-spacing: 1px;
       }
+      .play-diff[data-diff="normal"].is-on { color: #4ade80; border-color: #4ade80; background: rgba(74,222,128,0.14); }
       .play-diff[data-diff="hard"].is-on { color: #fbbf24; border-color: #fbbf24; background: rgba(251,191,36,0.14); }
       .play-diff[data-diff="fatal"].is-on { color: #f87171; border-color: #f87171; background: rgba(248,113,113,0.14); }
       .play-row {
@@ -3081,8 +3082,16 @@ export class GameHUD {
       list.innerHTML = ordered.map(({ d, i }) => {
         const inOrder = Boolean((d as any).sideContent) || i <= cleared;
         const levelMet = lvl >= (d.minLevel || 1);
-        const open = inOrder && levelMet;
-        const why = !inOrder ? 'Clear the previous run first' : `Needs Lv. ${d.minLevel || 1}`;
+        const diff = getActiveDifficulty();
+        const isCleared = i < cleared;
+        const diffAllowed = diff === 'normal' || isCleared;
+        const open = inOrder && levelMet && diffAllowed;
+        
+        let why = '';
+        if (!inOrder) why = 'Clear the previous run first';
+        else if (!levelMet) why = `Needs Lv. ${d.minLevel || 1}`;
+        else if (!diffAllowed) why = 'Clear on Normal first';
+
         return `
           <div class="play-row">
             <div class="play-meta">
@@ -3144,6 +3153,7 @@ export class GameHUD {
         this.container.querySelectorAll('.play-diff').forEach(b => b.classList.remove('is-on'));
         btn.classList.add('is-on');
         audio.playClick();
+        paintPlay();
       });
     });
 
