@@ -1549,7 +1549,7 @@ export class GameHUD {
         justify-content: center;
         cursor: pointer;
         touch-action: manipulation;
-        overflow: hidden;
+        overflow: visible;
       }
 
       .potion-slot {
@@ -2050,8 +2050,8 @@ export class GameHUD {
         .slot-key-badge {
           font-size: 11px;
           padding: 2px 4px;
-          top: -8px;
-          left: -8px;
+          top: -5px;
+          left: -5px;
           border: 1px solid #ffd700;
           box-shadow: 0 2px 4px rgba(0,0,0,0.8);
           background: rgba(20, 20, 20, 0.95);
