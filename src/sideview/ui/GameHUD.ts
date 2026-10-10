@@ -1284,9 +1284,8 @@ export class GameHUD {
       /* Mini Quest Tracker Widget */
       .mini-quest-tracker {
         position: absolute;
-        /* Clear of a wrapped two-line button row. */
-        top: 120px;
-        right: 10px;
+        bottom: 12px;
+        right: 12px;
         width: 220px;
         background: url('/assets/kenney-rpg-ui/panel_brown.png') repeat;
         background-size: 100% 100%;
@@ -4117,6 +4116,11 @@ export class GameHUD {
     if (this.engine.isTownMode && waveTitle && waveMobs) {
       waveTitle.textContent = 'HAVEN OF ELDERMOOR';
       waveMobs.textContent = 'Peaceful Town Sanctuary';
+    }
+
+    const leaveBtn = this.hudNode('leave-dungeon-btn');
+    if (leaveBtn) {
+      leaveBtn.style.display = this.engine.isTownMode ? 'none' : 'block';
     }
 
     // Update Skill Cooldowns
