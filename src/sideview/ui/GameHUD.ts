@@ -665,10 +665,10 @@ export class GameHUD {
 
       .leave-dungeon-btn {
         padding: 4px 12px;
-        background: linear-gradient(180deg, #7f1d1d 0%, #450a0a 100%);
-        border: 2px solid #ef4444;
+        background: linear-gradient(180deg, #b91c1c 0%, #7f1d1d 100%);
+        border: 2px solid #f87171;
         border-radius: 4px;
-        color: #fecaca;
+        color: #fef2f2;
         font-size: 10px;
         font-weight: 900;
         font-family: 'Outfit', sans-serif;
@@ -682,8 +682,8 @@ export class GameHUD {
         margin-left: 4px;
       }
       .leave-dungeon-btn:hover {
-        background: linear-gradient(180deg, #991b1b 0%, #7f1d1d 100%);
-        box-shadow: 0 4px 15px rgba(239, 68, 68, 0.6);
+        background: linear-gradient(180deg, #dc2626 0%, #991b1b 100%);
+        box-shadow: 0 4px 15px rgba(239, 68, 68, 0.8);
         color: #fff;
       }
       .leave-dungeon-btn:active {
@@ -2754,7 +2754,6 @@ export class GameHUD {
         <div class="wave-title" id="wave-title-text">DUNGEON BATTLE</div>
         <div class="wave-mobs-left" id="wave-mobs-text">Enemies remaining: 0</div>
       </div>
-      <button class="leave-dungeon-btn" id="leave-dungeon-btn" style="display: ${this.engine.isTownMode ? 'none' : 'inline-block'};">✕ Leave Dungeon</button>
 
       <section class="dungeon-run-status" id="dungeon-run-status" aria-label="Dungeon run" aria-hidden="true">
         <div class="run-objective-row" id="run-objective-row">
@@ -3182,13 +3181,6 @@ export class GameHUD {
     const townBtn = this.container.querySelector('#return-town-btn');
     townBtn?.addEventListener('click', (e) => {
       e.stopPropagation();
-      audio.playTeleport();
-      this.game?.loadTownHub();
-    });
-
-    this.container.querySelector('#leave-dungeon-btn')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (!confirm('Leave this dungeon and return to town? Progress in this run will be lost.')) return;
       audio.playTeleport();
       this.game?.loadTownHub();
     });
