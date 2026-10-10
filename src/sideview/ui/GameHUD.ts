@@ -661,8 +661,6 @@ export class GameHUD {
         z-index: 10;
       }
 
-      }
-
       .leave-dungeon-btn {
         padding: 4px 12px;
         background: linear-gradient(180deg, #b91c1c 0%, #7f1d1d 100%);
