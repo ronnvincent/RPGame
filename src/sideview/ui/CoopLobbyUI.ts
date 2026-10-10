@@ -638,9 +638,9 @@ export class CoopLobbyUI {
       }
       .cl-crest-art img.cl-hero-img {
         display: block;
-        height: 100%; width: 100%; max-width: none;
-        object-fit: contain;
-        object-position: bottom;
+        height: 120%; width: auto; max-width: none;
+        object-fit: none;
+        object-position: center bottom;
         image-rendering: pixelated;
         filter: drop-shadow(0 8px 10px rgba(0,0,0,0.7));
       }

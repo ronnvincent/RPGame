@@ -1608,8 +1608,14 @@ export class SideViewGame {
     if (!this.engine || this.engine.isTownMode) return false;
     // A held rescue always wins over a tap-only room action or parry.
     if (this.engine.nearestDownedAlly()) return true;
-    if (this.pendingDungeonInteraction === 'choice' && this.showRunRoomChoices()) return true;
-    if (this.pendingDungeonInteraction === 'route' && this.showRunRouteChoices()) return true;
+    if (this.pendingDungeonInteraction === 'choice') {
+      this.runDialogueKey = null;
+      if (this.showRunRoomChoices()) return true;
+    }
+    if (this.pendingDungeonInteraction === 'route') {
+      this.runDialogueKey = null;
+      if (this.showRunRouteChoices()) return true;
+    }
     if (this.pendingDungeonInteraction === 'world-object' && this.engine.isHost) {
       const result = this.encounter.hitWorldObjects({
         x: this.engine.player.x + this.engine.player.facing * 46,
@@ -1844,7 +1850,7 @@ export class SideViewGame {
         if (!this.engine.isTownMode) {
           const livingEnemies = this.engine.enemies.filter(e => !e.isDead);
           const dungeon = DUNGEONS[this.currentDungeonIndex];
-          if (dungeon) {
+          if (dungeon && !this.runController) {
             this.hud?.setWaveInfo(this.waveLabel(dungeon), livingEnemies.length);
 
             // Guest watchdog: if the host's state stream goes quiet we have
