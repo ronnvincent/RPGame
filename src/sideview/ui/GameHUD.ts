@@ -2029,6 +2029,95 @@ export class GameHUD {
           box-shadow: 0 2px 4px rgba(0,0,0,0.8);
           background: rgba(20, 20, 20, 0.95);
         }
+        .potion-slot .slot-key-badge {
+          display: block;
+        }
+      }
+
+      /* ─── PC Keyboard Controls Bar ─── */
+      .pc-controls-bar {
+        display: none;
+        position: absolute;
+        bottom: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: linear-gradient(180deg, rgba(30, 22, 12, 0.92) 0%, rgba(15, 10, 5, 0.96) 100%);
+        border: 2px solid rgba(212, 175, 55, 0.5);
+        border-radius: 8px;
+        padding: 6px 14px;
+        pointer-events: auto;
+        z-index: 15;
+        gap: 4px;
+        flex-direction: column;
+        align-items: center;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 215, 0, 0.1);
+      }
+      @media (hover: hover) and (pointer: fine) and (min-width: 861px) {
+        .pc-controls-bar { display: flex; }
+      }
+      .pc-controls-bar-title {
+        font-size: 8px;
+        font-weight: 700;
+        color: rgba(212, 175, 55, 0.6);
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        margin-bottom: 2px;
+      }
+      .pc-controls-row {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      .pc-control-hint {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        min-width: 42px;
+      }
+      .pc-control-hint .pc-key {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 28px;
+        height: 24px;
+        padding: 0 6px;
+        background: linear-gradient(180deg, rgba(60, 50, 30, 0.9) 0%, rgba(35, 28, 15, 0.95) 100%);
+        border: 1.5px solid #d4af37;
+        border-bottom-width: 3px;
+        border-radius: 4px;
+        color: #ffd700;
+        font-size: 11px;
+        font-weight: 900;
+        font-family: 'Outfit', sans-serif;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.9);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.6);
+        white-space: nowrap;
+      }
+      .pc-control-hint .pc-label {
+        font-size: 7.5px;
+        font-weight: 700;
+        color: #b8a070;
+        font-family: 'Outfit', sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        white-space: nowrap;
+      }
+      .pc-controls-divider {
+        width: 1px;
+        height: 32px;
+        background: rgba(212, 175, 55, 0.25);
+        margin: 0 4px;
+      }
+      .pc-control-hint--skill .pc-key {
+        border-color: #8b6914;
+        background: linear-gradient(180deg, rgba(50, 40, 20, 0.85) 0%, rgba(25, 20, 10, 0.9) 100%);
+        color: #f0d060;
+      }
+      .pc-control-hint--ult .pc-key {
+        border-color: #c850c0;
+        background: linear-gradient(180deg, rgba(60, 20, 55, 0.9) 0%, rgba(30, 10, 28, 0.95) 100%);
+        color: #e879f9;
       }
 
       @media (max-width: 860px) {
@@ -2886,6 +2975,58 @@ export class GameHUD {
           <span class="slot-skill-name">Potion</span>
           <div class="potion-count" id="potion-count">0</div>
         </button>
+      </div>
+
+      <!-- PC Keyboard Controls Bar (desktop only) -->
+      <div class="pc-controls-bar" id="pc-controls-bar">
+        <div class="pc-controls-bar-title">CONTROLS</div>
+        <div class="pc-controls-row">
+          <div class="pc-control-hint">
+            <div class="pc-key">A</div>
+            <div class="pc-label">Left</div>
+          </div>
+          <div class="pc-control-hint">
+            <div class="pc-key">D</div>
+            <div class="pc-label">Right</div>
+          </div>
+          <div class="pc-controls-divider"></div>
+          <div class="pc-control-hint">
+            <div class="pc-key">${escapeHtml(this.game?.inputBindingLabel('jump') || 'Space')}</div>
+            <div class="pc-label">Jump</div>
+          </div>
+          <div class="pc-control-hint">
+            <div class="pc-key">${escapeHtml(this.game?.inputBindingLabel('dash') || 'Shift')}</div>
+            <div class="pc-label">Dash</div>
+          </div>
+          <div class="pc-control-hint">
+            <div class="pc-key">${escapeHtml(this.game?.inputBindingLabel('interact') || 'E')}</div>
+            <div class="pc-label">Talk</div>
+          </div>
+          <div class="pc-controls-divider"></div>
+          ${p.characterClass.skills.map((s, idx) => `
+          <div class="pc-control-hint ${idx === 5 ? 'pc-control-hint--ult' : 'pc-control-hint--skill'}">
+            <div class="pc-key">${escapeHtml(this.skillBindingLabel(idx, s.key))}</div>
+            <div class="pc-label">${escapeHtml(s.name.length > 8 ? s.name.substring(0, 7) + '…' : s.name)}</div>
+          </div>
+          `).join('')}
+          <div class="pc-controls-divider"></div>
+          <div class="pc-control-hint">
+            <div class="pc-key">${escapeHtml(this.game?.inputBindingLabel('quickHeal') || 'Q')}</div>
+            <div class="pc-label">Potion</div>
+          </div>
+          <div class="pc-control-hint">
+            <div class="pc-key">I</div>
+            <div class="pc-label">Inventory</div>
+          </div>
+          <div class="pc-control-hint">
+            <div class="pc-key">J</div>
+            <div class="pc-label">Quest</div>
+          </div>
+          <div class="pc-control-hint">
+            <div class="pc-key">Esc</div>
+            <div class="pc-label">Menu</div>
+          </div>
+        </div>
       </div>
 
       <!-- MULTI-DEVICE VIRTUAL TOUCH CONTROLS (Joystick, Jump, Dash with Real Sprites) -->
