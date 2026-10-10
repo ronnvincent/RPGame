@@ -661,6 +661,34 @@ export class GameHUD {
         z-index: 10;
       }
 
+      .leave-dungeon-btn {
+        display: none;
+        padding: 4px 12px;
+        background: linear-gradient(180deg, rgba(60, 15, 15, 0.85) 0%, rgba(30, 8, 8, 0.9) 100%);
+        border: 1.5px solid rgba(239, 68, 68, 0.5);
+        border-radius: 4px;
+        color: #fca5a5;
+        font-size: 10px;
+        font-weight: 800;
+        font-family: 'Outfit', sans-serif;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        cursor: pointer;
+        pointer-events: auto;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.9);
+        transition: all 0.15s ease;
+        z-index: 10;
+      }
+      .leave-dungeon-btn:hover {
+        background: linear-gradient(180deg, rgba(80, 20, 20, 0.9) 0%, rgba(50, 12, 12, 0.95) 100%);
+        border-color: rgba(239, 68, 68, 0.8);
+        color: #fecaca;
+        box-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+      }
+      .leave-dungeon-btn:active {
+        transform: scale(0.95);
+      }
+
       .player-id-row {
         font-size: 8.5px;
         font-weight: 700;
@@ -2019,11 +2047,6 @@ export class GameHUD {
       } /* End of skill ring mobile media query */
 
       @media (hover: hover) and (pointer: fine) and (min-width: 861px) {
-        .potion-slot {
-          bottom: calc(36px + env(safe-area-inset-bottom));
-          right: 269px;
-          left: auto;
-        }
         .slot-key-badge {
           font-size: 11px;
           padding: 2px 4px;
@@ -2038,6 +2061,71 @@ export class GameHUD {
         }
       }
 
+      /* ─── PC Keyboard Controls Bar (Bottom Left) ─── */
+      .pc-controls-bar {
+        display: none;
+        position: absolute;
+        bottom: 12px;
+        left: 12px;
+        background: linear-gradient(180deg, rgba(30, 22, 12, 0.92) 0%, rgba(15, 10, 5, 0.96) 100%);
+        border: 2px solid rgba(212, 175, 55, 0.5);
+        border-radius: 8px;
+        padding: 6px 12px;
+        pointer-events: auto;
+        z-index: 15;
+        gap: 4px;
+        flex-direction: column;
+        align-items: flex-start;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 215, 0, 0.1);
+      }
+      @media (hover: hover) and (pointer: fine) and (min-width: 861px) {
+        .pc-controls-bar { display: flex; }
+      }
+      .pc-controls-bar-title {
+        font-size: 8px;
+        font-weight: 700;
+        color: rgba(212, 175, 55, 0.6);
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        margin-bottom: 2px;
+      }
+      .pc-controls-row {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+      .pc-control-hint {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .pc-control-hint .pc-key {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 24px;
+        height: 20px;
+        padding: 0 4px;
+        background: linear-gradient(180deg, rgba(60, 50, 30, 0.9) 0%, rgba(35, 28, 15, 0.95) 100%);
+        border: 1.5px solid #d4af37;
+        border-bottom-width: 3px;
+        border-radius: 4px;
+        color: #ffd700;
+        font-size: 10px;
+        font-weight: 900;
+        font-family: 'Outfit', sans-serif;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.9);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.6);
+        white-space: nowrap;
+      }
+      .pc-control-hint .pc-label {
+        font-size: 8px;
+        font-weight: 700;
+        color: #b8a070;
+        font-family: 'Outfit', sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        white-space: nowrap;
       }
 
       @media (max-width: 860px) {
@@ -2662,6 +2750,7 @@ export class GameHUD {
         <div class="wave-title" id="wave-title-text">DUNGEON BATTLE</div>
         <div class="wave-mobs-left" id="wave-mobs-text">Enemies remaining: 0</div>
       </div>
+      <button class="leave-dungeon-btn" id="leave-dungeon-btn" style="display: ${this.engine.isTownMode ? 'none' : 'inline-block'};">✕ Leave Dungeon</button>
 
       <section class="dungeon-run-status" id="dungeon-run-status" aria-label="Dungeon run" aria-hidden="true">
         <div class="run-objective-row" id="run-objective-row">
@@ -2874,6 +2963,42 @@ export class GameHUD {
         </button>
       </div>
 
+      <!-- PC Keyboard Controls Bar (desktop only) - Anchored bottom left -->
+      <div class="pc-controls-bar" id="pc-controls-bar">
+        <div class="pc-controls-bar-title">CONTROLS</div>
+        <div class="pc-controls-row">
+          <div class="pc-control-hint">
+            <div class="pc-key">A</div><div class="pc-key">D</div>
+            <div class="pc-label">Move</div>
+          </div>
+          <div class="pc-control-hint">
+            <div class="pc-key">${escapeHtml(this.game?.inputBindingLabel('jump') || 'Space')}</div>
+            <div class="pc-label">Jump</div>
+          </div>
+          <div class="pc-control-hint">
+            <div class="pc-key">${escapeHtml(this.game?.inputBindingLabel('dash') || 'Shift')}</div>
+            <div class="pc-label">Dash</div>
+          </div>
+          <div class="pc-control-hint">
+            <div class="pc-key">${escapeHtml(this.game?.inputBindingLabel('interact') || 'E')}</div>
+            <div class="pc-label">Talk</div>
+          </div>
+        </div>
+        <div class="pc-controls-row" style="margin-top: 2px;">
+          <div class="pc-control-hint">
+            <div class="pc-key">I</div>
+            <div class="pc-label">Inventory</div>
+          </div>
+          <div class="pc-control-hint">
+            <div class="pc-key">J</div>
+            <div class="pc-label">Quest</div>
+          </div>
+          <div class="pc-control-hint">
+            <div class="pc-key">Esc</div>
+            <div class="pc-label">Menu</div>
+          </div>
+        </div>
+      </div>
       <!-- MULTI-DEVICE VIRTUAL TOUCH CONTROLS (Joystick, Jump, Dash with Real Sprites) -->
       <!-- Party voice, down at the bottom where it is easy to see and reach
            during a fight. The top-bar pair is the same controls; both are
@@ -3053,6 +3178,13 @@ export class GameHUD {
     const townBtn = this.container.querySelector('#return-town-btn');
     townBtn?.addEventListener('click', (e) => {
       e.stopPropagation();
+      audio.playTeleport();
+      this.game?.loadTownHub();
+    });
+
+    this.container.querySelector('#leave-dungeon-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!confirm('Leave this dungeon and return to town? Progress in this run will be lost.')) return;
       audio.playTeleport();
       this.game?.loadTownHub();
     });
