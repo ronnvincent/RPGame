@@ -2790,6 +2790,9 @@ export class GameHUD {
               <button class="pause-tile" id="toggle-play-btn">
                 <img src="/assets/ui_sprites/icons/S_Sword01.png" alt="" /><span>Start a Run</span>
               </button>
+              <button class="pause-tile" id="toggle-lobby-btn">
+                <img src="/assets/ui_sprites/icons/I_Map.png" alt="" /><span>Party Lobby</span>
+              </button>
               <button class="pause-tile" id="toggle-skills-btn">
                 <img src="/assets/ui_sprites/icons/S_Buff01.png" alt="" /><span>Skills</span>
               </button>
@@ -3200,6 +3203,12 @@ export class GameHUD {
       this.openHudDialog(playBack, {
         initialFocus: playBack?.querySelector<HTMLElement>('.play-mode.is-on'),
       });
+    });
+
+    this.container.querySelector('#toggle-lobby-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.closeHudDialog(pauseBack);
+      this.game?.showScreen('lobby');
     });
     this.container.querySelector('#play-close-btn')?.addEventListener('click', () => {
       this.closeHudDialog(playBack);

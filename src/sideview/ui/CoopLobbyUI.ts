@@ -632,13 +632,15 @@ export class CoopLobbyUI {
          fit-size the character would be a quarter of the card. */
       .cl-crest-art.cl-crest-hero {
         flex: 1 1 auto;
-        width: 100%; height: auto; min-height: 0;
+        width: 100%; height: 160px; min-height: 100px;
         overflow: hidden;
         display: flex; align-items: flex-end; justify-content: center;
       }
       .cl-crest-art img.cl-hero-img {
         display: block;
-        height: 150%; width: auto; max-width: none;
+        height: 100%; width: 100%; max-width: none;
+        object-fit: contain;
+        object-position: bottom;
         image-rendering: pixelated;
         filter: drop-shadow(0 8px 10px rgba(0,0,0,0.7));
       }
