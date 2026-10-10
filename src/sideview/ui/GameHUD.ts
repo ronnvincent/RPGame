@@ -1857,16 +1857,8 @@ export class GameHUD {
       }
 
       /* The skill ring.
-
-         This lived inside the phone breakpoint, so anything wider than
-         860px got a flat strip of labelled buttons along the bottom - the
-         layout that reads as a toolbar. The ring is the arrangement this
-         game is played with, on every screen: slots placed around the
-         thumb, no labels, the basic attack largest.
-
-         It sits after the strip rules on purpose. Same specificity, so the
-         later block wins and the strip becomes the fallback that never
-         applies rather than something to delete and lose. */
+         Applies only on mobile/touch devices. */
+      @media (hover: none) and (pointer: coarse), (max-width: 860px) {
       .skills-hotbar {
         background: none;
         box-shadow: none;
@@ -2024,6 +2016,7 @@ export class GameHUD {
         right: calc(268px + env(safe-area-inset-right));
         font-size: 8.5px;
       }
+      } /* End of skill ring mobile media query */
 
       @media (hover: hover) and (pointer: fine) and (min-width: 861px) {
         .potion-slot {
@@ -2049,7 +2042,7 @@ export class GameHUD {
       .pc-controls-bar {
         display: none;
         position: absolute;
-        bottom: 10px;
+        bottom: 74px;
         left: 50%;
         transform: translateX(-50%);
         background: linear-gradient(180deg, rgba(30, 22, 12, 0.92) 0%, rgba(15, 10, 5, 0.96) 100%);
@@ -3017,17 +3010,6 @@ export class GameHUD {
             <div class="pc-label">Talk</div>
           </div>
           <div class="pc-controls-divider"></div>
-          ${p.characterClass.skills.map((s, idx) => `
-          <div class="pc-control-hint ${idx === 5 ? 'pc-control-hint--ult' : 'pc-control-hint--skill'}">
-            <div class="pc-key">${escapeHtml(this.skillBindingLabel(idx, s.key))}</div>
-            <div class="pc-label">${escapeHtml(s.name.length > 8 ? s.name.substring(0, 7) + '…' : s.name)}</div>
-          </div>
-          `).join('')}
-          <div class="pc-controls-divider"></div>
-          <div class="pc-control-hint">
-            <div class="pc-key">${escapeHtml(this.game?.inputBindingLabel('quickHeal') || 'Q')}</div>
-            <div class="pc-label">Potion</div>
-          </div>
           <div class="pc-control-hint">
             <div class="pc-key">I</div>
             <div class="pc-label">Inventory</div>
