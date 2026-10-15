@@ -5918,22 +5918,68 @@ export class SideViewEngine {
         ctx.fill();
       }
 
-      // Name & Title Tag
-      ctx.font = 'bold 12px "Outfit", sans-serif';
-      ctx.fillStyle = '#ffffff';
-      ctx.shadowColor = '#000';
-      ctx.shadowBlur = 5;
-      ctx.textAlign = 'center';
-      ctx.fillText(npc.name, npc.x, npcY - 95);
+      // 1. NPC Title Tag (bottom)
       ctx.font = '10px "Outfit", sans-serif';
       ctx.fillStyle = '#fef08a';
-      ctx.fillText(npc.title, npc.x, npcY - 82);
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+      ctx.shadowBlur = 4;
+      ctx.textAlign = 'center';
+      const titleY = npcY - 104;
+      ctx.fillText(npc.title, npc.x, titleY);
+
+      // 2. NPC Name Tag (middle - bold white with strong dark text-shadow)
+      ctx.font = 'bold 12px "Outfit", sans-serif';
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+      ctx.shadowBlur = 6;
+      ctx.textAlign = 'center';
+      const nameY = titleY - 16;
+      ctx.fillText(npc.name, npc.x, nameY);
       ctx.shadowBlur = 0;
 
-      // Quest Indicator Badge
+      const isNearNpc = Boolean(activeNpc && activeNpc.id === npc.id);
+      const isTouch = typeof window !== 'undefined' && (
+        ('ontouchstart' in window) ||
+        (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0) ||
+        (typeof window.matchMedia === 'function' && window.matchMedia('(hover: none) and (pointer: coarse)').matches)
+      );
+
+      // 3. Proximity Prompt (top) - margin-bottom: 8px above name
+      const promptY = nameY - 29 + Math.sin(now * 4) * 2;
+      if (isNearNpc) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 1.5;
+        ctx.shadowColor = '#d97706';
+        ctx.shadowBlur = 6;
+
+        const promptText = isTouch ? 'TALK' : '[E] TALK';
+        const bw = isTouch ? 56 : 74;
+        const bh = 20;
+        if (ctx.roundRect) {
+          ctx.beginPath();
+          ctx.roundRect(npc.x - bw / 2, promptY - bh / 2, bw, bh, 10);
+          ctx.fill();
+          ctx.stroke();
+        } else {
+          ctx.fillRect(npc.x - bw / 2, promptY - bh / 2, bw, bh);
+          ctx.strokeRect(npc.x - bw / 2, promptY - bh / 2, bw, bh);
+        }
+
+        ctx.shadowBlur = 0;
+        ctx.font = 'bold 11px "Cinzel", sans-serif';
+        ctx.fillStyle = '#fef08a';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(promptText, npc.x, promptY);
+        ctx.restore();
+      }
+
+      // 4. Quest Indicator Badge - above prompt if prompt is active, else above name
       const indicator = quests.getNpcIndicator(npc.id);
       if (indicator) {
-        const badgeY = npcY - 105 + Math.sin(now * 5) * 3;
+        const badgeY = isNearNpc ? promptY - 24 : nameY - 26 + Math.sin(now * 5) * 3;
         ctx.save();
         if (indicator === 'turn_in') {
           ctx.fillStyle = '#eab308';
@@ -5972,36 +6018,6 @@ export class SideViewEngine {
           ctx.textBaseline = 'middle';
           ctx.fillText('!', npc.x, badgeY + 1);
         }
-        ctx.restore();
-      }
-
-      // Proximity Prompt: [E] Talk
-      if (activeNpc && activeNpc.id === npc.id) {
-        const promptY = npcY - 112 + Math.sin(now * 4) * 2;
-        ctx.save();
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-        ctx.strokeStyle = '#f59e0b';
-        ctx.lineWidth = 1.5;
-        ctx.shadowColor = '#d97706';
-        ctx.shadowBlur = 8;
-
-        const bw = 74;
-        const bh = 20;
-        if (ctx.roundRect) {
-          ctx.beginPath();
-          ctx.roundRect(npc.x - bw / 2, promptY - bh / 2, bw, bh, 10);
-          ctx.fill();
-          ctx.stroke();
-        } else {
-          ctx.fillRect(npc.x - bw / 2, promptY - bh / 2, bw, bh);
-          ctx.strokeRect(npc.x - bw / 2, promptY - bh / 2, bw, bh);
-        }
-
-        ctx.font = 'bold 11px "Cinzel", sans-serif';
-        ctx.fillStyle = '#fef08a';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('[E] TALK', npc.x, promptY);
         ctx.restore();
       }
 

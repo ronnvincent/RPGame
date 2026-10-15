@@ -146,6 +146,20 @@ export class SideViewGame {
     this.container.style.touchAction = 'none';
     this.container.appendChild(this.canvas);
 
+    this.canvas.addEventListener('click', (e) => {
+      if (this.engine?.isTownMode && this.townHub) {
+        const activeNpc = this.townHub.getActiveNpc();
+        if (activeNpc) {
+          const rect = this.canvas.getBoundingClientRect();
+          const scaleX = this.viewWidth / (rect.width || 1);
+          const clickX = (e.clientX - rect.left) * scaleX + (this.engine.cameraX || 0);
+          if (Math.abs(clickX - activeNpc.x) <= 120) {
+            this.interactWithActiveNpc();
+          }
+        }
+      }
+    });
+
     this.input = new InputController({
       storage: typeof localStorage === 'undefined' ? null : localStorage,
       context: () => this.resolveInputContext(),

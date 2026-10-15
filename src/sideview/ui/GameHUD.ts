@@ -515,7 +515,7 @@ export class GameHUD {
           inset 0 0 0 1px rgba(255, 215, 0, 0.14),
           inset 0 -8px 18px rgba(0, 0, 0, 0.55),
           0 4px 15px rgba(0, 0, 0, 0.9);
-        padding: 8px 14px 10px 10px;
+        padding: 8px 14px 14px 10px;
         display: flex;
         align-items: center;
         gap: 8px;
@@ -592,10 +592,11 @@ export class GameHUD {
 
       /* Currency rail, horizontal next to menu button. */
       .currency-stack {
+        order: 2;
         display: flex;
-        flex-direction: row;
-        align-items: center;
-        gap: 4px;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 3px;
         margin-top: 0;
         pointer-events: auto;
       }
@@ -1203,7 +1204,7 @@ export class GameHUD {
          already position:relative, and its 10px bottom padding leaves room. */
       .plate-exp {
         position: absolute;
-        left: 4px; right: 4px; bottom: 2px;
+        left: 4px; right: 4px; bottom: 3px;
         height: 3px;
         background: rgba(0, 0, 0, 0.55);
         border-radius: 2px;
@@ -1321,20 +1322,25 @@ export class GameHUD {
 
       .hud-top-right {
         position: absolute;
-        top: max(8px, env(safe-area-inset-top));
-        right: max(8px, env(safe-area-inset-right));
+        top: 10px;
+        right: 10px;
         display: flex;
         /* Wrap rather than run into the player panel. Ten items in a fixed row
            only fits while nothing is added to it, and voice added two. */
         flex-direction: row-reverse;
         flex-wrap: wrap;
         justify-content: flex-start;
-        align-items: center;
+        align-items: flex-start;
         max-width: calc(100vw - 300px);
         row-gap: 5px;
-        gap: 6px;
+        gap: 8px;
         pointer-events: auto;
         z-index: 40;
+      }
+
+      .hud-menu-btn {
+        order: 1;
+        margin-top: 0;
       }
 
       .gold-badge {
@@ -1389,7 +1395,7 @@ export class GameHUD {
 
       /* Mini Quest Tracker Widget */
       .mini-quest-tracker {
-        position: absolute;
+        position: fixed;
         top: 78px;
         bottom: 12px;
         right: 12px;
@@ -1409,7 +1415,7 @@ export class GameHUD {
 
       .start-run-top-btn {
         position: absolute;
-        top: 20px;
+        top: 12px;
         left: 50%;
         transform: translateX(-50%);
         padding: 8px 24px;
@@ -1558,7 +1564,7 @@ export class GameHUD {
       /* Floating Toast Notification */
       .hud-toast-banner {
         position: absolute;
-        top: 18px;
+        top: 68px;
         left: 50%;
         transform: translateX(-50%);
         background: rgba(18, 12, 28, 0.95);
@@ -1571,13 +1577,14 @@ export class GameHUD {
         box-shadow: 0 6px 25px rgba(0, 0, 0, 0.85), 0 0 15px rgba(255, 215, 0, 0.45);
         z-index: 99999;
         pointer-events: none;
-        animation: toastSlideDown 0.3s ease-out;
+        animation: toastFade 0.35s ease-out;
         text-shadow: 1px 1px 2px #000;
+        transition: opacity 0.3s ease, transform 0.3s ease;
       }
 
-      @keyframes toastSlideDown {
-        from { transform: translate(-50%, -20px); opacity: 0; }
-        to { transform: translate(-50%, 0); opacity: 1; }
+      @keyframes toastFade {
+        from { opacity: 0; transform: translate(-50%, -10px); }
+        to { opacity: 1; transform: translate(-50%, 0); }
       }
 
       /* Touch Talk Button for NPC Interaction */
@@ -1699,11 +1706,21 @@ export class GameHUD {
       .potion-count {
         position: absolute;
         right: 2px;
-        bottom: 1px;
-        font-size: 10px;
+        bottom: 2px;
+        background: rgba(10, 10, 16, 0.95);
+        border: 1px solid rgba(74, 222, 128, 0.9);
+        border-radius: 3px;
+        padding: 0 4px;
+        min-width: 14px;
+        height: 14px;
+        line-height: 14px;
+        text-align: center;
+        font-size: 9.5px;
         font-weight: 900;
-        color: #4ade80;
-        text-shadow: 1px 1px 2px #000;
+        color: #ffffff;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.9);
+        font-family: 'Outfit', sans-serif;
+        z-index: 4;
       }
 
       .potion-slot.empty {
@@ -1736,16 +1753,7 @@ export class GameHUD {
       }
 
       .slot-skill-name {
-        font-size: 6.5px;
-        font-weight: 900;
-        color: #ffffff;
-        text-align: center;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: 40px;
-        font-family: 'Outfit', sans-serif;
-        text-shadow: 1px 1px 1px #000;
+        display: none !important;
       }
 
       .slot-cooldown-overlay {
@@ -2055,11 +2063,22 @@ export class GameHUD {
       }
 
       .slot-skill-name {
-        display: none;
+        display: none !important;
+      }
+
+      /* In town on mobile, hide the 6 combat attack/skill buttons and potion button */
+      .hud-town .skills-hotbar,
+      .hud-town .hotbar-slot,
+      .hud-town .potion-slot {
+        display: none !important;
       }
 
       /* Hide all keyboard hotkey badges on mobile/touch viewports */
-      .slot-key-badge {
+      .slot-key-badge,
+      .touch-action-btn .slot-key-badge,
+      .hotbar-slot .slot-key-badge,
+      .potion-slot .slot-key-badge,
+      .pc-controls-bar {
         display: none !important;
       }
 
@@ -2276,7 +2295,7 @@ export class GameHUD {
           max-height: 44vh;
         }
         .player-status-panel {
-          padding: 4px 8px 6px 8px;
+          padding: 4px 8px 10px 8px;
           gap: 6px;
           transform: scale(0.85);
           transform-origin: top left;
@@ -2338,16 +2357,22 @@ export class GameHUD {
         .run-relic-chip { max-width: 67px; height: 19px; font-size: 6.8px; }
         .run-relic-icon { width: 14px; height: 14px; }
         .hud-top-right {
-          top: max(6px, env(safe-area-inset-top));
-          right: max(6px, env(safe-area-inset-right));
+          top: 10px;
+          right: 10px;
           gap: 4px;
           transform: scale(0.88);
           transform-origin: top right;
           flex-direction: row-reverse;
+          align-items: flex-start;
           flex-wrap: nowrap;
           justify-content: flex-start;
           width: auto;
           max-width: 60vw;
+        }
+        .currency-stack {
+          flex-direction: row;
+          flex-wrap: nowrap;
+          gap: 3px;
         }
         .gold-badge {
           padding: 3px 6px;
@@ -2358,7 +2383,19 @@ export class GameHUD {
           font-size: 8.5px;
         }
         .mini-quest-tracker {
-          display: none; /* Hide on small mobile to avoid screen clutter */
+          position: relative !important;
+          top: auto !important;
+          bottom: auto !important;
+          right: auto !important;
+          left: auto !important;
+          width: 100% !important;
+          max-width: min(286px, calc(100vw - 24px)) !important;
+          transform: scale(0.85);
+          transform-origin: top left;
+          margin-top: 2px !important;
+          padding: 4px 8px !important;
+          box-sizing: border-box !important;
+          display: flex !important;
         }
 
         .mobile-joystick-area {
@@ -2959,6 +2996,22 @@ export class GameHUD {
           <div class="run-relic-rail" id="run-relic-rail" aria-label="Active relics"></div>
         </section>
       </div>
+
+      <!-- Active Quest Tracker Widget -->
+      <div class="mini-quest-tracker" id="mini-quest-tracker">
+        <div class="tracker-title">
+          <span><img src="/assets/gui/PNG/buttonSquare_brown.png" width="12" height="12" style="vertical-align:middle;" /> ACTIVE QUEST</span>
+          <span class="tracker-hint" id="tracker-hint" style="font-size: 8.5px; color: #94a3b8;">${
+            typeof window !== 'undefined' && (('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches))
+              ? '[TAP]'
+              : '[CLICK / J]'
+          }</span>
+        </div>
+        <div class="tracker-quest-name" id="tracker-quest-name">Act I: The Stolen Keystone</div>
+        <div class="tracker-obj-list" id="tracker-obj-list">
+          <div>Talk to Elder Justinian in Eldermoor</div>
+        </div>
+      </div>
       </div>
 
       <!-- Top Center: Start Run Button in Town -->
@@ -3126,16 +3179,6 @@ export class GameHUD {
       </div>
 
       <!-- Mini Quest Tracker -->
-      <div class="mini-quest-tracker" id="mini-quest-tracker">
-        <div class="tracker-title">
-          <span><img src="/assets/gui/PNG/buttonSquare_brown.png" width="12" height="12" style="vertical-align:middle;" /> ACTIVE QUEST</span>
-          <span style="font-size: 8.5px; color: #94a3b8;">[CLICK / J]</span>
-        </div>
-        <div class="tracker-quest-name" id="tracker-quest-name">Act I: The Stolen Keystone</div>
-        <div class="tracker-obj-list" id="tracker-obj-list">
-          <div>Talk to Elder Justinian in Eldermoor</div>
-        </div>
-      </div>
 
       <!-- Bottom Center: 6-Skill Cooldown Hotbar with Kyrise Icons & Sprite Slots -->
       <div class="skills-hotbar" id="skills-hotbar">
@@ -3155,7 +3198,6 @@ export class GameHUD {
         <button class="hotbar-slot potion-slot" id="potion-slot" type="button" aria-label="Drink a healing potion, ${escapeHtmlAttribute(this.game?.inputBindingLabel('quickHeal') || 'Q')}" title="Drink a healing potion (${escapeHtmlAttribute(this.game?.inputBindingLabel('quickHeal') || 'Q')})">
           <span class="slot-key-badge">${escapeHtml(this.game?.inputBindingLabel('quickHeal') || 'Q')}</span>
           <img src="/assets/ui_sprites/icons/P_Red01.png" width="24" height="24" class="slot-icon-img" alt="" />
-          <span class="slot-skill-name">Potion</span>
           <div class="potion-count" id="potion-count">0</div>
         </button>
       </div>
@@ -4463,6 +4505,15 @@ export class GameHUD {
       return;
     }
     name.textContent = top.quest.title;
+    const hint = this.hudNode('tracker-hint');
+    if (hint) {
+      const isTouch = typeof window !== 'undefined' && (
+        ('ontouchstart' in window) ||
+        (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0) ||
+        (typeof window.matchMedia === 'function' && window.matchMedia('(hover: none) and (pointer: coarse)').matches)
+      );
+      hint.textContent = isTouch ? '[TAP]' : '[CLICK / J]';
+    }
     list.innerHTML = top.objectives.map(objective => {
       const current = Math.max(0, Math.trunc(finiteNumber(objective.currentCount)));
       const required = Math.max(1, Math.trunc(finiteNumber(objective.requiredCount, 1)));
