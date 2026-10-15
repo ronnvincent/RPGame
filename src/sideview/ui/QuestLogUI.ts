@@ -39,7 +39,10 @@ export class QuestLogUI {
       <section class="rpg-panel rpg-dialog quest-log-dialog" tabindex="-1">
         <header class="rpg-dialog__header">
           <div><p class="rpg-kicker">Journal and Field Notes</p><h2 class="rpg-title" id="quest-log-title">Quest Log</h2></div>
-          <span class="rpg-help"><kbd class="rpg-key">J</kbd> or <kbd class="rpg-key">Esc</kbd> closes</span>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <span class="rpg-help"><kbd class="rpg-key">J</kbd> or <kbd class="rpg-key">Esc</kbd></span>
+            <button class="rpg-icon-button rpg-dialog-close-btn" id="close-quest-log-top-btn" type="button" aria-label="Close Journal" title="Close Journal">&times;</button>
+          </div>
         </header>
         <div class="rpg-tabs" role="tablist" aria-label="Quest categories"></div>
         <div class="rpg-dialog__body quest-log-content" id="quest-log-content" role="tabpanel" tabindex="0"></div>
@@ -76,6 +79,7 @@ export class QuestLogUI {
     });
 
     modal.querySelector('#close-quest-log-btn')?.addEventListener('click', () => this.close());
+    modal.querySelector('#close-quest-log-top-btn')?.addEventListener('click', () => this.close());
     modal.addEventListener('pointerdown', event => { if (event.target === modal) this.close(); });
     this.renderTabContent();
     this.releaseFocus = installModalFocusTrap(modal, {

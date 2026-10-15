@@ -62,9 +62,12 @@ export class WorldMapUI {
             <p class="rpg-kicker">Gateways of Aethelgard</p>
             <h2 class="rpg-title" id="world-map-title">World Map</h2>
           </div>
-          <div class="world-map-progress" aria-label="${restored} of 4 primordial runes restored">
-            <span class="rpg-label">Runes Restored</span>
-            <strong>${restored}/4</strong>
+          <div style="display:flex;align-items:center;gap:14px;">
+            <div class="world-map-progress" aria-label="${restored} of 4 primordial runes restored">
+              <span class="rpg-label">Runes Restored</span>
+              <strong>${restored}/4</strong>
+            </div>
+            <button class="rpg-icon-button rpg-dialog-close-btn" id="close-map-top-btn" type="button" aria-label="Close World Map" title="Close World Map">&times;</button>
           </div>
         </header>
         <div class="rpg-divider" aria-hidden="true"></div>
@@ -138,6 +141,7 @@ export class WorldMapUI {
     });
 
     modal.querySelector('#close-map-btn')?.addEventListener('click', () => this.close());
+    modal.querySelector('#close-map-top-btn')?.addEventListener('click', () => this.close());
     modal.addEventListener('pointerdown', event => { if (event.target === modal) this.close(); });
     this.container.appendChild(modal);
     this.modalEl = modal;

@@ -112,7 +112,7 @@ export class InputSettingsPanel {
             <div class="rpg-kicker input-settings-kicker">System</div>
             <h2 class="rpg-title" id="input-settings-title">Controls and Accessibility</h2>
           </div>
-          <button class="rpg-button input-settings-close" type="button" aria-label="Close controls">Close</button>
+          <button class="rpg-icon-button rpg-dialog-close-btn input-settings-close" type="button" aria-label="Close controls" title="Close Controls">&times;</button>
         </header>
 
         <div class="input-settings-tabs" role="tablist" aria-label="Input device">

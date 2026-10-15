@@ -218,7 +218,10 @@ export class CoopLobbyUI {
 
         <header class="cl-titlebar">
           <div><p class="rpg-kicker">Expedition Staging</p><h1 class="rpg-title" id="coop-lobby-title">Party Lobby</h1></div>
-          <div class="cl-room-status" role="status">${network.socket?.connected ? 'Connected' : 'Connection recovering'}</div>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div class="cl-room-status" role="status">${network.socket?.connected ? 'Connected' : 'Connection recovering'}</div>
+            <button class="rpg-icon-button rpg-dialog-close-btn cl-close-top-btn" id="cl-close-top-btn" type="button" aria-label="Leave or Close Lobby" title="Exit Party Lobby">&times;</button>
+          </div>
         </header>
 
         <div class="cl-tabs" role="tablist" aria-label="Lobby sections">
@@ -434,10 +437,12 @@ export class CoopLobbyUI {
       voice.toggleSpeaker();
     });
 
-    q<HTMLButtonElement>('.cl-leave')?.addEventListener('click', () => {
+    const onLeave = () => {
       network.leaveLobby();
       this.close();
-    });
+    };
+    q<HTMLButtonElement>('.cl-leave')?.addEventListener('click', onLeave);
+    q<HTMLButtonElement>('#cl-close-top-btn')?.addEventListener('click', onLeave);
 
     q<HTMLButtonElement>('.cl-start')?.addEventListener('click', () => this.startRun());
 

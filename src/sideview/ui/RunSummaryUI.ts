@@ -35,7 +35,8 @@ export class RunSummaryUI {
     back.setAttribute('aria-labelledby', 'run-summary-title');
     back.innerHTML = `<div class="rpg-screen__backdrop" aria-hidden="true"></div>
       <section class="rpg-panel rpg-dialog rpg-dialog--compact rs-panel" tabindex="-1">
-        <header class="rs-head">
+        <header class="rs-head" style="position: relative;">
+          <button class="rpg-icon-button rpg-dialog-close-btn rs-close-corner-btn" id="rs-close-corner-btn" type="button" aria-label="Close Report" title="Close Report" style="position: absolute; top: -4px; right: 0;">&times;</button>
           <p class="rpg-kicker">Expedition Report</p>
           <h2 class="rpg-title rs-title" id="run-summary-title">${escapeHtml(title)}</h2>
           <p class="rs-sub">${escapeHtml(subtitle)}</p>
@@ -78,10 +79,12 @@ export class RunSummaryUI {
 
     this.container.appendChild(back);
     this.root = back;
-    back.querySelector('#rs-close')?.addEventListener('click', () => {
+    const dismissSummary = () => {
       this.close();
       this.onClose?.();
-    });
+    };
+    back.querySelector('#rs-close')?.addEventListener('click', dismissSummary);
+    back.querySelector('#rs-close-corner-btn')?.addEventListener('click', dismissSummary);
     back.querySelector('#rs-rematch')?.addEventListener('click', () => {
       this.close();
       this.onRematch?.();

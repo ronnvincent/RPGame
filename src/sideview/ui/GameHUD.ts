@@ -1294,6 +1294,7 @@ export class GameHUD {
       }
 
       .pause-panel {
+        position: relative;
         width: min(560px, 92vw); max-height: 88vh; overflow-y: auto;
         padding: 24px 30px;
         background: linear-gradient(145deg, rgba(22, 18, 30, 0.95), rgba(12, 10, 18, 0.98));
@@ -1302,6 +1303,43 @@ export class GameHUD {
         border-top: 1px solid rgba(212, 175, 55, 0.6);
         border-radius: 8px;
         box-shadow: 0 24px 60px rgba(0,0,0,0.85), inset 0 2px 4px rgba(255,255,255,0.05);
+      }
+
+      .modal-corner-close {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        width: 34px;
+        height: 34px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 0, 0, 0.55);
+        border: 1px solid rgba(212, 175, 55, 0.45);
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+        z-index: 25;
+        padding: 0;
+      }
+      .modal-corner-close .hud-glyph {
+        width: 18px;
+        height: 18px;
+        color: #ef4444;
+        transition: transform 0.15s ease, color 0.15s ease;
+      }
+      .modal-corner-close:hover {
+        background: rgba(239, 68, 68, 0.25);
+        border-color: #ef4444;
+        box-shadow: 0 0 12px rgba(239, 68, 68, 0.5);
+        transform: scale(1.08);
+      }
+      .modal-corner-close:hover .hud-glyph {
+        color: #ffffff;
+        transform: scale(1.15);
+      }
+      .modal-corner-close:active {
+        transform: scale(0.95);
       }
 
       .pause-title {
@@ -3041,6 +3079,7 @@ export class GameHUD {
 
       /* Item Inspection Pane Card */
       .item-inspector-pane {
+        position: relative;
         grid-column: 1 / -1;
         background: url('/assets/kenney-rpg-ui/panelInset_beige.png') repeat;
         background-size: 100% 100%;
@@ -3512,6 +3551,7 @@ export class GameHUD {
            each copy. One screen: pick how you are playing, then pick where. -->
       <div class="pause-back" id="play-back" style="display:none" role="dialog" aria-modal="true" aria-labelledby="play-title" tabindex="-1">
         <div class="pause-panel rpg-panel">
+          <button class="modal-corner-close" id="play-close-corner-btn" type="button" aria-label="Close" title="Close">${GameHUD.glyph('close')}</button>
           <div class="pause-heading"><h2 class="pause-title" id="play-title">START A RUN</h2></div>
           <div class="play-modes">
             <button class="play-mode is-on" type="button" data-mode="solo">SOLO</button>
@@ -3534,6 +3574,7 @@ export class GameHUD {
 
       <div class="pause-back" id="skills-back" style="display:none" role="dialog" aria-modal="true" aria-labelledby="skills-title" tabindex="-1">
         <div class="pause-panel rpg-panel">
+          <button class="modal-corner-close" id="skills-close-corner-btn" type="button" aria-label="Close" title="Close">${GameHUD.glyph('close')}</button>
           <h2 class="pause-title" id="skills-title">SKILLS</h2>
           <div class="sk-points">Unspent points: <b id="sk-points">0</b></div>
           <div id="sk-list"></div>
@@ -3546,6 +3587,7 @@ export class GameHUD {
 
       <div class="pause-back" id="pause-back" style="display:none" role="dialog" aria-modal="true" aria-labelledby="pause-title" tabindex="-1">
         <div class="pause-panel rpg-panel">
+          <button class="modal-corner-close" id="pause-close-corner-btn" type="button" aria-label="Close" title="Close">${GameHUD.glyph('close')}</button>
           <h2 class="pause-title" id="pause-title">MENU</h2>
 
           <div class="pause-group">
@@ -3732,6 +3774,7 @@ export class GameHUD {
       <!-- Leave Dungeon Confirmation Modal -->
       <div class="pause-back" id="leave-dungeon-modal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="leave-modal-title" tabindex="-1">
         <div class="pause-panel rpg-panel leave-confirm-panel">
+          <button class="modal-corner-close" id="leave-modal-close-corner" type="button" aria-label="Close" title="Close">${GameHUD.glyph('close')}</button>
           <h2 class="leave-confirm-title" id="leave-modal-title">LEAVE DUNGEON?</h2>
           <div class="leave-confirm-body">
             <p class="leave-confirm-text">Are you sure you want to return to town?</p>
@@ -3744,6 +3787,20 @@ export class GameHUD {
             <button class="leave-action-btn leave-confirm-btn" id="leave-modal-confirm-btn" type="button">
               ABANDON &amp; LEAVE
             </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Logout Confirmation Modal -->
+      <div class="pause-back" id="logout-modal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="logout-modal-title" tabindex="-1">
+        <div class="pause-panel rpg-panel logout-confirm-panel" style="max-width: 440px; text-align: center;">
+          <button class="modal-corner-close" id="logout-modal-close-corner" type="button" aria-label="Close" title="Close">${GameHUD.glyph('close')}</button>
+          <h2 class="pause-title" id="logout-modal-title" style="color: #ef4444; margin-bottom: 8px;">LOG OUT?</h2>
+          <div style="font-size: 14px; color: #fdf6e3; margin: 12px 0 6px;">Are you sure you want to log out?</div>
+          <div style="font-size: 12px; color: #fca5a5; margin-bottom: 20px;">Make sure your progress is saved before returning to the login screen.</div>
+          <div style="display: flex; gap: 12px; justify-content: center;">
+            <button class="leave-action-btn leave-cancel-btn" id="logout-cancel-btn" type="button">CANCEL</button>
+            <button class="leave-action-btn leave-confirm-btn" id="logout-confirm-btn" type="button" style="background: linear-gradient(to bottom, rgba(239, 68, 68, 0.4), rgba(185, 28, 28, 0.3)); border-color: #ef4444; color: #fee2e2;">CONFIRM LOGOUT</button>
           </div>
         </div>
       </div>
@@ -3963,6 +4020,11 @@ export class GameHUD {
       audio.playClick();
       closeLeaveModal();
     });
+    this.container.querySelector('#leave-modal-close-corner')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      audio.playClick();
+      closeLeaveModal();
+    });
 
     leaveConfirmBtn?.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -4145,6 +4207,9 @@ export class GameHUD {
     this.container.querySelector('#play-close-btn')?.addEventListener('click', () => {
       this.closeHudDialog(playBack);
     });
+    this.container.querySelector('#play-close-corner-btn')?.addEventListener('click', () => {
+      this.closeHudDialog(playBack);
+    });
     playBack?.addEventListener('click', (e) => {
       if (e.target === playBack) this.closeHudDialog(playBack);
     });
@@ -4195,6 +4260,9 @@ export class GameHUD {
     this.container.querySelector('#skills-close-btn')?.addEventListener('click', () => {
       this.closeHudDialog(skillsBack);
     });
+    this.container.querySelector('#skills-close-corner-btn')?.addEventListener('click', () => {
+      this.closeHudDialog(skillsBack);
+    });
     skillsBack?.addEventListener('click', (e) => {
       if (e.target === skillsBack) this.closeHudDialog(skillsBack);
     });
@@ -4224,14 +4292,28 @@ export class GameHUD {
       this.togglePauseMenu();
     });
     this.container.querySelector('#pause-close-btn')?.addEventListener('click', () => setMenu(false));
+    this.container.querySelector('#pause-close-corner-btn')?.addEventListener('click', () => setMenu(false));
 
     this.container.querySelector('#logout-btn')?.addEventListener('click', () => {
-      if (!confirm('Are you sure you want to log out? Make sure your progress is saved!')) return;
+      setMenu(false);
+      this.openLogoutModal();
+    });
+    this.container.querySelector('#logout-cancel-btn')?.addEventListener('click', () => {
+      this.closeLogoutModal();
+    });
+    this.container.querySelector('#logout-modal-close-corner')?.addEventListener('click', () => {
+      this.closeLogoutModal();
+    });
+    this.container.querySelector('#logout-confirm-btn')?.addEventListener('click', () => {
       localStorage.removeItem('playerName');
       localStorage.removeItem('playerUUID');
       localStorage.removeItem('playerShortId');
       localStorage.removeItem('playerSessionToken');
       window.location.reload();
+    });
+    const logoutBack = this.container.querySelector('#logout-modal') as HTMLElement | null;
+    logoutBack?.addEventListener('click', (e) => {
+      if (e.target === logoutBack) this.closeLogoutModal();
     });
     // Clicking the darkened area outside the panel closes it too.
     pauseBack?.addEventListener('click', (e) => { if (e.target === pauseBack) setMenu(false); });
@@ -5241,6 +5323,7 @@ export class GameHUD {
     }
 
     pane.innerHTML = `
+      <button class="modal-corner-close" id="inspector-close-corner-btn" type="button" aria-label="Close" title="Close" style="top: 8px; right: 8px; width: 28px; height: 28px;">${GameHUD.glyph('close')}</button>
       <div class="inspector-header">
         <div class="inspector-icon-box rarity-${escapeHtmlAttribute(item.rarity)}">
           ${safeLocalAssetPath(item.image) ? `<img src="${escapeHtmlAttribute(safeLocalAssetPath(item.image))}" width="32" height="32" style="image-rendering:pixelated;" alt="" />` : ''}
@@ -5300,12 +5383,13 @@ export class GameHUD {
       this.renderInventoryItems();
     });
 
-    const closeBtn = pane.querySelector('#inspector-close-btn');
-    closeBtn?.addEventListener('click', (e) => {
+    const closeInspector = (e: Event) => {
       e.stopPropagation();
       this.selectedItem = null;
       this.renderInspectorPane();
-    });
+    };
+    pane.querySelector('#inspector-close-btn')?.addEventListener('click', closeInspector);
+    pane.querySelector('#inspector-close-corner-btn')?.addEventListener('click', closeInspector);
   }
 
   /**
@@ -5440,7 +5524,7 @@ export class GameHUD {
       wheel.classList.remove('open');
       return true;
     }
-    for (const selector of ['#leave-dungeon-modal', '#skills-back', '#play-back']) {
+    for (const selector of ['#logout-modal', '#leave-dungeon-modal', '#skills-back', '#play-back']) {
       if (!this.elementIsOpen(selector)) continue;
       const element = this.container.querySelector(selector) as HTMLElement;
       this.closeHudDialog(element);
@@ -5466,14 +5550,14 @@ export class GameHUD {
   public isInputBlocking(): boolean {
     return Boolean(this.controlsPanel?.isOpen)
       || this.inventoryOpen
-      || ['#leave-dungeon-modal', '#pause-back', '#skills-back', '#play-back'].some(selector => this.elementIsOpen(selector))
+      || ['#logout-modal', '#leave-dungeon-modal', '#pause-back', '#skills-back', '#play-back'].some(selector => this.elementIsOpen(selector))
       || Boolean(this.container.querySelector('#qc-wheel.open'))
       || (typeof document !== 'undefined' && Boolean(document.querySelector('.lb-backdrop')));
   }
 
   public navigateMenu(direction: 'up' | 'down' | 'left' | 'right' | 'confirm'): void {
     const scopes = [
-      '#leave-dungeon-modal', '#pause-back', '#skills-back', '#play-back', '#inventory-modal', '#qc-wheel.open',
+      '#logout-modal', '#leave-dungeon-modal', '#pause-back', '#skills-back', '#play-back', '#inventory-modal', '#qc-wheel.open',
     ];
     const scope = scopes
       .map(selector => this.container.querySelector(selector) as HTMLElement | null)
@@ -5507,9 +5591,23 @@ export class GameHUD {
     this.container.querySelector('#qc-wheel')?.classList.remove('open');
   }
 
+  public openLogoutModal(): void {
+    const modal = this.container.querySelector('#logout-modal') as HTMLElement | null;
+    if (!modal) return;
+    this.openHudDialog(modal, {
+      initialFocus: modal.querySelector<HTMLElement>('#logout-cancel-btn') || undefined,
+      onEscape: () => this.closeLogoutModal(),
+    });
+  }
+
+  public closeLogoutModal(): void {
+    const modal = this.container.querySelector('#logout-modal') as HTMLElement | null;
+    if (modal) this.closeHudDialog(modal);
+  }
+
   public closePanels() {
     this.controlsPanel?.close(false);
-    ['#leave-dungeon-modal', '#pause-back', '#skills-back', '#play-back'].forEach((sel) => {
+    ['#logout-modal', '#leave-dungeon-modal', '#pause-back', '#skills-back', '#play-back'].forEach((sel) => {
       const el = this.container.querySelector(sel) as HTMLElement | null;
       this.closeHudDialog(el);
     });

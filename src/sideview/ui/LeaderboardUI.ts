@@ -41,7 +41,7 @@ export class LeaderboardUI {
       <section class="rpg-dialog rpg-dialog--compact lb-panel" tabindex="-1">
         <header class="rpg-dialog__header lb-head">
           <div><p class="rpg-kicker">Hall of Champions</p><h2 class="rpg-title lb-title" id="leaderboard-title">Power Rankings</h2><p class="rpg-help">Levels, equipment, and forge upgrades all count.</p></div>
-          <button class="rpg-icon-button lb-close" type="button" aria-label="Close rankings">&times;</button>
+          <button class="rpg-icon-button rpg-dialog-close-btn lb-close" type="button" aria-label="Close rankings" title="Close Rankings">&times;</button>
         </header>
         <div class="rpg-tabs lb-tabs" role="tablist" aria-label="Ranking category">
           <button class="rpg-tab lb-tab lb-tab-on" type="button" role="tab" aria-selected="true" data-sort="power">Power</button>

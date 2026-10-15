@@ -255,6 +255,30 @@ export function installRpgUiTheme(): void {
     .rpg-icon-button:disabled { opacity: .42; cursor: not-allowed !important; }
     .rpg-button--primary { color: #171006; background: linear-gradient(#ffe39a, #d8a83b 52%, #b67b22 53%); text-shadow: 0 1px rgba(255,255,255,.25); }
     .rpg-button--danger { border-color: rgba(239, 91, 85, .72); background: linear-gradient(#713833, #3c1b1b); }
+    .rpg-dialog-close-btn {
+      width: 42px;
+      min-width: 42px;
+      height: 42px;
+      min-height: 42px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.6rem;
+      font-weight: 900;
+      line-height: 1;
+      color: #fca5a5;
+      cursor: pointer;
+      border-color: rgba(239, 68, 68, 0.45);
+      transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    .rpg-dialog-close-btn:hover:not(:disabled) {
+      color: #ffffff;
+      border-color: #ef4444;
+      background: linear-gradient(#38161b, #220b0e 52%, #140507 53%);
+      box-shadow: inset 0 0 0 1px rgba(239, 68, 68, .35), 0 3px 0 #05060a, 0 0 14px rgba(239, 68, 68, .35);
+      transform: scale(1.06);
+    }
 
     .rpg-field {
       display: grid;
