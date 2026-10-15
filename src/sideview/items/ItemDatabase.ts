@@ -221,6 +221,39 @@ export const ITEM_DATABASE: ItemData[] = [
     price: 120,
     stats: { atk: 18 }
   },
+  {
+    id: 'wep_ragnarok',
+    name: 'Ragnarok Worldbreaker Greatsword',
+    type: 'weapon',
+    rarity: 'mythical',
+    icon: 'Sword',
+    image: '/assets/rpg-icons/32x32/sword_03e.png',
+    description: 'An apocalyptic celestial greatsword forged in the core of a dying star. Obliterates enemy defenses with cosmic fury.',
+    price: 3500,
+    stats: { atk: 120, crit: 0.25, armorPen: 0.20, hp: 300 }
+  },
+  {
+    id: 'wep_astral_staff',
+    name: 'Primordial Astral Staff',
+    type: 'weapon',
+    rarity: 'mythical',
+    icon: 'Staff',
+    image: '/assets/rpg-icons/32x32/staff_03e.png',
+    description: 'Ancient staff drawing pure ether from the stars. Dramatically quickens arcane cooldowns and radiates immense spell energy.',
+    price: 3400,
+    stats: { atk: 110, mp: 380, rechargeSpeed: 0.25, crit: 0.20 }
+  },
+  {
+    id: 'wep_infinity_bow',
+    name: 'Infinity Void Bow',
+    type: 'weapon',
+    rarity: 'mythical',
+    icon: 'Bow',
+    image: '/assets/rpg-icons/32x32/bow_03e.png',
+    description: 'Mythic bow whose arrows tear open micro-wormholes. Unmatched critical velocity and armor penetration.',
+    price: 3450,
+    stats: { atk: 105, crit: 0.32, speed: 1.6, armorPen: 0.22 }
+  },
 
   // --- HELMETS ---
   {
@@ -267,6 +300,18 @@ export const ITEM_DATABASE: ItemData[] = [
     description: 'Radiant battle crown of the heavenly Valkyries. Immense power and defense.',
     price: 950,
     stats: { def: 35, hp: 160, atk: 25, mp: 80 }
+  },
+  {
+    id: 'helm_celestial_crown',
+    setId: 'set_celestial',
+    name: 'Crown of the Celestial Sovereign',
+    type: 'helmet',
+    rarity: 'mythical',
+    icon: 'Crown',
+    image: '/assets/rpg-icons/32x32/helmet_02e.png',
+    description: 'Crown worn by immortal cosmos monarchs. Projects a dense protective energy shield and elevates martial vigor.',
+    price: 2800,
+    stats: { def: 52, hp: 300, energyShield: 160, atk: 32, mp: 120 }
   },
 
   // --- ARMOR ---
@@ -316,6 +361,18 @@ export const ITEM_DATABASE: ItemData[] = [
     price: 1300,
     stats: { def: 38, mp: 250, hp: 180, atk: 30 }
   },
+  {
+    id: 'armor_dragon_sovereign',
+    setId: 'set_dragon',
+    name: 'Dragon Sovereign Astral Carapace',
+    type: 'armor',
+    rarity: 'mythical',
+    icon: 'Armor',
+    image: '/assets/rpg-icons/32x32/armor_01e.png',
+    description: 'Impervious mail forged from crystallized elder wyrm scales. Provides immense physical fortitude and energy barrier.',
+    price: 3600,
+    stats: { def: 78, hp: 520, energyShield: 220, atk: 25 }
+  },
 
   // --- BOOTS ---
   {
@@ -350,6 +407,17 @@ export const ITEM_DATABASE: ItemData[] = [
     description: 'Divine greaves carrying the blessing of the god of speed.',
     price: 900,
     stats: { speed: 3.5, def: 22, crit: 0.12 }
+  },
+  {
+    id: 'boots_hermes_astral',
+    name: 'Hermes Astral Striders',
+    type: 'boots',
+    rarity: 'mythical',
+    icon: 'Greaves',
+    image: '/assets/rpg-icons/32x32/boots_01e.png',
+    description: 'Mythic astral boots that warp spacetime. Extreme dash responsiveness, movement speed, and cooldown acceleration.',
+    price: 2600,
+    stats: { speed: 4.2, def: 36, hp: 200, rechargeSpeed: 0.16, crit: 0.14 }
   },
 
   // --- WINGS ---
@@ -387,6 +455,18 @@ export const ITEM_DATABASE: ItemData[] = [
     price: 1100,
     stats: { atk: 35, speed: 1.5, crit: 0.15 }
   },
+  {
+    id: 'wings_archangel',
+    setId: 'set_celestial',
+    name: 'Archangel Wings of Eternity',
+    type: 'wings',
+    rarity: 'mythical',
+    icon: 'Wings',
+    image: '/assets/rpg-icons/32x32/crystal_01e.png',
+    description: 'Six transcendent wings composed of eternal starlight. Unmatched aerial agility and continuous life restoration.',
+    price: 4200,
+    stats: { speed: 2.8, hp: 350, mp: 220, def: 32, crit: 0.16, rechargeSpeed: 0.18 }
+  },
 
   // --- RINGS ---
   {
@@ -422,6 +502,17 @@ export const ITEM_DATABASE: ItemData[] = [
     description: 'Flawless diamond ring radiating universal combat prowess.',
     price: 1000,
     stats: { atk: 30, def: 25, crit: 0.18, speed: 1.0 }
+  },
+  {
+    id: 'ring_chronos',
+    name: 'Chronos Eternity Band',
+    type: 'ring',
+    rarity: 'mythical',
+    icon: 'Ring',
+    image: '/assets/rpg-icons/32x32/ring_03e.png',
+    description: 'An ancient relic that alters temporal rhythm. Massively accelerates skill recovery while granting lethal critical focus.',
+    price: 2900,
+    stats: { atk: 45, def: 28, crit: 0.24, rechargeSpeed: 0.22, hp: 160 }
   },
 
   // --- AMULETS ---
@@ -459,6 +550,17 @@ export const ITEM_DATABASE: ItemData[] = [
     price: 1250,
     stats: { hp: 300, def: 35, atk: 20 }
   },
+  {
+    id: 'amulet_ouroboros',
+    name: 'Eye of the Ouroboros',
+    type: 'amulet',
+    rarity: 'mythical',
+    icon: 'Amulet',
+    image: '/assets/rpg-icons/32x32/necklace_03e.png',
+    description: 'An infinite loop of primordial power. Delivers boundless health, mana reserves, and destructive armor penetration.',
+    price: 3200,
+    stats: { hp: 380, mp: 280, atk: 35, armorPen: 0.22, def: 25 }
+  },
 
   // --- SHIELDS ---
   {
@@ -482,6 +584,17 @@ export const ITEM_DATABASE: ItemData[] = [
     description: 'Heavy oak shield with jagged steel spikes that reflect melee blows.',
     price: 380,
     stats: { def: 28, atk: 15 }
+  },
+  {
+    id: 'shield_aegis_prime',
+    name: 'Aegis Divine Bastion',
+    type: 'shield',
+    rarity: 'mythical',
+    icon: 'Shield',
+    image: '/assets/rpg-icons/32x32/shield_03e.png',
+    description: 'Mythical bulwark crafted to withstand apocalyptic cataclysms. Emits a fortress-grade energy barrier.',
+    price: 3100,
+    stats: { def: 72, hp: 460, energyShield: 280, atk: 20 }
   },
 
   // --- CONSUMABLES ---

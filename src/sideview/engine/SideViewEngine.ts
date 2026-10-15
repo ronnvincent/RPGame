@@ -8,7 +8,8 @@ import { CharacterClass, SkillDefinition, CHARACTER_CLASSES } from '../classes/C
 import { POLY_SHEETS, POLY_PROPS, POLY_HOUSES, POLY_NATURE } from './MapLibrary';
 import { bossSkillsFor, BossSkill } from '../dungeons/BossSkills';
 import { BattleTheme, EnemyInstance } from '../dungeons/DungeonManager';
-import { ItemData, RARITY_CONFIGS } from '../items/ItemDatabase';
+import { ItemData, ItemRarity, RARITY_CONFIGS } from '../items/ItemDatabase';
+import { computeGearScore } from '../items/darkrise/rarities';
 import { getCardById, getCardForDungeon, makeCardItem, BOSS_CARD_DROP_CHANCE } from '../items/darkrise/cards';
 import { socketBonusStats } from '../items/darkrise/gems';
 import { enchantMultiplier } from '../items/darkrise/services';
@@ -5309,6 +5310,121 @@ export class SideViewEngine {
     this.triggerSave();
     this.particles.addFloatingText(p.x, p.y - 24, `Unequipped ${item.name}`, '#94a3b8', true, 14);
     audio.playClick();
+  }
+
+  public getItemSellPrice(item: ItemData): number {
+    const rarityBaseValues: Record<ItemRarity, number> = {
+      common: 60,
+      uncommon: 150,
+      rare: 350,
+      epic: 750,
+      legendary: 1500,
+      mythical: 3500,
+    };
+    const base = Math.max(item.price || 0, rarityBaseValues[item.rarity] || 50);
+    const enchantMult = 1 + (item.enchantLevel || 0) * 0.2;
+    const socketBonus = (item.sockets?.filter(Boolean).length || 0) * 75;
+    return Math.max(10, Math.round(base * 0.5 * enchantMult + socketBonus));
+  }
+
+  public sellItem(invIdx: number): { success: boolean; goldGained: number } {
+    const p = this.player;
+    const item = p.inventory[invIdx];
+    if (!item) return { success: false, goldGained: 0 };
+
+    const goldGained = this.getItemSellPrice(item);
+    p.inventory.splice(invIdx, 1);
+    p.gold = (p.gold || 0) + goldGained;
+    this.triggerSave();
+
+    this.particles.addFloatingText(p.x, p.y - 24, `+${goldGained} Gold (Sold ${item.name})`, '#fbbf24', true, 14);
+    audio.playClick();
+    return { success: true, goldGained };
+  }
+
+  public sellJunkItems(maxRarity: ItemRarity = 'uncommon'): { count: number; totalGold: number } {
+    const p = this.player;
+    const targetRarities: ItemRarity[] = maxRarity === 'common' ? ['common'] : ['common', 'uncommon'];
+    const nonSellableTypes = ['consumable', 'gem', 'card', 'material'];
+
+    let count = 0;
+    let totalGold = 0;
+    for (let i = p.inventory.length - 1; i >= 0; i--) {
+      const item = p.inventory[i];
+      if (nonSellableTypes.includes(item.type)) continue;
+      if (targetRarities.includes(item.rarity)) {
+        const gold = this.getItemSellPrice(item);
+        totalGold += gold;
+        p.inventory.splice(i, 1);
+        count++;
+      }
+    }
+
+    if (count > 0) {
+      p.gold = (p.gold || 0) + totalGold;
+      this.triggerSave();
+      this.particles.addFloatingText(p.x, p.y - 28, `Sold ${count} items for +${totalGold} Gold!`, '#fbbf24', true, 16);
+      audio.playClick();
+    } else {
+      this.particles.addFloatingText(p.x, p.y - 20, 'No junk items to sell', '#94a3b8', true, 13);
+      audio.playClick();
+    }
+
+    return { count, totalGold };
+  }
+
+  public autoEquipBest(): { equippedCount: number } {
+    const p = this.player;
+    const slots: Array<keyof PlayerEquipment> = [
+      'weapon', 'helmet', 'armor', 'boots', 'wings', 'shield', 'ring', 'amulet',
+    ];
+
+    let equippedCount = 0;
+
+    for (const slotKey of slots) {
+      const currentEquipped = p.equipment[slotKey];
+      const currentScore = currentEquipped ? computeGearScore(currentEquipped) : -1;
+
+      let bestCandidate: ItemData | null = null;
+      let bestCandidateScore = -1;
+
+      for (const item of p.inventory) {
+        if (item.type !== slotKey) continue;
+        const score = computeGearScore(item);
+        if (score > bestCandidateScore) {
+          bestCandidateScore = score;
+          bestCandidate = item;
+        }
+      }
+
+      if (bestCandidate && bestCandidateScore > currentScore) {
+        const candidateIdx = p.inventory.indexOf(bestCandidate);
+        if (candidateIdx >= 0) {
+          p.inventory.splice(candidateIdx, 1);
+          if (currentEquipped) {
+            p.inventory.push(currentEquipped);
+          }
+          p.equipment[slotKey] = bestCandidate;
+          equippedCount++;
+        }
+      }
+    }
+
+    if (equippedCount > 0) {
+      this.recomputeStats();
+      this.triggerSave();
+      this.particles.addFloatingText(
+        p.x, p.y - 30,
+        `Auto-equipped ${equippedCount} upgrade${equippedCount > 1 ? 's' : ''}!`,
+        '#22c55e', true, 16,
+      );
+      audio.playClick();
+    } else {
+      this.particles.addFloatingText(p.x, p.y - 24, 'Already wearing best equipment!', '#94a3b8', true, 13);
+      audio.playClick();
+    }
+
+    return { equippedCount };
   }
 
   private zoneHazardColour(kind: HazardKind): string {

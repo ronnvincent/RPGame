@@ -45,9 +45,9 @@ export const RARITY_POWER_WEIGHT: Record<ItemRarity, number> = {
 export type LootTier = 'boss' | 'mid' | 'low';
 
 export const RARITY_WEIGHTS_BY_TIER: Record<LootTier, Record<ItemRarity, number>> = {
-  low: { common: 50, uncommon: 26, rare: 20, epic: 3.5, legendary: 0.5, mythical: 0 },
-  mid: { common: 24, uncommon: 30, rare: 30, epic: 12, legendary: 4, mythical: 0 },
-  boss: { common: 6, uncommon: 14, rare: 30, epic: 32, legendary: 17, mythical: 1 },
+  low: { common: 40, uncommon: 28, rare: 20, epic: 8, legendary: 3.2, mythical: 0.8 },
+  mid: { common: 15, uncommon: 24, rare: 32, epic: 20, legendary: 6.5, mythical: 2.5 },
+  boss: { common: 2, uncommon: 6, rare: 18, epic: 32, legendary: 30, mythical: 12 },
 };
 
 export function weightedRarityRoll(

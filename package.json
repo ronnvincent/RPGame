@@ -53,7 +53,8 @@
     "test:stage": "node test/coop-lobby-stage.test.mjs",
     "test:chrome": "node test/hud-chrome.test.mjs",
     "test:layout": "node test/hud-layout-v2.test.mjs",
-    "test:voting": "node test/dungeon-wave-voting.test.mjs"
+    "test:voting": "node test/dungeon-wave-voting.test.mjs",
+    "test:inventory-loot": "node test/inventory-loot.test.mjs"
   },
   "keywords": [],
   "author": "",

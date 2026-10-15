@@ -42,9 +42,9 @@ const ENEMY_HP_SCALE = 2.8;
 const ELITE_SPAWN_CHANCE = 0.12;
 
 /** Chance an ordinary monster leaves an item. */
-const MOB_DROP_CHANCE = 0.16;
+const MOB_DROP_CHANCE = 0.38;
 /** Chance an elite leaves one. Bosses always do. */
-const ELITE_DROP_CHANCE = 0.55;
+const ELITE_DROP_CHANCE = 0.80;
 
 /**
  * Darkrise's "defective" monsters: they appear sometimes with random stats you

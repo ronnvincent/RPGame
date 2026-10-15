@@ -145,6 +145,7 @@ export class GameHUD {
     orb: '<path d="M12 3s6 6.4 6 10a6 6 0 0 1-12 0c0-3.6 6-10 6-10z"/>',
     spark: '<path d="M13 2L5 13h5l-1 9 8-11h-5l1-9z"/>',
     wind: '<path d="M3 8h10a3 3 0 1 0-3-3"/><path d="M3 12h14a3 3 0 1 1-3 3"/><path d="M3 16h7"/>',
+    coin: '<circle cx="12" cy="12" r="8"/><path d="M12 7v10M9.5 9.5a2.5 2.5 0 0 1 5 0c0 2-5 2-5 4a2.5 2.5 0 0 0 5 0"/>',
   };
 
   /** One glyph as inline SVG, inheriting colour so CSS still drives the look. */
@@ -2844,6 +2845,53 @@ export class GameHUD {
         align-items: center;
         border-bottom: 2px solid rgba(212, 175, 55, 0.4);
         padding-bottom: 6px;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .inv-header-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .inv-action-btn {
+        padding: 5px 10px;
+        font-size: 10px;
+        font-weight: 900;
+        font-family: 'Cinzel', serif;
+        letter-spacing: 0.5px;
+        cursor: pointer;
+        border-radius: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        text-shadow: 1px 1px 2px #000;
+        transition: transform 0.1s ease, filter 0.15s ease;
+      }
+
+      .inv-action-btn:hover {
+        filter: brightness(1.15);
+        transform: translateY(-1px);
+      }
+
+      .inv-action-btn:active {
+        transform: translateY(1px);
+      }
+
+      .inv-best-equip-btn {
+        background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+        color: #e0f2fe;
+        border-color: #60a5fa;
+        box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+      }
+
+      .inv-sell-junk-btn {
+        background: linear-gradient(135deg, #78350f 0%, #d97706 100%);
+        color: #fef3c7;
+        border-color: #fbbf24;
+        box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
       }
 
       .inv-title {
@@ -3127,6 +3175,13 @@ export class GameHUD {
         background: url('/assets/kenney-rpg-ui/buttonLong_brown.png') no-repeat center center !important;
         background-size: 100% 100% !important;
         color: #f87171 !important;
+      }
+
+      .inspector-btn-gold {
+        background: linear-gradient(135deg, #b45309 0%, #f59e0b 100%) !important;
+        color: #fef08a !important;
+        border: 1px solid #fde047 !important;
+        border-radius: 4px;
       }
 
       /* Hotbar Skill Floating Tooltip */
@@ -3729,7 +3784,11 @@ export class GameHUD {
       <div class="inventory-modal rpg-panel" id="inventory-modal" role="dialog" aria-modal="true" aria-labelledby="inventory-title" tabindex="-1">
         <div class="inv-header">
           <h2 class="inv-title" id="inventory-title">HERO INVENTORY &amp; EQUIPMENT</h2>
-          <button class="inv-close-btn" id="close-inv-btn" type="button" aria-label="Close inventory">${GameHUD.glyph('close')}</button>
+          <div class="inv-header-actions">
+            <button class="inv-action-btn inv-best-equip-btn" id="inv-best-equip-btn" type="button" title="Automatically equip the highest Gear Score equipment for all slots">${GameHUD.glyph('spark')} BEST EQUIP</button>
+            <button class="inv-action-btn inv-sell-junk-btn" id="inv-sell-junk-btn" type="button" title="Sell all Common and Uncommon equipment for Gold">${GameHUD.glyph('coin')} SELL JUNK</button>
+            <button class="inv-close-btn" id="close-inv-btn" type="button" aria-label="Close inventory">${GameHUD.glyph('close')}</button>
+          </div>
         </div>
         <div class="inv-grid-container">
           <!-- Left: Equipment Paperdoll Slots -->
@@ -3834,6 +3893,24 @@ export class GameHUD {
     };
 
     closeBtn?.addEventListener('click', closeInv);
+
+    const bestEquipBtn = this.container.querySelector('#inv-best-equip-btn');
+    bestEquipBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.engine.autoEquipBest();
+      this.selectedItem = null;
+      this.render();
+      this.renderInventoryItems();
+    });
+
+    const sellJunkBtn = this.container.querySelector('#inv-sell-junk-btn');
+    sellJunkBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.engine.sellJunkItems('uncommon');
+      this.selectedItem = null;
+      this.render();
+      this.renderInventoryItems();
+    });
 
     // Quests button
     const questsBtn = this.container.querySelector('#toggle-quests-btn');
@@ -5153,6 +5230,8 @@ export class GameHUD {
       ? this.compareWithEquipped(item)
       : '';
 
+    const sellPrice = this.engine.getItemSellPrice(item);
+
     if (item.consumableEffect) {
       if (item.consumableEffect.type === 'heal_hp') statChips.push(`<span class="stat-chip">${GameHUD.glyph('heart')} Heals +${item.consumableEffect.value} HP</span>`);
       if (item.consumableEffect.type === 'heal_mp') statChips.push(`<span class="stat-chip">${GameHUD.glyph('orb')} Restores +${item.consumableEffect.value} MP</span>`);
@@ -5184,8 +5263,10 @@ export class GameHUD {
         ${isEquipped
           ? `<button class="inspector-btn inspector-btn-danger" id="inspector-unequip-btn">UNEQUIP</button>`
           : item.type === 'consumable'
-            ? `<button class="inspector-btn" id="inspector-action-btn">USE</button>`
-            : `<button class="inspector-btn" id="inspector-action-btn">EQUIP</button>`
+            ? `<button class="inspector-btn" id="inspector-action-btn">USE</button><button class="inspector-btn inspector-btn-gold" id="inspector-sell-btn">SELL (+${sellPrice}G)</button>`
+            : (item.type === 'gem' || item.type === 'card' || item.type === 'material')
+              ? `<button class="inspector-btn inspector-btn-gold" id="inspector-sell-btn">SELL (+${sellPrice}G)</button>`
+              : `<button class="inspector-btn" id="inspector-action-btn">EQUIP</button><button class="inspector-btn inspector-btn-gold" id="inspector-sell-btn">SELL (+${sellPrice}G)</button>`
         }
         <button class="inspector-btn inspector-btn-danger" id="inspector-close-btn">CLOSE</button>
       </div>
@@ -5196,6 +5277,15 @@ export class GameHUD {
     actBtn?.addEventListener('click', (e) => {
       e.stopPropagation();
       this.engine.useOrEquipItem(Number(slotOrIdx));
+      this.selectedItem = null;
+      this.render();
+      this.renderInventoryItems();
+    });
+
+    const sellBtn = pane.querySelector('#inspector-sell-btn');
+    sellBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.engine.sellItem(Number(slotOrIdx));
       this.selectedItem = null;
       this.render();
       this.renderInventoryItems();
