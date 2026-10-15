@@ -444,6 +444,13 @@ export class SideViewGame {
       
       mod.network.listenForEnemyDied((enemyData) => {
         if (!this.engine || this.engine.isHost) return;
+        const realEnemy = this.engine.enemies.find(e => e.id === enemyData.id);
+        if (realEnemy) {
+          realEnemy.isDead = true;
+          realEnemy.hp = 0;
+          this.engine.onEnemyDefeated(realEnemy);
+          return;
+        }
         // Mock an enemy instance to trigger the defeat logic and spawn identical ground loot
         const fakeEnemy: any = {
           id: enemyData.id,
@@ -655,6 +662,26 @@ export class SideViewGame {
     if (!this.engine) return;
     const lostLoot = this.engine.droppedLoots.length;
 
+    if (this.waveClearTimer) {
+      window.clearTimeout(this.waveClearTimer);
+      this.waveClearTimer = null;
+    }
+    if (this.hostVoteTimer) {
+      window.clearTimeout(this.hostVoteTimer);
+      this.hostVoteTimer = null;
+    }
+    if (this.voteWatchdogTimer) {
+      window.clearTimeout(this.voteWatchdogTimer);
+      this.voteWatchdogTimer = null;
+    }
+    if (this.waveCompletionWatchdogTimer) {
+      window.clearTimeout(this.waveCompletionWatchdogTimer);
+      this.waveCompletionWatchdogTimer = null;
+    }
+    this.hud?.hideGameModeVotingModal();
+    this.dungeonFlowState = 'WAVE_ACTIVE';
+    this.isTransitioningWave = false;
+
     this.hud?.showToast('DEFEATED - returning to Eldermoor');
     if (lostLoot > 0) {
       window.setTimeout(() => this.hud?.showToast(`${lostLoot} unclaimed item${lostLoot > 1 ? 's' : ''} left behind`), 1800);
@@ -677,6 +704,29 @@ export class SideViewGame {
 
   public loadTownHub(broadcastParty: boolean = true) {
     if (!this.engine) return;
+    if (this.waveClearTimer) {
+      window.clearTimeout(this.waveClearTimer);
+      this.waveClearTimer = null;
+    }
+    if (this.hostVoteTimer) {
+      window.clearTimeout(this.hostVoteTimer);
+      this.hostVoteTimer = null;
+    }
+    if (this.voteWatchdogTimer) {
+      window.clearTimeout(this.voteWatchdogTimer);
+      this.voteWatchdogTimer = null;
+    }
+    if (this.waveCompletionWatchdogTimer) {
+      window.clearTimeout(this.waveCompletionWatchdogTimer);
+      this.waveCompletionWatchdogTimer = null;
+    }
+    this.hud?.hideGameModeVotingModal();
+    this.dungeonFlowState = 'WAVE_ACTIVE';
+    this.isTransitioningWave = false;
+    this.activeGameModeModifiers = {};
+    this.currentVoteTally.clear();
+    this.localVotedModeId = null;
+
     this.engine.resetCombatScene();
     this.engine.setDungeonEncounterRuntime(null);
     this.engine.onPlayerWorldHit = null;
@@ -1428,7 +1478,7 @@ export class SideViewGame {
 
     // Preserves regex for test/endgame.test.mjs:
     // !dungeon.endless && this.currentWaveIndex >= dungeon.waves.length
-    if (!dungeon.endless && this.currentWaveIndex >= dungeon.waves.length && false) {
+    if (!dungeon.endless && this.currentWaveIndex >= dungeon.waves.length) {
       this.onDungeonCleared();
       return;
     }
@@ -1612,7 +1662,7 @@ export class SideViewGame {
             },
             {
               label: 'Enter Endless Celestial Arena',
-              icon: '⭐',
+              icon: '/assets/ui_sprites/icons/I_Crystal03.png',
               type: 'custom',
               onSelect: () => this.onSelectLocation('endless_arena')
             }
@@ -2077,6 +2127,16 @@ export class SideViewGame {
     }
     if (this.waveClearTimer) {
       window.clearTimeout(this.waveClearTimer);
+    }
+    const dungeon = DUNGEONS[this.currentDungeonIndex];
+    if (dungeon && !dungeon.endless && (this.currentWaveIndex + 1) >= dungeon.waves.length) {
+      // Final wave of dungeon defeated: celebrate with fanfare and advance to victory
+      this.waveClearTimer = window.setTimeout(() => {
+        this.waveClearTimer = null;
+        this.currentWaveIndex++;
+        this.onDungeonCleared();
+      }, 1500);
+      return;
     }
     // Strict Dungeon State Machine Phase 2: 1.5s celebration / cleanup
     this.waveClearTimer = window.setTimeout(() => {

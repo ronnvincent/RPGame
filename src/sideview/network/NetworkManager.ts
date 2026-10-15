@@ -741,32 +741,39 @@ export class NetworkManager {
       if (data) this.onFullSyncCb?.(data);
     });
 
-    this.socket.on('START_GAMEMODE_VOTE', (data: StartGameModeVotePacket) => {
+    let lastStartVoteAt = 0;
+    const onStartVote = (data: StartGameModeVotePacket) => {
+      const now = performance.now();
+      if (now - lastStartVoteAt < 100) return;
+      lastStartVoteAt = now;
       this.debug('IN', 'START_GAMEMODE_VOTE', data);
       this.onStartGameModeVoteCb?.(data);
-    });
-    this.socket.on('start_gamemode_vote', (data: StartGameModeVotePacket) => {
-      this.debug('IN', 'start_gamemode_vote', data);
-      this.onStartGameModeVoteCb?.(data);
-    });
+    };
+    this.socket.on('START_GAMEMODE_VOTE', onStartVote);
+    this.socket.on('start_gamemode_vote', onStartVote);
 
-    this.socket.on('CAST_GAMEMODE_VOTE', (data: CastGameModeVotePacket) => {
+    const recentCastVotes = new Set<string>();
+    const onCastVote = (data: CastGameModeVotePacket) => {
+      const key = `${data.playerId}:${data.selectedModeId}`;
+      if (recentCastVotes.has(key)) return;
+      recentCastVotes.add(key);
+      setTimeout(() => recentCastVotes.delete(key), 500);
       this.debug('IN', 'CAST_GAMEMODE_VOTE', data);
       this.onCastGameModeVoteCb?.(data);
-    });
-    this.socket.on('cast_gamemode_vote', (data: CastGameModeVotePacket) => {
-      this.debug('IN', 'cast_gamemode_vote', data);
-      this.onCastGameModeVoteCb?.(data);
-    });
+    };
+    this.socket.on('CAST_GAMEMODE_VOTE', onCastVote);
+    this.socket.on('cast_gamemode_vote', onCastVote);
 
-    this.socket.on('GAMEMODE_VOTE_RESULT', (data: GameModeVoteResultPacket) => {
+    let lastVoteResultAt = 0;
+    const onVoteResult = (data: GameModeVoteResultPacket) => {
+      const now = performance.now();
+      if (now - lastVoteResultAt < 100) return;
+      lastVoteResultAt = now;
       this.debug('IN', 'GAMEMODE_VOTE_RESULT', data);
       this.onGameModeVoteResultCb?.(data);
-    });
-    this.socket.on('gamemode_vote_result', (data: GameModeVoteResultPacket) => {
-      this.debug('IN', 'gamemode_vote_result', data);
-      this.onGameModeVoteResultCb?.(data);
-    });
+    };
+    this.socket.on('GAMEMODE_VOTE_RESULT', onVoteResult);
+    this.socket.on('gamemode_vote_result', onVoteResult);
   }
 
   /**

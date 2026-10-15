@@ -508,6 +508,11 @@ export class CoopLobbyUI {
    * START look dead because NetworkManager silently returned without emitting.
    */
   private startRun() {
+    const startBtn = this.root?.querySelector<HTMLButtonElement>('.cl-start');
+    if (startBtn?.disabled) {
+      this.toast('Waiting for all party members to ready up.');
+      return;
+    }
     if (!network.startMatch()) this.toast('Party connection is not ready yet. Try again.');
   }
 
