@@ -114,6 +114,7 @@ export class SideViewGame {
   private runTickAccumulatorMs = 0;
   private pendingDungeonInteraction: 'choice' | 'route' | 'world-object' | null = null;
   private runDialogueKey: string | null = null;
+  private isAdvancingRunRoom = false;
   /** Deepest endless wave ever cleared on this device. */
   private bestEndlessWave: number = Number(localStorage.getItem('bestEndlessWave')) || 0;
   private waveActive: boolean = false;
@@ -723,6 +724,7 @@ export class SideViewGame {
     this.hud?.hideGameModeVotingModal();
     this.dungeonFlowState = 'WAVE_ACTIVE';
     this.isTransitioningWave = false;
+    this.isAdvancingRunRoom = false;
     this.activeGameModeModifiers = {};
     this.currentVoteTally.clear();
     this.localVotedModeId = null;
@@ -958,6 +960,7 @@ export class SideViewGame {
     }
     this.hud?.hideGameModeVotingModal();
     this.dungeonFlowState = 'WAVE_ACTIVE';
+    this.isAdvancingRunRoom = false;
     this.isTransitioningWave = false;
     this.activeGameModeModifiers = {};
     this.currentVoteTally.clear();
@@ -1158,11 +1161,13 @@ export class SideViewGame {
           });
           if (available.length > 0) {
             this.pendingDungeonInteraction = null;
+            this.isAdvancingRunRoom = true;
             const chosenExit = available[Math.floor(Math.random() * available.length)];
             const target = state.graph.nodes.find(candidate => candidate.id === chosenExit.toRoomId);
             const targetName = target ? this.humanize(target.kind) : 'Next Chamber';
             this.hud?.showToast(`Room Cleared! Advancing to ${targetName}...`);
             window.setTimeout(() => {
+              this.isAdvancingRunRoom = false;
               if (this.runController?.getSnapshot().status === 'active') {
                 this.dispatchRun({ type: 'choose_exit', exitId: chosenExit.id });
               }
@@ -1322,6 +1327,55 @@ export class SideViewGame {
       if (this.runSyncAccumulator >= 0.25) {
         this.runSyncAccumulator = 0;
         network.sendRunSync(this.runController.getSnapshot(), this.encounter.snapshot());
+      }
+
+      // Watchdog 1: Reconcile Encounter Objective Completion
+      const node = this.currentRunNode(state);
+      if (node) {
+        const runtime = state.roomStates[node.id];
+        const livingEnemies = this.engine.enemies.filter(e => !e.isDead && e.hp > 0).length;
+        const encSnapshot = this.encounter.snapshot();
+        const encSucceeded = encSnapshot?.objectiveStatus === 'succeeded';
+
+        if (runtime?.status === 'active' && encSucceeded && livingEnemies === 0) {
+          if (node.objective && runtime.objectiveState && runtime.objectiveState.status !== 'succeeded') {
+            if (node.objective.type === 'destroy_nests') {
+              for (const nestId of node.objective.nestObjectIds) {
+                this.dispatchRun({ type: 'objective_event', event: { type: 'world_object_destroyed', objectId: nestId } });
+              }
+            } else if (node.objective.type === 'kill_all' && runtime.objectiveState.type === 'kill_all') {
+              for (const enemyId of runtime.objectiveState.spawnedEnemyIds) {
+                this.dispatchRun({ type: 'objective_event', event: { type: 'enemy_defeated', enemyId } });
+              }
+            }
+          }
+        }
+
+        // Watchdog 2: Auto-Advance Completed Rooms (Zero Deadlocks)
+        const updatedRuntime = this.runController.getStateView().roomStates[node.id];
+        if (updatedRuntime?.status === 'completed' && !this.isAdvancingRunRoom) {
+          const exits = state.graph.exits.filter(exit => exit.fromRoomId === node.id);
+          const available = exits.filter(exit => {
+            const target = state.graph.nodes.find(candidate => candidate.id === exit.toRoomId);
+            return target?.access !== 'secret' || state.revealedSecretRoomIds.includes(target.id);
+          });
+          const chosenExit = available[0] || exits[0];
+          if (chosenExit) {
+            this.isAdvancingRunRoom = true;
+            const target = state.graph.nodes.find(candidate => candidate.id === chosenExit.toRoomId);
+            const targetName = target ? this.humanize(target.kind) : 'Next Chamber';
+            this.hud?.showToast(`Room Cleared! Advancing to ${targetName}...`);
+            window.setTimeout(() => {
+              this.isAdvancingRunRoom = false;
+              if (this.runController?.getSnapshot().status === 'active' && this.runController.getSnapshot().currentRoomId === node.id) {
+                this.dispatchRun({ type: 'choose_exit', exitId: chosenExit.id });
+              }
+            }, 800);
+          } else if (node.id === state.graph.finaleRoomId) {
+            this.isAdvancingRunRoom = true;
+            this.onDungeonCleared();
+          }
+        }
       }
     }
     this.updateRunHud(this.runController.getStateView());
@@ -1643,77 +1697,29 @@ export class SideViewGame {
     // cleared dungeon put two panels on screen at the same time - one of them
     // half behind the other - and neither said which to answer first.
     const openGateway = () => {
-      if (dungeon.id === 'void_nexus') {
-        this.dialogue?.showDialogue({
-          speakerName: 'Elder Justinian',
-          speakerTitle: 'Sage of Aethelgard',
-          portraitIcon: '/assets/ui_sprites/icons/I_Scroll.png',
-          sentences: [
-            "Elder Justinian: The Void Overlord has fallen!",
-            "Elder Justinian: The Five Primordial Runes are reunited in radiance! Peace returns to Aethelgard!",
-            "Elder Justinian: You have proven yourself as the True Champion of the Realm!"
-          ],
-          options: [
-            {
-              label: 'Return to Town Sanctuary',
-              icon: '/assets/ui_sprites/icons/I_Map.png',
-              type: 'custom',
-              onSelect: () => this.loadTownHub(true)
-            },
-            {
-              label: 'Enter Endless Celestial Arena',
-              icon: '/assets/ui_sprites/icons/I_Crystal03.png',
-              type: 'custom',
-              onSelect: () => this.onSelectLocation('endless_arena')
-            }
-          ]
-        });
+      this.dialogue?.close();
+      if (dungeon && dungeon.id === 'void_nexus') {
+        this.hud?.showToast('The Void Overlord has fallen! Peace returns to Aethelgard!');
+        window.setTimeout(() => this.loadTownHub(true), 1500);
         return;
       }
 
-      setTimeout(() => {
-        this.dialogue?.showDialogue({
-          speakerName: 'Victory Portal',
-          speakerTitle: 'Realm Gateway',
-          portraitIcon: '/assets/ui_sprites/icons/I_Crystal01.png',
-          sentences: [
-            `You have successfully cleansed ${dungeon.name}!`,
-            "Would you like to return to Eldermoor Town to turn in quests, or advance to the next realm?"
-          ],
-          options: [
-            {
-              label: 'Return to Town Hub [T]',
-              icon: '/assets/ui_sprites/icons/I_Map.png',
-              type: 'custom',
-              onSelect: () => {
-                this.dialogue?.close();
-                this.loadTownHub(true);
-              }
-            },
-            {
-              label: 'Advance to Next Dungeon',
-              icon: '/assets/ui_sprites/icons/S_Sword01.png',
-              type: 'custom',
-              onSelect: () => {
-                this.dialogue?.close();
-                const nextDungeon = DUNGEONS[this.currentDungeonIndex + 1];
-                if (!nextDungeon) {
-                  this.loadTownHub(true);
-                  return;
-                }
-                const requiredLevel = nextDungeon.minLevel || 1;
-                if (this.engine!.player.level < requiredLevel) {
-                  audio.playClick();
-                  this.hud?.showToast(`Lv. ${requiredLevel} Required for ${nextDungeon.name}!`);
-                  this.loadTownHub(true);
-                  return;
-                }
-                this.loadDungeon(this.currentDungeonIndex + 1, true);
-              }
-            }
-          ]
-        });
-      }, 2800);
+      window.setTimeout(() => {
+        const nextDungeon = DUNGEONS[this.currentDungeonIndex + 1];
+        if (!nextDungeon) {
+          this.hud?.showToast('All realms cleansed! Returning to Town Hub...');
+          this.loadTownHub(true);
+          return;
+        }
+        const requiredLevel = nextDungeon.minLevel || 1;
+        if (this.engine!.player.level < requiredLevel) {
+          this.hud?.showToast(`Lv. ${requiredLevel} Required for ${nextDungeon.name}! Returning to Town...`);
+          this.loadTownHub(true);
+          return;
+        }
+        this.hud?.showToast(`Cleansed ${dungeon ? dungeon.name : 'Realm'}! Advancing to ${nextDungeon.name}...`);
+        this.loadDungeon(this.currentDungeonIndex + 1, true);
+      }, 1500);
     };
 
     // Rematch goes straight back in, so it never asks where to go next.
@@ -2214,15 +2220,11 @@ export class SideViewGame {
 
     const remainingMs = Math.max(1000, Math.min(packet.duration, packet.endTime - Date.now()));
 
-    // Auto-pick random game mode modifier so waves flow continuously without manual pause
+    // Auto-pick random game mode modifier so waves flow continuously without manual pause or modal popups
     const autoOpt = packet.options[Math.floor(Math.random() * packet.options.length)];
     if (autoOpt) {
       this.castGameModeVote(autoOpt.id);
     }
-
-    this.hud?.showGameModeVotingModal(packet.options, remainingMs, (selectedModeId: string) => {
-      this.castGameModeVote(selectedModeId);
-    });
   }
 
   private castGameModeVote(selectedModeId: string): void {
