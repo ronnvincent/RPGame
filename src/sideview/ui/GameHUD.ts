@@ -1659,9 +1659,10 @@ export class GameHUD {
       .mini-quest-tracker {
         position: fixed;
         top: 78px;
-        bottom: 12px;
         right: 12px;
         width: 220px;
+        height: auto;
+        max-height: 240px;
         background: url('/assets/kenney-rpg-ui/panel_brown.png') repeat;
         background-size: 100% 100%;
         padding: 8px 10px;
@@ -1672,7 +1673,7 @@ export class GameHUD {
         display: flex;
         flex-direction: column;
         gap: 3px;
-        transition: transform 0.1s ease;
+        transition: transform 0.12s ease, width 0.2s ease, padding 0.2s ease;
       }
 
       .start-run-top-btn {
@@ -1793,7 +1794,7 @@ export class GameHUD {
       }
 
       .mini-quest-tracker:hover {
-        transform: scale(1.02);
+        filter: brightness(1.05);
       }
 
       .tracker-title {
@@ -1806,6 +1807,44 @@ export class GameHUD {
         align-items: center;
         border-bottom: 1px solid rgba(255, 215, 0, 0.3);
         padding-bottom: 3px;
+        gap: 6px;
+      }
+
+      .tracker-title-left {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex: 1;
+        white-space: nowrap;
+        user-select: none;
+      }
+
+      .tracker-title-right {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .tracker-collapse-btn {
+        background: rgba(0, 0, 0, 0.45);
+        border: 1px solid rgba(255, 215, 0, 0.4);
+        border-radius: 3px;
+        color: #ffd700;
+        font-size: 8.5px;
+        width: 17px;
+        height: 17px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        padding: 0;
+        line-height: 1;
+        transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+      }
+      .tracker-collapse-btn:hover {
+        background: rgba(255, 215, 0, 0.25);
+        color: #fff;
+        border-color: #ffd700;
       }
 
       .tracker-quest-name {
@@ -1813,6 +1852,7 @@ export class GameHUD {
         font-weight: 800;
         color: #ffffff;
         text-shadow: 1px 1px 2px #000;
+        line-height: 1.25;
       }
 
       .tracker-obj-list {
@@ -1821,6 +1861,23 @@ export class GameHUD {
         gap: 2px;
         font-size: 9.5px;
         color: #cbd5e1;
+        max-height: 160px;
+        overflow-y: auto;
+      }
+
+      .mini-quest-tracker.is-collapsed {
+        width: 140px;
+        padding: 6px 8px;
+        gap: 0;
+      }
+      .mini-quest-tracker.is-collapsed .tracker-title {
+        border-bottom: none;
+        padding-bottom: 0;
+      }
+      .mini-quest-tracker.is-collapsed .tracker-hint,
+      .mini-quest-tracker.is-collapsed .tracker-quest-name,
+      .mini-quest-tracker.is-collapsed .tracker-obj-list {
+        display: none !important;
       }
 
       /* Floating Toast Notification */
@@ -3262,12 +3319,18 @@ export class GameHUD {
       <!-- Active Quest Tracker Widget -->
       <div class="mini-quest-tracker" id="mini-quest-tracker">
         <div class="tracker-title">
-          <span><img src="/assets/gui/PNG/buttonSquare_brown.png" width="12" height="12" style="vertical-align:middle;" /> ACTIVE QUEST</span>
-          <span class="tracker-hint" id="tracker-hint" style="font-size: 8.5px; color: #94a3b8;">${
-            typeof window !== 'undefined' && (('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches))
-              ? '[TAP]'
-              : '[CLICK / J]'
-          }</span>
+          <div class="tracker-title-left">
+            <img src="/assets/gui/PNG/buttonSquare_brown.png" width="12" height="12" style="vertical-align:middle;" />
+            <span>ACTIVE QUEST</span>
+          </div>
+          <div class="tracker-title-right">
+            <span class="tracker-hint" id="tracker-hint" style="font-size: 8.5px; color: #94a3b8;">${
+              typeof window !== 'undefined' && (('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches))
+                ? '[TAP]'
+                : '[CLICK / J]'
+            }</span>
+            <button class="tracker-collapse-btn" id="tracker-collapse-btn" type="button" aria-label="Collapse Quest Tracker" title="Collapse / Expand Quest Tracker">▲</button>
+          </div>
         </div>
         <div class="tracker-quest-name" id="tracker-quest-name">Act I: The Stolen Keystone</div>
         <div class="tracker-obj-list" id="tracker-obj-list">
@@ -4194,10 +4257,40 @@ export class GameHUD {
       this.controlsPanel?.open();
     });
 
-    // Mini Quest Tracker Click
-    const trackerEl = this.container.querySelector('#mini-quest-tracker');
+    // Mini Quest Tracker Click & Collapse
+    const trackerEl = this.container.querySelector('#mini-quest-tracker') as HTMLElement | null;
+    const collapseBtn = this.container.querySelector('#tracker-collapse-btn') as HTMLElement | null;
+
+    // Restore saved collapse preference
+    const savedCollapsed = typeof localStorage !== 'undefined' && localStorage.getItem('rpg_quest_tracker_collapsed') === '1';
+    if (savedCollapsed && trackerEl) {
+      trackerEl.classList.add('is-collapsed');
+      if (collapseBtn) collapseBtn.textContent = '▼';
+    }
+
+    const toggleTrackerCollapse = (e?: Event) => {
+      if (e) e.stopPropagation();
+      if (!trackerEl) return;
+      const isNowCollapsed = trackerEl.classList.toggle('is-collapsed');
+      if (collapseBtn) {
+        collapseBtn.textContent = isNowCollapsed ? '▼' : '▲';
+      }
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('rpg_quest_tracker_collapsed', isNowCollapsed ? '1' : '0');
+      }
+      audio.playClick();
+    };
+
+    collapseBtn?.addEventListener('click', (e) => {
+      toggleTrackerCollapse(e);
+    });
+
     trackerEl?.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (trackerEl.classList.contains('is-collapsed')) {
+        toggleTrackerCollapse();
+        return;
+      }
       this.questLogUI?.toggle();
     });
 
