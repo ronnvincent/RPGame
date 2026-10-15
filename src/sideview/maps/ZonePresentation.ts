@@ -307,6 +307,7 @@ function drawFrameSilhouette(
   groundY: number,
   sideWidth: number,
 ) {
+  return; // Floating obstacle shapes and viewport frame silhouettes removed per user directive
   const bottom = Math.min(viewportHeight, groundY + 22);
   ctx.beginPath();
 

@@ -724,7 +724,7 @@ export class DungeonEncounterRuntime {
       if (this.renderer.draw(ctx, spriteId, x, y, { time: animationTime, ...options })) drawn++;
     };
 
-    for (const prop of this.routeProps) paint(prop.spriteId, prop.x, prop.y, { scale: prop.scale });
+    // Route props / giant gate blocks removed from combat arena per user request
     for (const object of this.worldObjects) {
       if (!object.active) continue;
       if (object.secondarySpriteId) paint(object.secondarySpriteId, object.x, object.y, { width: object.width });
@@ -819,54 +819,8 @@ export class DungeonEncounterRuntime {
     positionedX: (fraction: number, jitter: number) => number,
     rng: SeededRng,
   ): void {
-    this.worldObjects.push(
-      {
-        id: 'hazard.bridge', kind: 'breakable-bridge', spriteId: HAZARD_SPRITES['breakable-bridge'].body,
-        secondarySpriteId: 'hazard.bridge-support', x: positionedX(0.58, 35), y: this.groundY - 2,
-        width: 176, height: 28, hp: 240, maxHp: 240, active: true,
-      },
-      {
-        id: 'hazard.barrel-a', kind: 'explosive-barrel', spriteId: HAZARD_SPRITES['explosive-barrel'].body,
-        x: positionedX(0.32, 28), y: this.groundY, width: 52, height: 68, hp: 80, maxHp: 80, active: true,
-      },
-      {
-        id: 'hazard.barrel-b', kind: 'explosive-barrel', spriteId: HAZARD_SPRITES['explosive-barrel'].body,
-        x: positionedX(0.78, 28), y: this.groundY, width: 52, height: 68, hp: 80, maxHp: 80, active: true,
-      },
-    );
-
-    for (const [index, fraction] of [0.24, 0.7].entries()) {
-      const x = positionedX(fraction, 42);
-      this.hazards.push({
-        id: `hazard.rock-${index}`, kind: 'falling-rocks', bodySpriteId: HAZARD_SPRITES['falling-rocks'].body,
-        telegraphSpriteId: HAZARD_SPRITES['falling-rocks'].telegraph,
-        impactSpriteId: HAZARD_SPRITES['falling-rocks'].impact,
-        x, y: this.groundY - 320, baseX: x, baseY: this.groundY,
-        minX: x, maxX: x, width: 62, height: 62, direction: 1,
-        phase: 'cooldown', timerSeconds: 0.6 + rng.nextFloat() * 1.4, impactSeconds: 0, cycle: 0,
-      });
-    }
-    for (const [index, fraction] of [0.16, 0.66].entries()) {
-      const x = positionedX(fraction, 24);
-      this.hazards.push({
-        id: `hazard.trap-${index}`, kind: 'traps', bodySpriteId: HAZARD_SPRITES.traps.body,
-        telegraphSpriteId: HAZARD_SPRITES.traps.telegraph, impactSpriteId: HAZARD_SPRITES.traps.impact,
-        x, y: this.groundY, baseX: x, baseY: this.groundY,
-        minX: x, maxX: x, width: 78, height: 44, direction: 1,
-        phase: 'cooldown', timerSeconds: 1.2 + rng.nextFloat() * 1.5, impactSeconds: 0, cycle: 0,
-      });
-    }
-    const platformX = positionedX(0.45, 18);
-    this.hazards.push({
-      id: 'hazard.moving-platform', kind: 'moving-platform', bodySpriteId: HAZARD_SPRITES['moving-platform'].body,
-      telegraphSpriteId: HAZARD_SPRITES['moving-platform'].telegraph,
-      impactSpriteId: HAZARD_SPRITES['moving-platform'].impact,
-      x: platformX, y: this.groundY - 112, baseX: platformX, baseY: this.groundY - 112,
-      minX: clamp(platformX - 150, 80, this.arenaWidth - 80),
-      maxX: clamp(platformX + 150, 80, this.arenaWidth - 80),
-      width: 144, height: 24, direction: rng.chancePermille(500) ? 1 : -1,
-      phase: 'active', timerSeconds: 0, impactSeconds: 0, cycle: 0,
-    });
+    // Floating platforms, bridges, and obstructive hazard objects removed per user directive
+    return;
   }
 
   private isDangerousRoom(kind: RoomKind): boolean {

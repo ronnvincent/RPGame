@@ -2632,12 +2632,18 @@ export class SpriteManager {
       ? Math.min(list.length - 1, raw)
       : raw % list.length;
     const src = list[index];
-    const image = this.images[src];
-    if (!image) {
+    let image = this.images[src];
+    if (!image || !image.complete || !image.naturalWidth) {
       this.warmPaths(visual.requiredAssets);
-      return;
+      for (let offset = 1; offset < list.length; offset++) {
+        const candidate = this.images[list[(index + list.length - offset) % list.length]];
+        if (candidate && candidate.complete && candidate.naturalWidth) {
+          image = candidate;
+          break;
+        }
+      }
+      if (!image || !image.complete || !image.naturalWidth) return;
     }
-    if (!image.complete || !image.naturalWidth) return;
 
     const scale = isBoss ? (visual.bossScale || visual.scale * 1.8) : visual.scale;
     const isDragon = visual.variant === 'elder-dragon';
@@ -3861,7 +3867,7 @@ export class SpriteManager {
     platforms: { x: number; y: number; width: number; height: number; type: string }[],
     theme: BattleTheme
   ) {
-    if (!platforms || platforms.length === 0) return;
+    return;
 
     // Cut from the same earth as the floor, so a ledge looks like part of the
     // map. A stretched rock sprite read as a pale lens hanging in mid-air, and

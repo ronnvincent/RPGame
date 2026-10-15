@@ -48,6 +48,7 @@ import type { VfxQuality } from './engine/ParticleSystem';
 import { sanitizeEnemyAttackIntent } from './combat/EnemyAttackProfiles';
 import { network } from './network/NetworkManager';
 import { sprites } from './engine/SpriteManager';
+import { resolveEnemyVisual } from './maps/EnemyVisualRegistry';
 import { TownHub } from './town/TownHub';
 import { DialogueSystem } from './dialogue/DialogueSystem';
 import { WorldMapUI } from './ui/WorldMapUI';
@@ -931,6 +932,10 @@ export class SideViewGame {
       this.engine.currentDungeonId = dungeon.id;
       this.engine.setBattleTheme(dungeon.theme);
       audio.playDungeonBGM(dungeon.theme);
+      if (dungeon.id === 'dragon_lair' || dungeon.theme === 'inferno') {
+        const dragonVisual = resolveEnemyVisual('Ancient Red Dragon Ignis');
+        if (dragonVisual) sprites.warmPaths(dragonVisual.requiredAssets);
+      }
     }
 
     this.engine.setDungeonEncounterRuntime(this.encounter);

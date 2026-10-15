@@ -686,20 +686,7 @@ export class SideViewEngine {
   }
 
   private collisionPlatforms(): Platform[] {
-    const dynamic = this.dungeonEncounterRuntime?.getDynamicPlatforms() || [];
-    if (!dynamic.length) return this.platforms;
-    return [
-      ...this.platforms,
-      ...dynamic.filter(platform => platform.active).map(platform => ({
-        // Encounter objects use their sprite centre; engine platforms use a
-        // left edge and a top surface.
-        x: platform.x - platform.width / 2,
-        y: platform.y,
-        width: platform.width,
-        height: platform.height,
-        type: 'one-way' as const,
-      })),
-    ];
+    return [];
   }
 
   /** Receives the shared input settings once per frame without polling DOM/storage in hot paths. */

@@ -312,19 +312,23 @@ const BOSS_WIZARD = { ...WIZARD, id: 'boss-wizard', silhouetteId: 'arch-lich', s
 const BOSS_BERSERKER = { ...BERSERKER, id: 'boss-berserker', silhouetteId: 'warlord', scale: 1.25, bossScale: 1.5 };
 const BOSS_SPIDER = { ...SPIDER, id: 'boss-spider', silhouetteId: 'giant-spider', scale: 4.2, bossScale: 4.2 };
 const BOSS_THING = { ...SWAMP_THING, id: 'boss-behemoth', silhouetteId: 'moon-behemoth', scale: 3.5, bossScale: 3.5 };
+const DRAGON_FRAMES = [1, 5, 9, 13, 17, 21, 25, 29, 33, 37];
+const DRAGON_IDLE = DRAGON_FRAMES.map((n) => `/assets/elder_dragon/idle/${n}.png`);
+const DRAGON_MOVE = DRAGON_FRAMES.map((n) => `/assets/elder_dragon/walk/${n}.png`);
+const DRAGON_ATTACK = DRAGON_FRAMES.map((n) => `/assets/elder_dragon/atk/${n}.png`);
 const DRAGON: EnemyVisualProfile = sequence(
   'elder-dragon',
   'dragon',
   'elder-dragon',
   'elder-dragon',
-  [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `/assets/elder_dragon/idle/${n}.png`),
+  [...DRAGON_IDLE, ...DRAGON_MOVE, ...DRAGON_ATTACK],
   0.55,
   {
-    idle: Array.from({ length: 40 }, (_, i) => `/assets/elder_dragon/idle/${i + 1}.png`),
-    move: Array.from({ length: 40 }, (_, i) => `/assets/elder_dragon/walk/${i + 1}.png`),
-    attack: Array.from({ length: 40 }, (_, i) => `/assets/elder_dragon/atk/${i + 1}.png`),
-    hit: Array.from({ length: 40 }, (_, i) => `/assets/elder_dragon/idle/${i + 1}.png`),
-    dead: Array.from({ length: 40 }, (_, i) => `/assets/elder_dragon/idle/${i + 1}.png`),
+    idle: DRAGON_IDLE,
+    move: DRAGON_MOVE,
+    attack: DRAGON_ATTACK,
+    hit: DRAGON_IDLE,
+    dead: DRAGON_IDLE,
   },
 );
 
