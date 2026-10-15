@@ -421,7 +421,7 @@ export class SideViewGame {
           const dungeon = DUNGEONS[this.currentDungeonIndex];
           if (dungeon) {
             const livingCount = this.engine.enemies.filter(e => !e.isDead).length;
-            this.hud?.setWaveInfo(this.waveLabel(dungeon), livingCount);
+            this.syncWaveObjectiveHud(dungeon, livingCount);
             audio.playSlash('heavy');
           }
         }
@@ -688,6 +688,7 @@ export class SideViewGame {
     this.hud?.setDungeonObjective(null);
     this.hud?.setDungeonRelics([]);
     this.hud?.setDungeonContextAction(null);
+    this.hud?.setQuestTrackerInDungeon(false);
     this.waveActive = false;
     this.engine.isTownMode = true;
     this.engine.enemies = [];
@@ -826,7 +827,7 @@ export class SideViewGame {
     const dungeon = DUNGEONS[this.currentDungeonIndex];
     if (dungeon) {
       const livingCount = this.engine.enemies.filter(e => !e.isDead).length;
-      this.hud?.setWaveInfo(this.waveLabel(dungeon), livingCount);
+      this.syncWaveObjectiveHud(dungeon, livingCount);
     }
   }
 
@@ -857,6 +858,7 @@ export class SideViewGame {
     if (!this.engine) return;
     this.waveActive = false;
     this.engine.isTownMode = false;
+    this.hud?.setQuestTrackerInDungeon(true);
     this.engine.player.x = this.engine.isHost ? 260 : 360;
     this.engine.player.y = this.engine.groundY;
     this.engine.player.vx = 0;
@@ -1403,6 +1405,40 @@ export class SideViewGame {
       : `${dungeon.name} - Wave ${n}/${total}`;
   }
 
+  private syncWaveObjectiveHud(dungeon: DungeonDefinition, livingCount?: number): void {
+    if (!this.engine || this.runController || this.engine.isTownMode) return;
+    const enemies = this.engine.enemies || [];
+    const alive = livingCount !== undefined ? livingCount : enemies.filter(e => e.hp > 0 && !e.isDead).length;
+    const total = Math.max(1, enemies.length);
+    const defeated = Math.max(0, total - alive);
+    const hasBoss = enemies.some(e => e.type === 'boss');
+    const hasScheduledSpawns = enemies.some(e => (Number(e.spawnDelay) || 0) > 0 || e.isActive === false) || this.engine.hasPendingEnemyReinforcements();
+    const isComplete = alive === 0 && !hasScheduledSpawns;
+
+    this.hud?.setWaveInfo(this.waveLabel(dungeon), alive);
+    if (enemies.length === 0 && hasScheduledSpawns) {
+      this.hud?.setDungeonObjective({
+        kind: 'kill-all',
+        title: hasBoss ? 'DEFEAT BOSS' : 'KILL ALL',
+        current: 0,
+        target: 1,
+        progressPercent: 0,
+        progressText: 'Spawning enemies...',
+        complete: false,
+      });
+    } else {
+      this.hud?.setDungeonObjective({
+        kind: 'kill-all',
+        title: hasBoss ? 'DEFEAT BOSS' : 'KILL ALL',
+        current: defeated,
+        target: total,
+        progressPercent: Math.min(100, (defeated / total) * 100),
+        progressText: `${defeated}/${total} defeated`,
+        complete: isComplete,
+      });
+    }
+  }
+
   /**
    * Remembers how deep this account has ever gone.
    *
@@ -1506,7 +1542,7 @@ export class SideViewGame {
     }
 
     const aliveEnemies = enemies.filter(e => e.hp > 0 && !e.isDead);
-    this.hud?.setWaveInfo(this.waveLabel(dungeon), aliveEnemies.length);
+    this.syncWaveObjectiveHud(dungeon, aliveEnemies.length);
 
     // Immediately broadcast newly spawned wave to party members.
     // This used to be a dynamic import(); when that chunk failed to load the
@@ -1580,6 +1616,17 @@ export class SideViewGame {
     }
     
     const dungeon = DUNGEONS[this.currentDungeonIndex];
+    if (dungeon) {
+      this.hud?.setDungeonObjective({
+        kind: 'kill-all',
+        title: 'VICTORY',
+        current: 1,
+        target: 1,
+        progressPercent: 100,
+        progressText: 'Dungeon Cleared!',
+        complete: true,
+      });
+    }
     audio.playFanfare();
     this.engine.particles.addFloatingText(this.engine.player.x, this.engine.player.y - 60, 'DUNGEON CLEARED!', '#ffd700', true, 28);
 
@@ -1975,7 +2022,7 @@ export class SideViewGame {
           const hasScheduledSpawns = this.engine.enemies.some(e => (Number(e.spawnDelay) || 0) > 0 || e.isActive === false) || this.engine.hasPendingEnemyReinforcements();
           const dungeon = DUNGEONS[this.currentDungeonIndex];
           if (dungeon && !this.runController) {
-            this.hud?.setWaveInfo(this.waveLabel(dungeon), enemiesRemaining);
+            this.syncWaveObjectiveHud(dungeon, enemiesRemaining);
 
             // Guest watchdog: if the host's state stream goes quiet we have
             // most likely been dropped from the room (mobile reconnect). Ask

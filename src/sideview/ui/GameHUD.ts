@@ -1102,13 +1102,13 @@ export class GameHUD {
       .dungeon-run-status {
         display: none;
         width: min(286px, calc(100vw - 24px));
-        padding: 4px 8px;
+        padding: 5px 9px;
         box-sizing: border-box;
-        background: rgba(15, 10, 22, 0.94);
-        border: 1px solid rgba(212, 175, 55, 0.5);
-        border-top: 1px solid rgba(212, 175, 55, 0.25);
+        background: linear-gradient(180deg, rgba(20, 14, 28, 0.96) 0%, rgba(10, 8, 16, 0.98) 100%);
+        border: 1.5px solid #d4af37;
+        border-top: 1px solid rgba(212, 175, 55, 0.4);
         border-radius: 0 0 4px 4px;
-        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.72);
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.85), 0 0 10px rgba(212, 175, 55, 0.25);
         grid-template-columns: 1fr;
         gap: 3px;
         pointer-events: none;
@@ -1154,38 +1154,43 @@ export class GameHUD {
       }
       .run-objective-title {
         overflow: hidden;
-        color: #f8d66d;
-        font-size: 9px;
+        color: #ffd700;
+        font-size: 9.5px;
         font-weight: 900;
-        letter-spacing: .55px;
+        letter-spacing: .8px;
         line-height: 1.2;
         text-overflow: ellipsis;
         text-transform: uppercase;
         white-space: nowrap;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
       }
       .run-objective-progress {
-        color: #e2e8f0;
+        color: #fef08a;
         font-family: 'Outfit', sans-serif;
-        font-size: 8px;
+        font-size: 8.5px;
         font-weight: 800;
         white-space: nowrap;
+        text-shadow: 0 1px 2px #000;
       }
       .run-objective-meter {
-        height: 5px;
+        height: 6px;
         margin-top: 4px;
         overflow: hidden;
-        background: rgba(0,0,0,.74);
-        border: 1px solid rgba(245, 205, 92, .38);
+        background: rgba(0, 0, 0, 0.85);
+        border: 1px solid rgba(245, 205, 92, .6);
         border-radius: 3px;
+        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8);
       }
       .run-objective-fill {
         width: 0;
         height: 100%;
-        background: linear-gradient(90deg, #b7791f, #f6d365);
+        background: linear-gradient(90deg, #d97706, #fbbf24, #fef08a);
+        box-shadow: 0 0 8px rgba(251, 191, 36, 0.55);
+        border-radius: 2px;
         transition: width .16s linear;
       }
       .run-objective-row.is-complete .run-objective-title { color: #86efac; }
-      .run-objective-row.is-complete .run-objective-fill { background: #4ade80; }
+      .run-objective-row.is-complete .run-objective-fill { background: linear-gradient(90deg, #10b981, #4ade80); box-shadow: 0 0 8px rgba(74, 222, 128, 0.7); }
 
       .run-relic-rail {
         display: none;
@@ -2611,7 +2616,8 @@ export class GameHUD {
       @media (max-width: 860px), (orientation: landscape) and (max-height: 520px) {
         .hud-top-left {
           gap: 4px;
-          max-height: 44vh;
+          max-height: calc(100vh - 160px);
+          overflow: visible;
         }
         .player-status-panel {
           padding: 4px 8px 10px 8px;
@@ -2653,6 +2659,7 @@ export class GameHUD {
           transform: scale(0.85);
           transform-origin: top left;
           margin-top: -6px;
+          width: min(228px, calc(100vw - 18px));
         }
         .dungeon-wave-banner {
           padding: 3px 8px;
@@ -2668,11 +2675,13 @@ export class GameHUD {
           width: min(228px, calc(100vw - 18px));
           padding: 4px 6px;
           gap: 3px;
+          border: 1.5px solid #d4af37;
+          box-shadow: 0 0 8px rgba(212, 175, 55, 0.3), 0 3px 8px rgba(0, 0, 0, 0.8);
         }
         .run-objective-row { grid-template-columns: 26px minmax(0, 1fr); gap: 5px; }
         .run-objective-icon { width: 24px; height: 24px; }
-        .run-objective-title { font-size: 7.8px; }
-        .run-objective-progress { font-size: 7px; }
+        .run-objective-title { font-size: 8.5px; }
+        .run-objective-progress { font-size: 8px; }
         .run-relic-chip { max-width: 67px; height: 19px; font-size: 6.8px; }
         .run-relic-icon { width: 14px; height: 14px; }
         .hud-top-right {
@@ -2715,6 +2724,29 @@ export class GameHUD {
           padding: 4px 8px !important;
           box-sizing: border-box !important;
           display: flex !important;
+        }
+
+        .mini-quest-tracker.is-collapsed,
+        .mini-quest-tracker.in-dungeon:not(.is-expanded) {
+          width: auto !important;
+          max-width: 140px !important;
+          padding: 3px 6px !important;
+          gap: 0 !important;
+          opacity: 0.85;
+        }
+        .mini-quest-tracker.is-collapsed .tracker-title,
+        .mini-quest-tracker.in-dungeon:not(.is-expanded) .tracker-title {
+          border-bottom: none !important;
+          padding-bottom: 0 !important;
+          font-size: 8.5px !important;
+        }
+        .mini-quest-tracker.is-collapsed .tracker-hint,
+        .mini-quest-tracker.is-collapsed .tracker-quest-name,
+        .mini-quest-tracker.is-collapsed .tracker-obj-list,
+        .mini-quest-tracker.in-dungeon:not(.is-expanded) .tracker-hint,
+        .mini-quest-tracker.in-dungeon:not(.is-expanded) .tracker-quest-name,
+        .mini-quest-tracker.in-dungeon:not(.is-expanded) .tracker-obj-list {
+          display: none !important;
         }
 
         .mobile-joystick-area {
@@ -4261,22 +4293,41 @@ export class GameHUD {
     const trackerEl = this.container.querySelector('#mini-quest-tracker') as HTMLElement | null;
     const collapseBtn = this.container.querySelector('#tracker-collapse-btn') as HTMLElement | null;
 
-    // Restore saved collapse preference
+    // Restore saved collapse preference (or collapsed in dungeon)
+    const isInDungeon = !this.engine.isTownMode;
     const savedCollapsed = typeof localStorage !== 'undefined' && localStorage.getItem('rpg_quest_tracker_collapsed') === '1';
-    if (savedCollapsed && trackerEl) {
-      trackerEl.classList.add('is-collapsed');
-      if (collapseBtn) collapseBtn.textContent = '▼';
+    if (trackerEl) {
+      if (isInDungeon || savedCollapsed) {
+        trackerEl.classList.add('is-collapsed');
+        if (collapseBtn) collapseBtn.textContent = '▼';
+      }
+      trackerEl.classList.toggle('in-dungeon', isInDungeon);
     }
 
     const toggleTrackerCollapse = (e?: Event) => {
       if (e) e.stopPropagation();
       if (!trackerEl) return;
-      const isNowCollapsed = trackerEl.classList.toggle('is-collapsed');
-      if (collapseBtn) {
-        collapseBtn.textContent = isNowCollapsed ? '▼' : '▲';
-      }
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('rpg_quest_tracker_collapsed', isNowCollapsed ? '1' : '0');
+      const inDungeonNow = !this.engine.isTownMode || trackerEl.classList.contains('in-dungeon');
+      if (inDungeonNow) {
+        const isCurrentlyExpanded = trackerEl.classList.contains('is-expanded') && !trackerEl.classList.contains('is-collapsed');
+        if (isCurrentlyExpanded) {
+          trackerEl.classList.remove('is-expanded');
+          trackerEl.classList.add('is-collapsed');
+          if (collapseBtn) collapseBtn.textContent = '▼';
+        } else {
+          trackerEl.classList.add('is-expanded');
+          trackerEl.classList.remove('is-collapsed');
+          if (collapseBtn) collapseBtn.textContent = '▲';
+        }
+      } else {
+        const isNowCollapsed = trackerEl.classList.toggle('is-collapsed');
+        trackerEl.classList.remove('is-expanded');
+        if (collapseBtn) {
+          collapseBtn.textContent = isNowCollapsed ? '▼' : '▲';
+        }
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('rpg_quest_tracker_collapsed', isNowCollapsed ? '1' : '0');
+        }
       }
       audio.playClick();
     };
@@ -4287,7 +4338,9 @@ export class GameHUD {
 
     trackerEl?.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (trackerEl.classList.contains('is-collapsed')) {
+      const inDungeonNow = !this.engine.isTownMode || trackerEl.classList.contains('in-dungeon');
+      const isCollapsed = trackerEl.classList.contains('is-collapsed') || (inDungeonNow && !trackerEl.classList.contains('is-expanded'));
+      if (isCollapsed) {
         toggleTrackerCollapse();
         return;
       }
@@ -4516,6 +4569,23 @@ export class GameHUD {
   public setDungeonObjective(objective: DungeonObjectiveHudState | null): void {
     this.dungeonObjective = objective ? { ...objective } : null;
     this.patchDungeonRunHud();
+  }
+
+  public setQuestTrackerInDungeon(inDungeon: boolean): void {
+    const tracker = this.hudNode('mini-quest-tracker');
+    const collapseBtn = this.hudNode('tracker-collapse-btn');
+    if (!tracker) return;
+    tracker.classList.toggle('in-dungeon', inDungeon);
+    if (inDungeon) {
+      tracker.classList.remove('is-expanded');
+      tracker.classList.add('is-collapsed');
+      if (collapseBtn) collapseBtn.textContent = '▼';
+    } else {
+      const savedCollapsed = typeof localStorage !== 'undefined' && localStorage.getItem('rpg_quest_tracker_collapsed') === '1';
+      tracker.classList.toggle('is-collapsed', savedCollapsed);
+      tracker.classList.remove('is-expanded');
+      if (collapseBtn) collapseBtn.textContent = savedCollapsed ? '▼' : '▲';
+    }
   }
 
   /** Replaces the compact mid-run relic strip. The supplied array is never retained. */
@@ -4753,6 +4823,8 @@ export class GameHUD {
         }
       }
       this.patchQuestTracker();
+      const trackerNode = this.hudNode('mini-quest-tracker');
+      if (trackerNode) trackerNode.classList.toggle('in-dungeon', !this.engine.isTownMode);
       this.lastSlowHudPatchAt = now;
     }
 
