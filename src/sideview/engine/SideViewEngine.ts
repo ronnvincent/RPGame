@@ -1504,7 +1504,7 @@ export class SideViewEngine {
       case 'celestial_radiance':
         this.particles.spawnCelestialDivineRadiance(x, this.groundY); break;
       case 'dragon_descent':
-        this.particles.spawnDragonDescent(x, y, facing); break;
+        this.particles.spawnDragonDescent(x, this.groundY, facing); break;
     }
 
     if (entry.summon) {
@@ -1656,7 +1656,7 @@ export class SideViewEngine {
     } else if (summon?.kind === 'shadow_clones') {
       this.particles.spawnShadowClones(x, y, facing, 0);
     } else if (summon?.kind === 'dragon_avatar') {
-      this.particles.spawnDragonDescent(x, y, facing);
+      this.particles.spawnDragonDescent(x, this.groundY, facing);
     } else if (summon?.kind === 'reaper_waves') {
       this.particles.spawnReaperDeathNova(x, this.groundY, facing);
     }
@@ -1979,7 +1979,7 @@ export class SideViewEngine {
       // advertised 150% Shadow Clone at only half of that potency.
       this.particles.spawnShadowClones(p.x, p.y, p.facing, summonDamage);
     } else if (summon.kind === 'dragon_avatar') {
-      this.particles.spawnDragonDescent(p.x, p.y, p.facing);
+      this.particles.spawnDragonDescent(p.x, this.groundY, p.facing);
     } else if (summon.kind === 'reaper_waves') {
       this.particles.spawnReaperDeathNova(p.x, this.groundY, p.facing);
     }
@@ -3855,7 +3855,10 @@ export class SideViewEngine {
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const enemy = this.enemies[i];
       if (enemy.isDead || enemy.hp <= 0) {
-        enemy.isDead = true;
+        if (!enemy.isDead) {
+          enemy.isDead = true;
+          this.onEnemyDefeated(enemy);
+        }
         this.enemyPlayerTargets.delete(enemy.id);
         this.enemies.splice(i, 1);
         continue;
@@ -5611,12 +5614,20 @@ export class SideViewEngine {
       for (const enemy of this.enemies) {
         if (enemy.isDead || !enemy.isActive) continue;
 
-        // Darkrise's invisible mobs: a shimmer at range, solid up close.
+        // Cloaked mobs: semi-transparent spectral shimmer, but always clearly visible so players never lose them
         const cloakAlpha = enemy.isCloaked
-          ? (Math.abs(enemy.x - this.player.x) < 170 ? 0.42 : 0.07)
+          ? (Math.abs(enemy.x - this.player.x) < 170 ? 0.95 : 0.85)
           : 1;
         ctx.save();
         ctx.globalAlpha = cloakAlpha;
+
+        if (enemy.isCloaked) {
+          ctx.strokeStyle = 'rgba(168, 85, 247, 0.7)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(enemy.x, enemy.y - enemy.height * 0.5, Math.max(enemy.width, enemy.height) * 0.55, 0, Math.PI * 2);
+          ctx.stroke();
+        }
 
         this.drawEnemyIntent(ctx, enemy);
         

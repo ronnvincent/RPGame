@@ -697,8 +697,8 @@ export function spawnWaveEnemies(
   const formationId = chooseFormation(encounterSeed, waveIndex);
   const formationFacing: -1 | 1 = playerX <= arenaWidth * 0.5 ? -1 : 1;
   const formationAnchor = formationFacing < 0
-    ? Math.max(playerX + spawnLayout.minimumSeparation, arenaWidth - 180)
-    : Math.min(playerX - spawnLayout.minimumSeparation, 180);
+    ? Math.min(arenaWidth - 120, playerX + spawnLayout.minimumSeparation)
+    : Math.max(120, playerX - spawnLayout.minimumSeparation);
   const formationSlots = buildFormation(formationId, formationAnchor, formationFacing, encounterSeed);
   const authoredEnemySpawns = spawnLayout.enemies.filter(
     x => Math.abs(x - playerX) >= spawnLayout.minimumSeparation,
@@ -712,6 +712,7 @@ export function spawnWaveEnemies(
     ? authoredEnemySpawns
     : spawnLayout.enemies;
   let spawnOffsetIndex = 0;
+  const occupiedSpawnXs = new Set<number>();
 
   wave.enemies.forEach((enemyTemplate) => {
     for (let i = 0; i < enemyTemplate.count; i++) {
@@ -758,11 +759,15 @@ export function spawnWaveEnemies(
       }
       const spawnSide = x >= playerX ? 1 : -1;
 
-      const baseDelay = enemyTemplate.type === 'boss'
-        ? 0
-        : 0.28 + (spawnOffsetIndex + i) * 0.16 + (enemyTemplate.type === 'elite' ? 0.15 : 0);
-      const delayJitter = ((spawnOffsetIndex + i + enemyTemplate.name.length) % 8) * 0.06;
-      const spawnDelay = Number((baseDelay + delayJitter).toFixed(2));
+      let separationAttempts = 0;
+      while (occupiedSpawnXs.has(x) && separationAttempts < 32) {
+        x += 44 * spawnSide;
+        x = Math.max(120, Math.min(arenaWidth - 120, x));
+        separationAttempts += 1;
+      }
+      occupiedSpawnXs.add(x);
+
+      const spawnDelay = 0;
 
       // Every elite and boss dropped, and ordinary monsters dropped 60% of the
       // time, so loot arrived faster than it could mean anything. A boss still
@@ -839,7 +844,7 @@ export function spawnWaveEnemies(
         attackProfileId,
         intentSequence: 0,
         roleActionCooldown: stableEncounterUnit(`${encounterSeed}:${spawnOffsetIndex}:role`) * 2,
-        isActive: spawnDelay <= 0,
+        isActive: true,
         spawnDelay,
         x,
         y: Number.isFinite(groundY) ? groundY : 350,

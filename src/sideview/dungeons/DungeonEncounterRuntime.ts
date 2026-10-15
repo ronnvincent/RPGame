@@ -1003,11 +1003,15 @@ export class DungeonEncounterRuntime {
       this.knownEnemyIds = [...this.knownEnemyIds, ...newIds].sort().slice(0, ENCOUNTER_RUNTIME_LIMITS.maxEnemies);
       this.pushObjective(result, { type: 'enemy_spawned', enemyIds: newIds });
     }
-    for (const enemy of enemies) {
-      if (enemy.alive === false && this.knownEnemyIds.includes(enemy.enemyId) && !this.defeatedEnemyIds.includes(enemy.enemyId)) {
-        this.defeatedEnemyIds.push(enemy.enemyId);
+    // Reconcile living vs defeated enemies:
+    // Any known enemy that is either explicitly marked dead OR was spliced out of the active enemy list
+    // must be immediately credited as defeated so the objective counter (e.g. 5/5) never deadlocks at 4/5.
+    const activeEnemyIds = new Set(enemies.filter(enemy => enemy.alive !== false).map(enemy => enemy.enemyId));
+    for (const knownId of this.knownEnemyIds) {
+      if (!activeEnemyIds.has(knownId) && !this.defeatedEnemyIds.includes(knownId)) {
+        this.defeatedEnemyIds.push(knownId);
         this.defeatedEnemyIds.sort();
-        this.pushObjective(result, { type: 'enemy_defeated', enemyId: enemy.enemyId });
+        this.pushObjective(result, { type: 'enemy_defeated', enemyId: knownId });
       }
     }
     if (sealed && !this.spawnsSealed) {

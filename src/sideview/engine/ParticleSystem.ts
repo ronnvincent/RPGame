@@ -669,7 +669,7 @@ export class ParticleSystem {
   }
 
   private resolveDragonFallback(): HTMLImageElement | null {
-    const fallbackKeys = ['drag_atk1', 'drag_atk2', 'drag_atk3', 'drag_idle', 'drag_run'];
+    const fallbackKeys = ['dragon_atk_1', 'dragon_idle_1', 'dragon_walk_1'];
     for (const key of fallbackKeys) {
       const img = sprites.getImage(key);
       if (this.isDrawableImage(img)) {
@@ -804,13 +804,13 @@ export class ParticleSystem {
   /**
    * 1. DRAGOON: Colossal Spectral Elder Dragon Descent
    */
-  public spawnDragonDescent(x: number, y: number, facing: number) {
+  public spawnDragonDescent(x: number, groundY: number, facing: number) {
     this.triggerScreenShake(24, 1.2);
     this.addScreenFlash('#ff7849', 0.85, 0.04);
     this.dragonAvatars.push({
       id: `dragon_${Date.now()}`,
-      x: x - facing * 40,
-      y: y - 140,
+      x: x + facing * 100,
+      y: groundY,
       facing,
       life: 0,
       maxLife: 2.2
@@ -826,7 +826,7 @@ export class ParticleSystem {
     const spawnGroundExplosion = (waveIndex: number) => {
       if (groundExplosionSpawned || waveIndex < 0) return;
       groundExplosionSpawned = true;
-      this.addGroundExplosion(x + facing * (120 + waveIndex * 80), y - 20, 2.2);
+      this.addGroundExplosion(x + facing * (200 + waveIndex * 85), groundY - 20, 2.2);
     };
     for (let i = 0; i < scheduledWaveCount; i++) {
       this.scheduleTask(() => {
@@ -838,13 +838,14 @@ export class ParticleSystem {
           spawnGroundExplosion(lastExecutedWave);
           return;
         }
-        this.addFlameLash(x + facing * (100 + i * 80), y - 25, facing, 2.5 + i * 0.3);
-        if (quality === 'high') this.addFireLine(x + facing * (80 + i * 70), y - 20, facing, 2.0);
+        const flameX = x + facing * (180 + i * 85);
+        this.addFlameLash(flameX, groundY - 25, facing, 2.5 + i * 0.3);
+        if (quality === 'high') this.addFireLine(flameX - facing * 20, groundY - 20, facing, 2.0);
         lastExecutedWave = i;
         if (i === allowedWaveCount - 1 || i === scheduledWaveCount - 1) spawnGroundExplosion(i);
         this.addImpactBurst(
-          x + facing * (100 + i * 80),
-          y - 20,
+          flameX,
+          groundY - 20,
           quality === 'high' ? 18 : (quality === 'medium' ? 10 : 6),
           '#ff3d00',
           'fire',
@@ -2262,10 +2263,10 @@ export class ParticleSystem {
       } else if (minion.type === 'dragon') {
         ctx.translate(minion.x, minion.y);
         
-        // Shadow directly on the ground under dragon feet
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        // Ground shadow directly under dragon paws
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
         ctx.beginPath();
-        ctx.ellipse(0, 0, 140, 14, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, 2, 160, 15, 0, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.save();
@@ -2273,6 +2274,13 @@ export class ParticleSystem {
         // When minion.facing > 0 (facing right towards enemies), flip horizontally!
         if (minion.facing > 0) {
           ctx.scale(-1, 1);
+          if (minion.state === 'attack' || minion.state === 'attack2') {
+            ctx.rotate(0.06);
+          }
+        } else {
+          if (minion.state === 'attack' || minion.state === 'attack2') {
+            ctx.rotate(-0.06);
+          }
         }
 
         const frameNum = Math.min(40, Math.max(1, Math.floor((minion.animTimer * 16) % 40) + 1));
@@ -2294,14 +2302,14 @@ export class ParticleSystem {
           dragonImg = this.resolveDragonFallback();
         }
 
-        const destW = 480;
-        const destH = 295;
-        const feetYOffset = Math.round(destH * 0.78); // Exactly 230px from top of image
+        const destW = 540;
+        const destH = 330;
+        const feetYOffset = Math.round(destH * (351 / 445)); // Exactly 260px from top of image
 
         if (this.isDrawableImage(dragonImg)) {
           ctx.shadowColor = '#ff5722';
           ctx.shadowBlur = expensiveEffects ? 24 : 0;
-          // Mathematical precision: feet land perfectly on y = 0
+          // Mathematical precision: feet land perfectly on ground surface y = 0
           ctx.drawImage(dragonImg, -destW * 0.55, -feetYOffset, destW, destH);
         }
         ctx.restore();
@@ -2463,7 +2471,22 @@ export class ParticleSystem {
       const alpha = Math.min(1, Math.sin(progress * Math.PI) * 1.5);
       ctx.globalAlpha = alpha;
       ctx.translate(d.x, d.y);
-      if (d.facing < 0) ctx.scale(-1, 1);
+
+      // Contact shadow planted firmly on the ground surface
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+      ctx.beginPath();
+      ctx.ellipse(0, 2, 175, 16, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.save();
+      // Raw dragon sprite faces LEFT by default!
+      // When facing right (> 0), flip horizontally and apply a forward-downward attack tilt
+      if (d.facing > 0) {
+        ctx.scale(-1, 1);
+        ctx.rotate(0.08);
+      } else {
+        ctx.rotate(-0.08);
+      }
 
       const frameNum = Math.min(40, Math.max(1, Math.floor(progress * 40) + 1));
       let dragonImg = sprites.getImage(`dragon_atk_${frameNum}`);
@@ -2473,8 +2496,14 @@ export class ParticleSystem {
       if (this.isDrawableImage(dragonImg)) {
         const destW = 540;
         const destH = 330;
-        ctx.drawImage(dragonImg, -destW * 0.35, -destH * 0.55, destW, destH);
+        // 351 / 445 is the exact paw contact line in the elder dragon sprite sheet
+        const feetYOffset = Math.round(destH * (351 / 445)); // Exactly 260px
+        ctx.shadowColor = '#ff5722';
+        ctx.shadowBlur = expensiveEffects ? 24 : 0;
+        // Paws land firmly and realistically on the ground line
+        ctx.drawImage(dragonImg, -destW * 0.55, -feetYOffset, destW, destH);
       }
+      ctx.restore();
       ctx.restore();
     });
 

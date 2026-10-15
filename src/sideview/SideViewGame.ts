@@ -106,6 +106,7 @@ export class SideViewGame {
   public coopLobby: CoopLobbyUI | null = null;
   private currentDungeonIndex: number = 0;
   private currentWaveIndex: number = 0;
+  private currentWaveTotalEnemies: number = 0;
   private readonly runRelics = new RelicRegistry(RUN_RELIC_DEFINITIONS);
   private readonly encounter = createDungeonEncounterRuntime(gameplaySprites);
   private runController: DungeonRunController | null = null;
@@ -1119,6 +1120,7 @@ export class SideViewGame {
           this.engine.player.x,
           this.engine.groundY,
         );
+        this.currentWaveTotalEnemies = this.engine.enemies.length;
         this.engine.prepareEnemiesForRunRoom(node.kind);
         this.waveActive = true;
         const boss = this.engine.enemies.find(enemy => enemy.type === 'boss');
@@ -1342,13 +1344,16 @@ export class SideViewGame {
         const encSnapshot = this.encounter.snapshot();
         const encSucceeded = encSnapshot?.objectiveStatus === 'succeeded';
 
-        if (runtime?.status === 'active' && encSucceeded && livingEnemies === 0) {
+        if (runtime?.status === 'active' && (encSucceeded || livingEnemies === 0)) {
           if (node.objective && runtime.objectiveState && runtime.objectiveState.status !== 'succeeded') {
             if (node.objective.type === 'destroy_nests') {
               for (const nestId of node.objective.nestObjectIds) {
                 this.dispatchRun({ type: 'objective_event', event: { type: 'world_object_destroyed', objectId: nestId } });
               }
             } else if (node.objective.type === 'kill_all' && runtime.objectiveState.type === 'kill_all') {
+              if (!runtime.objectiveState.spawnsSealed) {
+                this.dispatchRun({ type: 'objective_event', event: { type: 'spawns_sealed' } });
+              }
               for (const enemyId of runtime.objectiveState.spawnedEnemyIds) {
                 this.dispatchRun({ type: 'objective_event', event: { type: 'enemy_defeated', enemyId } });
               }
@@ -1469,7 +1474,7 @@ export class SideViewGame {
     if (!this.engine || this.runController || this.engine.isTownMode) return;
     const enemies = this.engine.enemies || [];
     const alive = livingCount !== undefined ? livingCount : enemies.filter(e => e.hp > 0 && !e.isDead).length;
-    const total = Math.max(1, enemies.length);
+    const total = Math.max(1, this.currentWaveTotalEnemies || enemies.length);
     const defeated = Math.max(0, total - alive);
     const hasBoss = enemies.some(e => e.type === 'boss');
     const hasScheduledSpawns = enemies.some(e => (Number(e.spawnDelay) || 0) > 0 || e.isActive === false) || this.engine.hasPendingEnemyReinforcements();
@@ -1594,6 +1599,7 @@ export class SideViewGame {
     }
 
     this.engine.enemies = enemies;
+    this.currentWaveTotalEnemies = enemies.length;
     audio.playSlash('heavy');
 
     const bossEnemy = enemies.find(e => e.type === 'boss');
