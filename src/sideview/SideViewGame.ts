@@ -126,6 +126,7 @@ export class SideViewGame {
   private voteWatchdogTimer: number | null = null;
   private waveClearTimer: number | null = null;
   private hostVoteTimer: number | null = null;
+  private waveCompletionWatchdogTimer: number | null = null;
   private localVotedModeId: string | null = null;
   private lastTime: number = 0;
   private isRunning: boolean = false;
@@ -900,6 +901,10 @@ export class SideViewGame {
     if (this.hostVoteTimer) {
       window.clearTimeout(this.hostVoteTimer);
       this.hostVoteTimer = null;
+    }
+    if (this.waveCompletionWatchdogTimer) {
+      window.clearTimeout(this.waveCompletionWatchdogTimer);
+      this.waveCompletionWatchdogTimer = null;
     }
     this.hud?.hideGameModeVotingModal();
     this.dungeonFlowState = 'WAVE_ACTIVE';
@@ -2038,10 +2043,35 @@ export class SideViewGame {
               }
             }
 
+            // Fail-safe watchdog: if living enemies reach 0 during WAVE_ACTIVE, never let the dungeon freeze
+            if (!this.runController && this.engine.isHost && this.waveActive && this.dungeonFlowState === 'WAVE_ACTIVE' && !this.isTransitioningWave && enemiesRemaining === 0) {
+              if (!this.waveCompletionWatchdogTimer) {
+                this.waveCompletionWatchdogTimer = window.setTimeout(() => {
+                  this.waveCompletionWatchdogTimer = null;
+                  if (this.engine?.isHost && this.waveActive && this.dungeonFlowState === 'WAVE_ACTIVE' && !this.isTransitioningWave) {
+                    const currentAlive = this.engine.enemies.filter(e => e.hp > 0 && !e.isDead).length;
+                    if (currentAlive === 0) {
+                      console.warn('[Dungeon] Watchdog: 0 living enemies remaining, clearing phantom entities and force-advancing wave');
+                      this.engine.enemies = [];
+                      this.isTransitioningWave = true;
+                      this.handleWaveActiveComplete();
+                    }
+                  }
+                }, 1800);
+              }
+            } else if (enemiesRemaining > 0 && this.waveCompletionWatchdogTimer) {
+              window.clearTimeout(this.waveCompletionWatchdogTimer);
+              this.waveCompletionWatchdogTimer = null;
+            }
+
             // Bulletproof wave progression with sequential state machine:
             // 1. WAVE_ACTIVE: Checks enemiesRemaining === 0 AND all scheduled spawns have finished.
             // 2. isTransitioningWave lock flag prevents duplicate triggers from simultaneous kills.
             if (!this.runController && this.engine.isHost && this.waveActive && this.dungeonFlowState === 'WAVE_ACTIVE' && !this.isTransitioningWave && enemiesRemaining === 0 && !hasScheduledSpawns) {
+              if (this.waveCompletionWatchdogTimer) {
+                window.clearTimeout(this.waveCompletionWatchdogTimer);
+                this.waveCompletionWatchdogTimer = null;
+              }
               this.isTransitioningWave = true;
               this.handleWaveActiveComplete();
             }
@@ -2095,6 +2125,10 @@ export class SideViewGame {
     audio.playFanfare();
     this.hud?.showToast('Wave Cleared!');
 
+    if (this.waveCompletionWatchdogTimer) {
+      window.clearTimeout(this.waveCompletionWatchdogTimer);
+      this.waveCompletionWatchdogTimer = null;
+    }
     if (this.waveClearTimer) {
       window.clearTimeout(this.waveClearTimer);
     }

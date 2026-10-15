@@ -23,9 +23,30 @@
     <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;800;900&family=Inter:wght@400;600;700;800&family=Outfit:wght@500;700;800;900&display=swap">
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;800;900&family=Inter:wght@400;600;700;800&family=Outfit:wght@500;700;800;900&display=swap" rel="stylesheet">
     <style>
-      * {
+      *, *::before, *::after {
         box-sizing: border-box;
         -webkit-tap-highlight-color: transparent;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+      }
+      /* Authentic pixel-art RPG scrollbars across entire application */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+        background: #0e0c15;
+      }
+      ::-webkit-scrollbar-track {
+        background: #0e0c15;
+        border-left: 1px solid #1c1828;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #3c3222;
+        border: 1px solid #c8a048;
+        box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.2), inset -1px -1px 0 rgba(0, 0, 0, 0.5);
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #54452e;
+        border-color: #ffd700;
       }
       html, body {
         position: fixed;

@@ -1057,6 +1057,12 @@ export class SpriteManager {
       this.addImage(`reaper_idle_${i}`, `/assets/reaper/sprites/Idle/Bringer-of-Death_Idle_${i}.png`);
       this.addImage(`reaper_walk_${i}`, `/assets/reaper/sprites/Walk/Bringer-of-Death_Walk_${i}.png`);
     }
+    for (let i = 1; i <= 3; i++) {
+      this.addImage(`reaper_hurt_${i}`, `/assets/reaper/sprites/Hurt/Bringer-of-Death_Hurt_${i}.png`);
+    }
+    for (let i = 1; i <= 10; i++) {
+      this.addImage(`reaper_death_${i}`, `/assets/reaper/sprites/Death/Bringer-of-Death_Death_${i}.png`);
+    }
 
     // Chest frames are registered below as th_chest_unlocked_set:* and remain
     // lazy until an authored scene actually displays one.
@@ -2364,24 +2370,34 @@ export class SpriteManager {
   ) {
     const lower = mobType.toLowerCase();
 
+    // 0. Epic Bosses: Render authentic boss spritesheets before generic fallbacks
+    if (isBoss) {
+      if (lower.includes('nightborne') || lower.includes('lich') || lower.includes('malakar') || lower.includes('void overlord')) {
+        this.drawNightBorneBoss(ctx, x, y, state, facing, hitStun);
+        return;
+      }
+      if (lower.includes('reaper') || lower.includes('bringer') || lower.includes('behemoth') || lower.includes('mordred')) {
+        this.drawReaperBoss(ctx, x, y, state, facing, hitStun);
+        return;
+      }
+      if (lower.includes('grimjaw') || lower.includes('gallet forge overlord') || lower.includes('warlord')) {
+        this.drawOrcMob(ctx, x, y, state, facing, true, hitStun);
+        return;
+      }
+    }
+
+    // 0b. Distinct Orc Mobs
+    if (lower === 'orc berserker' || lower.includes('orc berserker')) {
+      this.drawOrcMob(ctx, x, y, state, facing, false, hitStun);
+      return;
+    }
+
     // Dungeon enemies use an exact, licensed visual registry. Keyword
     // fallbacks below remain only for legacy/free-roam names that are not part
     // of a dungeon definition.
     const registeredVisual = resolveEnemyVisual(mobType);
     if (registeredVisual) {
       this.drawRegisteredEnemyVisual(ctx, x, y, registeredVisual, state, facing, isBoss, hitStun);
-      return;
-    }
-
-    // 0. Epic Boss: NightBorne Lord of Darkness
-    if (lower.includes('nightborne') || lower.includes('lich') || lower.includes('dragon') || (isBoss && lower.includes('malakar'))) {
-      this.drawNightBorneBoss(ctx, x, y, state, facing, hitStun);
-      return;
-    }
-
-    // 0b. Reaper / Bringer of Death Boss
-    if (lower.includes('reaper') || lower.includes('bringer') || lower.includes('leviathan') || lower.includes('behemoth') || lower.includes('overlord')) {
-      this.drawReaperBoss(ctx, x, y, state, facing, hitStun);
       return;
     }
 

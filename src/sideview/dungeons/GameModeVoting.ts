@@ -22,6 +22,7 @@ export interface GameModeOption {
   subtitle: string;
   description: string;
   icon: string;
+  iconPath?: string;
   badge: string;
   color: string;
   modifiers: GameModeModifiers;
@@ -53,7 +54,8 @@ export const ALL_GAME_MODES: readonly GameModeOption[] = Object.freeze([
     name: 'Berserker Rush',
     subtitle: 'High Risk, Colossal Bounty',
     description: 'Enemies deal +35% damage, but players gain +25% attack speed and +60% Gold & EXP.',
-    icon: '⚡',
+    icon: '⚔️',
+    iconPath: '/assets/rpg-icons/32x32/sword_01c.png',
     badge: 'HIGH RISK',
     color: '#ef4444',
     modifiers: {
@@ -68,7 +70,8 @@ export const ALL_GAME_MODES: readonly GameModeOption[] = Object.freeze([
     name: 'Golden Treasury',
     subtitle: 'Wealth Beyond Measure',
     description: 'Enemies have +40% HP, but drop +100% Gold and double gem find chance.',
-    icon: '💰',
+    icon: '🪙',
+    iconPath: '/assets/rpg-icons/32x32/coin_01a.png',
     badge: 'BOUNTY',
     color: '#f59e0b',
     modifiers: {
@@ -82,7 +85,8 @@ export const ALL_GAME_MODES: readonly GameModeOption[] = Object.freeze([
     name: 'Chrono Surge',
     subtitle: 'Accelerated Battlefield',
     description: 'Movement and attack speed +30% for all heroes, and skill cooldowns are reduced by 25%.',
-    icon: '⏳',
+    icon: '⚡',
+    iconPath: '/assets/rpg-icons/32x32/boots_01a.png',
     badge: 'FAST PACED',
     color: '#06b6d4',
     modifiers: {
@@ -95,7 +99,8 @@ export const ALL_GAME_MODES: readonly GameModeOption[] = Object.freeze([
     name: 'Vampiric Pact',
     subtitle: 'Life for Life',
     description: 'Defeating any monster restores 6% Max HP. Monsters gain +15% attack power.',
-    icon: '🩸',
+    icon: '🧪',
+    iconPath: '/assets/rpg-icons/32x32/potion_01a.png',
     badge: 'SUSTAIN',
     color: '#ec4899',
     modifiers: {
@@ -108,7 +113,8 @@ export const ALL_GAME_MODES: readonly GameModeOption[] = Object.freeze([
     name: 'Titan Onslaught',
     subtitle: 'Fewer, Stronger Beasts',
     description: 'Monsters spawn as hulking titans with +70% HP, but grant +80% EXP and rare loot.',
-    icon: '👹',
+    icon: '💀',
+    iconPath: '/assets/rpg-icons/32x32/skull_01a.png',
     badge: 'ELITE TRIAL',
     color: '#8b5cf6',
     modifiers: {
@@ -122,7 +128,8 @@ export const ALL_GAME_MODES: readonly GameModeOption[] = Object.freeze([
     name: 'Glass Arsenal',
     subtitle: 'Lethal Lethality',
     description: 'Both heroes and monsters deal +50% damage. Every swing is devastating.',
-    icon: '💥',
+    icon: '🗡️',
+    iconPath: '/assets/rpg-icons/32x32/sword_01a.png',
     badge: 'LETHAL',
     color: '#f97316',
     modifiers: {
@@ -135,7 +142,8 @@ export const ALL_GAME_MODES: readonly GameModeOption[] = Object.freeze([
     name: 'Arcane Tempest',
     subtitle: 'Spellstorm Unleashed',
     description: 'Skill cooldowns are reduced by 40%, but monsters move 20% faster.',
-    icon: '🌀',
+    icon: '📜',
+    iconPath: '/assets/rpg-icons/32x32/scroll_01a.png',
     badge: 'COOLDOWNS',
     color: '#3b82f6',
     modifiers: {
@@ -149,6 +157,7 @@ export const ALL_GAME_MODES: readonly GameModeOption[] = Object.freeze([
     subtitle: 'Steadfast Defense',
     description: 'Monsters deal -25% damage. A steady, resilient trial with +30% Gold rewards.',
     icon: '🛡️',
+    iconPath: '/assets/rpg-icons/32x32/shield_01a.png',
     badge: 'DEFENSIVE',
     color: '#10b981',
     modifiers: {

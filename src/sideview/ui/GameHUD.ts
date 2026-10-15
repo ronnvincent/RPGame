@@ -797,15 +797,18 @@ export class GameHUD {
       }
 
       /* Game Mode / Wave Modifier Voting Modal */
+      #gamemode-voting-modal.pause-back {
+        background: rgba(6, 8, 14, 0.94);
+        backdrop-filter: blur(8px);
+      }
       .gamemode-voting-panel {
-        width: min(720px, 94vw);
+        width: min(740px, 95vw);
         max-height: 92vh;
-        padding: 20px 24px;
-        background: rgba(15, 17, 24, 0.98);
-        border: 1px solid rgba(212, 175, 55, 0.35);
-        border-top: 2px solid #f59e0b;
-        border-radius: 6px;
-        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.85);
+        padding: 22px 26px;
+        background: url('/assets/kenney-rpg-ui/panel_brown.png') repeat;
+        border: 3px solid #3b2414;
+        box-shadow: inset 0 0 0 2px #6b4c2a, inset 0 0 0 4px #23160c, 0 16px 40px rgba(0, 0, 0, 0.96);
+        border-radius: 4px;
         display: flex;
         flex-direction: column;
         gap: 14px;
@@ -816,42 +819,45 @@ export class GameHUD {
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 4px;
+        gap: 5px;
       }
       .gamemode-badge {
         font-family: 'Cinzel', serif;
         font-size: 11px;
         font-weight: 800;
         letter-spacing: 1.5px;
-        color: #fbbf24;
-        background: rgba(245, 158, 11, 0.16);
-        border: 1px solid rgba(245, 158, 11, 0.5);
-        padding: 3px 12px;
-        border-radius: 999px;
+        color: #ffd700;
+        background: #23160c;
+        border: 2px solid #c8a048;
+        padding: 4px 14px;
+        border-radius: 4px;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 2px 4px rgba(0,0,0,0.6);
       }
       .gamemode-title {
         font-family: 'Cinzel', serif;
-        font-size: 21px;
+        font-size: 23px;
         font-weight: 900;
         letter-spacing: 2px;
-        color: #f8fafc;
+        color: #fff4d0;
         margin: 2px 0 0 0;
-        text-shadow: 0 2px 4px rgba(0,0,0,0.9);
+        text-shadow: 2px 2px 0 #180f08, -1px -1px 0 #180f08, 0 4px 8px rgba(0,0,0,0.9);
       }
       .gamemode-subtitle {
         font-family: 'Outfit', sans-serif;
         font-size: 12.5px;
-        color: #94a3b8;
+        color: #e2d3b5;
         margin: 0;
+        text-shadow: 1px 1px 0 #1a120b;
       }
       .gamemode-timer-container {
         display: flex;
         flex-direction: column;
         gap: 6px;
-        background: rgba(0, 0, 0, 0.45);
-        padding: 8px 12px;
-        border-radius: 6px;
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: url('/assets/kenney-rpg-ui/panelInset_brown.png') repeat;
+        padding: 10px 14px;
+        border-radius: 4px;
+        border: 2px solid #2e1d11;
+        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.7);
       }
       .gamemode-timer-meta {
         display: flex;
@@ -859,31 +865,34 @@ export class GameHUD {
         align-items: center;
         font-family: 'Cinzel', serif;
         font-size: 12px;
-        font-weight: 700;
+        font-weight: 800;
         letter-spacing: 1px;
       }
       .gamemode-timer-label {
-        color: #cbd5e1;
+        color: #f1e2c3;
+        text-shadow: 1px 1px 0 #000;
       }
       .gamemode-timer-text {
-        color: #fbbf24;
+        color: #ffd700;
         font-family: 'Outfit', sans-serif;
-        font-size: 14px;
+        font-size: 15px;
         font-weight: 900;
+        text-shadow: 1px 1px 0 #000;
       }
       .gamemode-timer-track {
         width: 100%;
-        height: 8px;
-        background: rgba(0, 0, 0, 0.6);
-        border-radius: 4px;
+        height: 12px;
+        background: #140d07;
+        border-radius: 2px;
         overflow: hidden;
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        border: 2px solid #3d2616;
+        box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.8);
       }
       .gamemode-timer-bar {
         height: 100%;
-        background: linear-gradient(90deg, #10b981 0%, #f59e0b 60%, #ef4444 100%);
-        border-radius: 4px;
-        box-shadow: 0 0 6px rgba(245, 158, 11, 0.4);
+        background: linear-gradient(90deg, #34d399 0%, #fbbf24 65%, #f87171 100%);
+        border-radius: 1px;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), inset 0 -1px 0 rgba(0, 0, 0, 0.4);
         transition: width 0.05s linear;
       }
       .gamemode-options-grid {
@@ -892,43 +901,53 @@ export class GameHUD {
         gap: 12px;
       }
       .gamemode-option-card {
-        background: rgba(22, 25, 36, 0.95);
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 6px;
+        background: url('/assets/kenney-rpg-ui/panelInset_brown.png') repeat;
+        border: 2px solid #4a3320;
+        border-radius: 4px;
         padding: 14px 10px;
         display: flex;
         flex-direction: column;
         align-items: center;
         text-align: center;
         cursor: pointer;
-        transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+        transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
         position: relative;
         user-select: none;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08);
       }
       .gamemode-option-card:hover {
         transform: translateY(-2px);
-        border-color: rgba(245, 158, 11, 0.6);
-        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6);
+        border-color: #ffd700;
+        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.8), 0 0 0 1px #ffd700;
       }
       .gamemode-option-card:active {
         transform: scale(0.98);
       }
       .gamemode-option-card.selected {
-        border-color: #ffd54f !important;
-        background: rgba(36, 32, 50, 0.98) !important;
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6) !important;
-        outline: 1px solid rgba(255, 213, 79, 0.7);
+        border-color: #ffd700 !important;
+        background: #3a2717 !important;
+        box-shadow: 0 0 0 2px #ffd700, 0 6px 16px rgba(0, 0, 0, 0.85) !important;
+        outline: none;
       }
       .gamemode-option-card.winner {
-        border-color: #10b981 !important;
-        background: rgba(18, 38, 28, 0.98) !important;
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6) !important;
-        outline: 1px solid rgba(16, 185, 129, 0.7);
+        border-color: #34d399 !important;
+        background: #1c3322 !important;
+        box-shadow: 0 0 0 2px #34d399, 0 6px 16px rgba(0, 0, 0, 0.85) !important;
+        outline: none;
       }
       .gamemode-card-icon {
-        font-size: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 40px;
         margin-bottom: 6px;
-        filter: drop-shadow(0 2px 8px rgba(0,0,0,0.8));
+      }
+      .gamemode-card-icon-img {
+        width: 36px;
+        height: 36px;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+        filter: drop-shadow(2px 2px 0 #140d07);
       }
       .gamemode-card-badge {
         font-family: 'Cinzel', serif;
@@ -936,50 +955,54 @@ export class GameHUD {
         font-weight: 800;
         letter-spacing: 0.8px;
         padding: 2px 8px;
-        border-radius: 4px;
-        border: 1px solid transparent;
+        border-radius: 3px;
+        border: 1px solid #c8a048;
+        background: #23160c;
+        color: #ffd700;
         margin-bottom: 6px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
       }
       .gamemode-card-title {
         font-family: 'Cinzel', serif;
         font-size: 13.5px;
         font-weight: 800;
         letter-spacing: 0.8px;
-        color: #f8fafc;
+        color: #fff2c8;
         margin: 0 0 6px 0;
-        text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+        text-shadow: 1px 1px 0 #180f08;
       }
       .gamemode-card-desc {
         font-family: 'Outfit', sans-serif;
         font-size: 11px;
-        color: #cbd5e1;
+        color: #d8c8af;
         line-height: 1.4;
         margin: 0 0 10px 0;
         flex: 1;
+        text-shadow: 1px 1px 0 #0f0a05;
       }
       .gamemode-card-votes {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        padding: 3px 10px;
-        border-radius: 999px;
+        padding: 4px 12px;
+        border-radius: 3px;
         font-family: 'Outfit', sans-serif;
         font-size: 10.5px;
         font-weight: 800;
         letter-spacing: 0.5px;
-        background: rgba(0, 0, 0, 0.5);
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        color: #94a3b8;
-        transition: all 0.2s ease;
+        background: #1e130a;
+        border: 1px solid #5a3d24;
+        color: #c4b090;
+        transition: all 0.15s ease;
       }
       .gamemode-card-votes.has-votes {
-        background: rgba(245, 158, 11, 0.22);
-        border-color: #f59e0b;
-        color: #fbbf24;
-        box-shadow: 0 0 10px rgba(245, 158, 11, 0.35);
+        background: #472f1a;
+        border-color: #ffd700;
+        color: #ffd700;
+        box-shadow: 0 0 8px rgba(255, 215, 0, 0.35);
       }
       .vote-winner-badge {
-        color: #10b981;
+        color: #34d399;
         font-weight: 900;
         letter-spacing: 1px;
       }
@@ -989,8 +1012,9 @@ export class GameHUD {
       .gamemode-status-text {
         font-family: 'Outfit', sans-serif;
         font-size: 12px;
-        font-weight: 600;
-        color: #fbbf24;
+        font-weight: 700;
+        color: #ffd700;
+        text-shadow: 1px 1px 0 #140d07;
       }
 
       @media (max-height: 500px) {
@@ -1021,7 +1045,7 @@ export class GameHUD {
           font-size: 11px;
         }
         .gamemode-timer-track {
-          height: 5px;
+          height: 6px;
         }
         .gamemode-options-grid {
           gap: 8px;
@@ -1030,8 +1054,12 @@ export class GameHUD {
           padding: 6px 6px;
         }
         .gamemode-card-icon {
-          font-size: 22px;
+          min-height: 26px;
           margin-bottom: 2px;
+        }
+        .gamemode-card-icon-img {
+          width: 24px;
+          height: 24px;
         }
         .gamemode-card-badge {
           font-size: 8px;
@@ -5533,7 +5561,9 @@ export class GameHUD {
     if (grid) {
       grid.innerHTML = packet.options.map(opt => `
         <div class="gamemode-option-card" id="gamemode-card-${opt.id}" data-mode-id="${escapeHtmlAttribute(opt.id)}" tabindex="0" role="button" aria-label="Vote for ${escapeHtmlAttribute(opt.name)}">
-          <div class="gamemode-card-icon" style="color: ${opt.color};">${opt.icon}</div>
+          <div class="gamemode-card-icon" style="color: ${opt.color};">
+            ${opt.iconPath ? `<img class="gamemode-card-icon-img" src="${escapeHtmlAttribute(opt.iconPath)}" alt="${escapeHtmlAttribute(opt.name)}" />` : opt.icon}
+          </div>
           <span class="gamemode-card-badge" style="background: ${opt.color}22; border-color: ${opt.color}; color: ${opt.color};">${escapeHtml(opt.badge)}</span>
           <h3 class="gamemode-card-title">${escapeHtml(opt.name)}</h3>
           <p class="gamemode-card-desc">${escapeHtml(opt.description)}</p>

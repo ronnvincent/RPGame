@@ -191,7 +191,7 @@ const MIMIC = stripProfile('luiz-mimic', 'mimic', 'mimic', 'mimic',
   });
 
 function fantasyOne(id: string, species: string, prefix: string): EnemyVisualProfile {
-  const root = species === 'skeleton' ? 'Skeleton' : species === 'goblin' ? 'Goblin' : 'Flying eye';
+  const root = species === 'skeleton' ? 'Skeleton' : species === 'goblin' ? 'Goblin' : species === 'mushroom' ? 'Mushroom' : 'Flying eye';
   const idleFile = species === 'flying eye' ? 'Flight.png' : 'Idle.png';
   return {
     id, species, silhouetteId: species, renderer: 'fantasy-one', variant: prefix,
@@ -271,12 +271,12 @@ const PINK_STAR = sequence('treasure-pink-star', 'starfish', 'starfish', 'pixelf
   });
 
 const BOAR = stripProfile('high-forest-boar', 'boar', 'boar', 'boar',
-  { width: 32, height: 32, feetGap: 0, centreOffset: 0 }, 2.2, {
-    idle: { src: '/assets/high-forest/Mob/Boar/Idle/Idle-Sheet.png', frames: 6, fps: 8 },
-    move: { src: '/assets/high-forest/Mob/Boar/Walk/Walk-Base-Sheet.png', frames: 9, fps: 10 },
-    attack: { src: '/assets/high-forest/Mob/Boar/Run/Run-Sheet.png', frames: 9, fps: 12 },
-    hit: { src: '/assets/high-forest/Mob/Boar/Hit-Vanish/Hit-Sheet.png', frames: 6, fps: 10 },
-    dead: { src: '/assets/high-forest/Mob/Boar/Hit-Vanish/Hit-Sheet.png', frames: 6, fps: 8 },
+  { width: 48, height: 32, feetGap: 0, centreOffset: 0 }, 2.0, {
+    idle: { src: '/assets/high-forest/Mob/Boar/Idle/Idle-Sheet.png', frames: 4, fps: 8 },
+    move: { src: '/assets/high-forest/Mob/Boar/Walk/Walk-Base-Sheet.png', frames: 6, fps: 10 },
+    attack: { src: '/assets/high-forest/Mob/Boar/Run/Run-Sheet.png', frames: 6, fps: 12 },
+    hit: { src: '/assets/high-forest/Mob/Boar/Hit-Vanish/Hit-Sheet.png', frames: 4, fps: 10 },
+    dead: { src: '/assets/high-forest/Mob/Boar/Hit-Vanish/Hit-Sheet.png', frames: 4, fps: 8 },
   }, 'brullov-high-forest');
 
 const BEE = stripProfile('high-forest-bee', 'bee', 'bee', 'bee',
@@ -289,17 +289,18 @@ const BEE = stripProfile('high-forest-bee', 'bee', 'bee', 'bee',
   }, 'brullov-high-forest');
 
 const SNAIL = stripProfile('high-forest-snail', 'snail', 'snail', 'snail',
-  { width: 32, height: 32, feetGap: 0, centreOffset: 0 }, 2.0, {
-    idle: { src: '/assets/high-forest/Mob/Snail/walk-Sheet.png', frames: 12, fps: 8 },
-    move: { src: '/assets/high-forest/Mob/Snail/walk-Sheet.png', frames: 12, fps: 8 },
-    attack: { src: '/assets/high-forest/Mob/Snail/Hide-Sheet.png', frames: 12, fps: 10 },
-    hit: { src: '/assets/high-forest/Mob/Snail/Hide-Sheet.png', frames: 12, fps: 12 },
-    dead: { src: '/assets/high-forest/Mob/Snail/Dead-Sheet.png', frames: 12, fps: 8 },
+  { width: 48, height: 32, feetGap: 0, centreOffset: 0 }, 2.0, {
+    idle: { src: '/assets/high-forest/Mob/Snail/walk-Sheet.png', frames: 8, fps: 8 },
+    move: { src: '/assets/high-forest/Mob/Snail/walk-Sheet.png', frames: 8, fps: 8 },
+    attack: { src: '/assets/high-forest/Mob/Snail/Hide-Sheet.png', frames: 8, fps: 10 },
+    hit: { src: '/assets/high-forest/Mob/Snail/Hide-Sheet.png', frames: 8, fps: 12 },
+    dead: { src: '/assets/high-forest/Mob/Snail/Dead-Sheet.png', frames: 8, fps: 8 },
   }, 'brullov-high-forest');
 
 const SKELETON = fantasyOne('fantasy-skeleton', 'skeleton', 'skel');
 const GOBLIN = fantasyOne('fantasy-goblin', 'goblin', 'gob');
 const EYE = fantasyOne('fantasy-eye', 'flying eye', 'eye');
+const MUSHROOM = fantasyOne('fantasy-mushroom', 'mushroom', 'mush');
 const KNIGHT = hero('hero-knight', 'knight');
 const HUNTRESS = hero('hero-huntress', 'huntress');
 const WIZARD = hero('hero-evil-wizard', 'evil-wizard');
@@ -311,11 +312,21 @@ const BOSS_WIZARD = { ...WIZARD, id: 'boss-wizard', silhouetteId: 'arch-lich', s
 const BOSS_BERSERKER = { ...BERSERKER, id: 'boss-berserker', silhouetteId: 'warlord', scale: 1.25, bossScale: 1.5 };
 const BOSS_SPIDER = { ...SPIDER, id: 'boss-spider', silhouetteId: 'giant-spider', scale: 4.2, bossScale: 4.2 };
 const BOSS_THING = { ...SWAMP_THING, id: 'boss-behemoth', silhouetteId: 'moon-behemoth', scale: 3.5, bossScale: 3.5 };
-const DRAGON: EnemyVisualProfile = {
-  id: 'elder-dragon', species: 'dragon', silhouetteId: 'elder-dragon', renderer: 'frame-sequence',
-  variant: 'elder-dragon', sourceId: 'elder-dragon', scale: 0.55, bossScale: 0.55,
-  requiredAssets: [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `/assets/elder_dragon/idle/${n}.png`),
-};
+const DRAGON: EnemyVisualProfile = sequence(
+  'elder-dragon',
+  'dragon',
+  'elder-dragon',
+  'elder-dragon',
+  [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `/assets/elder_dragon/idle/${n}.png`),
+  0.55,
+  {
+    idle: Array.from({ length: 40 }, (_, i) => `/assets/elder_dragon/idle/${i + 1}.png`),
+    move: Array.from({ length: 40 }, (_, i) => `/assets/elder_dragon/walk/${i + 1}.png`),
+    attack: Array.from({ length: 40 }, (_, i) => `/assets/elder_dragon/atk/${i + 1}.png`),
+    hit: Array.from({ length: 40 }, (_, i) => `/assets/elder_dragon/idle/${i + 1}.png`),
+    dead: Array.from({ length: 40 }, (_, i) => `/assets/elder_dragon/idle/${i + 1}.png`),
+  },
+);
 
 function fallback(base: EnemyVisualProfile, note: string): EnemyVisualProfile {
   return { ...base, intentionalFallback: note };
@@ -329,13 +340,13 @@ export const ENEMY_VISUAL_BY_NAME: Readonly<Record<string, EnemyVisualProfile>> 
   'orc berserker': BERSERKER,
   'chief warlord grimjaw': BOSS_BERSERKER,
   'skeleton warrior': SKELETON,
-  'skeleton archer': SKELETON,
+  'skeleton archer': HUNTRESS,
   'cursed wraith': GHOST,
   'death knight': KNIGHT,
   'arch-lich malakar': BOSS_WIZARD,
   'magma hound': MAGMA_HOUND,
-  'fire imp': BAT,
-  'lava golem': SWAMP_THING,
+  'fire imp': EYE,
+  'lava golem': MUSHROOM,
   'magma drake': BAT,
   'ancient red dragon ignis': DRAGON,
   'void phantom': GHOST,
@@ -347,8 +358,8 @@ export const ENEMY_VISUAL_BY_NAME: Readonly<Record<string, EnemyVisualProfile>> 
   'swamp thing': SWAMP_THING,
   'broodmother queen': BOSS_SPIDER,
   'dusk wolf': PIXEL_WOLF,
-  'mountain harpy': BAT,
-  'bloodstone golem': SWAMP_THING,
+  'mountain harpy': EYE,
+  'bloodstone golem': MUSHROOM,
   'blood moon behemoth': BOSS_THING,
   'deep coral crab': CRABBY,
   'abyssal siren': FIERCE_TOOTH,

@@ -89,6 +89,7 @@ import {
 } from '../assets/GameplaySpriteManifest';
 import { gameplaySprites } from './GameplaySpriteRenderer';
 import type { RelicDefinition } from '../dungeons/run/RunTypes';
+import { resolveEnemyVisual } from '../maps/EnemyVisualRegistry';
 
 interface ActivePlayerBuff {
   stat: PlayerBuffStat;
@@ -3866,7 +3867,8 @@ export class SideViewEngine {
 
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const enemy = this.enemies[i];
-      if (enemy.isDead) {
+      if (enemy.isDead || enemy.hp <= 0) {
+        enemy.isDead = true;
         this.enemyPlayerTargets.delete(enemy.id);
         this.enemies.splice(i, 1);
         continue;
@@ -5439,11 +5441,13 @@ export class SideViewEngine {
     const role = enemy.role;
     if (!role || role === 'boss' || role === 'bruiser') return false;
     const set = ENEMY_ROLE_SPRITES[role];
+    const isAttacking = enemy.isAttacking
+      || Boolean(enemy.attackIntent && enemyAttackIntentPhase(enemy.attackIntent).phase !== 'complete');
     const spriteId = enemy.hitStun > 0 || (enemy.guardState?.staggeredRemaining || 0) > 0
       ? set.hit
-      : enemy.isAttacking
+      : isAttacking
         ? set.attack
-        : Math.abs(enemy.vx) > 0.1 ? set.move : set.idle;
+        : Math.abs(enemy.vx) > 0.05 ? set.move : set.idle;
     return gameplaySprites.draw(ctx, spriteId, enemy.x, enemy.y, {
       time: this.zoneHazardClock,
       facing: enemy.facing < 0 ? -1 : 1,
@@ -5641,15 +5645,26 @@ export class SideViewEngine {
         }
 
         // Draw Animated Mob Sprite
-        if (!this.drawTacticalEnemy(ctx, enemy)) {
+        // Authored / registered enemies and bosses use their unique, dedicated spritesheets first
+        const hasSpecificVisual = Boolean(resolveEnemyVisual(enemy.name)) || enemy.type === 'boss';
+        if (hasSpecificVisual || !this.drawTacticalEnemy(ctx, enemy)) {
+          const isAttackingState = enemy.isAttacking
+            || (enemy.bossCastTimer || 0) > 0
+            || Boolean(enemy.attackIntent && enemyAttackIntentPhase(enemy.attackIntent).phase !== 'complete');
+          const isMovingState = Math.abs(enemy.vx) > 0.05;
+          const animState: 'idle' | 'walk' | 'run' | 'attack' | 'hit' | 'dead' =
+            enemy.isDead ? 'dead'
+            : enemy.hitStun > 0 ? 'hit'
+            : isAttackingState ? 'attack'
+            : isMovingState ? 'run'
+            : 'idle';
+
           sprites.drawMob(
             ctx,
             enemy.x,
             enemy.y,
             enemy.name,
-            enemy.hitStun > 0 ? 'hit'
-              : enemy.isAttacking ? 'attack'
-              : (Math.abs(enemy.vx) > 0.1 ? 'run' : 'idle'),
+            animState,
             enemy.facing,
             enemy.type === 'boss',
             enemy.hitStun,
