@@ -638,6 +638,43 @@ function buildEndlessWave(dungeon: DungeonDefinition, waveIndex: number): Dungeo
   return { waveNumber: depth, enemies };
 }
 
+/**
+ * Dynamic procedural wave generator for Wave 4+ and beyond.
+ * Scales enemy count, HP, and spawn pools automatically so getWaveConfig(waveNumber)
+ * NEVER returns undefined or null.
+ */
+export function getWaveConfig(
+  dungeonOrWaveNumber: DungeonDefinition | number,
+  waveIndexOrNumber?: number,
+): DungeonWave {
+  let dungeon: DungeonDefinition;
+  let waveIndex: number;
+
+  if (typeof dungeonOrWaveNumber === 'number') {
+    dungeon = DUNGEONS[0];
+    const raw = dungeonOrWaveNumber;
+    waveIndex = Math.max(0, raw >= 1 ? raw - 1 : raw);
+  } else {
+    dungeon = dungeonOrWaveNumber || DUNGEONS[0];
+    const raw = waveIndexOrNumber ?? 0;
+    if (raw >= 0 && raw < dungeon.waves.length) {
+      waveIndex = raw;
+    } else if (raw > 0 && raw - 1 < dungeon.waves.length) {
+      waveIndex = raw - 1;
+    } else {
+      waveIndex = raw >= 1 && raw > dungeon.waves.length ? raw - 1 : Math.max(0, raw);
+    }
+  }
+
+  // Check if wave is explicitly authored in dungeon definition
+  if (dungeon.waves && dungeon.waves[waveIndex]) {
+    return dungeon.waves[waveIndex];
+  }
+
+  // Wave 4+ procedural scaling: never return undefined or null
+  return buildEndlessWave(dungeon, waveIndex);
+}
+
 export function spawnWaveEnemies(
   dungeon: DungeonDefinition,
   waveIndex: number,
@@ -645,8 +682,8 @@ export function spawnWaveEnemies(
   playerX: number = 300,
   groundY: number = 350,
 ): EnemyInstance[] {
-  const wave = dungeon.waves[waveIndex] || (dungeon.endless ? buildEndlessWave(dungeon, waveIndex) : undefined);
-  if (!wave) return [];
+  const wave = getWaveConfig(dungeon, waveIndex) || (dungeon.endless ? buildEndlessWave(dungeon, waveIndex) : undefined);
+  if (!wave || !wave.enemies || wave.enemies.length === 0) return [];
 
   // Difficulty tiers (Normal/Hard/Fatal) scale the authored tables at spawn
   // time instead of duplicating every wave list per tier.

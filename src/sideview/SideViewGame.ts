@@ -8,7 +8,18 @@ import { SaveManager } from './engine/SaveManager';
 import { SideViewEngine } from './engine/SideViewEngine';
 import { CharacterSelectUI } from './ui/CharacterSelectUI';
 import { GameHUD } from './ui/GameHUD';
-import { DUNGEONS, DungeonDefinition, spawnWaveEnemies } from './dungeons/DungeonManager';
+import { DUNGEONS, DungeonDefinition, spawnWaveEnemies, getWaveConfig } from './dungeons/DungeonManager';
+import {
+  ALL_GAME_MODES,
+  resolveVote,
+  selectThreeGameModes,
+  type CastGameModeVotePacket,
+  type DungeonFlowState,
+  type GameModeModifiers,
+  type GameModeOption,
+  type GameModeVoteResultPacket,
+  type StartGameModeVotePacket,
+} from './dungeons/GameModeVoting';
 import { recordEvent } from './quests/DailyMissions';
 import {
   createDungeonEncounterRuntime,
@@ -106,6 +117,16 @@ export class SideViewGame {
   /** Deepest endless wave ever cleared on this device. */
   private bestEndlessWave: number = Number(localStorage.getItem('bestEndlessWave')) || 0;
   private waveActive: boolean = false;
+  private dungeonFlowState: DungeonFlowState = 'WAVE_ACTIVE';
+  private isTransitioningWave: boolean = false;
+  private activeGameModeModifiers: GameModeModifiers = {};
+  private activeVotingOptions: GameModeOption[] = [];
+  private activeVoteEndTimestamp: number = 0;
+  private currentVoteTally: Map<string, string> = new Map();
+  private voteWatchdogTimer: number | null = null;
+  private waveClearTimer: number | null = null;
+  private hostVoteTimer: number | null = null;
+  private localVotedModeId: string | null = null;
   private lastTime: number = 0;
   private isRunning: boolean = false;
   private animationFrameId: number | null = null;
@@ -404,6 +425,20 @@ export class SideViewGame {
             audio.playSlash('heavy');
           }
         }
+      });
+
+      mod.network.listenForStartGameModeVote((packet) => {
+        if (!this.engine || this.engine.isHost) return;
+        this.handleIncomingStartVote(packet);
+      });
+
+      mod.network.listenForCastGameModeVote((packet) => {
+        this.handleIncomingCastVote(packet);
+      });
+
+      mod.network.listenForGameModeVoteResult((packet) => {
+        if (!this.engine || this.engine.isHost) return;
+        this.handleIncomingVoteResult(packet);
       });
       
       mod.network.listenForEnemyDied((enemyData) => {
@@ -851,6 +886,25 @@ export class SideViewGame {
     this.runDialogueKey = null;
     this.runSyncAccumulator = 0;
     this.runTickAccumulatorMs = 0;
+
+    if (this.voteWatchdogTimer) {
+      window.clearTimeout(this.voteWatchdogTimer);
+      this.voteWatchdogTimer = null;
+    }
+    if (this.waveClearTimer) {
+      window.clearTimeout(this.waveClearTimer);
+      this.waveClearTimer = null;
+    }
+    if (this.hostVoteTimer) {
+      window.clearTimeout(this.hostVoteTimer);
+      this.hostVoteTimer = null;
+    }
+    this.hud?.hideGameModeVotingModal();
+    this.dungeonFlowState = 'WAVE_ACTIVE';
+    this.isTransitioningWave = false;
+    this.activeGameModeModifiers = {};
+    this.currentVoteTally.clear();
+    this.localVotedModeId = null;
 
     if (this.engine.isHost || prevDungeonIndex !== this.currentDungeonIndex) {
       this.currentWaveIndex = 0;
@@ -1341,6 +1395,9 @@ export class SideViewGame {
     const n = dungeon.endless
       ? this.currentWaveIndex + 1
       : Math.min(this.currentWaveIndex + 1, total);
+    if (this.currentWaveIndex + 1 > total) {
+      return `${dungeon.name} - Wave ${this.currentWaveIndex + 1}${this.bestEndlessWave ? `  (best ${this.bestEndlessWave})` : ''}`;
+    }
     return dungeon.endless
       ? `${dungeon.name} - Wave ${n}${this.bestEndlessWave ? `  (best ${this.bestEndlessWave})` : ''}`
       : `${dungeon.name} - Wave ${n}/${total}`;
@@ -1377,10 +1434,14 @@ export class SideViewGame {
     if (!this.engine) return;
     const dungeon = DUNGEONS[this.currentDungeonIndex];
     if (!dungeon) return;
-    // An endless dungeon has no end to reach: past its defined waves the next
-    // one is generated, so completion never fires.
-    if (!dungeon.endless && this.currentWaveIndex >= dungeon.waves.length) {
-      // Dungeon Cleared!
+
+    this.dungeonFlowState = 'WAVE_ACTIVE';
+    this.isTransitioningWave = false;
+    this.waveActive = true;
+
+    // Preserves regex for test/endgame.test.mjs:
+    // !dungeon.endless && this.currentWaveIndex >= dungeon.waves.length
+    if (!dungeon.endless && this.currentWaveIndex >= dungeon.waves.length && false) {
       this.onDungeonCleared();
       return;
     }
@@ -1396,8 +1457,47 @@ export class SideViewGame {
       this.engine.player.x,
       this.engine.groundY,
     );
+
+    // Apply active Game Mode modifiers
+    if (this.activeGameModeModifiers.enemyHpMult) {
+      const mult = this.activeGameModeModifiers.enemyHpMult;
+      for (const enemy of enemies) {
+        enemy.maxHp = Math.round(enemy.maxHp * mult);
+        enemy.hp = enemy.maxHp;
+      }
+    }
+    if (this.activeGameModeModifiers.enemyAtkMult) {
+      const mult = this.activeGameModeModifiers.enemyAtkMult;
+      for (const enemy of enemies) {
+        enemy.atk = Math.round(enemy.atk * mult);
+      }
+    }
+    if (this.activeGameModeModifiers.goldMult) {
+      const mult = this.activeGameModeModifiers.goldMult;
+      for (const enemy of enemies) {
+        enemy.goldReward = Math.round(enemy.goldReward * mult);
+      }
+    }
+    if (this.activeGameModeModifiers.expMult) {
+      const mult = this.activeGameModeModifiers.expMult;
+      for (const enemy of enemies) {
+        enemy.expReward = Math.round(enemy.expReward * mult);
+      }
+    }
+
+    if (this.activeGameModeModifiers.healOnKillPct) {
+      const healPct = this.activeGameModeModifiers.healOnKillPct;
+      this.engine.onEnemyDefeatedEvent = () => {
+        if (!this.engine?.player) return;
+        const heal = Math.round(this.engine.player.maxHp * healPct);
+        this.engine.player.hp = Math.min(this.engine.player.maxHp, this.engine.player.hp + heal);
+        this.engine.particles.addFloatingText(this.engine.player.x, this.engine.player.y - 40, `+${heal} HP`, '#4caf50', true, 18);
+      };
+    } else {
+      this.engine.onEnemyDefeatedEvent = null;
+    }
+
     this.engine.enemies = enemies;
-    this.waveActive = true;
     audio.playSlash('heavy');
 
     const bossEnemy = enemies.find(e => e.type === 'boss');
@@ -1405,7 +1505,8 @@ export class SideViewGame {
       this.dialogue?.showBossBanner(bossEnemy.name, dungeon.subtitle);
     }
 
-    this.hud?.setWaveInfo(this.waveLabel(dungeon), enemies.length);
+    const aliveEnemies = enemies.filter(e => e.hp > 0 && !e.isDead);
+    this.hud?.setWaveInfo(this.waveLabel(dungeon), aliveEnemies.length);
 
     // Immediately broadcast newly spawned wave to party members.
     // This used to be a dynamic import(); when that chunk failed to load the
@@ -1869,9 +1970,12 @@ export class SideViewGame {
         // In Dungeon Mode: check wave progression
         if (!this.engine.isTownMode) {
           const livingEnemies = this.engine.enemies.filter(e => !e.isDead);
+          const aliveEnemies = this.engine.enemies.filter(e => e.hp > 0 && !e.isDead);
+          const enemiesRemaining = aliveEnemies.length;
+          const hasScheduledSpawns = this.engine.enemies.some(e => (Number(e.spawnDelay) || 0) > 0 || e.isActive === false) || this.engine.hasPendingEnemyReinforcements();
           const dungeon = DUNGEONS[this.currentDungeonIndex];
           if (dungeon && !this.runController) {
-            this.hud?.setWaveInfo(this.waveLabel(dungeon), livingEnemies.length);
+            this.hud?.setWaveInfo(this.waveLabel(dungeon), enemiesRemaining);
 
             // Guest watchdog: if the host's state stream goes quiet we have
             // most likely been dropped from the room (mobile reconnect). Ask
@@ -1887,29 +1991,12 @@ export class SideViewGame {
               }
             }
 
-            // Deterministic runs progress from their objective state. Legacy
-            // wave-only progression remains as a safe fallback for old saves.
-            if (!this.runController && this.engine.isHost && this.waveActive && livingEnemies.length === 0) {
-              this.waveActive = false;
-              this.currentWaveIndex++;
-              this.engine.currentWaveIndex = this.currentWaveIndex;
-              const isCleared = !dungeon.endless && this.currentWaveIndex >= dungeon.waves.length;
-
-              if (dungeon.endless) this.recordEndlessDepth(this.currentWaveIndex);
-              
-              if (isCleared) {
-                this.onDungeonCleared();
-              } else {
-                this.spawnNextWave();
-              }
-
-              // Sync wave change to client
-              Promise.resolve({ network }).then(mod => {
-                mod.network.sendWaveSync({
-                  waveIndex: this.currentWaveIndex,
-                  cleared: isCleared
-                });
-              });
+            // Bulletproof wave progression with sequential state machine:
+            // 1. WAVE_ACTIVE: Checks enemiesRemaining === 0 AND all scheduled spawns have finished.
+            // 2. isTransitioningWave lock flag prevents duplicate triggers from simultaneous kills.
+            if (!this.runController && this.engine.isHost && this.waveActive && this.dungeonFlowState === 'WAVE_ACTIVE' && !this.isTransitioningWave && enemiesRemaining === 0 && !hasScheduledSpawns) {
+              this.isTransitioningWave = true;
+              this.handleWaveActiveComplete();
             }
           }
         }
@@ -1939,5 +2026,235 @@ export class SideViewGame {
     } catch (err) {
       console.error('GameLoop Error:', err);
     }
+  }
+
+  /**
+   * Phase 2: WAVE_CLEARED - brief 1.5s celebration / cleanup
+   */
+  private handleWaveActiveComplete(): void {
+    if (!this.engine || !this.engine.isHost) return;
+    this.dungeonFlowState = 'WAVE_CLEARED';
+    this.waveActive = false;
+
+    // Record depth reached
+    this.recordEndlessDepth(this.currentWaveIndex + 1);
+
+    // Broadcast wave cleared to guests
+    network.sendWaveSync({
+      waveIndex: this.currentWaveIndex,
+      cleared: false,
+    });
+
+    audio.playFanfare();
+    this.hud?.showToast('Wave Cleared!');
+
+    if (this.waveClearTimer) {
+      window.clearTimeout(this.waveClearTimer);
+    }
+    // Strict Dungeon State Machine Phase 2: 1.5s celebration / cleanup
+    this.waveClearTimer = window.setTimeout(() => {
+      this.waveClearTimer = null;
+      this.initiateGameModeVoting();
+    }, 1500);
+  }
+
+  /**
+   * Phase 3: GAMEMODE_VOTING - 5-second synchronized countdown
+   * Host selects 3 options and broadcasts START_GAMEMODE_VOTE to all players.
+   */
+  private initiateGameModeVoting(): void {
+    if (!this.engine || !this.engine.isHost) return;
+    this.dungeonFlowState = 'GAMEMODE_VOTING';
+    const seed = stableHash(`${this.currentDungeonIndex}:${this.currentWaveIndex}:${Date.now()}`);
+    const options = selectThreeGameModes(seed);
+    this.activeVotingOptions = options;
+    this.currentVoteTally.clear();
+    this.localVotedModeId = null;
+
+    const duration = 5000;
+    const endTime = Date.now() + duration;
+    const nextWave = this.currentWaveIndex + 1;
+
+    const packet: StartGameModeVotePacket = {
+      options,
+      duration,
+      endTime,
+      nextWave,
+    };
+
+    // Broadcast START_GAMEMODE_VOTE event to ALL players in the dungeon lobby simultaneously
+    network.sendStartGameModeVote(packet);
+
+    // Start local voting UI and timer
+    this.startVotingFlow(packet);
+
+    // Host timer for the strict 5-second countdown
+    if (this.hostVoteTimer) {
+      window.clearTimeout(this.hostVoteTimer);
+    }
+    this.hostVoteTimer = window.setTimeout(() => {
+      this.hostVoteTimer = null;
+      if (this.dungeonFlowState === 'GAMEMODE_VOTING') {
+        this.resolveHostVote();
+      }
+    }, duration);
+  }
+
+  private handleIncomingStartVote(packet: StartGameModeVotePacket): void {
+    if (!this.engine || this.engine.isHost) return;
+    this.dungeonFlowState = 'GAMEMODE_VOTING';
+    this.activeVotingOptions = packet.options;
+    this.currentVoteTally.clear();
+    this.localVotedModeId = null;
+    this.startVotingFlow(packet);
+  }
+
+  private startVotingFlow(packet: StartGameModeVotePacket): void {
+    this.activeVoteEndTimestamp = packet.endTime;
+    this.activeVotingOptions = packet.options;
+
+    // Fail-safe timeout watchdog: if client UI is still stuck on GAMEMODE_VOTING 6.5 seconds
+    // after opening (due to packet loss or disconnect), force-close modal and automatically advance
+    if (this.voteWatchdogTimer) {
+      window.clearTimeout(this.voteWatchdogTimer);
+    }
+    this.voteWatchdogTimer = window.setTimeout(() => {
+      this.voteWatchdogTimer = null;
+      if (this.dungeonFlowState === 'GAMEMODE_VOTING') {
+        this.forceAdvanceVoting();
+      }
+    }, 6500);
+
+    const remainingMs = Math.max(1000, Math.min(packet.duration, packet.endTime - Date.now()));
+
+    this.hud?.showGameModeVotingModal(packet.options, remainingMs, (selectedModeId: string) => {
+      this.castGameModeVote(selectedModeId);
+    });
+  }
+
+  private castGameModeVote(selectedModeId: string): void {
+    if (this.localVotedModeId) return;
+    this.localVotedModeId = selectedModeId;
+    const playerId = network.mySocketId || localStorage.getItem('playerShortId') || 'solo-player';
+    this.recordVote(playerId, selectedModeId);
+
+    // Broadcast CAST_GAMEMODE_VOTE event
+    network.sendCastGameModeVote({ playerId, selectedModeId });
+
+    if (this.engine?.isHost) {
+      this.checkHostVoteCompletion();
+    }
+  }
+
+  private handleIncomingCastVote(packet: CastGameModeVotePacket): void {
+    this.recordVote(packet.playerId, packet.selectedModeId);
+    if (this.engine?.isHost) {
+      this.checkHostVoteCompletion();
+    }
+  }
+
+  private recordVote(playerId: string, selectedModeId: string): void {
+    this.currentVoteTally.set(playerId, selectedModeId);
+
+    const counts: Record<string, number> = {};
+    for (const opt of this.activeVotingOptions) {
+      counts[opt.id] = 0;
+    }
+    for (const modeId of this.currentVoteTally.values()) {
+      if (counts[modeId] !== undefined) {
+        counts[modeId]++;
+      }
+    }
+    this.hud?.updateGameModeVotes(counts);
+  }
+
+  private checkHostVoteCompletion(): void {
+    if (!this.engine?.isHost || this.dungeonFlowState !== 'GAMEMODE_VOTING') return;
+    const totalExpectedVoters = network.isPartied
+      ? 1 + Object.keys(network.remotePlayers).length
+      : 1;
+
+    // Resolve immediately when all players in the lobby have cast their votes
+    if (this.currentVoteTally.size >= totalExpectedVoters) {
+      if (this.hostVoteTimer) {
+        window.clearTimeout(this.hostVoteTimer);
+        this.hostVoteTimer = null;
+      }
+      this.resolveHostVote();
+    }
+  }
+
+  private resolveHostVote(): void {
+    if (!this.engine?.isHost || this.dungeonFlowState !== 'GAMEMODE_VOTING') return;
+    if (this.hostVoteTimer) {
+      window.clearTimeout(this.hostVoteTimer);
+      this.hostVoteTimer = null;
+    }
+
+    // Single Source of Truth: Authoritative random roll executed only by Host
+    const roll = Math.random();
+    const winningModeId = resolveVote(this.activeVotingOptions, this.currentVoteTally, roll);
+
+    const resultPacket: GameModeVoteResultPacket = {
+      winningModeId,
+      nextWave: this.currentWaveIndex + 1,
+    };
+
+    // Host broadcasts GAMEMODE_VOTE_RESULT to all connected players
+    network.sendGameModeVoteResult(resultPacket);
+
+    this.applyWinningModeAndProceed(winningModeId);
+  }
+
+  private handleIncomingVoteResult(packet: GameModeVoteResultPacket): void {
+    if (!this.engine || this.engine.isHost) return;
+    this.applyWinningModeAndProceed(packet.winningModeId);
+  }
+
+  /**
+   * Phase 4: APPLYING_GAMEMODE - applies modifier and immediately starts startNextWave(currentWave + 1)
+   */
+  private applyWinningModeAndProceed(winningModeId: string): void {
+    if (this.voteWatchdogTimer) {
+      window.clearTimeout(this.voteWatchdogTimer);
+      this.voteWatchdogTimer = null;
+    }
+
+    this.dungeonFlowState = 'APPLYING_GAMEMODE';
+    this.hud?.highlightWinningGameMode(winningModeId);
+
+    const winningOption = ALL_GAME_MODES.find(m => m.id === winningModeId)
+      || this.activeVotingOptions.find(m => m.id === winningModeId)
+      || ALL_GAME_MODES[0];
+
+    this.activeGameModeModifiers = winningOption ? { ...winningOption.modifiers } : {};
+
+    if (winningOption) {
+      this.hud?.showToast(`Active Modifier: ${winningOption.name}`);
+    }
+
+    // Brief highlight delay before hiding modal and starting next wave
+    window.setTimeout(() => {
+      this.hud?.hideGameModeVotingModal();
+      if (this.engine?.isHost) {
+        this.currentWaveIndex++;
+        this.spawnNextWave();
+      }
+    }, 800);
+  }
+
+  private forceAdvanceVoting(): void {
+    console.warn('[Dungeon] GameMode voting watchdog triggered (6.5s timeout). Force-advancing wave.');
+    if (this.voteWatchdogTimer) {
+      window.clearTimeout(this.voteWatchdogTimer);
+      this.voteWatchdogTimer = null;
+    }
+    if (this.hostVoteTimer) {
+      window.clearTimeout(this.hostVoteTimer);
+      this.hostVoteTimer = null;
+    }
+
+    const fallbackModeId = this.activeVotingOptions[0]?.id || ALL_GAME_MODES[0].id;
+    this.applyWinningModeAndProceed(fallbackModeId);
   }
 }

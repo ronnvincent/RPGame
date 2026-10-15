@@ -37,6 +37,7 @@ import { computeGearScore } from '../items/darkrise/rarities';
 import { getSetById } from '../items/darkrise/sets';
 import { InputSettingsPanel, isActionPointerStart, skillAction } from '../input';
 import { SKILL_IDENTITY_MATRIX, isSkillId } from '../combat/SkillMechanics';
+import type { StartGameModeVotePacket, GameModeOption } from '../dungeons/GameModeVoting';
 import {
   clampPercent,
   escapeHtml,
@@ -165,6 +166,9 @@ export class GameHUD {
   private controlsPanel: InputSettingsPanel | null = null;
   /** Every render replaces bound DOM nodes, so their active holds must be disposed first. */
   private actionBindingDisposers = new Set<() => void>();
+  private voteTimerInterval: number | null = null;
+  private currentVoteOnCastCb: ((modeId: string) => void) | null = null;
+  private localUserVotedModeId: string | null = null;
 
   // Joystick state
   private joystickActive: boolean = false;
@@ -792,6 +796,264 @@ export class GameHUD {
       }
       .leave-confirm-btn:active {
         transform: scale(0.96);
+      }
+
+      /* Game Mode / Wave Modifier Voting Modal */
+      .gamemode-voting-panel {
+        width: min(720px, 94vw);
+        max-height: 92vh;
+        padding: 20px 24px;
+        background: linear-gradient(145deg, rgba(20, 16, 28, 0.98), rgba(12, 10, 18, 0.99));
+        border: 1px solid rgba(245, 158, 11, 0.4);
+        border-top: 2px solid #f59e0b;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.95), 0 0 30px rgba(245, 158, 11, 0.2);
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        text-align: center;
+        overflow-y: auto;
+      }
+      .gamemode-header {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+      }
+      .gamemode-badge {
+        font-family: 'Cinzel', serif;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 1.5px;
+        color: #fbbf24;
+        background: rgba(245, 158, 11, 0.16);
+        border: 1px solid rgba(245, 158, 11, 0.5);
+        padding: 3px 12px;
+        border-radius: 999px;
+        text-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+      }
+      .gamemode-title {
+        font-family: 'Cinzel', serif;
+        font-size: 21px;
+        font-weight: 900;
+        letter-spacing: 2px;
+        color: #f8fafc;
+        margin: 2px 0 0 0;
+        text-shadow: 0 2px 10px rgba(0,0,0,0.9), 0 0 20px rgba(245, 158, 11, 0.3);
+      }
+      .gamemode-subtitle {
+        font-family: 'Outfit', sans-serif;
+        font-size: 12.5px;
+        color: #94a3b8;
+        margin: 0;
+      }
+      .gamemode-timer-container {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        background: rgba(0, 0, 0, 0.45);
+        padding: 8px 12px;
+        border-radius: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .gamemode-timer-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-family: 'Cinzel', serif;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 1px;
+      }
+      .gamemode-timer-label {
+        color: #cbd5e1;
+      }
+      .gamemode-timer-text {
+        color: #fbbf24;
+        font-family: 'Outfit', sans-serif;
+        font-size: 14px;
+        font-weight: 900;
+      }
+      .gamemode-timer-track {
+        width: 100%;
+        height: 8px;
+        background: rgba(0, 0, 0, 0.6);
+        border-radius: 4px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      .gamemode-timer-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #10b981 0%, #f59e0b 60%, #ef4444 100%);
+        border-radius: 4px;
+        box-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
+        transition: width 0.05s linear;
+      }
+      .gamemode-options-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+      }
+      .gamemode-option-card {
+        background: linear-gradient(160deg, rgba(32, 26, 42, 0.95), rgba(18, 14, 24, 0.98));
+        border: 1.5px solid rgba(255, 255, 255, 0.12);
+        border-radius: 8px;
+        padding: 14px 10px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        cursor: pointer;
+        transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+        position: relative;
+        user-select: none;
+      }
+      .gamemode-option-card:hover {
+        transform: translateY(-2px);
+        border-color: rgba(245, 158, 11, 0.6);
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.7);
+      }
+      .gamemode-option-card:active {
+        transform: scale(0.98);
+      }
+      .gamemode-option-card.selected {
+        border-color: #ffd54f !important;
+        background: linear-gradient(160deg, rgba(50, 40, 68, 0.98), rgba(28, 22, 38, 0.98)) !important;
+        box-shadow: 0 0 22px rgba(255, 213, 79, 0.5), 0 10px 25px rgba(0, 0, 0, 0.7) !important;
+      }
+      .gamemode-option-card.winner {
+        border-color: #10b981 !important;
+        background: linear-gradient(160deg, rgba(20, 50, 35, 0.98), rgba(12, 30, 22, 0.98)) !important;
+        box-shadow: 0 0 30px rgba(16, 185, 129, 0.75), 0 10px 25px rgba(0, 0, 0, 0.7) !important;
+      }
+      .gamemode-card-icon {
+        font-size: 32px;
+        margin-bottom: 6px;
+        filter: drop-shadow(0 2px 8px rgba(0,0,0,0.8));
+      }
+      .gamemode-card-badge {
+        font-family: 'Cinzel', serif;
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: 0.8px;
+        padding: 2px 8px;
+        border-radius: 4px;
+        border: 1px solid transparent;
+        margin-bottom: 6px;
+      }
+      .gamemode-card-title {
+        font-family: 'Cinzel', serif;
+        font-size: 13.5px;
+        font-weight: 800;
+        letter-spacing: 0.8px;
+        color: #f8fafc;
+        margin: 0 0 6px 0;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+      }
+      .gamemode-card-desc {
+        font-family: 'Outfit', sans-serif;
+        font-size: 11px;
+        color: #cbd5e1;
+        line-height: 1.4;
+        margin: 0 0 10px 0;
+        flex: 1;
+      }
+      .gamemode-card-votes {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-family: 'Outfit', sans-serif;
+        font-size: 10.5px;
+        font-weight: 800;
+        letter-spacing: 0.5px;
+        background: rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        color: #94a3b8;
+        transition: all 0.2s ease;
+      }
+      .gamemode-card-votes.has-votes {
+        background: rgba(245, 158, 11, 0.22);
+        border-color: #f59e0b;
+        color: #fbbf24;
+        box-shadow: 0 0 10px rgba(245, 158, 11, 0.35);
+      }
+      .vote-winner-badge {
+        color: #10b981;
+        font-weight: 900;
+        letter-spacing: 1px;
+      }
+      .gamemode-footer {
+        padding: 4px 0 0 0;
+      }
+      .gamemode-status-text {
+        font-family: 'Outfit', sans-serif;
+        font-size: 12px;
+        font-weight: 600;
+        color: #fbbf24;
+      }
+
+      @media (max-height: 500px) {
+        .gamemode-voting-panel {
+          width: min(650px, 96vw);
+          max-height: 96vh;
+          padding: 8px 14px;
+          gap: 6px;
+        }
+        .gamemode-title {
+          font-size: 15px;
+        }
+        .gamemode-badge {
+          font-size: 9.5px;
+          padding: 1px 8px;
+        }
+        .gamemode-subtitle {
+          display: none;
+        }
+        .gamemode-timer-container {
+          padding: 4px 8px;
+          gap: 3px;
+        }
+        .gamemode-timer-meta {
+          font-size: 10px;
+        }
+        .gamemode-timer-text {
+          font-size: 11px;
+        }
+        .gamemode-timer-track {
+          height: 5px;
+        }
+        .gamemode-options-grid {
+          gap: 8px;
+        }
+        .gamemode-option-card {
+          padding: 6px 6px;
+        }
+        .gamemode-card-icon {
+          font-size: 22px;
+          margin-bottom: 2px;
+        }
+        .gamemode-card-badge {
+          font-size: 8px;
+          padding: 1px 5px;
+          margin-bottom: 3px;
+        }
+        .gamemode-card-title {
+          font-size: 11.5px;
+          margin-bottom: 3px;
+        }
+        .gamemode-card-desc {
+          font-size: 9.5px;
+          line-height: 1.25;
+          margin-bottom: 5px;
+        }
+        .gamemode-card-votes {
+          font-size: 9px;
+          padding: 2px 7px;
+        }
+        .gamemode-status-text {
+          font-size: 10.5px;
+        }
       }
 
       .player-id-row {
@@ -3308,6 +3570,38 @@ export class GameHUD {
         </div>
       </div>
 
+      <!-- Game Mode / Wave Modifier Voting Modal -->
+      <div class="pause-back" id="gamemode-voting-modal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="gamemode-modal-title" tabindex="-1">
+        <div class="pause-panel rpg-panel gamemode-voting-panel">
+          <div class="gamemode-header">
+            <span class="gamemode-badge" id="gamemode-wave-badge">WAVE 4 INCOMING</span>
+            <h2 class="gamemode-title" id="gamemode-modal-title">CHOOSE WAVE MODIFIER</h2>
+            <p class="gamemode-subtitle">Vote for the party modifier for the upcoming wave. Majority decides!</p>
+          </div>
+
+          <!-- Synchronized 5-Second Countdown Bar -->
+          <div class="gamemode-timer-container">
+            <div class="gamemode-timer-meta">
+              <span class="gamemode-timer-label">TIME REMAINING:</span>
+              <span class="gamemode-timer-text" id="gamemode-timer-text">5.0s</span>
+            </div>
+            <div class="gamemode-timer-track">
+              <div class="gamemode-timer-bar" id="gamemode-timer-bar" style="width: 100%;"></div>
+            </div>
+          </div>
+
+          <!-- 3 Option Cards Container -->
+          <div class="gamemode-options-grid" id="gamemode-options-grid">
+            <!-- Dynamic 3 options will be rendered here -->
+          </div>
+
+          <!-- Live Status / Helper Footer -->
+          <div class="gamemode-footer">
+            <span class="gamemode-status-text" id="gamemode-status-text">Select an option to cast your vote</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Inventory Modal -->
       <div class="inventory-modal rpg-panel" id="inventory-modal" role="dialog" aria-modal="true" aria-labelledby="inventory-title" tabindex="-1">
         <div class="inv-header">
@@ -5037,5 +5331,198 @@ export class GameHUD {
 
     // Render current inspector pane state
     this.renderInspectorPane();
+  }
+
+  public showGameModeVotingModal(
+    packetOrOptions: StartGameModeVotePacket | GameModeOption[],
+    durationOrOnCast: number | ((modeId: string) => void),
+    onCastVote?: (modeId: string) => void,
+  ): void {
+    const modal = this.container.querySelector('#gamemode-voting-modal') as HTMLElement | null;
+    if (!modal) return;
+
+    let packet: StartGameModeVotePacket;
+    if (Array.isArray(packetOrOptions)) {
+      const duration = typeof durationOrOnCast === 'number' ? durationOrOnCast : 5000;
+      packet = {
+        options: packetOrOptions,
+        duration,
+        endTime: Date.now() + duration,
+        nextWave: 4,
+      };
+      this.currentVoteOnCastCb = onCastVote || (typeof durationOrOnCast === 'function' ? durationOrOnCast : null);
+    } else {
+      packet = packetOrOptions;
+      this.currentVoteOnCastCb = typeof durationOrOnCast === 'function' ? durationOrOnCast : (onCastVote || null);
+    }
+
+    this.localUserVotedModeId = null;
+
+    // Set wave title badge
+    const badge = modal.querySelector('#gamemode-wave-badge');
+    if (badge) {
+      badge.textContent = `WAVE ${packet.nextWave || 4} INCOMING`;
+    }
+
+    const grid = modal.querySelector('#gamemode-options-grid');
+    if (grid) {
+      grid.innerHTML = packet.options.map(opt => `
+        <div class="gamemode-option-card" id="gamemode-card-${opt.id}" data-mode-id="${escapeHtmlAttribute(opt.id)}" tabindex="0" role="button" aria-label="Vote for ${escapeHtmlAttribute(opt.name)}">
+          <div class="gamemode-card-icon" style="color: ${opt.color};">${opt.icon}</div>
+          <span class="gamemode-card-badge" style="background: ${opt.color}22; border-color: ${opt.color}; color: ${opt.color};">${escapeHtml(opt.badge)}</span>
+          <h3 class="gamemode-card-title">${escapeHtml(opt.name)}</h3>
+          <p class="gamemode-card-desc">${escapeHtml(opt.description)}</p>
+          <div class="gamemode-card-votes" id="gamemode-votes-${opt.id}">
+            <span class="vote-count-text">0 VOTES</span>
+          </div>
+        </div>
+      `).join('');
+
+      // Add click listeners to cards
+      const cards = grid.querySelectorAll('.gamemode-option-card');
+      cards.forEach(card => {
+        const modeId = card.getAttribute('data-mode-id');
+        if (!modeId) return;
+
+        const onSelectCard = (e: Event) => {
+          e.stopPropagation();
+          audio.playClick();
+          this.localUserVotedModeId = modeId;
+          cards.forEach(c => c.classList.remove('selected'));
+          card.classList.add('selected');
+
+          const status = modal.querySelector('#gamemode-status-text');
+          if (status) {
+            const chosen = packet.options.find(o => o.id === modeId);
+            status.textContent = `You voted for: ${chosen?.name || modeId}`;
+          }
+
+          this.currentVoteOnCastCb?.(modeId);
+        };
+
+        card.addEventListener('click', onSelectCard);
+        card.addEventListener('keydown', (e: any) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onSelectCard(e);
+          }
+        });
+      });
+    }
+
+    // Initialize timer animation
+    if (this.voteTimerInterval) {
+      window.clearInterval(this.voteTimerInterval);
+      this.voteTimerInterval = null;
+    }
+
+    const timerBar = modal.querySelector('#gamemode-timer-bar') as HTMLElement | null;
+    const timerText = modal.querySelector('#gamemode-timer-text') as HTMLElement | null;
+    const statusText = modal.querySelector('#gamemode-status-text');
+    if (statusText) statusText.textContent = 'Select an option to cast your vote';
+
+    const duration = packet.duration || 5000;
+    const endTime = packet.endTime;
+
+    const updateTimer = () => {
+      const now = Date.now();
+      const remainingMs = Math.max(0, endTime - now);
+      const remainingSec = (remainingMs / 1000).toFixed(1);
+      const pct = Math.max(0, Math.min(100, (remainingMs / duration) * 100));
+
+      if (timerText) timerText.textContent = `${remainingSec}s`;
+      if (timerBar) timerBar.style.width = `${pct}%`;
+
+      if (remainingMs <= 0) {
+        if (this.voteTimerInterval) {
+          window.clearInterval(this.voteTimerInterval);
+          this.voteTimerInterval = null;
+        }
+        if (statusText) statusText.textContent = 'Voting closed! Resolving result...';
+      }
+    };
+
+    updateTimer();
+    this.voteTimerInterval = window.setInterval(updateTimer, 50);
+
+    this.openHudDialog(modal, {
+      initialFocus: grid?.querySelector('.gamemode-option-card') as HTMLElement | null,
+    });
+  }
+
+  public updateGameModeVotes(voteCounts: Map<string, number> | Record<string, number>, userVoteId?: string): void {
+    const modal = this.container.querySelector('#gamemode-voting-modal');
+    if (!modal) return;
+
+    if (userVoteId) {
+      this.localUserVotedModeId = userVoteId;
+    }
+
+    const entries = voteCounts instanceof Map ? voteCounts.entries() : Object.entries(voteCounts);
+    for (const [modeId, count] of entries) {
+      const voteContainer = modal.querySelector(`#gamemode-votes-${modeId}`);
+      if (voteContainer) {
+        const text = count === 1 ? '1 VOTE' : `${count} VOTES`;
+        voteContainer.innerHTML = `<span class="vote-count-text">${text}</span>`;
+        voteContainer.classList.toggle('has-votes', count > 0);
+      }
+
+      const card = modal.querySelector(`#gamemode-card-${modeId}`);
+      if (card && this.localUserVotedModeId) {
+        card.classList.toggle('selected', modeId === this.localUserVotedModeId);
+      }
+    }
+  }
+
+  public highlightWinningGameMode(winningModeId: string): void {
+    const modal = this.container.querySelector('#gamemode-voting-modal');
+    if (!modal) return;
+
+    if (this.voteTimerInterval) {
+      window.clearInterval(this.voteTimerInterval);
+      this.voteTimerInterval = null;
+    }
+
+    const timerBar = modal.querySelector('#gamemode-timer-bar') as HTMLElement | null;
+    const timerText = modal.querySelector('#gamemode-timer-text') as HTMLElement | null;
+    if (timerBar) timerBar.style.width = '0%';
+    if (timerText) timerText.textContent = '0.0s';
+
+    const cards = modal.querySelectorAll('.gamemode-option-card');
+    cards.forEach(card => {
+      const modeId = card.getAttribute('data-mode-id');
+      if (modeId === winningModeId) {
+        card.classList.remove('selected');
+        card.classList.add('winner');
+        const voteBadge = card.querySelector('.gamemode-card-votes');
+        if (voteBadge) {
+          voteBadge.innerHTML = `<span class="vote-winner-badge">★ WINNER ★</span>`;
+        }
+      } else {
+        (card as HTMLElement).style.opacity = '0.4';
+      }
+    });
+
+    const status = modal.querySelector('#gamemode-status-text');
+    if (status) {
+      status.textContent = 'Modifier chosen! Starting next wave...';
+    }
+  }
+
+  public hideGameModeVotingModal(): void {
+    if (this.voteTimerInterval) {
+      window.clearInterval(this.voteTimerInterval);
+      this.voteTimerInterval = null;
+    }
+    const modal = this.container.querySelector('#gamemode-voting-modal') as HTMLElement | null;
+    if (modal) {
+      this.closeHudDialog(modal);
+      // Reset card opacities
+      const cards = modal.querySelectorAll('.gamemode-option-card');
+      cards.forEach(c => {
+        (c as HTMLElement).style.opacity = '';
+        c.classList.remove('selected', 'winner');
+      });
+    }
   }
 }

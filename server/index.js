@@ -939,6 +939,12 @@ const RATE_LIMITS = {
   party_stats: [5, 10_000],
   party_ping: [5, 1000],
   party_chat: [4, 3000],
+  start_gamemode_vote: [10, 1000],
+  cast_gamemode_vote: [30, 1000],
+  gamemode_vote_result: [10, 1000],
+  START_GAMEMODE_VOTE: [10, 1000],
+  CAST_GAMEMODE_VOTE: [30, 1000],
+  GAMEMODE_VOTE_RESULT: [10, 1000],
 };
 
 function isPayloadWithin(value, maxBytes = 64 * 1024) {
@@ -1908,6 +1914,37 @@ io.on('connection', (socket) => {
     if (!Number.isInteger(data.waveIndex) || data.waveIndex < 0 || data.waveIndex > 100000) return;
     socket.to(p.room).emit('wave_sync', { waveIndex: data.waveIndex, cleared: data.cleared === true });
   });
+
+  function handleStartGameModeVote(sock, data = {}) {
+    const p = players[sock.id];
+    if (!isRoomHost(p) || !p.room || !isPayloadWithin(data, 16 * 1024)) return;
+    sock.to(p.room).emit('START_GAMEMODE_VOTE', data);
+    sock.to(p.room).emit('start_gamemode_vote', data);
+  }
+  socket.on('START_GAMEMODE_VOTE', data => handleStartGameModeVote(socket, data));
+  socket.on('start_gamemode_vote', data => handleStartGameModeVote(socket, data));
+
+  function handleCastGameModeVote(sock, data = {}) {
+    const p = players[sock.id];
+    if (!p || !p.room || !isPayloadWithin(data, 4 * 1024)) return;
+    const payload = {
+      playerId: String(data.playerId || p.actorId || sock.id).slice(0, 128),
+      selectedModeId: String(data.selectedModeId || '').slice(0, 64),
+    };
+    io.to(p.room).emit('CAST_GAMEMODE_VOTE', payload);
+    io.to(p.room).emit('cast_gamemode_vote', payload);
+  }
+  socket.on('CAST_GAMEMODE_VOTE', data => handleCastGameModeVote(socket, data));
+  socket.on('cast_gamemode_vote', data => handleCastGameModeVote(socket, data));
+
+  function handleGameModeVoteResult(sock, data = {}) {
+    const p = players[sock.id];
+    if (!isRoomHost(p) || !p.room || !isPayloadWithin(data, 8 * 1024)) return;
+    socket.to(p.room).emit('GAMEMODE_VOTE_RESULT', data);
+    socket.to(p.room).emit('gamemode_vote_result', data);
+  }
+  socket.on('GAMEMODE_VOTE_RESULT', data => handleGameModeVoteResult(socket, data));
+  socket.on('gamemode_vote_result', data => handleGameModeVoteResult(socket, data));
 
   socket.on('enemy_died', (data = {}) => {
     const p = players[socket.id];

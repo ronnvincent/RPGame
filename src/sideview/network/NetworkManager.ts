@@ -13,6 +13,11 @@ import {
   type DungeonEncounterSnapshot,
 } from '../dungeons/DungeonEncounterRuntime';
 import { PayloadCadence, quantizeNetworkCoordinate, smoothNetworkCoordinate } from './NetworkCadence';
+import type {
+  StartGameModeVotePacket,
+  CastGameModeVotePacket,
+  GameModeVoteResultPacket,
+} from '../dungeons/GameModeVoting';
 
 export type DungeonRunState = DungeonRunStateContract;
 export const RUN_SYNC_PROTOCOL_VERSION = 1 as const;
@@ -369,6 +374,9 @@ export class NetworkManager {
   private onQuickChatCb: ((payload: any) => void) | null = null;
   private onPingCb: ((payload: any) => void) | null = null;
   private onLobbyListCb: ((lobbies: any[]) => void) | null = null;
+  private onStartGameModeVoteCb: ((data: StartGameModeVotePacket) => void) | null = null;
+  private onCastGameModeVoteCb: ((data: CastGameModeVotePacket) => void) | null = null;
+  private onGameModeVoteResultCb: ((data: GameModeVoteResultPacket) => void) | null = null;
 
   constructor() {
     NetworkManager.instance = this;
@@ -731,6 +739,33 @@ export class NetworkManager {
       if (data?.encounterSnapshot !== undefined
         && !isBoundedDungeonEncounterSnapshot(data.encounterSnapshot)) return;
       if (data) this.onFullSyncCb?.(data);
+    });
+
+    this.socket.on('START_GAMEMODE_VOTE', (data: StartGameModeVotePacket) => {
+      this.debug('IN', 'START_GAMEMODE_VOTE', data);
+      this.onStartGameModeVoteCb?.(data);
+    });
+    this.socket.on('start_gamemode_vote', (data: StartGameModeVotePacket) => {
+      this.debug('IN', 'start_gamemode_vote', data);
+      this.onStartGameModeVoteCb?.(data);
+    });
+
+    this.socket.on('CAST_GAMEMODE_VOTE', (data: CastGameModeVotePacket) => {
+      this.debug('IN', 'CAST_GAMEMODE_VOTE', data);
+      this.onCastGameModeVoteCb?.(data);
+    });
+    this.socket.on('cast_gamemode_vote', (data: CastGameModeVotePacket) => {
+      this.debug('IN', 'cast_gamemode_vote', data);
+      this.onCastGameModeVoteCb?.(data);
+    });
+
+    this.socket.on('GAMEMODE_VOTE_RESULT', (data: GameModeVoteResultPacket) => {
+      this.debug('IN', 'GAMEMODE_VOTE_RESULT', data);
+      this.onGameModeVoteResultCb?.(data);
+    });
+    this.socket.on('gamemode_vote_result', (data: GameModeVoteResultPacket) => {
+      this.debug('IN', 'gamemode_vote_result', data);
+      this.onGameModeVoteResultCb?.(data);
     });
   }
 
@@ -1193,6 +1228,36 @@ export class NetworkManager {
   public listenForWaveSync(onSync: (waveData: any) => void) {
     if (!this.socket) this.connect();
     this.onWaveSyncCb = onSync;
+  }
+
+  public sendStartGameModeVote(data: StartGameModeVotePacket) {
+    if (!this.socket || !this.room) return;
+    this.socket.emit('START_GAMEMODE_VOTE', data);
+  }
+
+  public listenForStartGameModeVote(cb: (data: StartGameModeVotePacket) => void) {
+    if (!this.socket) this.connect();
+    this.onStartGameModeVoteCb = cb;
+  }
+
+  public sendCastGameModeVote(data: CastGameModeVotePacket) {
+    if (!this.socket || !this.room) return;
+    this.socket.emit('CAST_GAMEMODE_VOTE', data);
+  }
+
+  public listenForCastGameModeVote(cb: (data: CastGameModeVotePacket) => void) {
+    if (!this.socket) this.connect();
+    this.onCastGameModeVoteCb = cb;
+  }
+
+  public sendGameModeVoteResult(data: GameModeVoteResultPacket) {
+    if (!this.socket || !this.room) return;
+    this.socket.emit('GAMEMODE_VOTE_RESULT', data);
+  }
+
+  public listenForGameModeVoteResult(cb: (data: GameModeVoteResultPacket) => void) {
+    if (!this.socket) this.connect();
+    this.onGameModeVoteResultCb = cb;
   }
 
   public sendEnemyDied(enemyData: any, groundY: number) {
