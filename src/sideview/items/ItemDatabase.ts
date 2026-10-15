@@ -597,10 +597,10 @@ export interface WeightedDrop {
  * Weighted Table Drop Roller (SKILL.md standard pattern)
  * Rolls one number across the accumulated weight sum.
  */
-export function rollDrop(table: WeightedDrop[]): ItemData | null {
+export function rollDrop(table: WeightedDrop[], rng: () => number = Math.random): ItemData | null {
   const total = table.reduce((sum, d) => sum + d.weight, 0);
   if (total <= 0) return null;
-  let r = Math.random() * total;
+  let r = rng() * total;
   for (const drop of table) {
     if ((r -= drop.weight) <= 0) {
       return drop.item;
@@ -617,15 +617,15 @@ export function rollDrop(table: WeightedDrop[]): ItemData | null {
  * rolled affixes, a chance of open sockets, and a gear score. The catalog
  * entry itself is never mutated - every drop is a copy.
  */
-export function getRandomLoot(tier: LootTier = 'mid'): ItemData {
-  const base = weightedRarityRoll(RARITY_WEIGHTS_BY_TIER[tier]);
+export function getRandomLoot(tier: LootTier = 'mid', rng: () => number = Math.random): ItemData {
+  const base = weightedRarityRoll(RARITY_WEIGHTS_BY_TIER[tier], rng);
 
   // Hard/Fatal can promote a roll up the ladder. One roll per promotion step
   // keeps Fatal's mythical chance small but real.
   const config = getDifficultyConfig();
   let rarity = base;
   for (let i = 0; i < 2; i++) {
-    if (rarity !== 'mythical' && Math.random() < config.lootUpgradeChance * 0.5) {
+    if (rarity !== 'mythical' && rng() < config.lootUpgradeChance * 0.5) {
       const idx = RARITY_ORDER.indexOf(rarity);
       rarity = RARITY_ORDER[Math.min(RARITY_ORDER.length - 1, idx + 1)];
     }
@@ -633,18 +633,18 @@ export function getRandomLoot(tier: LootTier = 'mid'): ItemData {
 
   const pool = ITEM_DATABASE.filter(i => i.rarity === rarity && !['consumable', 'gem', 'card', 'material'].includes(i.type));
   if (!pool.length) return ITEM_DATABASE[0];
-  const source = pool[Math.floor(Math.random() * pool.length)];
+  const source = pool[Math.floor(rng() * pool.length)];
 
   const drop: ItemData = { ...source, stats: source.stats ? { ...source.stats } : undefined };
-  drop.affixes = rollAffixes(rarity);
-  if (drop.affixes.length === 0 && Math.random() < config.bonusAffixChance) {
-    drop.affixes = rollAffixes('uncommon');
+  drop.affixes = rollAffixes(rarity, rng);
+  if (drop.affixes.length === 0 && rng() < config.bonusAffixChance) {
+    drop.affixes = rollAffixes('uncommon', rng);
   }
 
   // Drops may arrive with carved sockets already in place - better rarities
   // come pre-slotted, like Darkrise's higher-tier gear.
   const socketChance = { common: 0, uncommon: 0.15, rare: 0.3, epic: 0.5, legendary: 0.7, mythical: 1 }[rarity];
-  if (Math.random() < socketChance) {
+  if (rng() < socketChance) {
     const count = rarity === 'mythical' ? 3 : rarity === 'legendary' ? 2 : 1;
     drop.sockets = Array(count).fill(null);
   }

@@ -1072,7 +1072,7 @@ export class SideViewGame {
       }
 
       if (this.engine.isHost && (node.completion.type === 'party_choice' || node.completion.type === 'actor_choices')) {
-        this.pendingDungeonInteraction = 'choice';
+        this.showRunRoomChoices();
       } else if (this.engine.isHost && node.objective?.type === 'destroy_nests') {
         this.pendingDungeonInteraction = 'world-object';
       }
@@ -1106,13 +1106,17 @@ export class SideViewGame {
             const target = state.graph.nodes.find(candidate => candidate.id === exit.toRoomId);
             return target?.access !== 'secret' || state.revealedSecretRoomIds.includes(target.id);
           });
-          if (available.length === 1) {
+          if (available.length > 0) {
             this.pendingDungeonInteraction = null;
-            this.hud?.showToast('Advancing to next room...');
-            window.setTimeout(() => this.dispatchRun({ type: 'choose_exit', exitId: available[0].id }), 800);
-          } else {
-            this.pendingDungeonInteraction = 'route';
-            this.hud?.showToast('Room clear - choose your route');
+            const chosenExit = available[Math.floor(Math.random() * available.length)];
+            const target = state.graph.nodes.find(candidate => candidate.id === chosenExit.toRoomId);
+            const targetName = target ? this.humanize(target.kind) : 'Next Chamber';
+            this.hud?.showToast(`Room Cleared! Advancing to ${targetName}...`);
+            window.setTimeout(() => {
+              if (this.runController?.getSnapshot().status === 'active') {
+                this.dispatchRun({ type: 'choose_exit', exitId: chosenExit.id });
+              }
+            }, 1000);
           }
         }
       } else if (effect.type === 'relic_offer_created') {
@@ -1145,30 +1149,13 @@ export class SideViewGame {
   private showRelicOffer(offerId: string): void {
     const state = this.runController?.getSnapshot();
     const offer = state?.relicOffers.find(candidate => candidate.id === offerId && !candidate.chosenRelicId);
-    if (!offer || !this.dialogue || !this.engine?.isHost) return;
-    const key = `relic:${offer.id}`;
-    if (this.runDialogueKey === key && this.dialogue.isOpen) return;
-    this.runDialogueKey = key;
-    const first = this.runRelics.get(offer.relicIds[0]);
-    this.dialogue.showDialogue({
-      speakerName: 'Relic Altar',
-      speakerTitle: 'Choose one blessing',
-      portraitIcon: first ? this.spriteFile(first.iconSpriteId as GameplaySpriteId) : '',
-      sentences: ['The relics answer your deeds. Choose carefully; your build changes for the rest of this run.'],
-      options: offer.relicIds.map(relicId => {
-        const relic = this.runRelics.get(relicId)!;
-        return {
-          label: this.humanize(relic.nameKey),
-          icon: this.spriteFile(relic.iconSpriteId as GameplaySpriteId),
-          type: 'custom' as const,
-          onSelect: () => {
-            this.dialogue?.close();
-            this.runDialogueKey = null;
-            this.dispatchRun({ type: 'choose_relic', actorId: offer.actorId, offerId: offer.id, relicId });
-          },
-        };
-      }),
-    });
+    if (!offer || !this.engine?.isHost) return;
+    const randomRelicId = offer.relicIds[Math.floor(Math.random() * offer.relicIds.length)];
+    const chosenRelic = this.runRelics.get(randomRelicId);
+    const relicName = chosenRelic ? this.humanize(chosenRelic.nameKey) : 'Sacred Blessing';
+    this.hud?.showToast(`BLESSING GRANTED: ${relicName}!`);
+    audio.playLevelUp();
+    this.dispatchRun({ type: 'choose_relic', actorId: offer.actorId, offerId: offer.id, relicId: randomRelicId });
   }
 
   private humanize(key: string): string {
@@ -1179,80 +1166,39 @@ export class SideViewGame {
   private showRunRoomChoices(): boolean {
     const state = this.runController?.getSnapshot();
     const node = this.currentRunNode(state);
-    if (!state || !node || !node.choices.length || !this.dialogue || !this.engine?.isHost) return false;
-    const key = `choice:${node.id}`;
-    if (this.dialogue.isOpen || this.runDialogueKey === key) return true;
-    this.runDialogueKey = key;
-    this.dialogue.showDialogue({
-      speakerName: node.kind === 'shrine' ? 'Risk Shrine' : node.kind === 'treasure' ? 'Sealed Treasury' : 'Dungeon Event',
-      speakerTitle: 'Your decision changes this run',
-      portraitIcon: this.spriteFile(node.sprites.roomIconSpriteId as GameplaySpriteId),
-      sentences: ['Choose how the party will proceed. The host decision is shared with the expedition.'],
-      options: node.choices.map(choice => ({
-        label: this.humanize(choice.titleKey),
-        icon: this.spriteFile(choice.iconSpriteId as GameplaySpriteId),
-        type: 'custom' as const,
-        onSelect: () => {
-          this.dialogue?.close();
-          this.runDialogueKey = null;
-          this.pendingDungeonInteraction = null;
-          this.dispatchRun({ type: 'resolve_room_choice', actorId: this.localRunActorId(), choiceId: choice.id });
-        },
-      })),
-    });
+    if (!state || !node || !node.choices.length || !this.engine?.isHost) return false;
+    this.pendingDungeonInteraction = null;
+    this.runDialogueKey = null;
+    const chosenChoice = node.choices[Math.floor(Math.random() * node.choices.length)];
+    const choiceName = this.humanize(chosenChoice.titleKey);
+    this.hud?.showToast(`Dungeon Blessing: ${choiceName}`);
+    this.dispatchRun({ type: 'resolve_room_choice', actorId: this.localRunActorId(), choiceId: chosenChoice.id });
     return true;
   }
 
   private showRunRouteChoices(): boolean {
     const state = this.runController?.getSnapshot();
     const node = this.currentRunNode(state);
-    if (!state || !node || !this.dialogue || !this.engine?.isHost) return false;
+    if (!state || !node || !this.engine?.isHost) return false;
     const runtime = state.roomStates[node.id];
     if (runtime?.status !== 'completed' || state.status !== 'active') return false;
     const exits = state.graph.exits.filter(exit => exit.fromRoomId === node.id);
     if (!exits.length) return false;
-    const key = `route:${node.id}:${state.revealedSecretRoomIds.length}`;
-    if (this.dialogue.isOpen || this.runDialogueKey === key) return true;
-    this.runDialogueKey = key;
     const available = exits.filter(exit => {
       const target = state.graph.nodes.find(candidate => candidate.id === exit.toRoomId);
       return target?.access !== 'secret' || state.revealedSecretRoomIds.includes(target.id);
     });
-    const hidden = exits.find(exit => {
-      const target = state.graph.nodes.find(candidate => candidate.id === exit.toRoomId);
-      return exit.kind === 'secret' && target && !state.revealedSecretRoomIds.includes(target.id);
-    });
-    const options = available.map(exit => {
-      const target = state.graph.nodes.find(candidate => candidate.id === exit.toRoomId)!;
-      return {
-        label: `${exit.kind === 'secret' ? 'Secret: ' : ''}${this.humanize(target.kind)} route`,
-        icon: this.spriteFile(exit.doorSpriteId as GameplaySpriteId),
-        type: 'custom' as const,
-        onSelect: () => {
-          this.dialogue?.close();
-          this.runDialogueKey = null;
-          this.pendingDungeonInteraction = null;
-          this.dispatchRun({ type: 'choose_exit', exitId: exit.id });
-        },
-      };
-    });
-    if (hidden) options.push({
-      label: 'Search the hidden wall',
-      icon: this.spriteFile(hidden.lockedSpriteId as GameplaySpriteId),
-      type: 'custom' as const,
-      onSelect: () => {
-        this.dialogue?.close();
-        this.runDialogueKey = null;
-        this.dispatchRun({ type: 'reveal_secret', exitId: hidden.id });
-      },
-    });
-    this.dialogue.showDialogue({
-      speakerName: 'Crossroads',
-      speakerTitle: 'Choose the next chamber',
-      portraitIcon: this.spriteFile(node.sprites.exitDoorSpriteId as GameplaySpriteId),
-      sentences: ['The dungeon branches ahead. Safer roads and hidden rewards demand different risks.'],
-      options,
-    });
+    if (!available.length) return false;
+    this.pendingDungeonInteraction = null;
+    const chosenExit = available[Math.floor(Math.random() * available.length)];
+    const target = state.graph.nodes.find(candidate => candidate.id === chosenExit.toRoomId);
+    const targetName = target ? this.humanize(target.kind) : 'Next Chamber';
+    this.hud?.showToast(`Advancing to ${targetName}...`);
+    window.setTimeout(() => {
+      if (this.runController?.getSnapshot().status === 'active') {
+        this.dispatchRun({ type: 'choose_exit', exitId: chosenExit.id });
+      }
+    }, 800);
     return true;
   }
 
@@ -2208,6 +2154,12 @@ export class SideViewGame {
 
     const remainingMs = Math.max(1000, Math.min(packet.duration, packet.endTime - Date.now()));
 
+    // Auto-pick random game mode modifier so waves flow continuously without manual pause
+    const autoOpt = packet.options[Math.floor(Math.random() * packet.options.length)];
+    if (autoOpt) {
+      this.castGameModeVote(autoOpt.id);
+    }
+
     this.hud?.showGameModeVotingModal(packet.options, remainingMs, (selectedModeId: string) => {
       this.castGameModeVote(selectedModeId);
     });
@@ -2321,7 +2273,7 @@ export class SideViewGame {
         this.currentWaveIndex++;
         this.spawnNextWave();
       }
-    }, 800);
+    }, 400);
   }
 
   private forceAdvanceVoting(): void {

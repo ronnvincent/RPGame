@@ -769,20 +769,25 @@ export function spawnWaveEnemies(
       // always drops - that is the reward for the fight - but everything below
       // is now uncommon enough to be worth picking up.
       // Gems ride the same slot: bosses double the chance, rank-and-file halve it.
+      const lootRngSeed = `${encounterSeed}:${enemyTemplate.name}:${i}:loot`;
+      const lootRng = createSeededRng(lootRngSeed);
       const gemChance = enemyTemplate.type === 'boss'
         ? GEM_DROP_CHANCE * 2
         : (enemyTemplate.type === 'elite' || isElite)
         ? GEM_DROP_CHANCE
         : GEM_DROP_CHANCE * 0.5;
-      const loot = Math.random() < gemChance
-        ? rollGemDrop()
+      const gemRoll = stableEncounterUnit(`${lootRngSeed}:gem`);
+      const eliteDropRoll = stableEncounterUnit(`${lootRngSeed}:eliteDrop`);
+      const mobDropRoll = stableEncounterUnit(`${lootRngSeed}:mobDrop`);
+      const loot = gemRoll < gemChance
+        ? rollGemDrop(lootRng)
         : enemyTemplate.type === 'boss'
-        ? getRandomLoot('boss')
+        ? getRandomLoot('boss', lootRng)
         : enemyTemplate.type === 'elite'
-        ? (Math.random() < ELITE_DROP_CHANCE ? getRandomLoot('mid') : undefined)
+        ? (eliteDropRoll < ELITE_DROP_CHANCE ? getRandomLoot('mid', lootRng) : undefined)
         : isElite
         ? getRandomLoot('mid')
-        : (Math.random() < MOB_DROP_CHANCE ? getRandomLoot('low') : undefined);
+        : (mobDropRoll < MOB_DROP_CHANCE ? getRandomLoot('low', lootRng) : undefined);
 
       // Defective monsters are a dice roll in both directions: 1x-3.5x HP,
       // 1x-2.5x ATK, double gold. The name tag is the only warning.
@@ -862,6 +867,14 @@ function stableEncounterUnit(value: string): number {
     hash = Math.imul(hash, 16777619);
   }
   return (hash >>> 0) / 4_294_967_296;
+}
+
+function createSeededRng(seed: string): () => number {
+  let index = 0;
+  return () => {
+    index += 1;
+    return stableEncounterUnit(`${seed}:${index}`);
+  };
 }
 
 function slugEnemyId(value: string): string {
