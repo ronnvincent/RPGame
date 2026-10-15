@@ -916,7 +916,7 @@ export class ParticleSystem {
     this.reaperAvatars.push({
       id: `reaper_${Date.now()}`,
       x,
-      y: y - 160,
+      y,
       facing,
       life: 0,
       maxLife: 2.5
@@ -2514,22 +2514,49 @@ export class ParticleSystem {
       const alpha = Math.min(1, Math.sin(progress * Math.PI) * 1.5);
       ctx.globalAlpha = alpha;
       ctx.translate(r.x, r.y);
-      if (r.facing < 0) ctx.scale(-1, 1);
 
-      const isSpell = progress < 0.45;
+      // Contact shadow planted firmly on the ground surface
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+      ctx.beginPath();
+      ctx.ellipse(0, 2, 130, 16, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.save();
+      // Bringer of Death sprite faces LEFT by default!
+      // When facing right (> 0), flip horizontally and apply an aggressive forward-downward attack tilt
+      if (r.facing > 0) {
+        ctx.scale(-1, 1);
+        ctx.rotate(0.06);
+      } else {
+        ctx.rotate(-0.06);
+      }
+
+      const isSpell = progress < 0.40;
       const frameNum = isSpell
-        ? Math.min(16, Math.max(1, Math.floor((progress / 0.45) * 16) + 1))
-        : Math.min(10, Math.max(1, Math.floor(((progress - 0.45) / 0.55) * 10) + 1));
+        ? Math.min(16, Math.max(1, Math.floor((progress / 0.40) * 16) + 1))
+        : Math.min(10, Math.max(1, Math.floor(((progress - 0.40) / 0.60) * 10) + 1));
 
       let reaperImg = sprites.getImage(isSpell ? `reaper_spell_${frameNum}` : `reaper_atk_${frameNum}`);
       if (!this.isDrawableImage(reaperImg)) {
-        reaperImg = this.resolveReaperFallback() || undefined;
+        reaperImg = sprites.getImage('reaper_spell_1') || this.resolveReaperFallback() || undefined;
       }
+
+      const destW = 420;
+      const destH = 280;
+      // 93px height in Bringer of Death sprite has the robe hem and footline at ~95%
+      const feetYOffset = Math.round(destH * 0.95); // ~266px from top
+
       if (this.isDrawableImage(reaperImg)) {
-        const destW = 280;
-        const destH = 186;
-        ctx.drawImage(reaperImg, -destW / 2, -destH + 50, destW, destH);
+        ctx.shadowColor = '#a855f7';
+        ctx.shadowBlur = expensiveEffects ? 24 : 0;
+        ctx.drawImage(reaperImg, -destW * 0.72, -feetYOffset, destW, destH);
+      } else {
+        const sheetImg = sprites.getImage('reaper_sheet');
+        if (this.isDrawableImage(sheetImg)) {
+          ctx.drawImage(sheetImg, 0, 0, 140, 93, -destW * 0.72, -feetYOffset, destW, destH);
+        }
       }
+      ctx.restore();
       ctx.restore();
     });
 
