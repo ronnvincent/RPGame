@@ -28,7 +28,7 @@ check('and Power with it', /plate-power/.test(plate) && /hud-power/.test(plate))
 check('EXP is a hairline, not a third framed bar',
   /plate-exp/.test(plate) && !/sprite-bar-exp/.test(plate));
 check('HP and MP keep their frames, because those are read mid-fight',
-  (plate.match(/sprite-bar-frame/g) || []).length === 2);
+  (plate.match(/id="hud-[hm]p-track"/g) || []).length === 2);
 // The ID was put on the HUD by explicit request - you read it out to a friend
 // to be invited - so decluttering moves it, it does not remove it. It lost its
 // own row and joined the plate's footer beside the gold and Power.
@@ -115,18 +115,21 @@ const ruleBody = (selector) => {
 // to a flex column against the right edge, on top of the skills. Measured after
 // the move at 1024x768, 1180x820, 812x375 and 568x320: jump sits 268px from the
 // right edge at every one, and nothing overlaps.
-const offsetOf = (cls) => {
-  const needle = '      .' + cls + ' {';
-  for (let i = hud.indexOf(needle); i !== -1; i = hud.indexOf(needle, i + 1)) {
-    const m = hud.slice(i, i + 300).match(/right: calc\(([0-9]+)px/);
-    if (m) return Number(m[1]);
-  }
-  return NaN;
-};
-const utility = ['jump-touch-btn', 'dash-touch-btn', 'touch-talk-btn'].map(offsetOf);
-check('the utility buttons share one column', new Set(utility).size === 1 && Number.isFinite(utility[0]));
-check('and that column is clear of the skill fan, which reaches 239px',
-  utility[0] > 239);
+const utilityPlacements = [
+  { name: 'jump', cls: 'jump-touch-btn', right: 104, bottom: 18, width: 46, height: 46 },
+  { name: 'dash', cls: 'dash-touch-btn', right: 96, bottom: 68, width: 46, height: 46 },
+  { name: 'talk', cls: 'touch-talk-btn', right: 62, bottom: 104, width: 46, height: 46 },
+];
+check('the utility buttons form an inner arc around attack',
+  utilityPlacements.every(u => {
+    const selector = '      .' + u.cls + ' {';
+    const marker = hud.indexOf('Inner Arc: Jump, Dash, Parry');
+    const start = hud.indexOf(selector, marker);
+    const body = start === -1 ? '' : hud.slice(start, start + 300).split('}')[0];
+    const r = Number(body.match(/right: calc\(([0-9]+)px/)?.[1]);
+    const b = Number(body.match(/bottom: calc\(([0-9]+)px/)?.[1]);
+    return r === u.right && b === u.bottom;
+  }));
 
 // --- Stepping back, not vanishing ----------------------------------------
 check(`a calm HUD is still readable (readouts at ${calmReadouts})`,
@@ -147,10 +150,7 @@ check('and every tile is styled by one class', (menuBlock.match(/class="pause-ti
 check('town is exempt from the fade, in a state of its own', /isTownMode \? 'hud-town'/.test(hud) && /\.hud-town \.player-status-panel/.test(hud));
 check('and the state is cleared with the others', /'hud-boss', 'hud-town'/.test(hud));
 
-// --- Compact attack fan --------------------------------------------------
-// The former 175px radius made the attack feel detached from its abilities.
-// A 100px radius with a wider angular sweep keeps 58px neighbours apart while
-// moving the large primary action into the same thumb cluster.
+// --- Two-ring radial arc layout -----------------------------------------
 check('the skills use the compact 100px-radius fan',
   /tight 100px-radius fan/.test(hud));
 const attackRule = (() => {
@@ -158,21 +158,21 @@ const attackRule = (() => {
   const i = hud.indexOf('      .hotbar-slot[data-skill-idx="0"] {', marker);
   return i === -1 ? '' : hud.slice(i, i + 500);
 })();
-check('and the attack is pulled left into that fan', /right: calc\(67px/.test(attackRule));
+check('and the attack is anchored in the corner', /right: calc\(16px/.test(attackRule));
 
 const fanPlacements = [
-  { idx: 0, right: 67, bottom: 27, width: 86, height: 86 },
-  { idx: 1, right: 181, bottom: 41, width: 58, height: 58 },
-  { idx: 2, right: 162, bottom: 100, width: 58, height: 58 },
-  { idx: 3, right: 112, bottom: 136, width: 58, height: 58 },
-  { idx: 4, right: 50, bottom: 136, width: 58, height: 58 },
-  { idx: 5, right: 0, bottom: 100, width: 58, height: 58 },
+  { idx: 0, right: 16, bottom: 16, width: 76, height: 76 },
+  { idx: 1, right: 174, bottom: 42, width: 44, height: 44 },
+  { idx: 2, right: 161, bottom: 92, width: 44, height: 44 },
+  { idx: 3, right: 131, bottom: 134, width: 44, height: 44 },
+  { idx: 4, right: 88, bottom: 163, width: 44, height: 44 },
+  { idx: 5, right: 37, bottom: 174, width: 44, height: 44 },
 ];
 const sharedSkillRuleStart = hud.indexOf('.hotbar-slot[data-skill-idx="1"],');
 const sharedSkillRule = sharedSkillRuleStart === -1 ? '' : hud.slice(sharedSkillRuleStart, sharedSkillRuleStart + 400);
 const sharedSkillWidth = Number(sharedSkillRule.match(/width: ([0-9]+)px/)?.[1]);
 const sharedSkillHeight = Number(sharedSkillRule.match(/height: ([0-9]+)px/)?.[1]);
-const fanCoordinateMarker = hud.indexOf('Five 58px skills on a tight 100px-radius fan');
+const fanCoordinateMarker = hud.indexOf('Five 44px skills on a tight 100px-radius fan');
 const declaredFanPlacement = (idx) => {
   const selector = `.hotbar-slot[data-skill-idx="${idx}"]`;
   const start = hud.indexOf(`${selector} {`, idx === 0 ? hud.indexOf('The Main Attack Button') : fanCoordinateMarker);
@@ -187,7 +187,7 @@ const declaredFanPlacement = (idx) => {
     height: idx === 0 ? size('height') : sharedSkillHeight,
   };
 };
-check('all six attack-fan coordinates are locked to the compact layout',
+check('all six attack-fan coordinates are locked to the two-ring layout',
   JSON.stringify(fanPlacements.map(({ idx }) => declaredFanPlacement(idx))) === JSON.stringify(fanPlacements));
 check('the 568px safe-area fallback lifts the potion clear of the utility column',
   /@media \(max-width: 600px\) \{[\s\S]{0,180}\.potion-slot \{[\s\S]{0,100}bottom: calc\(208px \+ env\(safe-area-inset-bottom\)\)/.test(hud));
@@ -209,17 +209,13 @@ const rectsForViewport = ({ width, height, safeLeft = 0, safeRight = 0, safeBott
   controls.push(rectangle('joystick', Math.max(20, safeLeft), height - joystickBottom - 140, 140, 140, 'left'));
   const potionBottom = width <= 600 ? 208 + safeBottom : Math.max(20, safeBottom) + 22;
   controls.push(rectangle('potion', 176 + safeLeft, height - potionBottom - 58, 58, 58, 'left'));
-  [
-    ['jump', 28, 54, 54],
-    ['dash', 92, 50, 50],
-    ['talk', 156, 50, 50],
-  ].forEach(([name, bottom, rectWidth, rectHeight]) => controls.push(rectangle(
-    name,
-    width - safeRight - 268 - rectWidth,
-    height - safeBottom - bottom - rectHeight,
-    rectWidth,
-    rectHeight,
-    'utility',
+  utilityPlacements.forEach((u) => controls.push(rectangle(
+    u.name,
+    width - safeRight - u.right - u.width,
+    height - safeBottom - u.bottom - u.height,
+    u.width,
+    u.height,
+    'inner-arc',
   )));
   return controls;
 };
@@ -240,11 +236,12 @@ const circlesOverlap = (a, b) => {
   const inBounds = controls.every((control) => control.left >= 0 && control.top >= 0
     && control.right <= viewport.width && control.bottom <= viewport.height);
   let collision = '';
+  const isCircle = (grp) => grp === 'fan' || grp === 'inner-arc';
   for (let i = 0; i < controls.length && !collision; i += 1) {
     for (let j = i + 1; j < controls.length; j += 1) {
       const a = controls[i];
       const b = controls[j];
-      const overlaps = a.group === 'fan' && b.group === 'fan'
+      const overlaps = isCircle(a.group) && isCircle(b.group)
         ? circlesOverlap(a, b)
         : rectanglesOverlap(a, b);
       if (overlaps) { collision = `${a.name}/${b.name}`; break; }

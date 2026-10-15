@@ -521,6 +521,8 @@ export class GameHUD {
         gap: 8px;
         pointer-events: auto;
         z-index: 10;
+        box-sizing: border-box;
+        overflow: hidden;
       }
 
       .player-portrait-box {
@@ -588,34 +590,36 @@ export class GameHUD {
         box-shadow: 0 0 6px rgba(124, 58, 237, 0.8);
       }
 
-      /* Currency rail, under the menu button. */
+      /* Currency rail, horizontal next to menu button. */
       .currency-stack {
         display: flex;
-        flex-direction: column;
-        align-items: flex-end;
+        flex-direction: row;
+        align-items: center;
         gap: 4px;
-        margin-top: 8px;
+        margin-top: 0;
         pointer-events: auto;
       }
       .currency-pill {
         display: inline-flex;
         align-items: center;
-        gap: 5px;
-        min-width: 74px;
-        justify-content: flex-end;
-        padding: 3px 8px;
-        background: rgba(10, 10, 14, 0.82);
+        gap: 4px;
+        padding: 2px 6px;
+        background: rgba(10, 10, 14, 0.85);
         border: 1px solid #8a6d2f;
         border-radius: 3px;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.8), inset 0 0 0 1px rgba(255, 215, 0, 0.12);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.8), inset 0 0 0 1px rgba(255, 215, 0, 0.12);
+        white-space: nowrap;
       }
-      .currency-pill img { image-rendering: pixelated; }
+      .currency-pill img { image-rendering: pixelated; width: 13px; height: 13px; }
       .currency-pill b {
-        font-size: 11px;
+        font-size: 10.5px;
         font-weight: 900;
         color: #ffd700;
         text-shadow: 1px 1px 2px #000;
         font-family: 'Outfit', sans-serif;
+      }
+      .currency-pill.is-zero {
+        display: none;
       }
 
       .sprite-bar-fill {
@@ -641,51 +645,73 @@ export class GameHUD {
         height: 7px;
       }
 
-      /* Top Center: Wave Banner with Sprite Panel */
+      /* Combined Dungeon Banner & Objective Status */
+      .dungeon-banner-container {
+        display: flex;
+        flex-direction: column;
+        width: min(286px, calc(100vw - 24px));
+        pointer-events: auto;
+        z-index: 10;
+        box-shadow: 0 3px 12px rgba(0, 0, 0, 0.8);
+        border-radius: 4px;
+        overflow: hidden;
+      }
+
       .dungeon-wave-banner {
         position: relative;
+        width: 100%;
         max-width: min(420px, 60vw);
-        /* Say it explicitly. The two lines relied on default block stacking and
-           ran together into one crowded strip; a column with a gap cannot. */
+        box-sizing: border-box;
         display: flex;
         flex-direction: column;
         align-items: flex-start;
         gap: 3px;
-        padding: 6px 14px;
+        padding: 5px 10px;
         background: url('/assets/kenney-rpg-ui/panel_brown.png') repeat;
         background-size: 100% 100%;
-        padding: 6px 24px;
-        text-align: center;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.85);
-        pointer-events: none;
-        z-index: 10;
+        text-align: left;
+        pointer-events: auto;
+      }
+
+      .wave-header-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        gap: 6px;
       }
 
       .leave-dungeon-btn {
-        padding: 4px 12px;
+        padding: 2px 7px;
         background: linear-gradient(180deg, #b91c1c 0%, #7f1d1d 100%);
-        border: 2px solid #f87171;
-        border-radius: 4px;
+        border: 1px solid #f87171;
+        border-radius: 3px;
         color: #fef2f2;
-        font-size: 10px;
+        font-size: 8.5px;
         font-weight: 900;
         font-family: 'Outfit', sans-serif;
         text-transform: uppercase;
-        letter-spacing: 1px;
+        letter-spacing: 0.5px;
         cursor: pointer;
         pointer-events: auto;
-        box-shadow: 0 4px 10px rgba(239, 68, 68, 0.4);
+        box-shadow: 0 2px 5px rgba(239, 68, 68, 0.4);
         display: none;
-        align-self: flex-start;
-        margin-left: 4px;
+        align-items: center;
+        gap: 3px;
+        line-height: 1;
+        flex-shrink: 0;
       }
       .leave-dungeon-btn:hover {
         background: linear-gradient(180deg, #dc2626 0%, #991b1b 100%);
-        box-shadow: 0 4px 15px rgba(239, 68, 68, 0.8);
+        box-shadow: 0 2px 10px rgba(239, 68, 68, 0.7);
         color: #fff;
       }
       .leave-dungeon-btn:active {
-        transform: scale(0.95);
+        transform: scale(0.92);
+      }
+      .leave-dungeon-btn .leave-icon {
+        width: 10px;
+        height: 10px;
       }
 
       .player-id-row {
@@ -711,19 +737,18 @@ export class GameHUD {
       }
 
       .wave-title {
-        font-size: 11px;
+        font-size: 10px;
         font-weight: 900;
         color: #ffd700;
-        letter-spacing: 1px;
+        letter-spacing: 0.8px;
         text-transform: uppercase;
         text-shadow: 1px 1px 2px #000;
-        /* Wrapping is better than a name that runs out of its own panel. */
         white-space: normal;
         line-height: 1.25;
       }
 
       .wave-mobs-left {
-        font-size: 9px;
+        font-size: 8.5px;
         color: #f1f5f9;
         font-weight: 700;
         font-family: 'Outfit', sans-serif;
@@ -735,14 +760,15 @@ export class GameHUD {
       .dungeon-run-status {
         display: none;
         width: min(286px, calc(100vw - 24px));
-        padding: 7px 9px;
+        padding: 4px 8px;
         box-sizing: border-box;
-        background: rgba(15, 10, 22, 0.88);
-        border: 1px solid rgba(212, 175, 55, 0.72);
-        border-radius: 4px;
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.72);
+        background: rgba(15, 10, 22, 0.94);
+        border: 1px solid rgba(212, 175, 55, 0.5);
+        border-top: 1px solid rgba(212, 175, 55, 0.25);
+        border-radius: 0 0 4px 4px;
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.72);
         grid-template-columns: 1fr;
-        gap: 5px;
+        gap: 3px;
         pointer-events: none;
       }
 
@@ -851,16 +877,16 @@ export class GameHUD {
       /* Combo Display */
       .combo-display {
         position: absolute;
-        top: 65px;
-        right: 25px;
-        font-size: 24px;
+        top: 48px;
+        right: max(14px, env(safe-area-inset-right));
+        font-size: 22px;
         font-weight: 900;
         color: #ffd700;
         text-shadow: 2px 2px 0 #000, -2px -2px 0 #e43b44;
-        transform: rotate(-6deg);
+        transform: rotate(-5deg);
         display: none;
         pointer-events: none;
-        z-index: 10;
+        z-index: 15;
       }
 
       /* Top Right: Gold & Navigation Buttons */
@@ -873,9 +899,10 @@ export class GameHUD {
       /* The only chrome left in the top right besides the gold. */
       .hud-menu-btn {
         display: inline-flex; align-items: center; justify-content: center;
-        width: 34px; height: 34px; padding: 0; cursor: pointer;
+        width: 32px; height: 32px; padding: 0; cursor: pointer;
         background: url('/assets/kenney-rpg-ui/buttonSquare_brown.png') no-repeat center/100% 100%;
         border: none; color: #f3e6c8;
+        flex-shrink: 0;
       }
       .hud-menu-btn:active { transform: translateY(1px); }
       .hud-menu-btn .hud-glyph { width: 18px; height: 18px; }
@@ -1072,9 +1099,10 @@ export class GameHUD {
          press. Gold lived alone in the top right, which made a number look
          like a control. */
       .plate-meta {
-        display: flex; align-items: center; gap: 10px;
+        display: flex; align-items: center; gap: 8px;
         margin-top: 3px;
-        font-size: 10.5px; font-weight: 700; letter-spacing: 0.3px;
+        font-size: 10px; font-weight: 700; letter-spacing: 0.3px;
+        overflow: hidden; max-width: 100%;
       }
       .plate-gold {
         display: inline-flex; align-items: center; gap: 3px;
@@ -1088,15 +1116,15 @@ export class GameHUD {
       .plate-power .hud-glyph { width: 11px; height: 11px; }
       /* The ID is read out loud to a friend once, so it does not need weight -
          but it does need to be on screen without opening anything. */
-      .plate-id { margin-left: auto; color: #9b8a68; font-weight: 600; }
-      .plate-id b { color: #f3e6c8; letter-spacing: 1px; }
+      .plate-id { margin-left: auto; color: #9b8a68; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 75px; }
+      .plate-id b { color: #f3e6c8; letter-spacing: 0.5px; }
 
       /* Experience as the plate's underline. It was a third framed bar, which
          gave a slow background number the same weight as health. The plate is
          already position:relative, and its 10px bottom padding leaves room. */
       .plate-exp {
         position: absolute;
-        left: 6px; right: 6px; bottom: 3px;
+        left: 4px; right: 4px; bottom: 2px;
         height: 3px;
         background: rgba(0, 0, 0, 0.55);
         border-radius: 2px;
@@ -1219,14 +1247,15 @@ export class GameHUD {
         display: flex;
         /* Wrap rather than run into the player panel. Ten items in a fixed row
            only fits while nothing is added to it, and voice added two. */
+        flex-direction: row-reverse;
         flex-wrap: wrap;
-        justify-content: flex-end;
+        justify-content: flex-start;
+        align-items: center;
         max-width: calc(100vw - 300px);
         row-gap: 5px;
-        gap: 5px;
+        gap: 6px;
         pointer-events: auto;
-        z-index: 10;
-        align-items: center;
+        z-index: 40;
       }
 
       .gold-badge {
@@ -1282,6 +1311,7 @@ export class GameHUD {
       /* Mini Quest Tracker Widget */
       .mini-quest-tracker {
         position: absolute;
+        top: 78px;
         bottom: 12px;
         right: 12px;
         width: 220px;
@@ -1807,21 +1837,21 @@ export class GameHUD {
         position: absolute;
         left: 50%;
         transform: translateX(-50%);
-        bottom: 108px;
+        top: max(8px, env(safe-area-inset-top));
         display: flex;
-        gap: 8px;
+        gap: 6px;
         z-index: 60;
         pointer-events: auto;
       }
 
       .voice-dock-btn {
-        width: 42px;
-        height: 42px;
+        width: 30px;
+        height: 30px;
         border-radius: 50%;
-        border: 2px solid #6b4a24;
-        background: rgba(59, 42, 22, 0.92);
+        border: 1.5px solid #6b4a24;
+        background: rgba(45, 30, 16, 0.92);
         color: #ffe8b0;
-        font-size: 17px;
+        font-size: 13px;
         line-height: 1;
         cursor: pointer;
         display: flex;
@@ -1831,20 +1861,17 @@ export class GameHUD {
         user-select: none;
         -webkit-user-select: none;
         touch-action: manipulation;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
+        transition: transform 0.08s ease, filter 0.15s ease;
       }
 
       .voice-dock-btn:active { transform: scale(0.9); }
+      .voice-dock-btn .hud-glyph { width: 14px; height: 14px; }
 
       .voice-dock-count {
-        font-size: 9px;
+        font-size: 8px;
         font-weight: 900;
         margin-top: 1px;
-      }
-
-      /* On a short screen the skill bar sits higher, so lift the dock clear. */
-      @media (max-height: 520px) {
-        .voice-dock { bottom: 92px; }
-        .voice-dock-btn { width: 36px; height: 36px; font-size: 15px; }
       }
 
       .touch-action-btn {
@@ -1915,8 +1942,8 @@ export class GameHUD {
       }
 
       /* The skill ring.
-         Applies only on mobile/touch devices. */
-      @media (hover: none) and (pointer: coarse), (max-width: 860px) {
+         Applies on mobile/touch devices and responsive landscape. */
+      @media (hover: none) and (pointer: coarse), (max-width: 860px), (max-width: 950px), (max-height: 520px) {
       .skills-hotbar {
         background: none;
         box-shadow: none;
@@ -1928,6 +1955,15 @@ export class GameHUD {
         width: 100vw;
         height: 100vh;
         pointer-events: none; /* Let touches pass through to underlying elements */
+        opacity: 0.85;
+        transition: opacity 0.2s ease;
+      }
+
+      .skills-hotbar:hover,
+      .skills-hotbar:active,
+      .mobile-action-hub:hover,
+      .mobile-action-hub:active {
+        opacity: 1;
       }
 
       .hotbar-slot {
@@ -1943,43 +1979,37 @@ export class GameHUD {
         display: none;
       }
 
+      /* Hide all keyboard hotkey badges on mobile/touch viewports */
       .slot-key-badge {
-        font-size: 6.5px;
-        padding: 0 2px;
-        top: -4px;
-        left: -4px;
+        display: none !important;
       }
 
-      /* The Main Attack Button (Skill 0) */
+      /* The Main Attack Button (Skill 0) - firmly anchored in bottom-right corner */
       .hotbar-slot[data-skill-idx="0"] {
-        width: 86px;
-        height: 86px;
-        /* Pull the main attack into the fan instead of marooning it in the
-           corner. Its centre is the origin for the compact skill arc below. */
-        bottom: calc(27px + env(safe-area-inset-bottom));
-        right: calc(67px + env(safe-area-inset-right));
+        width: 76px;
+        height: 76px;
+        bottom: calc(16px + env(safe-area-inset-bottom));
+        right: calc(16px + env(safe-area-inset-right));
         z-index: 10;
       }
       .hotbar-slot[data-skill-idx="0"] .slot-icon-img {
-        width: 48px;
-        height: 48px;
+        width: 42px;
+        height: 42px;
       }
 
-      /* Outer Arc layout for active skills 1-5 (Radius 100px) */
+      /* Outer Arc layout for active skills 1-5 */
       .hotbar-slot[data-skill-idx="1"], .hotbar-slot[data-skill-idx="2"], 
       .hotbar-slot[data-skill-idx="3"], .hotbar-slot[data-skill-idx="4"], 
       .hotbar-slot[data-skill-idx="5"] {
-        width: 58px;
-        height: 58px;
+        width: 44px;
+        height: 44px;
       }
-      /* Five 58px skills on a tight 100px-radius fan, 36 degrees apart.
-         Neighbours retain a small gap, while every skill is now only 28px
-         edge-to-edge from the 86px attack button instead of roughly 103px. */
-      .hotbar-slot[data-skill-idx="1"] { bottom: calc(41px + env(safe-area-inset-bottom)); right: calc(181px + env(safe-area-inset-right)); }
-      .hotbar-slot[data-skill-idx="2"] { bottom: calc(100px + env(safe-area-inset-bottom)); right: calc(162px + env(safe-area-inset-right)); }
-      .hotbar-slot[data-skill-idx="3"] { bottom: calc(136px + env(safe-area-inset-bottom)); right: calc(112px + env(safe-area-inset-right)); }
-      .hotbar-slot[data-skill-idx="4"] { bottom: calc(136px + env(safe-area-inset-bottom)); right: calc(50px + env(safe-area-inset-right)); }
-      .hotbar-slot[data-skill-idx="5"] { bottom: calc(100px + env(safe-area-inset-bottom)); right: calc(0px + env(safe-area-inset-right)); }
+      /* Five 44px skills on a tight 100px-radius fan (outer arc around inner arc) */
+      .hotbar-slot[data-skill-idx="1"] { bottom: calc(42px + env(safe-area-inset-bottom)); right: calc(174px + env(safe-area-inset-right)); }
+      .hotbar-slot[data-skill-idx="2"] { bottom: calc(92px + env(safe-area-inset-bottom)); right: calc(161px + env(safe-area-inset-right)); }
+      .hotbar-slot[data-skill-idx="3"] { bottom: calc(134px + env(safe-area-inset-bottom)); right: calc(131px + env(safe-area-inset-right)); }
+      .hotbar-slot[data-skill-idx="4"] { bottom: calc(163px + env(safe-area-inset-bottom)); right: calc(88px + env(safe-area-inset-right)); }
+      .hotbar-slot[data-skill-idx="5"] { bottom: calc(174px + env(safe-area-inset-bottom)); right: calc(37px + env(safe-area-inset-right)); }
 
       /* The potion. On mobile the slots are placed one by one and this one had
          no place of its own, so it sat wherever the container defaulted to.
@@ -1987,92 +2017,95 @@ export class GameHUD {
          under the right thumb, and a heal squeezed among them would be pressed
          by accident in exactly the fight where you cannot afford to. */
       .potion-slot {
-        /* Beside the joystick, not above it. Above looks natural on a tall
-           phone but the left column also carries the player panel, and on a
-           short landscape screen (320px) panel + potion + joystick do not fit
-           - the potion landed on top of the panel. Sitting to the right of the
-           joystick keeps one position on every device, which is what muscle
-           memory needs from a heal button. */
         bottom: calc(max(20px, env(safe-area-inset-bottom)) + 22px);
         left: calc(176px + env(safe-area-inset-left));
         right: auto;
         margin-left: 0;
-        /* Same size as a skill button: this is the panic button, so it should
-           not be the smallest target on screen. */
         width: 58px;
         height: 58px;
         box-shadow: inset 0 0 0 2px rgba(74, 222, 128, 0.5);
       }
 
       .potion-slot .slot-skill-name { display: none; }
-      .potion-slot .slot-key-badge { display: none; }
+      .potion-slot .slot-key-badge { display: none !important; }
       .potion-count {
-        right: 3px;
+        position: absolute;
+        right: 2px;
         bottom: 2px;
-        font-size: 11px;
+        background: rgba(12, 10, 20, 0.94);
+        border: 1px solid rgba(212, 175, 55, 0.7);
+        border-radius: 999px;
+        padding: 1px 6px;
+        min-width: 14px;
+        text-align: center;
+        font-size: 10px;
+        font-weight: 900;
+        color: #ffffff;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+        font-family: 'Outfit', sans-serif;
+        line-height: 1.1;
       }
 
-      /* A 568px landscape phone can lose another 40px to left/right safe-area
-         gutters. In that pocket the potion and utility column cannot both sit
-         beside the joystick, so lift only the potion above the column. The
-         two-pixel vertical gap remains stable when a bottom inset is present. */
       @media (max-width: 600px) {
         .potion-slot {
           bottom: calc(208px + env(safe-area-inset-bottom));
         }
       }
 
-      /* On a pointer device the joystick is hidden, and the potion was placed
-         next to it - which left it stranded alone in the bottom-left corner.
-         Here it joins the ring instead, outside the arc so it is never a
-         mis-tap for a skill. */
-      /* The action hub travels with the ring.
-
-         These positions lived inside the phone breakpoint while the ring
-         moved to the base sheet, so on a touch device wider than 860px the
-         arc applied and the hub did not: jump, dash and talk fell back to a
-         flex column against the right edge, on top of the skills. */
       .mobile-action-hub {
         bottom: 0;
         right: 0;
         width: 100vw;
         height: 100vh;
         pointer-events: none;
+        opacity: 0.85;
+        transition: opacity 0.2s ease;
       }
 
       .touch-action-btn {
         position: absolute;
         pointer-events: auto;
+        border-radius: 50%;
+        border: none;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        font-weight: 900;
+        cursor: pointer;
+        user-select: none;
+        -webkit-user-select: none;
+        touch-action: none;
+        transition: transform 0.08s ease;
+        overflow: hidden;
+      }
+      .touch-action-btn .slot-key-badge {
+        display: none !important;
       }
 
-      /* Inner Arc: Jump and Dash (Radius 95px) */
-      /* Jump, dash and talk sat threaded through the skill arc - jump came
-         within 5px of a skill button - so the right thumb had two unrelated
-         kinds of action mixed into one shape. They are their own column now,
-         left of the arc, which is where this genre puts its utility buttons.
-         Ordered by how often they are pressed, nearest thumb first. */
+      /* Inner Arc: Jump, Dash, Parry in tight curve around Main Attack */
       .jump-touch-btn {
-        width: 54px;
-        height: 54px;
-        bottom: calc(28px + env(safe-area-inset-bottom));
-        right: calc(268px + env(safe-area-inset-right));
-        font-size: 9px;
+        width: 46px;
+        height: 46px;
+        bottom: calc(18px + env(safe-area-inset-bottom));
+        right: calc(104px + env(safe-area-inset-right));
+        font-size: 8.5px;
       }
       .dash-touch-btn {
-        width: 50px;
-        height: 50px;
-        bottom: calc(92px + env(safe-area-inset-bottom));
-        right: calc(268px + env(safe-area-inset-right));
-        font-size: 8.5px;
+        width: 46px;
+        height: 46px;
+        bottom: calc(68px + env(safe-area-inset-bottom));
+        right: calc(96px + env(safe-area-inset-right));
+        font-size: 8px;
       }
 
-      /* Talk button sitting safely out of the action arc */
+      /* Talk / Parry button on the inner curve */
       .touch-talk-btn {
-        width: 50px;
-        height: 50px;
-        bottom: calc(156px + env(safe-area-inset-bottom));
-        right: calc(268px + env(safe-area-inset-right));
-        font-size: 8.5px;
+        width: 46px;
+        height: 46px;
+        bottom: calc(104px + env(safe-area-inset-bottom));
+        right: calc(62px + env(safe-area-inset-right));
+        font-size: 8px;
       }
       } /* End of skill ring mobile media query */
 
@@ -2158,12 +2191,16 @@ export class GameHUD {
         white-space: nowrap;
       }
 
-      @media (max-width: 860px) {
+      @media (max-width: 860px), (orientation: landscape) and (max-height: 520px) {
+        .hud-top-left {
+          gap: 4px;
+          max-height: 44vh;
+        }
         .player-status-panel {
-          top: 6px;
-          left: 6px;
-          padding: 4px 8px;
+          padding: 4px 8px 6px 8px;
           gap: 6px;
+          transform: scale(0.85);
+          transform-origin: top left;
         }
         .player-portrait-box {
           width: 32px;
@@ -2183,12 +2220,26 @@ export class GameHUD {
           font-size: 7.5px;
           letter-spacing: 0.4px;
         }
-        .dungeon-wave-banner {
-          padding: 3px 10px;
+        .plate-id {
+          display: none;
+        }
+        .player-status-chips {
+          max-height: 18px;
           gap: 2px;
         }
+        .player-status-chip {
+          font-size: 7.5px;
+          padding: 1px 3px;
+          max-width: 52px;
+        }
+        .dungeon-banner-container {
+          transform: scale(0.85);
+          transform-origin: top left;
+          margin-top: -6px;
+        }
         .dungeon-wave-banner {
-          padding: 3px 12px;
+          padding: 3px 8px;
+          gap: 2px;
         }
         .wave-title {
           font-size: 9.5px;
@@ -2211,11 +2262,13 @@ export class GameHUD {
           top: max(6px, env(safe-area-inset-top));
           right: max(6px, env(safe-area-inset-right));
           gap: 4px;
-          transform: scale(0.85);
+          transform: scale(0.88);
           transform-origin: top right;
-          flex-wrap: wrap;
-          justify-content: flex-end;
-          width: 80%; /* Prevent stretching across whole screen */
+          flex-direction: row-reverse;
+          flex-wrap: nowrap;
+          justify-content: flex-start;
+          width: auto;
+          max-width: 60vw;
         }
         .gold-badge {
           padding: 3px 6px;
@@ -2229,7 +2282,6 @@ export class GameHUD {
           display: none; /* Hide on small mobile to avoid screen clutter */
         }
 
-        /* MLBB-Style Action HUD for Right Thumb */
         .mobile-joystick-area {
           bottom: max(20px, env(safe-area-inset-bottom));
           left: max(20px, env(safe-area-inset-left));
@@ -2759,6 +2811,7 @@ export class GameHUD {
           <div class="player-status-chips" id="player-status-chips" aria-label="Active effects"></div>
 
           <div class="plate-meta">
+            <span class="plate-gold" id="hud-gold-text" title="Gold"><img src="/assets/gui/PNG/iconCircle_brown.png" width="12" height="12" alt="" /> <span id="cur-gold-plate">0</span></span>
             <span class="plate-power" id="hud-power" title="Total Power - every level, item and upgrade counts">${GameHUD.glyph('spark')} ${this.engine.computePower().toLocaleString()}</span>
             <span class="plate-id" title="Your Player ID - give this to a friend to be invited">ID <b id="hud-id-text">${escapeHtml(localStorage.getItem('playerShortId') || 'Not assigned')}</b></span>
           </div>
@@ -2768,10 +2821,6 @@ export class GameHUD {
         <div class="plate-exp" title="Experience (EXP)"><div class="plate-exp-fill" id="hud-exp-bar" style="width: 0%"></div></div>
       </div>
 
-      <button class="leave-dungeon-btn" id="leave-dungeon-btn" style="display: ${this.engine.isTownMode ? 'none' : 'block'};">
-        ✕ Leave Dungeon
-      </button>
-
       <!-- Who else is here.
            Almost no 2D side-scroller has a party HUD - the genre's references
            are single-player, so there is nothing to copy. Without this the
@@ -2779,27 +2828,35 @@ export class GameHUD {
            the body: you cannot answer "is anyone in trouble" from the screen. -->
       <div class="ally-rail" id="ally-rail"></div>
 
-      <!-- Zone and wave, stacked under the player panel -->
-      <div class="dungeon-wave-banner" id="dungeon-wave-banner">
-        <div class="wave-title" id="wave-title-text">DUNGEON BATTLE</div>
-        <div class="wave-mobs-left" id="wave-mobs-text">Enemies remaining: 0</div>
-      </div>
+      <!-- Combined Zone Banner and Objective Status -->
+      <div class="dungeon-banner-container" id="dungeon-banner-container">
+        <div class="dungeon-wave-banner" id="dungeon-wave-banner">
+          <div class="wave-header-row">
+            <div class="wave-title" id="wave-title-text">DUNGEON BATTLE</div>
+            <button class="leave-dungeon-btn" id="leave-dungeon-btn" title="Leave Dungeon (Return to Town)" style="display: ${this.engine.isTownMode ? 'none' : 'inline-flex'};">
+              ${GameHUD.glyph('close', 'leave-icon')}
+              <span>Leave</span>
+            </button>
+          </div>
+          <div class="wave-mobs-left" id="wave-mobs-text">Enemies remaining: 0</div>
+        </div>
 
-      <section class="dungeon-run-status" id="dungeon-run-status" aria-label="Dungeon run" aria-hidden="true">
-        <div class="run-objective-row" id="run-objective-row">
-          <span class="gameplay-sprite-icon run-objective-icon" id="run-objective-icon" aria-hidden="true"><img alt="" draggable="false" /></span>
-          <div class="run-objective-copy">
-            <div class="run-objective-head">
-              <span class="run-objective-title" id="run-objective-title">DUNGEON OBJECTIVE</span>
-              <span class="run-objective-progress" id="run-objective-progress">In progress</span>
-            </div>
-            <div class="run-objective-meter" id="run-objective-meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-              <div class="run-objective-fill" id="run-objective-fill"></div>
+        <section class="dungeon-run-status" id="dungeon-run-status" aria-label="Dungeon run" aria-hidden="true">
+          <div class="run-objective-row" id="run-objective-row">
+            <span class="gameplay-sprite-icon run-objective-icon" id="run-objective-icon" aria-hidden="true"><img alt="" draggable="false" /></span>
+            <div class="run-objective-copy">
+              <div class="run-objective-head">
+                <span class="run-objective-title" id="run-objective-title">DUNGEON OBJECTIVE</span>
+                <span class="run-objective-progress" id="run-objective-progress">In progress</span>
+              </div>
+              <div class="run-objective-meter" id="run-objective-meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <div class="run-objective-fill" id="run-objective-fill"></div>
+              </div>
             </div>
           </div>
-        </div>
-        <div class="run-relic-rail" id="run-relic-rail" aria-label="Active relics"></div>
-      </section>
+          <div class="run-relic-rail" id="run-relic-rail" aria-label="Active relics"></div>
+        </section>
+      </div>
       </div>
 
       <!-- Top Center: Start Run Button in Town -->
@@ -2869,7 +2926,7 @@ export class GameHUD {
           <div class="play-modes" id="difficulty-modes">
             <button class="play-diff is-on" type="button" data-diff="normal">NORMAL</button>
             <button class="play-diff" type="button" data-diff="hard">HARD</button>
-            <button class="play-diff" type="button" data-diff="fatal">FATAL 🔑×10</button>
+            <button class="play-diff" type="button" data-diff="fatal">FATAL (Key×10)</button>
           </div>
           <div class="pause-label" id="play-hint">Choose where to go</div>
           <div id="play-list"></div>
@@ -3521,7 +3578,8 @@ export class GameHUD {
       const r = dockChat.getBoundingClientRect();
       const host = this.container.getBoundingClientRect();
       wheel.style.left = `${Math.max(6, r.left - host.left - 30)}px`;
-      wheel.style.bottom = `${Math.max(6, host.bottom - r.top + 8)}px`;
+      wheel.style.top = `${Math.max(6, r.bottom - host.top + 6)}px`;
+      wheel.style.bottom = 'auto';
     };
 
     dockChat?.addEventListener('click', (e) => {
@@ -3658,7 +3716,7 @@ export class GameHUD {
     // a tap. Cancel and leave both clear it, or walking away mid-hold would
     // leave the flag stuck on.
     if (talkBtn && this.game) {
-      this.bindActionControl(talkBtn, 'interact', { hold: true, vibrateMs: 8 });
+      this.actionBindingDisposers.add(this.game.bindInputAction(talkBtn, 'interact', { hold: true, vibrateMs: 8 }));
     } else {
       talkBtn?.addEventListener('click', (e) => {
         e.preventDefault();
@@ -4065,11 +4123,16 @@ export class GameHUD {
     mpTrack?.setAttribute('aria-valuemax', String(Math.round(maxMp)));
 
     if (slowPatch) {
+      const goldPlate = this.hudNode('cur-gold-plate');
+      if (goldPlate) goldPlate.textContent = finiteNumber(p.gold).toLocaleString();
       const goldText = this.hudNode('cur-gold');
       if (goldText) goldText.textContent = finiteNumber(p.gold).toLocaleString();
       const paintCurrency = (id: string, value: number | undefined) => {
         const node = this.hudNode(id);
-        if (node) node.textContent = finiteNumber(value ?? 0).toLocaleString();
+        const val = finiteNumber(value ?? 0);
+        if (node) node.textContent = val.toLocaleString();
+        const pill = node?.closest('.currency-pill') as HTMLElement | null;
+        if (pill) pill.classList.toggle('is-zero', val <= 0 && id !== 'cur-gold');
       };
       paintCurrency('cur-diamonds', p.diamonds);
       paintCurrency('cur-keys', p.keysOfPower);
@@ -4377,10 +4440,10 @@ export class GameHUD {
     }
     const card = item.cardId ? getCardById(item.cardId) : null;
     if (card) {
-      extraChips.push(`<span class="stat-chip" style="color:#c084fc;">🃏 ${escapeHtml(card.name)}</span>`);
+      extraChips.push(`<span class="stat-chip" style="color:#c084fc;">Card: ${escapeHtml(card.name)}</span>`);
     }
     if (item.enchantLevel) {
-      extraChips.push(`<span class="stat-chip" style="color:#f87171;">✦ Enchant +${item.enchantLevel}</span>`);
+      extraChips.push(`<span class="stat-chip" style="color:#f87171;">+ Enchant +${item.enchantLevel}</span>`);
     }
     if (item.setId) {
       const setDef = getSetById(item.setId);
