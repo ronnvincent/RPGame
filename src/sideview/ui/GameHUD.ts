@@ -714,6 +714,85 @@ export class GameHUD {
         height: 10px;
       }
 
+      /* Leave Dungeon In-Game Confirmation Modal */
+      .leave-confirm-panel {
+        width: min(440px, 92vw);
+        padding: 20px 24px;
+        text-align: center;
+        background: linear-gradient(145deg, rgba(28, 16, 22, 0.96), rgba(16, 10, 14, 0.98));
+        border: 1px solid rgba(239, 68, 68, 0.35);
+        border-top: 2px solid #ef4444;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.9), 0 0 24px rgba(239, 68, 68, 0.2);
+      }
+      .leave-confirm-title {
+        font-family: 'Cinzel', serif;
+        font-weight: 900;
+        font-size: 20px;
+        letter-spacing: 2px;
+        color: #f87171;
+        text-shadow: 0 2px 8px rgba(0,0,0,0.9), 0 0 16px rgba(239,68,68,0.45);
+        margin: 0 0 12px 0;
+      }
+      .leave-confirm-body {
+        margin-bottom: 20px;
+      }
+      .leave-confirm-text {
+        font-size: 13.5px;
+        color: #f8fafc;
+        font-weight: 600;
+        margin: 0 0 8px 0;
+        font-family: 'Outfit', sans-serif;
+      }
+      .leave-confirm-warn {
+        font-size: 11.5px;
+        color: #fca5a5;
+        opacity: 0.95;
+        margin: 0;
+        line-height: 1.45;
+        font-family: 'Outfit', sans-serif;
+      }
+      .leave-confirm-actions {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+      }
+      .leave-action-btn {
+        flex: 1;
+        padding: 10px 14px;
+        font-family: 'Cinzel', serif;
+        font-weight: 800;
+        font-size: 11.5px;
+        letter-spacing: 1px;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: transform 0.1s ease, filter 0.1s ease, background 0.15s ease;
+      }
+      .leave-cancel-btn {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        color: #e2e8f0;
+      }
+      .leave-cancel-btn:hover {
+        background: rgba(255, 255, 255, 0.2);
+        color: #ffffff;
+      }
+      .leave-cancel-btn:active {
+        transform: scale(0.96);
+      }
+      .leave-confirm-btn {
+        background: linear-gradient(180deg, #dc2626 0%, #991b1b 100%);
+        border: 1px solid #f87171;
+        color: #ffffff;
+        box-shadow: 0 4px 12px rgba(220, 38, 38, 0.5);
+      }
+      .leave-confirm-btn:hover {
+        filter: brightness(1.18);
+        box-shadow: 0 4px 18px rgba(220, 38, 38, 0.75);
+      }
+      .leave-confirm-btn:active {
+        transform: scale(0.96);
+      }
+
       .player-id-row {
         font-size: 8.5px;
         font-weight: 700;
@@ -2297,6 +2376,29 @@ export class GameHUD {
           height: 52px;
         }
 
+        .leave-confirm-panel {
+          padding: 14px 18px;
+          width: min(380px, 92vw);
+        }
+        .leave-confirm-title {
+          font-size: 17px;
+          margin-bottom: 8px;
+        }
+        .leave-confirm-body {
+          margin-bottom: 12px;
+        }
+        .leave-confirm-text {
+          font-size: 12px;
+          margin-bottom: 4px;
+        }
+        .leave-confirm-warn {
+          font-size: 10px;
+        }
+        .leave-action-btn {
+          padding: 8px 12px;
+          font-size: 10px;
+        }
+
       }
 
       /* Inventory Modal with Sprite Panel */
@@ -3145,6 +3247,25 @@ export class GameHUD {
         </div>
       </div>
 
+      <!-- Leave Dungeon Confirmation Modal -->
+      <div class="pause-back" id="leave-dungeon-modal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="leave-modal-title" tabindex="-1">
+        <div class="pause-panel rpg-panel leave-confirm-panel">
+          <h2 class="leave-confirm-title" id="leave-modal-title">LEAVE DUNGEON?</h2>
+          <div class="leave-confirm-body">
+            <p class="leave-confirm-text">Are you sure you want to return to town?</p>
+            <p class="leave-confirm-warn">Progress, unopened chests, and active wave rewards in this run will be lost.</p>
+          </div>
+          <div class="leave-confirm-actions">
+            <button class="leave-action-btn leave-cancel-btn" id="leave-modal-cancel-btn" type="button">
+              CONTINUE FIGHT
+            </button>
+            <button class="leave-action-btn leave-confirm-btn" id="leave-modal-confirm-btn" type="button">
+              ABANDON &amp; LEAVE
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- Inventory Modal -->
       <div class="inventory-modal rpg-panel" id="inventory-modal" role="dialog" aria-modal="true" aria-labelledby="inventory-title" tabindex="-1">
         <div class="inv-header">
@@ -3269,19 +3390,53 @@ export class GameHUD {
       this.game?.showScreen('map');
     });
 
-    // Return to Town button
+    // Return to Town button & Leave Dungeon handlers
     const townBtn = this.container.querySelector('#return-town-btn');
+    const leaveModal = this.container.querySelector('#leave-dungeon-modal') as HTMLElement | null;
+    const leaveCancelBtn = this.container.querySelector('#leave-modal-cancel-btn') as HTMLElement | null;
+    const leaveConfirmBtn = this.container.querySelector('#leave-modal-confirm-btn') as HTMLElement | null;
+
+    const closeLeaveModal = () => {
+      this.closeHudDialog(leaveModal);
+    };
+
+    const promptLeaveDungeon = () => {
+      if (!leaveModal) {
+        audio.playTeleport();
+        this.game?.loadTownHub();
+        return;
+      }
+      this.openHudDialog(leaveModal, {
+        initialFocus: leaveCancelBtn,
+        onEscape: closeLeaveModal,
+      });
+    };
+
     townBtn?.addEventListener('click', (e) => {
       e.stopPropagation();
-      audio.playTeleport();
-      this.game?.loadTownHub();
+      promptLeaveDungeon();
     });
 
     this.container.querySelector('#leave-dungeon-btn')?.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (!confirm('Leave this dungeon and return to town? Progress in this run will be lost.')) return;
+      promptLeaveDungeon();
+    });
+
+    leaveCancelBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      audio.playClick();
+      closeLeaveModal();
+    });
+
+    leaveConfirmBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeLeaveModal();
       audio.playTeleport();
       this.game?.loadTownHub();
+    });
+
+    leaveModal?.addEventListener('click', (e) => {
+      if (e.target === leaveModal) closeLeaveModal();
     });
 
     // Music toggle
@@ -4657,7 +4812,7 @@ export class GameHUD {
       wheel.classList.remove('open');
       return true;
     }
-    for (const selector of ['#skills-back', '#play-back']) {
+    for (const selector of ['#leave-dungeon-modal', '#skills-back', '#play-back']) {
       if (!this.elementIsOpen(selector)) continue;
       const element = this.container.querySelector(selector) as HTMLElement;
       this.closeHudDialog(element);
@@ -4683,14 +4838,14 @@ export class GameHUD {
   public isInputBlocking(): boolean {
     return Boolean(this.controlsPanel?.isOpen)
       || this.inventoryOpen
-      || ['#pause-back', '#skills-back', '#play-back'].some(selector => this.elementIsOpen(selector))
+      || ['#leave-dungeon-modal', '#pause-back', '#skills-back', '#play-back'].some(selector => this.elementIsOpen(selector))
       || Boolean(this.container.querySelector('#qc-wheel.open'))
       || (typeof document !== 'undefined' && Boolean(document.querySelector('.lb-backdrop')));
   }
 
   public navigateMenu(direction: 'up' | 'down' | 'left' | 'right' | 'confirm'): void {
     const scopes = [
-      '#pause-back', '#skills-back', '#play-back', '#inventory-modal', '#qc-wheel.open',
+      '#leave-dungeon-modal', '#pause-back', '#skills-back', '#play-back', '#inventory-modal', '#qc-wheel.open',
     ];
     const scope = scopes
       .map(selector => this.container.querySelector(selector) as HTMLElement | null)
@@ -4726,7 +4881,7 @@ export class GameHUD {
 
   public closePanels() {
     this.controlsPanel?.close(false);
-    ['#pause-back', '#skills-back', '#play-back'].forEach((sel) => {
+    ['#leave-dungeon-modal', '#pause-back', '#skills-back', '#play-back'].forEach((sel) => {
       const el = this.container.querySelector(sel) as HTMLElement | null;
       this.closeHudDialog(el);
     });
