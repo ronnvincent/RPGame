@@ -1385,8 +1385,9 @@ export class SpriteManager {
     const set = HERO_SPRITES[cid];
 
     let anim: string;
-    if (state === 'dead') anim = set.anims.death ? 'death' : 'idle';
-    else if (state === 'attack') anim = attackAnimFor(set, skillIndex);
+    if (state === 'dead') {
+      anim = set.anims.death ? 'death' : (set.anims.hurt ? 'hurt' : (set.anims.roll ? 'roll' : 'idle'));
+    } else if (state === 'attack') anim = attackAnimFor(set, skillIndex);
     else if (state === 'jump') anim = 'jump_up';
     else if (state === 'run') anim = 'run';
     else anim = 'idle';
@@ -1406,6 +1407,14 @@ export class SpriteManager {
       if (attackTimer > clock.prev) clock.start = this.animTimer;
       clock.prev = attackTimer;
       frame = Math.min(count - 1, Math.floor((this.animTimer - clock.start) * fps));
+    } else if (state === 'dead') {
+      if (set.anims.death) {
+        frame = Math.min(count - 1, Math.floor(this.animTimer * fps));
+      } else if (anim === 'roll') {
+        frame = count - 1; // Downed / defeated pose
+      } else {
+        frame = 0;
+      }
     } else {
       if (this.atkClock[cid]) this.atkClock[cid].prev = 0;
       frame = Math.floor(this.animTimer * fps) % count;
@@ -2542,12 +2551,20 @@ export class SpriteManager {
     isBoss: boolean,
     hitStun: number,
   ) {
-    if (visual.requiredAssets.length === 0) return;
+    const list = (visual.animationSequences && (
+      state === 'dead' ? visual.animationSequences.dead :
+      state === 'hit' || hitStun > 0 ? visual.animationSequences.hit :
+      state === 'attack' ? visual.animationSequences.attack :
+      state === 'walk' || state === 'run' ? (visual.animationSequences.move || visual.animationSequences.run || visual.animationSequences.walk) :
+      visual.animationSequences.idle
+    )) || visual.requiredAssets;
+
+    if (!list || list.length === 0) return;
     const raw = Math.floor(this.animTimer * (state === 'attack' ? 12 : 8));
     const index = state === 'dead'
-      ? Math.min(visual.requiredAssets.length - 1, raw)
-      : raw % visual.requiredAssets.length;
-    const src = visual.requiredAssets[index];
+      ? Math.min(list.length - 1, raw)
+      : raw % list.length;
+    const src = list[index];
     const image = this.images[src];
     if (!image) {
       this.warmPaths(visual.requiredAssets);

@@ -5899,23 +5899,18 @@ export class SideViewEngine {
       const npcType = npcSpriteTypeMap[npc.id] || 'oldman';
       (sprites as any).drawGothicTownNPC(ctx, npc.x, npcY + bob, npcType, -1);
 
-      // Scenery Props per NPC
+      // Scenery Props per NPC using authentic PolyProps and nature sprites
       if (npc.id === 'blacksmith_keith') {
-        // Anvil & Molten Hearth
-        ctx.fillStyle = '#334155';
-        ctx.fillRect(npc.x - 42, this.groundY - 16, 24, 16);
-        ctx.fillStyle = '#f97316';
-        ctx.fillRect(npc.x - 38, this.groundY - 18, 16, 4); // Glowing hot iron bar
+        // Authentic PolyProps Anvil and Forge
+        sprites.drawSheetPiece(ctx, POLY_SHEETS.props, POLY_PROPS.anvil, npc.x - 40, this.groundY, 26);
+        sprites.drawSheetPiece(ctx, POLY_SHEETS.props, POLY_PROPS.oven, npc.x - 76, this.groundY, 46);
       } else if (npc.id === 'alchemist_morwenna') {
-        // Cauldron
-        ctx.fillStyle = '#1e293b';
-        ctx.beginPath();
-        ctx.arc(npc.x + 36, this.groundY - 14, 14, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#22c55e';
-        ctx.beginPath();
-        ctx.arc(npc.x + 36, this.groundY - 20, 9, 0, Math.PI);
-        ctx.fill();
+        // Authentic Apothecary Barrel and Herb Garden
+        sprites.drawSheetPiece(ctx, POLY_SHEETS.props, POLY_PROPS.barrel, npc.x + 36, this.groundY, 28);
+        sprites.drawSheetPiece(ctx, POLY_SHEETS.nature, POLY_NATURE.bushGreen, npc.x + 58, this.groundY, 22);
+      } else if (npc.id === 'elder_justinian') {
+        // Village Elder Well
+        sprites.drawSheetPiece(ctx, POLY_SHEETS.props, POLY_PROPS.well, npc.x - 48, this.groundY, 42);
       }
 
       // 1. NPC Title Tag (bottom)

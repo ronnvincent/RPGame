@@ -27,6 +27,7 @@ export interface EnemyVisualProfile {
   bossScale?: number;
   frame?: { width: number; height: number; feetGap: number; centreOffset: number };
   animations?: Partial<Record<EnemyMobState | 'move', EnemyAnimationStrip>>;
+  animationSequences?: Partial<Record<EnemyMobState | 'move', readonly string[]>>;
   /** Documents a deliberate temporary species mismatch instead of hiding it. */
   intentionalFallback?: string;
 }
@@ -87,6 +88,14 @@ export const ENEMY_VISUAL_SOURCES = {
   'opengameart-pixel-wolf': {
     id: 'opengameart-pixel-wolf', title: 'Pixel Wolf', sourceUrl: 'https://opengameart.org/content/pixel-wolf',
     license: 'CC0-1.0', licenseEvidence: '/assets/runtime/licenses/opengameart-pixel-wolf-CC0-1.0.txt',
+  },
+  'pixelfrog-treasure-hunters': {
+    id: 'pixelfrog-treasure-hunters', title: 'Treasure Hunters', sourceUrl: 'https://pixelfrog-assets.itch.io/treasure-hunters',
+    license: 'CC0-1.0', licenseEvidence: '/assets/treasure-hunters/LICENSE-CC0.txt',
+  },
+  'brullov-high-forest': {
+    id: 'brullov-high-forest', title: 'High Forest', sourceUrl: 'https://brullov.itch.io/high-forest',
+    license: 'CC0-1.0', licenseEvidence: '/assets/high-forest/LICENSE-CC0.txt',
   },
 } as const satisfies Record<string, EnemyVisualSource>;
 
@@ -210,11 +219,15 @@ function sequence(
   id: string,
   species: string,
   silhouetteId: string,
-  sourceId: 'ansimuz-swamp' | 'ansimuz-warped',
+  sourceId: keyof typeof ENEMY_VISUAL_SOURCES,
   files: string[],
   scale: number,
+  animationSequences?: Partial<Record<EnemyMobState | 'move', readonly string[]>>,
 ): EnemyVisualProfile {
-  return { id, species, silhouetteId, renderer: 'frame-sequence', variant: id, sourceId, requiredAssets: files, scale, bossScale: scale * 1.8 };
+  const allAssets = animationSequences
+    ? [...new Set(Object.values(animationSequences).flat())]
+    : files;
+  return { id, species, silhouetteId, renderer: 'frame-sequence', variant: id, sourceId, requiredAssets: allAssets, scale, bossScale: scale * 1.8, animationSequences };
 }
 
 const SPIDER = sequence('swamp-spider', 'spider', 'spider', 'ansimuz-swamp',
@@ -229,6 +242,60 @@ const JUMPER = sequence('warped-jumper', 'jumper', 'stone-jumper', 'ansimuz-warp
   [1, 2, 3, 4].map((n) => `${WARPED}/jumper-idle/jumper-idle-${n}.png`), 2.0);
 const OCTOPUS = sequence('warped-octopus', 'octopus', 'octopus', 'ansimuz-warped',
   [1, 2, 3, 4].map((n) => `${WARPED}/octopus/octopus-${n}.png`), 2.45);
+
+const CRABBY = sequence('treasure-crabby', 'crab', 'crab', 'pixelfrog-treasure-hunters',
+  [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `/assets/treasure-hunters/The Crusty Crew/Sprites/Crabby/01-Idle/Idle 0${n}.png`), 1.8, {
+    idle: [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `/assets/treasure-hunters/The Crusty Crew/Sprites/Crabby/01-Idle/Idle 0${n}.png`),
+    move: [1, 2, 3, 4, 5, 6].map((n) => `/assets/treasure-hunters/The Crusty Crew/Sprites/Crabby/02-Run/Run 0${n}.png`),
+    attack: [1, 2, 3, 4].map((n) => `/assets/treasure-hunters/The Crusty Crew/Sprites/Crabby/07-Attack/Attack 0${n}.png`),
+    hit: [1, 2, 3, 4].map((n) => `/assets/treasure-hunters/The Crusty Crew/Sprites/Crabby/08-Hit/Hit 0${n}.png`),
+    dead: [1, 2, 3, 4].map((n) => `/assets/treasure-hunters/The Crusty Crew/Sprites/Crabby/09-Dead Hit/Dead Hit 0${n}.png`),
+  });
+
+const FIERCE_TOOTH = sequence('treasure-fierce-tooth', 'shark', 'shark', 'pixelfrog-treasure-hunters',
+  [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `/assets/treasure-hunters/The Crusty Crew/Sprites/Fierce Tooth/01-Idle/Idle 0${n}.png`), 2.0, {
+    idle: [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `/assets/treasure-hunters/The Crusty Crew/Sprites/Fierce Tooth/01-Idle/Idle 0${n}.png`),
+    move: [1, 2, 3, 4, 5, 6].map((n) => `/assets/treasure-hunters/The Crusty Crew/Sprites/Fierce Tooth/02-Run/Run 0${n}.png`),
+    attack: [1, 2, 3, 4, 5].map((n) => `/assets/treasure-hunters/The Crusty Crew/Sprites/Fierce Tooth/07-Attack/Attack 0${n}.png`),
+    hit: [1, 2, 3, 4].map((n) => `/assets/treasure-hunters/The Crusty Crew/Sprites/Fierce Tooth/08-Hit/Hit 0${n}.png`),
+    dead: [1, 2, 3, 4].map((n) => `/assets/treasure-hunters/The Crusty Crew/Sprites/Fierce Tooth/09-Dead Hit/Dead Hit 0${n}.png`),
+  });
+
+const PINK_STAR = sequence('treasure-pink-star', 'starfish', 'starfish', 'pixelfrog-treasure-hunters',
+  [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `/assets/treasure-hunters/The Crusty Crew/Sprites/Pink Star/01-Idle/Idle 0${n}.png`), 2.0, {
+    idle: [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `/assets/treasure-hunters/The Crusty Crew/Sprites/Pink Star/01-Idle/Idle 0${n}.png`),
+    move: [1, 2, 3, 4, 5, 6].map((n) => `/assets/treasure-hunters/The Crusty Crew/Sprites/Pink Star/02-Run/Run 0${n}.png`),
+    attack: [1, 2, 3, 4].map((n) => `/assets/treasure-hunters/The Crusty Crew/Sprites/Pink Star/07-Attack/Attack 0${n}.png`),
+    hit: [1, 2, 3, 4].map((n) => `/assets/treasure-hunters/The Crusty Crew/Sprites/Pink Star/08-Hit/Hit 0${n}.png`),
+    dead: [1, 2, 3, 4].map((n) => `/assets/treasure-hunters/The Crusty Crew/Sprites/Pink Star/09-Dead Hit/Dead Hit 0${n}.png`),
+  });
+
+const BOAR = stripProfile('high-forest-boar', 'boar', 'boar', 'boar',
+  { width: 32, height: 32, feetGap: 0, centreOffset: 0 }, 2.2, {
+    idle: { src: '/assets/high-forest/Mob/Boar/Idle/Idle-Sheet.png', frames: 6, fps: 8 },
+    move: { src: '/assets/high-forest/Mob/Boar/Walk/Walk-Base-Sheet.png', frames: 9, fps: 10 },
+    attack: { src: '/assets/high-forest/Mob/Boar/Run/Run-Sheet.png', frames: 9, fps: 12 },
+    hit: { src: '/assets/high-forest/Mob/Boar/Hit-Vanish/Hit-Sheet.png', frames: 6, fps: 10 },
+    dead: { src: '/assets/high-forest/Mob/Boar/Hit-Vanish/Hit-Sheet.png', frames: 6, fps: 8 },
+  }, 'brullov-high-forest');
+
+const BEE = stripProfile('high-forest-bee', 'bee', 'bee', 'bee',
+  { width: 64, height: 64, feetGap: 16, centreOffset: 0 }, 1.3, {
+    idle: { src: '/assets/high-forest/Mob/Small Bee/Fly/Fly-Sheet.png', frames: 4, fps: 9 },
+    move: { src: '/assets/high-forest/Mob/Small Bee/Fly/Fly-Sheet.png', frames: 4, fps: 10 },
+    attack: { src: '/assets/high-forest/Mob/Small Bee/Attack/Attack-Sheet.png', frames: 4, fps: 12 },
+    hit: { src: '/assets/high-forest/Mob/Small Bee/Hit/Hit-Sheet.png', frames: 4, fps: 10 },
+    dead: { src: '/assets/high-forest/Mob/Small Bee/Hit/Hit-Sheet.png', frames: 4, fps: 8 },
+  }, 'brullov-high-forest');
+
+const SNAIL = stripProfile('high-forest-snail', 'snail', 'snail', 'snail',
+  { width: 32, height: 32, feetGap: 0, centreOffset: 0 }, 2.0, {
+    idle: { src: '/assets/high-forest/Mob/Snail/walk-Sheet.png', frames: 12, fps: 8 },
+    move: { src: '/assets/high-forest/Mob/Snail/walk-Sheet.png', frames: 12, fps: 8 },
+    attack: { src: '/assets/high-forest/Mob/Snail/Hide-Sheet.png', frames: 12, fps: 10 },
+    hit: { src: '/assets/high-forest/Mob/Snail/Hide-Sheet.png', frames: 12, fps: 12 },
+    dead: { src: '/assets/high-forest/Mob/Snail/Dead-Sheet.png', frames: 12, fps: 8 },
+  }, 'brullov-high-forest');
 
 const SKELETON = fantasyOne('fantasy-skeleton', 'skeleton', 'skel');
 const GOBLIN = fantasyOne('fantasy-goblin', 'goblin', 'gob');
@@ -283,8 +350,16 @@ export const ENEMY_VISUAL_BY_NAME: Readonly<Record<string, EnemyVisualProfile>> 
   'mountain harpy': BAT,
   'bloodstone golem': SWAMP_THING,
   'blood moon behemoth': BOSS_THING,
-  'deep coral crab': CRAB,
-  'abyssal siren': WIZARD,
+  'deep coral crab': CRABBY,
+  'abyssal siren': FIERCE_TOOTH,
+  'tide hunter': FIERCE_TOOTH,
+  'starfish marauder': PINK_STAR,
+  'forest boar': BOAR,
+  'wild boar': BOAR,
+  'small bee': BEE,
+  'forest hornet': BEE,
+  'cave snail': SNAIL,
+  'armored snail': SNAIL,
   'sunken titan': JUMPER,
   'leviathan of the deep': OCTOPUS,
   'cave bat swarm': BAT,

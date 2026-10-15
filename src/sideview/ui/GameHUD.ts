@@ -511,15 +511,12 @@ export class GameHUD {
 
       .player-status-panel {
         position: relative;
-        /* Darkrise plate: near-black panel, gilded rim. */
-        background: linear-gradient(180deg, rgba(13, 13, 22, 0.95), rgba(5, 5, 9, 0.97));
-        border: 1px solid #8a6d2f;
+        /* Clean minimalist pixel-art dark obsidian panel with crisp gold rim */
+        background: rgba(14, 16, 22, 0.94);
+        border: 1px solid rgba(212, 175, 55, 0.45);
         border-radius: 4px;
-        box-shadow:
-          inset 0 0 0 1px rgba(255, 215, 0, 0.14),
-          inset 0 -8px 18px rgba(0, 0, 0, 0.55),
-          0 4px 15px rgba(0, 0, 0, 0.9);
-        padding: 8px 14px 14px 10px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.65);
+        padding: 8px 14px 12px 10px;
         display: flex;
         align-items: center;
         gap: 8px;
@@ -672,8 +669,9 @@ export class GameHUD {
         align-items: flex-start;
         gap: 3px;
         padding: 5px 10px;
-        background: url('/assets/kenney-rpg-ui/panel_brown.png') repeat;
-        background-size: 100% 100%;
+        background: rgba(14, 16, 22, 0.94);
+        border: 1px solid rgba(212, 175, 55, 0.35);
+        border-radius: 4px;
         text-align: left;
         pointer-events: auto;
       }
@@ -687,9 +685,9 @@ export class GameHUD {
       }
 
       .leave-dungeon-btn {
-        padding: 2px 7px;
-        background: linear-gradient(180deg, #b91c1c 0%, #7f1d1d 100%);
-        border: 1px solid #f87171;
+        padding: 3px 8px;
+        background: #7f1d1d;
+        border: 1px solid #ef4444;
         border-radius: 3px;
         color: #fef2f2;
         font-size: 8.5px;
@@ -699,7 +697,7 @@ export class GameHUD {
         letter-spacing: 0.5px;
         cursor: pointer;
         pointer-events: auto;
-        box-shadow: 0 2px 5px rgba(239, 68, 68, 0.4);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
         display: none;
         align-items: center;
         gap: 3px;
@@ -707,8 +705,7 @@ export class GameHUD {
         flex-shrink: 0;
       }
       .leave-dungeon-btn:hover {
-        background: linear-gradient(180deg, #dc2626 0%, #991b1b 100%);
-        box-shadow: 0 2px 10px rgba(239, 68, 68, 0.7);
+        background: #991b1b;
         color: #fff;
       }
       .leave-dungeon-btn:active {
@@ -724,10 +721,11 @@ export class GameHUD {
         width: min(440px, 92vw);
         padding: 20px 24px;
         text-align: center;
-        background: linear-gradient(145deg, rgba(28, 16, 22, 0.96), rgba(16, 10, 14, 0.98));
-        border: 1px solid rgba(239, 68, 68, 0.35);
+        background: rgba(18, 14, 20, 0.97);
+        border: 1px solid rgba(239, 68, 68, 0.4);
         border-top: 2px solid #ef4444;
-        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.9), 0 0 24px rgba(239, 68, 68, 0.2);
+        border-radius: 6px;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.85);
       }
       .leave-confirm-title {
         font-family: 'Cinzel', serif;
@@ -735,7 +733,7 @@ export class GameHUD {
         font-size: 20px;
         letter-spacing: 2px;
         color: #f87171;
-        text-shadow: 0 2px 8px rgba(0,0,0,0.9), 0 0 16px rgba(239,68,68,0.45);
+        text-shadow: 0 2px 4px rgba(0,0,0,0.9);
         margin: 0 0 12px 0;
       }
       .leave-confirm-body {
@@ -803,10 +801,11 @@ export class GameHUD {
         width: min(720px, 94vw);
         max-height: 92vh;
         padding: 20px 24px;
-        background: linear-gradient(145deg, rgba(20, 16, 28, 0.98), rgba(12, 10, 18, 0.99));
-        border: 1px solid rgba(245, 158, 11, 0.4);
+        background: rgba(15, 17, 24, 0.98);
+        border: 1px solid rgba(212, 175, 55, 0.35);
         border-top: 2px solid #f59e0b;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.95), 0 0 30px rgba(245, 158, 11, 0.2);
+        border-radius: 6px;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.85);
         display: flex;
         flex-direction: column;
         gap: 14px;
@@ -829,7 +828,6 @@ export class GameHUD {
         border: 1px solid rgba(245, 158, 11, 0.5);
         padding: 3px 12px;
         border-radius: 999px;
-        text-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
       }
       .gamemode-title {
         font-family: 'Cinzel', serif;
@@ -838,7 +836,7 @@ export class GameHUD {
         letter-spacing: 2px;
         color: #f8fafc;
         margin: 2px 0 0 0;
-        text-shadow: 0 2px 10px rgba(0,0,0,0.9), 0 0 20px rgba(245, 158, 11, 0.3);
+        text-shadow: 0 2px 4px rgba(0,0,0,0.9);
       }
       .gamemode-subtitle {
         font-family: 'Outfit', sans-serif;
@@ -885,7 +883,7 @@ export class GameHUD {
         height: 100%;
         background: linear-gradient(90deg, #10b981 0%, #f59e0b 60%, #ef4444 100%);
         border-radius: 4px;
-        box-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
+        box-shadow: 0 0 6px rgba(245, 158, 11, 0.4);
         transition: width 0.05s linear;
       }
       .gamemode-options-grid {
@@ -894,9 +892,9 @@ export class GameHUD {
         gap: 12px;
       }
       .gamemode-option-card {
-        background: linear-gradient(160deg, rgba(32, 26, 42, 0.95), rgba(18, 14, 24, 0.98));
-        border: 1.5px solid rgba(255, 255, 255, 0.12);
-        border-radius: 8px;
+        background: rgba(22, 25, 36, 0.95);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 6px;
         padding: 14px 10px;
         display: flex;
         flex-direction: column;
@@ -910,20 +908,22 @@ export class GameHUD {
       .gamemode-option-card:hover {
         transform: translateY(-2px);
         border-color: rgba(245, 158, 11, 0.6);
-        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.7);
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6);
       }
       .gamemode-option-card:active {
         transform: scale(0.98);
       }
       .gamemode-option-card.selected {
         border-color: #ffd54f !important;
-        background: linear-gradient(160deg, rgba(50, 40, 68, 0.98), rgba(28, 22, 38, 0.98)) !important;
-        box-shadow: 0 0 22px rgba(255, 213, 79, 0.5), 0 10px 25px rgba(0, 0, 0, 0.7) !important;
+        background: rgba(36, 32, 50, 0.98) !important;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6) !important;
+        outline: 1px solid rgba(255, 213, 79, 0.7);
       }
       .gamemode-option-card.winner {
         border-color: #10b981 !important;
-        background: linear-gradient(160deg, rgba(20, 50, 35, 0.98), rgba(12, 30, 22, 0.98)) !important;
-        box-shadow: 0 0 30px rgba(16, 185, 129, 0.75), 0 10px 25px rgba(0, 0, 0, 0.7) !important;
+        background: rgba(18, 38, 28, 0.98) !important;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6) !important;
+        outline: 1px solid rgba(16, 185, 129, 0.7);
       }
       .gamemode-card-icon {
         font-size: 32px;
@@ -1721,13 +1721,13 @@ export class GameHUD {
         transform: translateX(-50%);
         width: 480px;
         max-width: 90vw;
-        background: url('/assets/kenney-rpg-ui/panel_brown.png') repeat;
-        background-size: 100% 100%;
+        background: rgba(14, 16, 22, 0.94);
+        border: 1.5px solid rgba(212, 175, 55, 0.55);
         padding: 8px 14px;
         display: flex;
         align-items: center;
         gap: 10px;
-        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.9), 0 0 20px rgba(239, 68, 68, 0.4);
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.85);
         border-radius: 4px;
         z-index: 25;
         animation: bossBarSlideDown 0.4s ease-out;
@@ -1740,7 +1740,7 @@ export class GameHUD {
 
       .boss-portrait-icon {
         font-size: 28px;
-        filter: drop-shadow(0 0 8px #ef4444);
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8));
       }
 
       .boss-bar-details {
@@ -2318,7 +2318,7 @@ export class GameHUD {
         height: 68px;
         background: url('/assets/kenney-rpg-ui/buttonRound_brown.png') no-repeat center center;
         background-size: 100% 100%;
-        box-shadow: 0 0 18px rgba(245, 158, 11, 0.65);
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6), inset 0 1px 2px rgba(255, 255, 255, 0.2);
         color: #ffffff;
         font-size: 11px;
         text-shadow: 1px 1px 2px #000;
@@ -2330,7 +2330,7 @@ export class GameHUD {
         height: 56px;
         background: url('/assets/kenney-rpg-ui/buttonRound_blue.png') no-repeat center center;
         background-size: 100% 100%;
-        box-shadow: 0 0 16px rgba(14, 165, 233, 0.65);
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6), inset 0 1px 2px rgba(255, 255, 255, 0.2);
         color: #ffffff;
         font-size: 10px;
         text-shadow: 1px 1px 2px #000;
@@ -5661,7 +5661,7 @@ export class GameHUD {
         card.classList.add('winner');
         const voteBadge = card.querySelector('.gamemode-card-votes');
         if (voteBadge) {
-          voteBadge.innerHTML = `<span class="vote-winner-badge">★ WINNER ★</span>`;
+          voteBadge.innerHTML = `<span class="vote-winner-badge">WINNER</span>`;
         }
       } else {
         (card as HTMLElement).style.opacity = '0.4';

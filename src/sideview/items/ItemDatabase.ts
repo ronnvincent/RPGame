@@ -491,7 +491,7 @@ export const ITEM_DATABASE: ItemData[] = [
     type: 'consumable',
     rarity: 'common',
     icon: 'Potion',
-    image: '/assets/ui_sprites/icons/P_Green01.png',
+    image: '/assets/ui_sprites/icons/P_Red01.png',
     description: 'Restores 120 HP instantly when consumed.',
     price: 25,
     consumableEffect: { type: 'heal_hp', value: 120 }
@@ -502,7 +502,7 @@ export const ITEM_DATABASE: ItemData[] = [
     type: 'consumable',
     rarity: 'common',
     icon: 'Potion',
-    image: '/assets/ui_sprites/icons/P_Green01.png',
+    image: '/assets/ui_sprites/icons/P_Red02.png',
     description: 'Restores 280 HP instantly when consumed.',
     price: 60,
     consumableEffect: { type: 'heal_hp', value: 280 }
@@ -513,7 +513,7 @@ export const ITEM_DATABASE: ItemData[] = [
     type: 'consumable',
     rarity: 'common',
     icon: 'Potion',
-    image: '/assets/ui_sprites/icons/P_Green01.png',
+    image: '/assets/ui_sprites/icons/P_Red03.png',
     description: 'Restores 250 HP instantly when consumed.',
     price: 50,
     consumableEffect: { type: 'heal_hp', value: 250 }
@@ -524,7 +524,7 @@ export const ITEM_DATABASE: ItemData[] = [
     type: 'consumable',
     rarity: 'common',
     icon: 'Potion',
-    image: '/assets/rpg-icons/32x32/potion_02a.png',
+    image: '/assets/ui_sprites/icons/P_Blue01.png',
     description: 'Restores 200 MP instantly when consumed.',
     price: 60,
     consumableEffect: { type: 'heal_mp', value: 200 }
@@ -535,7 +535,7 @@ export const ITEM_DATABASE: ItemData[] = [
     type: 'consumable',
     rarity: 'common',
     icon: 'Elixir',
-    image: '/assets/rpg-icons/32x32/potion_02a.png',
+    image: '/assets/ui_sprites/icons/P_Blue02.png',
     description: 'Restores 180 MP instantly when consumed.',
     price: 50,
     consumableEffect: { type: 'heal_mp', value: 180 }
@@ -546,7 +546,7 @@ export const ITEM_DATABASE: ItemData[] = [
     type: 'consumable',
     rarity: 'rare',
     icon: 'Elixir',
-    image: '/assets/rpg-icons/32x32/potion_01a.png',
+    image: '/assets/ui_sprites/icons/P_Yellow01.png',
     description: 'Fully restores 450 HP and 250 MP simultaneously.',
     price: 180,
     consumableEffect: { type: 'heal_hp', value: 450 }
@@ -557,7 +557,7 @@ export const ITEM_DATABASE: ItemData[] = [
     type: 'consumable',
     rarity: 'rare',
     icon: 'Flask',
-    image: '/assets/ui_sprites/icons/P_Red01.png',
+    image: '/assets/ui_sprites/icons/P_Orange01.png',
     description: 'Boosts ATK by 35% for 12 seconds.',
     price: 120,
     consumableEffect: { type: 'buff_atk', value: 1.35, duration: 12 }
@@ -568,7 +568,7 @@ export const ITEM_DATABASE: ItemData[] = [
     type: 'consumable',
     rarity: 'rare',
     icon: 'Flask',
-    image: '/assets/ui_sprites/icons/P_Red01.png',
+    image: '/assets/ui_sprites/icons/P_Orange03.png',
     description: 'Empowers bearer, boosting ATK by 40% for 15 seconds.',
     price: 150,
     consumableEffect: { type: 'buff_atk', value: 1.40, duration: 15 }
@@ -579,7 +579,7 @@ export const ITEM_DATABASE: ItemData[] = [
     type: 'consumable',
     rarity: 'epic',
     icon: 'Feather',
-    image: '/assets/rpg-icons/32x32/crystal_01j.png',
+    image: '/assets/ui_sprites/icons/I_Feather01.png',
     description: 'Mystic phoenix plume that restores the bearer to life with 500 HP.',
     price: 300,
     consumableEffect: { type: 'revive', value: 500 }

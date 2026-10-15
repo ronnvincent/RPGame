@@ -253,7 +253,8 @@ export const DUNGEONS: DungeonDefinition[] = [
       {
         waveNumber: 2,
         enemies: [
-          { name: 'Fire Imp', type: 'mob', icon: '😈', color: '#f44336', maxHp: 260, atk: 48, def: 12, speed: 3.0, expReward: 154, goldReward: 97, width: 36, height: 44, count: 3 },
+          { name: 'Fire Imp', type: 'mob', icon: '😈', color: '#f44336', maxHp: 260, atk: 48, def: 12, speed: 3.0, expReward: 154, goldReward: 97, width: 36, height: 44, count: 2 },
+          { name: 'Lava Golem', type: 'mob', icon: '🗿', color: '#bf360c', maxHp: 420, atk: 46, def: 24, speed: 2.2, expReward: 180, goldReward: 110, width: 50, height: 50, count: 2 },
           { name: 'Magma Drake', type: 'elite', icon: '🦎', color: '#d84315', maxHp: 1100, atk: 66, def: 38, speed: 3.4, expReward: 630, goldReward: 364, width: 66, height: 60, count: 1 }
         ]
       },
