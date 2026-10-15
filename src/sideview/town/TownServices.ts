@@ -31,7 +31,7 @@ import {
   unificationStoneCost,
 } from '../items/darkrise/services';
 import { MONSTER_CARDS, cardFitsSlot, getCardById } from '../items/darkrise/cards';
-import { CURRENCY_ICONS } from '../items/darkrise/currencies';
+import { CURRENCY_ICONS, CURRENCY_IMAGE_PATHS } from '../items/darkrise/currencies';
 import { claimMission, getMissionViews } from '../quests/DailyMissions';
 
 const PANEL_BG = "url('/assets/kenney-rpg-ui/panelInset_brown.png') repeat; background-size: 100% 100%";
@@ -57,12 +57,13 @@ function mountModal(handle: ModalHandle): void {
 
 function walletRow(engine: SideViewEngine): string {
   const p = engine.player;
-  return `<div style="display:flex; gap:10px; font-size:12px; font-weight:900; color:#fef08a; background:rgba(0,0,0,0.5); padding:4px 10px; border-radius:4px; border:1px solid #ffd700;">
-    <span>${CURRENCY_ICONS.gold} ${p.gold}</span>
-    <span>${CURRENCY_ICONS.diamonds} ${p.diamonds ?? 0}</span>
-    <span>${CURRENCY_ICONS.magicSubstance} ${p.magicSubstance ?? 0}</span>
-    <span>${CURRENCY_ICONS.unificationStones} ${p.unificationStones ?? 0}</span>
-    <span>${CURRENCY_ICONS.keysOfPower} ${p.keysOfPower ?? 0}</span>
+  const cIcon = (src: string) => `<img src="${src}" width="14" height="14" style="vertical-align:middle; image-rendering:pixelated; margin-right:3px;" />`;
+  return `<div style="display:flex; gap:12px; align-items:center; font-size:12px; font-weight:900; color:#fef08a; background:rgba(14,16,22,0.92); padding:5px 12px; border-radius:4px; border:1px solid rgba(212,175,55,0.4);">
+    <span style="display:inline-flex; align-items:center;">${cIcon(CURRENCY_IMAGE_PATHS.gold)} ${p.gold}</span>
+    <span style="display:inline-flex; align-items:center;">${cIcon(CURRENCY_IMAGE_PATHS.diamonds)} ${p.diamonds ?? 0}</span>
+    <span style="display:inline-flex; align-items:center;">${cIcon(CURRENCY_IMAGE_PATHS.magicSubstance)} ${p.magicSubstance ?? 0}</span>
+    <span style="display:inline-flex; align-items:center;">${cIcon(CURRENCY_IMAGE_PATHS.unificationStones)} ${p.unificationStones ?? 0}</span>
+    <span style="display:inline-flex; align-items:center;">${cIcon(CURRENCY_IMAGE_PATHS.keysOfPower)} ${p.keysOfPower ?? 0}</span>
   </div>`;
 }
 
@@ -292,12 +293,12 @@ export function openAnvilServicesModal(engine: SideViewEngine): void {
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px;">
           <div style="background:${PANEL_BG}; padding:8px 10px; border-radius:4px;">
             <div style="font-size:12px; font-weight:900; color:#f87171;">Enchant (+8%/lvl)</div>
-            <div style="font-size:11px; color:#cbd5e1;">Level ${selected.enchantLevel || 0}/${MAX_ENCHANT_LEVEL} — Cost: ${enchant!.gold}G + ${enchant!.magicSubstance} ${CURRENCY_ICONS.magicSubstance}</div>
+            <div style="font-size:11px; color:#cbd5e1;">Level ${selected.enchantLevel || 0}/${MAX_ENCHANT_LEVEL} — Cost: ${enchant!.gold}G + ${enchant!.magicSubstance} <img src="${CURRENCY_IMAGE_PATHS.magicSubstance}" width="13" height="13" style="vertical-align:middle; image-rendering:pixelated;" /></div>
             ${canEnchant(selected) ? `<button id="av-enchant" class="dialogue-btn dialogue-btn-quest" style="margin-top:4px;">Enchant</button>` : '<div style="font-size:11px; color:#94a3b8;">Max level.</div>'}
           </div>
           <div style="background:${PANEL_BG}; padding:8px 10px; border-radius:4px;">
             <div style="font-size:12px; font-weight:900; color:#fbbf24;">Mythical Unification</div>
-            <div style="font-size:11px; color:#cbd5e1;">Promote rarity & reroll affixes — Cost: ${Number.isFinite(stoneCost) ? `${stoneCost} ${CURRENCY_ICONS.unificationStones} + 500G` : 'max tier reached'}</div>
+            <div style="font-size:11px; color:#cbd5e1;">Promote rarity & reroll affixes — Cost: ${Number.isFinite(stoneCost) ? `${stoneCost} <img src="${CURRENCY_IMAGE_PATHS.unificationStones}" width="13" height="13" style="vertical-align:middle; image-rendering:pixelated;" /> + 500G` : 'max tier reached'}</div>
             ${Number.isFinite(stoneCost) ? `<button id="av-fuse" class="dialogue-btn dialogue-btn-quest" style="margin-top:4px;">Unify</button>` : ''}
           </div>
           <div style="background:${PANEL_BG}; padding:8px 10px; border-radius:4px;">

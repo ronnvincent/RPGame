@@ -44,3 +44,12 @@ export const CURRENCY_LABELS: Record<keyof Wallet, string> = {
   unificationStones: 'Unification Stones',
   magicSubstance: 'Magic Substance',
 };
+
+export const CURRENCY_IMAGE_PATHS: Record<keyof Wallet, string> = {
+  gold: '/assets/treasure-hunters/Pirate Treasure/Sprites/Gold Coin/01.png',
+  diamonds: '/assets/treasure-hunters/Pirate Treasure/Sprites/Blue Diamond/01.png',
+  keysOfPower: '/assets/treasure-hunters/Merchant Ship/Sprites/Chest Key/1.png',
+  unificationStones: '/assets/rpg-icons/32x32/gem_01b.png',
+  magicSubstance: '/assets/ui_sprites/icons/P_Yellow01.png',
+};
+

@@ -1356,6 +1356,57 @@ export class SpriteManager {
       1,
       3
     );
+    this.addToGroup(
+      'th_chest_unlocked_set',
+      (i) => `/assets/treasure-hunters/Merchant Ship/Sprites/Chest/Unlocked/${i}.png`,
+      1,
+      8
+    );
+    this.addImage('th_chest_idle', '/assets/treasure-hunters/Merchant Ship/Sprites/Chest/Idle/1.png');
+  }
+
+  public drawTreasureChest(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    openProgress: number = 0,
+    scale: number = 2.0
+  ) {
+    let img: HTMLImageElement | undefined;
+    if (openProgress <= 0) {
+      img = this.images['th_chest_idle'];
+    } else {
+      const frames = this.spriteGroups['th_chest_unlocked_set'];
+      if (frames && frames.length > 0) {
+        const idx = Math.min(frames.length - 1, Math.floor(openProgress * (frames.length - 1)));
+        img = frames[idx];
+      }
+    }
+    if (!img || !img.complete || img.naturalWidth === 0) return;
+    const w = 32 * scale;
+    const h = 32 * scale;
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, x - w / 2, y - h, w, h);
+    ctx.restore();
+  }
+
+  public drawGroupFrame(
+    ctx: CanvasRenderingContext2D,
+    groupKey: string,
+    x: number,
+    y: number,
+    fps: number = 8,
+    scale: number = 1.5
+  ) {
+    const group = this.spriteGroups[groupKey];
+    if (!group || group.length === 0) return;
+    const idx = Math.floor(this.animTimer * fps) % group.length;
+    const img = group[idx];
+    if (!img || !img.complete || img.naturalWidth === 0) return;
+    const w = img.naturalWidth * scale;
+    const h = img.naturalHeight * scale;
+    ctx.drawImage(img, x - w / 2, y - h / 2, w, h);
   }
 
   public update(dt: number) {

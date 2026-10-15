@@ -118,7 +118,7 @@ export const HERO_SPRITES: Record<string, HeroSpriteSet> = {
   },
   priest: {
     frameW: 288, frameH: 128, scale: 1.148,
-    anims: { air_atk: 8, atk1: 7, atk2: 21, atk3: 27, idle: 8, jump_down: 3, jump_up: 3, roll: 6, run: 10 },
+    anims: { air_atk: 8, atk1: 7, atk2: 21, atk3: 27, death: 16, defend: 12, hurt: 7, idle: 8, jump_down: 3, jump_up: 3, roll: 6, run: 10, sp_atk: 28 },
     content: { centreOff: 2.0, feetGap: 1 }
   },
   ninja: {

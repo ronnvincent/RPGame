@@ -240,7 +240,7 @@ export const ITEM_DATABASE: ItemData[] = [
     type: 'helmet',
     rarity: 'rare',
     icon: 'Hood',
-    image: '/assets/rpg-icons/32x32/hat_01a.png',
+    image: '/assets/rpg-icons/32x32/hat_01b.png',
     description: 'Enchanted dark cowl that obscures the wearers face in shadow.',
     price: 320,
     stats: { def: 18, crit: 0.08, speed: 0.5 }
@@ -251,7 +251,7 @@ export const ITEM_DATABASE: ItemData[] = [
     type: 'helmet',
     rarity: 'rare',
     icon: 'Hood',
-    image: '/assets/rpg-icons/32x32/hat_01a.png',
+    image: '/assets/rpg-icons/32x32/hat_01d.png',
     description: 'A velvet cowl saturated with primordial mana for arcane masters.',
     price: 360,
     stats: { def: 16, mp: 120, atk: 15 }
@@ -287,7 +287,7 @@ export const ITEM_DATABASE: ItemData[] = [
     type: 'armor',
     rarity: 'rare',
     icon: 'Cuirass',
-    image: '/assets/rpg-icons/32x32/armor_01a.png',
+    image: '/assets/rpg-icons/32x32/armor_01b.png',
     description: 'Blessed breastplate inscribed with sacred protection runes.',
     price: 450,
     stats: { def: 32, hp: 140, mp: 40 }
@@ -371,7 +371,7 @@ export const ITEM_DATABASE: ItemData[] = [
     type: 'wings',
     rarity: 'epic',
     icon: 'Wings',
-    image: '/assets/rpg-icons/32x32/crystal_01g.png',
+    image: '/assets/rpg-icons/32x32/crystal_01h.png',
     description: 'Wings of sacred silver feathers that empower aerial double jumping.',
     price: 1200,
     stats: { speed: 1.8, atk: 25, hp: 120 }
@@ -443,7 +443,7 @@ export const ITEM_DATABASE: ItemData[] = [
     type: 'amulet',
     rarity: 'rare',
     icon: 'Talisman',
-    image: '/assets/rpg-icons/32x32/necklace_01a.png',
+    image: '/assets/rpg-icons/32x32/necklace_02a.png',
     description: 'A crimson talisman pulsing with draconian vitality.',
     price: 450,
     stats: { hp: 160, atk: 20 }

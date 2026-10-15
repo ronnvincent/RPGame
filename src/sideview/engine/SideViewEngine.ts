@@ -369,6 +369,7 @@ export class SideViewEngine {
   public player: PlayerState;
   public enemies: EnemyInstance[] = [];
   public droppedLoots: DroppedLoot[] = [];
+  public activeChests: Array<{ x: number; y: number; opened: boolean; openTimer: number; bonusGold: number }> = [];
   public platforms: Platform[] = [];
   public particles: ParticleSystem;
   public arenaWidth: number = 3600;
@@ -461,6 +462,7 @@ export class SideViewEngine {
     this.cancelDelayedCombatTasks();
     this.particles.clearGameplayEntities();
     this.combatSpriteEffects.length = 0;
+    this.activeChests.length = 0;
     this.resolvedReactionKeys.clear();
     this.playerDefense = createPlayerDefenseState();
     this.miniBossTriggered.clear();
@@ -2933,6 +2935,13 @@ export class SideViewEngine {
       audio.playBossRoar();
       this.particles.triggerScreenShake(4, 0.6);
       this.particles.addFloatingText(enemy.x, enemy.y - 50, 'BOSS DEFEATED!', '#ffd54f', true, 26);
+      this.activeChests.push({
+        x: enemy.x,
+        y: this.groundY,
+        opened: false,
+        openTimer: 0,
+        bonusGold: Math.round((enemy.goldReward || 200) * 1.5)
+      });
     } else {
     }
   }
@@ -5135,6 +5144,24 @@ export class SideViewEngine {
         this.droppedLoots.splice(i, 1);
       }
     }
+
+    // Update and collect animated treasure chests
+    for (let i = this.activeChests.length - 1; i >= 0; i--) {
+      const chest = this.activeChests[i];
+      if (!chest.opened) {
+        const dist = Math.hypot(p.x - chest.x, p.y - (chest.y - 16));
+        if (dist < 52) {
+          chest.opened = true;
+          audio.playFanfare();
+          this.particles.triggerScreenShake(3, 0.4);
+          this.player.gold += chest.bonusGold;
+          this.triggerSave();
+          this.particles.addFloatingText(chest.x, chest.y - 45, `+${chest.bonusGold} Chest Gold!`, '#ffd700', true, 20);
+        }
+      } else {
+        chest.openTimer = Math.min(1.0, chest.openTimer + dt * 2.5);
+      }
+    }
   }
 
   private projectileIntersectsEnemy(proj: import('./ParticleSystem').ProjectileVFX, enemy: EnemyInstance): boolean {
@@ -5491,6 +5518,11 @@ export class SideViewEngine {
     sprites.drawPlatforms(ctx, this.platforms, currentTheme);
     this.dungeonEncounterRuntime?.render(ctx, this.zoneHazardClock);
     this.drawZoneHazards(ctx, camX, virtualWidth, visualPreferences);
+
+    // 1.8 Render Animated Treasure Chests
+    for (const chest of this.activeChests) {
+      sprites.drawTreasureChest(ctx, chest.x, chest.y, chest.openTimer, 2.2);
+    }
 
     // 2. Render Dropped Loot with Rarity Beacons & Cached Sprites
     for (const loot of this.droppedLoots) {
@@ -5911,6 +5943,14 @@ export class SideViewEngine {
       } else if (npc.id === 'elder_justinian') {
         // Village Elder Well
         sprites.drawSheetPiece(ctx, POLY_SHEETS.props, POLY_PROPS.well, npc.x - 48, this.groundY, 42);
+      } else if (npc.id === 'captain_valerie') {
+        // Captain Valerie Guard Post Shield & Supply Crate
+        sprites.drawSheetPiece(ctx, POLY_SHEETS.props, POLY_PROPS.shield, npc.x + 36, this.groundY, 32);
+        sprites.drawSheetPiece(ctx, POLY_SHEETS.props, POLY_PROPS.crate, npc.x - 36, this.groundY, 26);
+      } else if (npc.id === 'portal_donald') {
+        // Dimensional Gatekeeper Magic Pillar & Lamp Post
+        sprites.drawSheetPiece(ctx, POLY_SHEETS.props, POLY_PROPS.pillar, npc.x - 36, this.groundY, 36);
+        sprites.drawSheetPiece(ctx, POLY_SHEETS.props, POLY_PROPS.lampPost, npc.x + 36, this.groundY, 38);
       }
 
       // 1. NPC Title Tag (bottom)
