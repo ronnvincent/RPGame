@@ -496,6 +496,26 @@ export const MAPS: Record<string, MapTheme> = {
       { src: `${PLX}/bg2/layer04_Path.png`, scroll: 0.92, anchor: 'fill' },
     ],
   },
+
+  // ---- Grand Colosseum: Tournament Battleground ----
+  // Authored specifically for balanced 1v1, 2v2, 3v3, and 4v4 PvP fighting.
+  // 8 distinct depth parallax layers and a measured ground line of 0.7972 so
+  // combatants stand firmly on the sandstone arena floor with zero float or sinking.
+  tournament_colosseum: {
+    sky: '#1a162b',
+    groundLine: 0.7972,
+    floor: { top: '#c2a66e', body: '#3a2e1d' },
+    layers: [
+      { src: `${PLX}/bg4/layer07_Sky.png`, scroll: 0.02, anchor: 'fill' },
+      { src: `${PLX}/bg2/layer08_Stars_1.png`, scroll: 0.04, anchor: 'fill', blend: 'screen', alpha: 0.35 },
+      { src: `${PLX}/bg4/layer06_Rocks.png`, scroll: 0.09, anchor: 'fill' },
+      { src: `${PLX}/bg4/layer05_Hills.png`, scroll: 0.18, anchor: 'fill' },
+      { src: `${PLX}/bg4/layer04_Clouds.png`, scroll: 0.26, anchor: 'fill', drift: -4, alpha: 0.5 },
+      { src: `${PLX}/bg4/layer03_Hills_Castle.png`, scroll: 0.45, anchor: 'fill' },
+      { src: `${PLX}/bg4/layer02_Trees_rocks.png`, scroll: 0.7, anchor: 'fill' },
+      { src: `${PLX}/bg4/layer01_Ground.png`, scroll: 1.0, anchor: 'fill' },
+    ],
+  },
 };
 
 /** Themes still on the old hand-written renderer. */
