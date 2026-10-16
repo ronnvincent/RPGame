@@ -723,9 +723,11 @@ export class SideViewGame {
 
       mod.network.onRemotePlayerMove((data: any) => {
         if (!this.engine) return;
-        if (data?.team || data?.isTournament || mod.network.isPvpSession || mod.network.isPvpFallback) {
+        // Only trigger match transition if remote player is active in combat (not town mode)
+        // and Joiner is not currently sitting in the lobby
+        if ((data?.team || data?.isTournament) && !data?.isTownMode && !this.tournamentLobby?.isOpen) {
           if (!this.engine.inTournamentMode && !this.engine.isHost) {
-            console.log('[PVP] Detected remote player with PvP team; auto-correcting Joiner to Arena...');
+            console.log('[PVP] Detected remote player active in PvP match; auto-correcting Joiner to Arena...');
             this.triggerTournamentJoinerTransition();
           }
         }
@@ -735,13 +737,22 @@ export class SideViewGame {
         console.log('[PVP] Handshake received from host:', handshake);
         mod.network.isPvpSession = true;
         mod.network.isPvpFallback = true;
-        if (this.coopLobby?.isOpen) {
-          this.coopLobby.close();
-          this.openTournamentLobby();
-        }
-        if (!this.engine?.inTournamentMode && !this.engine?.isHost) {
-          console.log('[PVP] Handshake received while outside tournament mode; auto-correcting Joiner to Arena...');
-          this.triggerTournamentJoinerTransition(handshake);
+        if (handshake.phase === 'match') {
+          // Host has launched or is in the match: transition joiner to arena
+          if (this.coopLobby?.isOpen) this.coopLobby.close();
+          if (this.tournamentLobby?.isOpen) this.tournamentLobby.close();
+          if (!this.engine?.inTournamentMode && !this.engine?.isHost) {
+            console.log('[PVP] Match is active on host; transitioning Joiner to Arena...');
+            this.triggerTournamentJoinerTransition(handshake);
+          }
+        } else {
+          // Lobby phase: ensure Joiner is in TournamentLobbyUI with the host
+          if (this.coopLobby?.isOpen) {
+            this.coopLobby.close();
+            this.openTournamentLobby();
+          } else if (!this.tournamentLobby?.isOpen && !this.engine?.inTournamentMode) {
+            this.openTournamentLobby();
+          }
         }
       });
 
@@ -975,7 +986,9 @@ export class SideViewGame {
   private applyEnemySnapshot(enemies: any[], waveIndex: number, dungeonIndex?: number, dungeonId?: string) {
     if (!this.engine || this.engine.isHost || this.engine.inTournamentMode) return;
     if (network.isPvpSession || network.isPvpFallback || dungeonId === 'tournament_colosseum' || dungeonId === 'tournament_arena') {
-      this.triggerTournamentJoinerTransition();
+      if (!this.tournamentLobby?.isOpen) {
+        this.triggerTournamentJoinerTransition();
+      }
       return;
     }
 
@@ -1119,6 +1132,10 @@ export class SideViewGame {
   public loadDungeon(dungeonIndex: number, broadcastParty: boolean = false) {
     if (!this.engine || this.engine.inTournamentMode) return;
     if (network.isPvpSession || network.isPvpFallback) {
+      if (this.tournamentLobby?.isOpen) {
+        console.warn('[PVP] Intercepted attempt to load PvE dungeon while in Tournament Lobby; ignoring.');
+        return;
+      }
       console.warn('[PVP] Intercepted attempt to load PvE dungeon during PvP session! Routing to Tournament Arena.');
       this.triggerTournamentJoinerTransition();
       return;
@@ -2169,7 +2186,7 @@ export class SideViewGame {
       }
       this.tournamentHostBroadcastInterval = window.setInterval(() => {
         if (this.engine?.inTournamentMode && network.isHost && network.room) {
-          network.broadcastPvpHandshake('tournament_colosseum', match.config.format);
+          network.broadcastPvpHandshake('tournament_colosseum', match.config.format, 'match');
         }
       }, 1500);
     }

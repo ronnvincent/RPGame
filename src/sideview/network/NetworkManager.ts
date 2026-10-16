@@ -402,7 +402,7 @@ export class NetworkManager {
   private onPvpHitEffectCb: ((data: any) => void) | null = null;
   private onPvpKillFeedCb: ((data: any) => void) | null = null;
   private onPvpMatchResultCb: ((data: any) => void) | null = null;
-  private onPvpHandshakeCb: ((data: { theme: string; format: string }) => void) | null = null;
+  private onPvpHandshakeCb: ((data: { theme: string; format: string; phase: 'lobby' | 'match' }) => void) | null = null;
   private cachedLobbies: Map<string, any> = new Map();
 
   constructor() {
@@ -631,10 +631,10 @@ export class NetworkManager {
           existing.team = data.team;
         }
       }
-      if (data?.team === 'red' || data?.team === 'blue' || data?.isTournament) {
+      if ((data?.team === 'red' || data?.team === 'blue' || data?.isTournament) && !data?.isTownMode) {
         this.isPvpSession = true;
         this.isPvpFallback = true;
-        this.onPvpHandshakeCb?.({ theme: 'tournament_colosseum', format: '1v1' });
+        this.onPvpHandshakeCb?.({ theme: 'tournament_colosseum', format: '1v1', phase: 'match' });
       }
       this.onRemotePlayerMoveCb?.(data);
     });
@@ -687,12 +687,14 @@ export class NetworkManager {
         this.isPvpFallback = true;
         let theme = 'tournament_colosseum';
         let format = '1v1';
+        let phase: 'lobby' | 'match' = 'lobby';
         if (typeof data.itemName === 'string') {
           const parts = data.itemName.split(':');
           if (parts[1]) theme = parts[1];
           if (parts[2]) format = parts[2];
+          if (parts[3] === 'match') phase = 'match';
         }
-        this.onPvpHandshakeCb?.({ theme, format });
+        this.onPvpHandshakeCb?.({ theme, format, phase });
         return;
       }
       this.onPartySupportCb?.(data);
@@ -703,20 +705,22 @@ export class NetworkManager {
     });
 
     this.socket.on('remote_party_chat', (data) => {
-      if (data?.lineId === 'pvpcolosseum') {
+      if (data?.lineId === 'pvpmatch' || data?.lineId === 'pvplobby' || data?.lineId === 'pvpcolosseum') {
         this.isPvpSession = true;
         this.isPvpFallback = true;
-        this.onPvpHandshakeCb?.({ theme: 'tournament_colosseum', format: '1v1' });
+        const phase: 'lobby' | 'match' = data.lineId === 'pvpmatch' ? 'match' : 'lobby';
+        this.onPvpHandshakeCb?.({ theme: 'tournament_colosseum', format: '1v1', phase });
         return;
       }
       this.onQuickChatCb?.(data);
     });
 
     this.socket.on('remote_party_ping', (data) => {
-      if (data?.x === 777777 && data?.y === 888888) {
+      if (data?.y === 888888 && (data?.x === 777777 || data?.x === 666666)) {
         this.isPvpSession = true;
         this.isPvpFallback = true;
-        this.onPvpHandshakeCb?.({ theme: 'tournament_colosseum', format: '1v1' });
+        const phase: 'lobby' | 'match' = data.x === 777777 ? 'match' : 'lobby';
+        this.onPvpHandshakeCb?.({ theme: 'tournament_colosseum', format: '1v1', phase });
         return;
       }
       this.onPingCb?.(data);
@@ -1735,25 +1739,25 @@ export class NetworkManager {
     this.onFullSyncCb = cb;
   }
 
-  public onPvpHandshake(cb: (data: { theme: string; format: string }) => void) {
+  public onPvpHandshake(cb: (data: { theme: string; format: string; phase: 'lobby' | 'match' }) => void) {
     if (!this.socket) this.connect();
     this.onPvpHandshakeCb = cb;
   }
 
-  public broadcastPvpHandshake(theme: string = 'tournament_colosseum', format: string = '1v1') {
+  public broadcastPvpHandshake(theme: string = 'tournament_colosseum', format: string = '1v1', phase: 'lobby' | 'match' = 'lobby') {
     if (!this.socket || !this.room) return;
     this.isPvpSession = true;
     this.isPvpFallback = true;
     this.socket.emit('party_support', {
       kind: 'pvp_handshake',
-      itemName: `PVP:${theme}:${format}`,
+      itemName: `PVP:${theme}:${format}:${phase}`,
     });
     this.socket.emit('party_ping', {
-      x: 777777,
+      x: phase === 'match' ? 777777 : 666666,
       y: 888888,
     });
     this.socket.emit('party_chat', {
-      lineId: 'pvpcolosseum',
+      lineId: phase === 'match' ? 'pvpmatch' : 'pvplobby',
     });
   }
 }

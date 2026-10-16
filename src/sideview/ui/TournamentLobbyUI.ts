@@ -105,10 +105,10 @@ export class TournamentLobbyUI {
       this.generatedRoomCode = Math.floor(1000 + Math.random() * 9000).toString();
     }
 
-    // Periodically broadcast PvP handshake if host so guests auto-convert to PvP Colosseum
+    // Periodically broadcast PvP handshake if host so guests auto-convert to PvP Colosseum Lobby
     this.handshakeInterval = window.setInterval(() => {
       if (network.isHost && network.room) {
-        network.broadcastPvpHandshake('tournament_colosseum', this.currentFormat);
+        network.broadcastPvpHandshake('tournament_colosseum', this.currentFormat, 'lobby');
       }
     }, 1200);
 
@@ -127,7 +127,7 @@ export class TournamentLobbyUI {
         this.localTeam = state.pvpTeams[myId];
       }
       if (network.isHost && state.members && state.members.length > 1) {
-        network.broadcastPvpHandshake('tournament_colosseum', this.currentFormat);
+        network.broadcastPvpHandshake('tournament_colosseum', this.currentFormat, 'lobby');
       }
       if (state.started) {
         this.close();
@@ -417,7 +417,7 @@ export class TournamentLobbyUI {
 
   private startTournament(): void {
     audio.playLevelUp();
-    network.broadcastPvpHandshake('tournament_colosseum', this.currentFormat);
+    network.broadcastPvpHandshake('tournament_colosseum', this.currentFormat, 'match');
     network.startMatch();
   }
 
