@@ -733,11 +733,12 @@ export class TournamentLobbyUI {
                 src="${heroFrame(clsId, 'idle', 0)}"
                 data-class="${escapeHtmlAttribute(clsId)}"
                 alt="${escapeHtmlAttribute(name)}"
+                onerror="this.onerror=null; this.src='/assets/heroes/warrior/idle/0.png';"
               />
             </div>
             <div class="pvp-fighter-info">
               <div class="pvp-info-row1">
-                ${iconSrc ? `<img class="pvp-class-icon" src="${escapeHtmlAttribute(iconSrc)}" alt="" />` : ''}
+                ${iconSrc ? `<img class="pvp-class-icon" src="${escapeHtmlAttribute(iconSrc)}" alt="" onerror="this.style.display='none';" />` : ''}
                 <span class="pvp-fighter-name">${escapeHtml(name)} ${isMe ? '<b class="pvp-you-tag">(YOU)</b>' : ''}</span>
                 ${badgeHtml}
               </div>
@@ -972,8 +973,9 @@ export class TournamentLobbyUI {
 
       .pvp-modal-shell {
         position: relative;
-        width: 1040px; max-width: 96vw;
-        max-height: 92vh;
+        width: 1040px; max-width: 98vw;
+        max-height: 96vh;
+        max-height: 96dvh;
         background: url('/assets/kenney-rpg-ui/panel_brown.png') repeat;
         border: 4px solid #3d2817;
         box-shadow: 0 0 40px rgba(0, 0, 0, 0.95), inset 0 0 20px rgba(0, 0, 0, 0.6);
@@ -986,58 +988,66 @@ export class TournamentLobbyUI {
 
       .pvp-header {
         display: flex; justify-content: space-between; align-items: center;
-        padding: 10px 18px;
+        padding: 8px 14px;
         background: rgba(18, 12, 7, 0.7);
         border-bottom: 2px solid #5a3d24;
+        gap: 8px; flex-shrink: 0;
       }
+      .pvp-title-cluster { min-width: 0; }
       .pvp-title {
-        margin: 0; font-family: 'Cinzel', Georgia, serif; font-size: 20px; font-weight: 900;
-        color: #fce79a; letter-spacing: 1.5px;
+        margin: 0; font-family: 'Cinzel', Georgia, serif; font-size: clamp(14px, 2.5vw, 20px); font-weight: 900;
+        color: #fce79a; letter-spacing: 1.2px;
         text-shadow: 0 2px 4px #000;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       }
-      .pvp-subtitle { font-size: 11px; color: #b89f80; margin-top: 1px; font-weight: 600; }
+      .pvp-subtitle { font-size: 10.5px; color: #b89f80; margin-top: 1px; font-weight: 600; white-space: nowrap; }
 
-      .pvp-header-actions { display: flex; align-items: center; gap: 8px; }
+      .pvp-header-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
       .pvp-qr-btn {
-        padding: 6px 12px; font-size: 11px; font-weight: 900;
+        padding: 5px 10px; font-size: 10.5px; font-weight: 900;
         background: url('/assets/kenney-rpg-ui/buttonLong_blue.png') no-repeat center/100% 100%;
         border: 0; color: #fff; cursor: pointer; text-shadow: 0 1px 2px #000;
-        display: flex; align-items: center; gap: 4px;
+        display: flex; align-items: center; gap: 4px; border-radius: 3px;
+        white-space: nowrap;
         transition: filter 0.15s ease;
       }
       .pvp-qr-btn:hover { filter: brightness(1.2); }
       .pvp-quick-code-badge {
-        display: flex; align-items: center; gap: 6px;
+        display: flex; align-items: center; gap: 5px;
         background: url('/assets/kenney-rpg-ui/panelInset_brown.png') repeat;
-        padding: 5px 12px; border-radius: 4px; cursor: pointer;
+        padding: 4px 10px; border-radius: 4px; cursor: pointer;
         border: 1px solid #735134;
+        white-space: nowrap;
         transition: all 0.15s ease;
       }
       .pvp-quick-code-badge:hover { border-color: #ffd770; filter: brightness(1.15); }
-      .pvp-badge-lbl { font-size: 10px; font-weight: 800; color: #ffd770; letter-spacing: 0.8px; }
-      .pvp-badge-val { font-size: 13px; font-weight: 900; color: #fff; font-family: monospace; letter-spacing: 1px; }
-      .pvp-badge-copy-btn { background: none; border: 0; color: #ffd770; cursor: pointer; font-size: 12px; }
+      .pvp-badge-lbl { font-size: 9.5px; font-weight: 800; color: #ffd770; letter-spacing: 0.8px; }
+      .pvp-badge-val { font-size: 12px; font-weight: 900; color: #fff; font-family: monospace; letter-spacing: 1px; }
+      .pvp-badge-copy-btn { background: none; border: 0; color: #ffd770; cursor: pointer; font-size: 11px; padding: 0 2px; }
 
       .pvp-close-btn {
-        width: 34px; height: 34px;
+        width: 30px; height: 30px;
         background: url('/assets/kenney-rpg-ui/buttonSquare_brown.png') no-repeat center/100% 100%;
-        border: 0; color: #fca5a5; font-size: 20px; font-weight: 900;
+        border: 0; color: #fca5a5; font-size: 18px; font-weight: 900;
         cursor: pointer; display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0;
       }
       .pvp-close-btn:hover { filter: brightness(1.25); color: #fff; }
 
       /* Direct Quick Join Bar */
       .pvp-quick-join-bar {
-        display: flex; align-items: center; gap: 10px;
-        padding: 6px 18px;
+        display: flex; align-items: center; gap: 8px;
+        padding: 5px 14px;
         background: rgba(10, 7, 4, 0.9);
         border-bottom: 1px solid #4a321c;
+        overflow-x: auto; flex-shrink: 0;
       }
-      .pvp-join-lbl { font-size: 11px; font-weight: 900; color: #ffd770; letter-spacing: 0.8px; }
+      .pvp-join-lbl { font-size: 10.5px; font-weight: 900; color: #ffd770; letter-spacing: 0.8px; white-space: nowrap; }
       .pvp-join-input {
-        width: 220px; padding: 5px 10px; font-size: 11.5px;
+        width: clamp(140px, 24vw, 240px); padding: 4px 8px; font-size: 11px;
         background: rgba(0, 0, 0, 0.6); border: 1px solid #634327; color: #fff;
         font-family: monospace; text-transform: uppercase; border-radius: 3px;
+        box-sizing: border-box;
       }
       .pvp-join-input:focus { border-color: #ffd770; outline: none; }
       .pvp-join-code-btn {
@@ -1083,10 +1093,10 @@ export class TournamentLobbyUI {
       .pvp-host-only-note { font-size: 10px; color: #e2b153; font-style: italic; }
 
       .pvp-versus-stage {
-        display: grid; grid-template-columns: 1fr 150px 1fr;
-        padding: 12px 16px; gap: 12px;
+        display: grid; grid-template-columns: 1fr 140px 1fr;
+        padding: 10px 14px; gap: 10px;
         background: url('/assets/kenney-rpg-ui/panelInset_brown.png') repeat;
-        overflow-y: auto; max-height: 520px;
+        overflow-y: auto; flex: 1; min-height: 0;
       }
 
       .pvp-team-col { display: flex; flex-direction: column; gap: 8px; }
@@ -1407,6 +1417,62 @@ export class TournamentLobbyUI {
         border: 2px solid #ffd770; color: #fff; padding: 6px 16px; border-radius: 4px;
         font-size: 11px; font-weight: 800; opacity: 0; pointer-events: none;
         transition: all 0.2s ease; z-index: 50; box-shadow: 0 4px 12px rgba(0,0,0,0.8);
+      }
+
+      /* Responsive: Mobile Landscape & Short Viewports (height <= 560px) */
+      @media (max-height: 560px) {
+        .pvp-modal-shell { max-height: 98vh; max-height: 98dvh; width: 98vw; }
+        .pvp-header { padding: 4px 10px; }
+        .pvp-title { font-size: 13.5px; }
+        .pvp-subtitle { display: none; }
+        .pvp-qr-btn { padding: 3px 8px; font-size: 9.5px; }
+        .pvp-quick-code-badge { padding: 3px 8px; }
+        .pvp-badge-lbl { font-size: 8.5px; }
+        .pvp-badge-val { font-size: 11px; }
+        .pvp-close-btn { width: 24px; height: 24px; font-size: 15px; }
+        .pvp-quick-join-bar { padding: 3px 10px; gap: 5px; }
+        .pvp-join-lbl { font-size: 9px; }
+        .pvp-join-input { padding: 2px 6px; font-size: 9.5px; width: 130px; }
+        .pvp-join-code-btn { padding: 2px 8px; font-size: 9px; }
+        .pvp-nav-tabs { padding: 3px 10px; gap: 4px; }
+        .pvp-nav-tab { padding: 3px 10px; font-size: 9.5px; }
+        .pvp-format-selector { padding: 2px 10px; }
+        .pvp-fmt-btn { padding: 2px 8px; font-size: 9px; }
+        .pvp-versus-stage { padding: 6px 8px; gap: 6px; grid-template-columns: 1fr 105px 1fr; }
+        .pvp-team-banner { padding: 3px 6px; }
+        .pvp-banner-title { font-size: 11px; }
+        .pvp-banner-count { font-size: 8.5px; }
+        .pvp-slots-container { gap: 4px; }
+        .pvp-fighter-card { padding: 3px 6px; gap: 6px; }
+        .pvp-fighter-avatar { width: 38px; height: 38px; }
+        .pvp-pedestal-sprite { height: 40px; }
+        .pvp-fighter-name { font-size: 11px; }
+        .pvp-class-icon { width: 16px; height: 16px; }
+        .pvp-info-row2 { font-size: 8px; gap: 4px; }
+        .pvp-empty-role-title { font-size: 10px; }
+        .pvp-empty-role-sub { font-size: 8px; }
+        .pvp-avatar-silhouette { font-size: 16px; }
+        .pvp-slot-claim-btn { padding: 3px 6px; font-size: 8.5px; }
+        .pvp-slot-inv-btn { width: 22px; height: 22px; font-size: 10px; }
+        .pvp-center-col { gap: 4px; }
+        .pvp-vs-emblem { width: 34px; height: 34px; font-size: 12px; }
+        .pvp-switch-team-btn { width: 90px; height: 30px; }
+        .pvp-switch-team-btn span { font-size: 7.5px; }
+        .pvp-switch-team-btn b { font-size: 9px; }
+        .pvp-balance-badge { display: none; }
+        .pvp-footer { padding: 4px 10px; }
+        .pvp-btn-leave { padding: 4px 10px; font-size: 9.5px; }
+        .pvp-btn-ready, .pvp-btn-start { width: 135px; height: 32px; font-size: 10px; }
+        .pvp-launch-warning { font-size: 9px; }
+      }
+
+      /* Responsive: Mobile Portrait & Narrow Width (width <= 720px) */
+      @media (max-width: 720px) {
+        .pvp-header { flex-wrap: wrap; }
+        .pvp-header-actions { width: 100%; justify-content: space-between; }
+        .pvp-versus-stage { grid-template-columns: 1fr; gap: 8px; }
+        .pvp-center-col { flex-direction: row; justify-content: center; gap: 8px; }
+        .pvp-balance-badge { display: none; }
       }
     `;
     document.head.appendChild(style);

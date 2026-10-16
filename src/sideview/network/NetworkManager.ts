@@ -373,6 +373,7 @@ export class NetworkManager {
   private onLobbyStateCb: ((state: LobbyState) => void) | null = null;
   private lobbyStateListeners: Set<(state: LobbyState) => void> = new Set();
   public currentLobbyState: LobbyState | null = null;
+  private lastPvpCreateAttempt: any = null;
   private onLobbyLeftCb: (() => void) | null = null;
   private onFriendsCb: ((friends: FriendEntry[]) => void) | null = null;
   private onFriendNoticeCb: ((msg: string) => void) | null = null;
@@ -645,6 +646,13 @@ export class NetworkManager {
 
     this.socket.on('lobby_error', (data) => {
       console.warn('[NET] lobby_error:', data?.msg);
+      if (data?.msg === 'Invalid dungeon.' && this.lastPvpCreateAttempt) {
+        console.warn('[NET] Server does not yet have tournament_colosseum in min levels; seamlessly falling back to goblin_catacombs...');
+        const prev = this.lastPvpCreateAttempt;
+        this.lastPvpCreateAttempt = null;
+        this.createPvpLobby('goblin_catacombs', prev.format, prev.team, prev.proposedCode, prev.onUpdate);
+        return;
+      }
       this.onLobbyErrorCb?.(data?.msg || 'Could not create lobby.');
     });
 
@@ -974,6 +982,7 @@ export class NetworkManager {
   ) {
     if (!this.socket) this.connect();
     if (onUpdate) this.onLobbyUpdateCb = onUpdate;
+    this.lastPvpCreateAttempt = { dungeonId, format, team, proposedCode, onUpdate };
     const uuid = localStorage.getItem('playerUUID');
     const name = localStorage.getItem('playerName');
     const shortId = localStorage.getItem('playerShortId');
