@@ -665,6 +665,10 @@ export class SideViewGame {
    */
   private onRunLost() {
     if (!this.engine) return;
+    if (this.engine.isVictoryOrWaveCleared || this.dungeonFlowState === 'WAVE_CLEARED') {
+      console.warn('[Dungeon] Prevented onRunLost: wave or dungeon was already cleared');
+      return;
+    }
     const lostLoot = this.engine.droppedLoots.length;
 
     if (this.waveClearTimer) {
@@ -747,6 +751,7 @@ export class SideViewGame {
     this.hud?.setDungeonContextAction(null);
     this.hud?.setQuestTrackerInDungeon(false);
     this.waveActive = false;
+    this.engine.isVictoryOrWaveCleared = false;
     this.engine.isTownMode = true;
     this.engine.enemies = [];
     this.engine.player.x = 450;
@@ -914,6 +919,7 @@ export class SideViewGame {
   public loadDungeon(dungeonIndex: number, broadcastParty: boolean = false) {
     if (!this.engine) return;
     this.waveActive = false;
+    this.engine.isVictoryOrWaveCleared = false;
     this.engine.isTownMode = false;
     this.hud?.setQuestTrackerInDungeon(true);
     this.engine.player.x = this.engine.isHost ? 260 : 360;
@@ -1591,6 +1597,7 @@ export class SideViewGame {
     this.dungeonFlowState = 'WAVE_ACTIVE';
     this.isTransitioningWave = false;
     this.waveActive = true;
+    this.engine.isVictoryOrWaveCleared = false;
 
     // Preserves regex for test/endgame.test.mjs:
     // !dungeon.endless && this.currentWaveIndex >= dungeon.waves.length
@@ -1724,6 +1731,11 @@ export class SideViewGame {
   private onDungeonCleared() {
     if (!this.engine) return;
     this.waveActive = false;
+    this.engine.isVictoryOrWaveCleared = true;
+    this.engine.clearCombatHazardsAndNegativeStatuses();
+    if (this.engine.isHost) {
+      network.sendWaveSync({ waveIndex: this.currentWaveIndex, cleared: true });
+    }
 
     recordEvent('dungeons_cleared');
 
@@ -2177,6 +2189,8 @@ export class SideViewGame {
     if (!this.engine || !this.engine.isHost) return;
     this.dungeonFlowState = 'WAVE_CLEARED';
     this.waveActive = false;
+    this.engine.isVictoryOrWaveCleared = true;
+    this.engine.clearCombatHazardsAndNegativeStatuses();
 
     // Record depth reached
     this.recordEndlessDepth(this.currentWaveIndex + 1);

@@ -381,7 +381,7 @@ function hazardFor(theme: BattleTheme, spec: ZoneSpec): ZoneHazardPlan | undefin
   if (!spec.hazard || !spec.telegraph) return undefined;
   return {
     id: `${theme}-hazard`, kind: spec.hazard, telegraph: spec.telegraph,
-    damageCooldownMs: 900, anchors: [1280, 2090, 2920], radius: 86, safeMargin: 280,
+    damageCooldownMs: 900, anchors: [1080, 1780, 2380], radius: 86, safeMargin: 280,
   };
 }
 

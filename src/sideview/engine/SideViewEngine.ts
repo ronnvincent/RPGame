@@ -461,6 +461,7 @@ export class SideViewEngine {
 
   /** Full transition boundary for town/dungeon changes, never for a downed tick. */
   public resetCombatScene() {
+    this.isVictoryOrWaveCleared = false;
     this.cancelDelayedCombatTasks();
     this.particles.clearGameplayEntities();
     this.combatSpriteEffects.length = 0;
@@ -572,6 +573,15 @@ export class SideViewEngine {
   public readonly enemyStatuses = new Map<string, EnemyCombatStatus[]>();
   /** Future enemy skills can use this same list; Purge Flame already cleans it. */
   public readonly playerNegativeStatuses: PlayerNegativeStatus[] = [];
+  /** Flag set when a wave or dungeon is cleared to suppress hazards and prevent defeat */
+  public isVictoryOrWaveCleared: boolean = false;
+  /** Clears lingering DoT debuffs, cancels hostile tasks, and grants safety invulnerability on wave/dungeon clear */
+  public clearCombatHazardsAndNegativeStatuses(): void {
+    this.playerNegativeStatuses.length = 0;
+    this.cancelDelayedCombatTasks();
+    this.particles.projectiles = this.particles.projectiles.filter(p => p.fromPlayer);
+    this.player.iframeTimer = Math.max(this.player.iframeTimer, 5.0);
+  }
   /** Pure timing state for dodge/parry; rendering resolves through sprite ids. */
   private playerDefense: PlayerDefenseState = createPlayerDefenseState();
   /** One elemental reaction per cast/target/reaction, including multi-hit skills. */
@@ -1043,6 +1053,7 @@ export class SideViewEngine {
     // with the warning ellipse painted on the floor.
     const withinGroundBand = Math.abs(p.y - hazard.y) <= hazard.radius * 0.75;
     if (!withinHorizontalRange || !withinGroundBand) return;
+    if (this.isVictoryOrWaveCleared) return;
 
     const nowMs = this.zoneHazardClock * 1000;
     const lastDamageMs = this.zoneHazardLastDamageMs.get(hazard.id) ?? Number.NEGATIVE_INFINITY;
@@ -1089,7 +1100,9 @@ export class SideViewEngine {
 
   private updateZoneHazards(dt: number) {
     this.ensureZoneGeometry();
-    if (this.isTownMode || this.zoneHazards.length === 0 || dt <= 0) return;
+    if (this.isTownMode || this.isVictoryOrWaveCleared || this.zoneHazards.length === 0 || dt <= 0) return;
+    const hasLivingEnemies = this.enemies.some(e => !e.isDead && e.hp > 0);
+    if (!hasLivingEnemies) return;
 
     // Do not let a restored background tab jump over the warning and land in
     // an active damage frame. A stalled frame advances this system by at most
@@ -2678,7 +2691,7 @@ export class SideViewEngine {
 
   private applyPlayerStatusTick(status: PlayerNegativeStatus) {
     const p = this.player;
-    if (p.downed || this.runOver || p.hp <= 0 || status.rawTickDamage <= 0) return;
+    if (this.isVictoryOrWaveCleared || p.downed || this.runOver || p.hp <= 0 || status.rawTickDamage <= 0) return;
     const mitigated = Math.max(
       1,
       Math.round(afterDefence(status.rawTickDamage, p.totalDef) * this.incomingDamageMultiplier()),
@@ -2735,6 +2748,11 @@ export class SideViewEngine {
         }
       }
       if (!statuses.length) this.enemyStatuses.delete(enemyId);
+    }
+
+    if (this.isVictoryOrWaveCleared) {
+      this.playerNegativeStatuses.length = 0;
+      return;
     }
 
     for (let i = this.playerNegativeStatuses.length - 1; i >= 0; i--) {
@@ -2857,6 +2875,12 @@ export class SideViewEngine {
     enemy.hp = 0;
     this.onEnemyDefeatedEvent?.(enemy.id);
     this.miniBossTriggered.delete(enemy.id);
+
+    const remainingAlive = this.enemies.filter(e => e.id !== enemy.id && !e.isDead && e.hp > 0);
+    if (enemy.type === 'boss' || remainingAlive.length === 0) {
+      this.isVictoryOrWaveCleared = true;
+      this.clearCombatHazardsAndNegativeStatuses();
+    }
 
     if (this.isHost && enemy.eliteModifiers?.includes('volatile')) {
       const profile = getEnemyAttackProfile('boss-nova');
@@ -3057,6 +3081,12 @@ export class SideViewEngine {
   private resolvePlayerDefeat() {
     const p = this.player;
     if (p.hp > 0 || p.downed || this.runOver) return;
+
+    if (this.isVictoryOrWaveCleared) {
+      p.hp = Math.max(1, Math.round(p.maxHp * 0.2));
+      p.iframeTimer = Math.max(p.iframeTimer, 5.0);
+      return;
+    }
 
     const preventionIndex = p.activeBuffs.findIndex(buff => buff.stat === 'deathPrevention' && (buff.amount || 0) > 0);
     if (preventionIndex >= 0) {
@@ -4877,7 +4907,7 @@ export class SideViewEngine {
     // caster is untouchable for the length of the cinematic.
     // Already down: the bleed-out clock is the threat now, not the boss. Being
     // finished off while helpless would just shorten a window meant for rescue.
-    if (p.downed || this.runOver || p.hp <= 0) return 0;
+    if (p.downed || this.runOver || p.hp <= 0 || this.isVictoryOrWaveCleared) return 0;
     if (p.iframeTimer > 0 && !attack) return 0;
     if (p.stealthTimer > 0 || this.ultimate.invulnerable) return 0;
 

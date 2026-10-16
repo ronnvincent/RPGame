@@ -57,7 +57,8 @@
     "test:inventory-loot": "node test/inventory-loot.test.mjs",
     "test:simulate-all-dungeons": "node tools/simulate-all-dungeons.mjs",
     "test:modals": "node test/modal-exit-buttons.test.mjs",
-    "test:survive-speed": "node test/survive-and-speed-balance.test.mjs"
+    "test:survive-speed": "node test/survive-and-speed-balance.test.mjs",
+    "test:post-boss": "node --test test/post-boss-safety.test.mjs"
   },
   "keywords": [],
   "author": "",
