@@ -1,13 +1,13 @@
 /**
  * Tournament Mode & Multiplayer PvP Colosseum Lobby UI
  *
- * Symmetrical Dark Fantasy Action RPG Colosseum staging area:
- * - Real connected players only (zero AI bots)
- * - Mobile Legends: Bang Bang style team switching (Crimson Legion vs Azure Sentinels)
- * - Symmetrical slot pedestals with animated pixel hero sprites facing each other
- * - Integrated friend invites & player ID lookup
- * - Host format management (1v1, 2v2, 3v3, 4v4)
- * - Ornate medieval stone & gold filigree styling
+ * Authentic Dark Fantasy Action RPG Colosseum staging area:
+ * - Uses real Kenney RPG UI pixel assets (/assets/kenney-rpg-ui/)
+ * - Mobile Legends: Bang Bang style 2-team custom room (Crimson vs Azure)
+ * - Zero AI bots: real connected players only
+ * - Live animated pixel hero sprites on pedestals facing each other
+ * - Immediate optimistic state updates so buttons respond with 0ms lag
+ * - Integrated tabs: [Arena Stage], [Invite Friends], [Public Duels]
  */
 
 import { audio } from '../engine/AudioManager';
@@ -25,7 +25,6 @@ import { HERO_SPRITES, heroFrame } from '../engine/HeroSprites';
 import {
   escapeHtml,
   escapeHtmlAttribute,
-  finiteNumber,
   installModalFocusTrap,
 } from './UiSafety';
 
@@ -45,13 +44,13 @@ export class TournamentLobbyUI {
   private parent: HTMLElement;
   private engine: SideViewEngine;
   public currentFormat: TournamentFormat = '1v1';
-  private selectedRoundsToWin: number = 2;
+  private localTeam: TournamentTeam = 'red';
   private onStartMatchCb: (match: TournamentMatch) => void;
 
   private state: LobbyState | null = null;
   private friends: FriendEntry[] = [];
   private pvpLobbies: any[] = [];
-  private activeDrawer: 'none' | 'invite' | 'lobbies' = 'none';
+  private activeTab: 'arena' | 'invite' | 'public' = 'arena';
 
   private idleFrame: number = 0;
   private idleTimer: number | null = null;
@@ -75,7 +74,7 @@ export class TournamentLobbyUI {
     this.injectStyle();
 
     this.overlay = document.createElement('div');
-    this.overlay.className = 'dialogue-modal-backdrop tournament-lobby-backdrop';
+    this.overlay.className = 'tournament-lobby-backdrop';
     this.overlay.setAttribute('role', 'dialog');
     this.overlay.setAttribute('aria-modal', 'true');
     this.overlay.setAttribute('aria-labelledby', 'pvp-colosseum-title');
@@ -85,6 +84,10 @@ export class TournamentLobbyUI {
       this.state = state;
       if (state.pvpFormat && ['1v1', '2v2', '3v3', '4v4'].includes(state.pvpFormat)) {
         this.currentFormat = state.pvpFormat;
+      }
+      const myId = network.getActorId();
+      if (state.pvpTeams && state.pvpTeams[myId]) {
+        this.localTeam = state.pvpTeams[myId];
       }
       if (state.started) {
         this.close();
@@ -96,12 +99,12 @@ export class TournamentLobbyUI {
 
     network.onFriends((friends) => {
       this.friends = friends;
-      if (this.overlay && this.activeDrawer === 'invite') this.render();
+      if (this.overlay && this.activeTab === 'invite') this.render();
     });
 
     network.onPvpLobbyList((lobbies) => {
       this.pvpLobbies = lobbies || [];
-      if (this.overlay && this.activeDrawer === 'lobbies') this.render();
+      if (this.overlay && this.activeTab === 'public') this.render();
     });
 
     network.onLobbyLeft(() => {
@@ -112,13 +115,16 @@ export class TournamentLobbyUI {
       this.toast(msg);
     });
 
-    // Check if player is already in a PvP lobby
+    // Check if player is already in a PvP room
     if (network.currentLobbyState && network.currentLobbyState.isPvp) {
       this.state = network.currentLobbyState;
       if (this.state.pvpFormat) this.currentFormat = this.state.pvpFormat;
+      const myId = network.getActorId();
+      if (this.state.pvpTeams && this.state.pvpTeams[myId]) {
+        this.localTeam = this.state.pvpTeams[myId];
+      }
     } else {
-      // Auto-create Colosseum room for player
-      network.createPvpLobby('tournament_colosseum', this.currentFormat, 'red');
+      network.createPvpLobby('tournament_colosseum', this.currentFormat, this.localTeam);
     }
 
     network.requestFriends();
@@ -133,7 +139,7 @@ export class TournamentLobbyUI {
       },
     });
 
-    // Character idle animation loop (~9 fps)
+    // Animate idle heroes on pedestals
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
       || document.documentElement.dataset.rpgReducedMotion === 'true';
     if (!reducedMotion) {
@@ -195,41 +201,60 @@ export class TournamentLobbyUI {
     }, 2800);
   }
 
-  private myActorId(): string {
-    return network.getActorId();
-  }
+  /** Synthesizes or retrieves the local player representation */
+  private getLocalMember(): LobbyMember {
+    const aid = network.getActorId();
+    const storedName = localStorage.getItem('playerName') || '';
+    const storedClass = localStorage.getItem('lastClassId') || '';
+    const storedLevel = Number(localStorage.getItem('playerLevel')) || 1;
+    const p = this.engine.player;
 
-  private myMember(): LobbyMember | null {
-    const aid = this.myActorId();
-    return this.state?.members.find(m => m.actorId === aid || m.uuid === aid || m.socketId === network.socket?.id) || null;
-  }
-
-  private myTeam(): TournamentTeam {
-    const me = this.myMember();
-    if (!me) return 'red';
-    const aid = me.actorId || me.uuid;
-    if (this.state?.pvpTeams && this.state.pvpTeams[aid]) {
-      return this.state.pvpTeams[aid];
-    }
-    return me.team || 'red';
+    return {
+      actorId: aid,
+      uuid: localStorage.getItem('playerUUID') || 'guest',
+      socketId: network.socket?.id || null,
+      name: p?.name || storedName || 'Champion',
+      shortId: localStorage.getItem('playerShortId') || 'CECT-HERO',
+      classId: p?.characterClass?.id || storedClass || 'warrior',
+      level: p?.level || storedLevel || 1,
+      power: (p as any)?.power || 150,
+      team: this.localTeam,
+      ready: true,
+      isHost: network.isHost,
+      online: true,
+    };
   }
 
   private switchTeam(targetTeam: TournamentTeam): void {
     audio.playClick();
+    this.localTeam = targetTeam;
+    if (this.state) {
+      if (!this.state.pvpTeams) this.state.pvpTeams = {};
+      this.state.pvpTeams[network.getActorId()] = targetTeam;
+    }
     network.switchPvpTeam(targetTeam);
+    this.render();
   }
 
   private setFormat(fmt: TournamentFormat): void {
     audio.playClick();
     this.currentFormat = fmt;
+    if (this.state) {
+      this.state.pvpFormat = fmt;
+      this.state.maxPlayers = TOURNAMENT_FORMAT_TEAM_SIZES[fmt] * 2;
+    }
     network.setPvpFormat(fmt);
+    this.render();
   }
 
   private toggleReady(): void {
-    const me = this.myMember();
-    if (!me) return;
     audio.playClick();
-    network.sendReady(!me.ready);
+    const myId = network.getActorId();
+    const me = this.state?.members.find(m => m.actorId === myId || m.uuid === myId);
+    const nextReady = !(me?.ready);
+    if (me) me.ready = nextReady;
+    network.sendReady(nextReady);
+    this.render();
   }
 
   private startTournament(): void {
@@ -243,19 +268,25 @@ export class TournamentLobbyUI {
 
     const st = this.state;
     const teamSize = TOURNAMENT_FORMAT_TEAM_SIZES[this.currentFormat];
-    const members = st?.members || [];
-    const iAmHost = network.isHost;
-    const myId = this.myActorId();
-    const myTeam = this.myTeam();
-    const me = this.myMember();
+    const myId = network.getActorId();
+    const me = this.getLocalMember();
 
-    // Group real connected players by team
+    // Ensure local player is always in member list
+    const rawMembers = st?.members && st.members.length > 0 ? [...st.members] : [me];
+    if (!rawMembers.some(m => m.actorId === myId || m.uuid === myId)) {
+      rawMembers.unshift(me);
+    }
+
     const redMembers: LobbyMember[] = [];
     const blueMembers: LobbyMember[] = [];
 
-    for (const m of members) {
+    for (const m of rawMembers) {
       const aid = m.actorId || m.uuid;
-      const assigned = (st?.pvpTeams && st.pvpTeams[aid]) || m.team || 'red';
+      const isMe = aid === myId;
+      const assigned = isMe
+        ? this.localTeam
+        : ((st?.pvpTeams && st.pvpTeams[aid]) || m.team || 'red');
+
       if (assigned === 'blue') {
         blueMembers.push(m);
       } else {
@@ -263,215 +294,216 @@ export class TournamentLobbyUI {
       }
     }
 
-    // Determine launch readiness
+    const iAmHost = network.isHost;
     const hasBothTeams = redMembers.length >= 1 && blueMembers.length >= 1;
-    const allGuestsReady = members.every(m => m.isHost || m.ready);
+    const allGuestsReady = rawMembers.every(m => m.isHost || m.ready);
     const canLaunch = iAmHost && hasBothTeams && allGuestsReady;
 
     let launchNotice = '';
     if (!hasBothTeams) {
       launchNotice = 'Requires at least 1 warrior on Crimson and 1 on Azure.';
     } else if (!allGuestsReady) {
-      const unreadyCount = members.filter(m => !m.isHost && !m.ready).length;
+      const unreadyCount = rawMembers.filter(m => !m.isHost && !m.ready).length;
       launchNotice = `Waiting for ${unreadyCount} challenger${unreadyCount > 1 ? 's' : ''} to ready up.`;
     }
 
     const modal = document.createElement('div');
     modal.className = 'pvp-modal-shell';
 
-    // Top Header with Title & Room Code
+    // 1. Top Header
     const header = document.createElement('div');
     header.className = 'pvp-header';
     header.innerHTML = `
-      <div class="pvp-title-group">
-        <div class="pvp-subcrest">MULTIPLAYER BATTLEGROUND • MOBILE LEGENDS CUSTOM MODE</div>
-        <h1 class="pvp-main-title">THE GRAND COLOSSEUM</h1>
-        <div class="pvp-stat-strip">
-          <span>0.22 PvP Multiplier</span>
-          <span class="pvp-bullet">•</span>
-          <span>Normalized HP</span>
-          <span class="pvp-bullet">•</span>
-          <span>Anti-Burst Aegis</span>
-          <span class="pvp-bullet">•</span>
-          <span>Diminishing CC</span>
-          <span class="pvp-bullet">•</span>
-          <span style="color: #4ade80;">Real Players Only</span>
-        </div>
+      <div class="pvp-title-cluster">
+        <h1 class="pvp-title" id="pvp-colosseum-title">THE GRAND COLOSSEUM</h1>
+        <div class="pvp-subtitle">Multiplayer PvP Duel • Mobile Legends Custom Format</div>
       </div>
-      <div class="pvp-header-right">
-        <div class="pvp-room-code-badge" title="Click to copy Room Code" data-action="copy-code">
-          <span class="pvp-code-lbl">COLOSSEUM:</span>
-          <span class="pvp-code-val">${escapeHtml(st?.roomId || 'ARENA-LOBBY')}</span>
-          <button class="pvp-copy-btn" aria-label="Copy Code">📋</button>
+      <div class="pvp-header-actions">
+        <div class="pvp-room-code-tag" title="Click to copy Room Code">
+          <span class="pvp-tag-label">ROOM:</span>
+          <span class="pvp-tag-val">${escapeHtml(st?.roomId || 'ARENA-LOBBY')}</span>
+          <span class="pvp-tag-copy">📋</span>
         </div>
-        <button class="pvp-close-top-btn" aria-label="Close Colosseum">✕</button>
+        <button class="pvp-close-btn" aria-label="Close Colosseum" title="Leave or Close">&times;</button>
       </div>
     `;
 
-    header.querySelector('[data-action="copy-code"]')?.addEventListener('click', () => {
+    header.querySelector('.pvp-room-code-tag')?.addEventListener('click', () => {
       if (st?.roomId) {
         navigator.clipboard?.writeText(st.roomId);
         this.toast('Room code copied to clipboard!');
       }
     });
-    header.querySelector('.pvp-close-top-btn')?.addEventListener('click', () => {
+    header.querySelector('.pvp-close-btn')?.addEventListener('click', () => {
       this.handleLeaveOrClose();
     });
     modal.appendChild(header);
 
-    // Format Selector Bar
-    const formatBar = document.createElement('div');
-    formatBar.className = 'pvp-format-bar';
-    const formats: Array<{ id: TournamentFormat; label: string; icon: string }> = [
-      { id: '1v1', label: '1v1 DUEL', icon: '⚔️' },
-      { id: '2v2', label: '2v2 SKIRMISH', icon: '🛡️' },
-      { id: '3v3', label: '3v3 SQUAD', icon: '🏹' },
-      { id: '4v4', label: '4v4 GUILD WAR', icon: '👑' },
-    ];
-
-    let formatHtml = '<div class="pvp-format-tabs">';
-    for (const fmt of formats) {
-      const active = this.currentFormat === fmt.id ? 'active' : '';
-      const disabled = !iAmHost ? 'disabled' : '';
-      formatHtml += `
-        <button class="pvp-format-tab ${active}" data-format="${fmt.id}" ${disabled}>
-          <span class="pvp-tab-icon">${fmt.icon}</span>
-          <span class="pvp-tab-label">${fmt.label}</span>
-          <span class="pvp-tab-cap">${TOURNAMENT_FORMAT_TEAM_SIZES[fmt.id]} vs ${TOURNAMENT_FORMAT_TEAM_SIZES[fmt.id]}</span>
-        </button>
-      `;
-    }
-    formatHtml += '</div>';
-    if (!iAmHost) {
-      formatHtml += '<div class="pvp-guest-format-hint">Lobby Host sets match format</div>';
-    }
-    formatBar.innerHTML = formatHtml;
-
-    if (iAmHost) {
-      formatBar.querySelectorAll<HTMLButtonElement>('.pvp-format-tab').forEach((tab) => {
-        tab.addEventListener('click', () => {
-          const fmt = tab.getAttribute('data-format') as TournamentFormat;
-          if (fmt && fmt !== this.currentFormat) {
-            this.setFormat(fmt);
-          }
-        });
-      });
-    }
-    modal.appendChild(formatBar);
-
-    // Symmetrical Colosseum Stage (West vs Center vs East)
-    const stage = document.createElement('div');
-    stage.className = 'pvp-stage';
-
-    // WEST WING: CRIMSON LEGION (RED)
-    const redWing = document.createElement('div');
-    redWing.className = 'pvp-wing pvp-wing-red';
-    redWing.innerHTML = `
-      <div class="pvp-wing-header">
-        <div class="pvp-banner-crest">🦁</div>
-        <div class="pvp-wing-title-box">
-          <div class="pvp-wing-title">CRIMSON LEGION</div>
-          <div class="pvp-wing-sub">WEST SIDE • ${redMembers.length} / ${teamSize} FIGHTERS</div>
-        </div>
-      </div>
-      <div class="pvp-pedestals-column pvp-pedestals-red">
-        ${this.renderPedestalSlots('red', teamSize, redMembers, myId, iAmHost)}
-      </div>
-    `;
-    stage.appendChild(redWing);
-
-    // CENTER DIVIDER: VS COIN & SWITCH BUTTON
-    const centerDivider = document.createElement('div');
-    centerDivider.className = 'pvp-center-divider';
-    const canSwitchToOther = myTeam === 'red' ? (blueMembers.length < teamSize) : (redMembers.length < teamSize);
-    const targetTeamName = myTeam === 'red' ? 'AZURE' : 'CRIMSON';
-    const switchTarget = myTeam === 'red' ? 'blue' : 'red';
-
-    centerDivider.innerHTML = `
-      <div class="pvp-vs-emblem">
-        <div class="pvp-vs-circle">VS</div>
-      </div>
-
-      <button class="pvp-switch-btn" data-action="switch-team" ${!canSwitchToOther ? 'disabled' : ''}>
-        <span class="pvp-switch-arrows">⇄</span>
-        <span class="pvp-switch-text">SWITCH TO ${targetTeamName}</span>
+    // 2. Navigation Tabs (Arena Stage vs Invite Friends vs Public Duels)
+    const tabsBar = document.createElement('div');
+    tabsBar.className = 'pvp-nav-tabs';
+    tabsBar.innerHTML = `
+      <button class="pvp-nav-tab ${this.activeTab === 'arena' ? 'active' : ''}" data-tab="arena">
+        ⚔️ VERSUS ARENA
       </button>
-
-      <div class="pvp-arena-scroll">
-        <div class="pvp-scroll-head">GOTHIC BASTION</div>
-        <div class="pvp-scroll-sub">Multi-Tier Arena Platforms</div>
-        <div class="pvp-scroll-body">
-          Symmetrical spawns, high-ground platforms, and 0 friendly fire.
-        </div>
-      </div>
+      <button class="pvp-nav-tab ${this.activeTab === 'invite' ? 'active' : ''}" data-tab="invite">
+        👥 INVITE FRIENDS
+      </button>
+      <button class="pvp-nav-tab ${this.activeTab === 'public' ? 'active' : ''}" data-tab="public">
+        📜 PUBLIC DUELS
+      </button>
     `;
 
-    centerDivider.querySelector('[data-action="switch-team"]')?.addEventListener('click', () => {
-      this.switchTeam(switchTarget);
+    tabsBar.querySelectorAll<HTMLButtonElement>('.pvp-nav-tab').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const t = btn.getAttribute('data-tab') as 'arena' | 'invite' | 'public';
+        if (t && t !== this.activeTab) {
+          audio.playClick();
+          this.activeTab = t;
+          if (t === 'public') network.browsePvpLobbies();
+          this.render();
+        }
+      });
     });
-    stage.appendChild(centerDivider);
+    modal.appendChild(tabsBar);
 
-    // EAST WING: AZURE SENTINELS (BLUE)
-    const blueWing = document.createElement('div');
-    blueWing.className = 'pvp-wing pvp-wing-blue';
-    blueWing.innerHTML = `
-      <div class="pvp-wing-header">
-        <div class="pvp-wing-title-box" style="text-align: right;">
-          <div class="pvp-wing-title">AZURE SENTINELS</div>
-          <div class="pvp-wing-sub">EAST SIDE • ${blueMembers.length} / ${teamSize} FIGHTERS</div>
-        </div>
-        <div class="pvp-banner-crest">🦅</div>
-      </div>
-      <div class="pvp-pedestals-column pvp-pedestals-blue">
-        ${this.renderPedestalSlots('blue', teamSize, blueMembers, myId, iAmHost)}
-      </div>
-    `;
-    stage.appendChild(blueWing);
+    // 3. Tab Contents
+    if (this.activeTab === 'arena') {
+      // Format selector bar
+      const formatBar = document.createElement('div');
+      formatBar.className = 'pvp-format-selector';
+      const formats: Array<{ id: TournamentFormat; label: string }> = [
+        { id: '1v1', label: '1v1 DUEL' },
+        { id: '2v2', label: '2v2 SKIRMISH' },
+        { id: '3v3', label: '3v3 SQUAD' },
+        { id: '4v4', label: '4v4 GUILD WAR' },
+      ];
 
-    modal.appendChild(stage);
-
-    // Drawer Container (Invite Friends / Public Duels)
-    if (this.activeDrawer !== 'none') {
-      const drawer = document.createElement('div');
-      drawer.className = 'pvp-drawer-panel';
-      if (this.activeDrawer === 'invite') {
-        drawer.innerHTML = this.renderInviteDrawer();
-        this.bindInviteDrawerEvents(drawer);
-      } else if (this.activeDrawer === 'lobbies') {
-        drawer.innerHTML = this.renderLobbiesDrawer();
-        this.bindLobbiesDrawerEvents(drawer);
+      let formatHtml = '<div class="pvp-format-buttons">';
+      for (const f of formats) {
+        const isSel = this.currentFormat === f.id;
+        formatHtml += `
+          <button class="pvp-fmt-btn ${isSel ? 'active' : ''}" data-format="${f.id}" ${!iAmHost ? 'disabled' : ''}>
+            ${f.label}
+          </button>
+        `;
       }
-      modal.appendChild(drawer);
+      formatHtml += '</div>';
+      if (!iAmHost) {
+        formatHtml += '<span class="pvp-host-only-note">(Host sets match format)</span>';
+      }
+      formatBar.innerHTML = formatHtml;
+
+      if (iAmHost) {
+        formatBar.querySelectorAll<HTMLButtonElement>('.pvp-fmt-btn').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const fmt = btn.getAttribute('data-format') as TournamentFormat;
+            if (fmt && fmt !== this.currentFormat) {
+              this.setFormat(fmt);
+            }
+          });
+        });
+      }
+      modal.appendChild(formatBar);
+
+      // Symmetrical Versus Stage
+      const stage = document.createElement('div');
+      stage.className = `pvp-versus-stage pvp-stage-${this.currentFormat}`;
+
+      // Left Column: Crimson Legion (Red)
+      const leftCol = document.createElement('div');
+      leftCol.className = 'pvp-team-col pvp-col-red';
+      leftCol.innerHTML = `
+        <div class="pvp-team-banner banner-red">
+          <div class="pvp-banner-title">CRIMSON LEGION</div>
+          <div class="pvp-banner-count">${redMembers.length} / ${teamSize} WARRIORS</div>
+        </div>
+        <div class="pvp-slots-container">
+          ${this.renderTeamSlots('red', teamSize, redMembers, myId, iAmHost)}
+        </div>
+      `;
+      stage.appendChild(leftCol);
+
+      // Center Divider: VS Medallion & Switch Button
+      const centerCol = document.createElement('div');
+      centerCol.className = 'pvp-center-col';
+      const canSwitch = this.localTeam === 'red' ? (blueMembers.length < teamSize) : (redMembers.length < teamSize);
+      const otherTeamName = this.localTeam === 'red' ? 'AZURE' : 'CRIMSON';
+      const switchTarget = this.localTeam === 'red' ? 'blue' : 'red';
+
+      centerCol.innerHTML = `
+        <div class="pvp-vs-emblem">VS</div>
+        <button class="pvp-switch-team-btn" data-action="switch-team" ${!canSwitch ? 'disabled' : ''}>
+          <span>⇄ SWITCH TO</span>
+          <b>${otherTeamName}</b>
+        </button>
+        <div class="pvp-balance-badge">
+          <b>PVP BALANCING</b>
+          <span>0.22 Multiplier</span>
+          <span>Anti-Burst Aegis</span>
+          <span>Normalized HP</span>
+        </div>
+      `;
+
+      centerCol.querySelector('[data-action="switch-team"]')?.addEventListener('click', () => {
+        this.switchTeam(switchTarget);
+      });
+      stage.appendChild(centerCol);
+
+      // Right Column: Azure Sentinels (Blue)
+      const rightCol = document.createElement('div');
+      rightCol.className = 'pvp-team-col pvp-col-blue';
+      rightCol.innerHTML = `
+        <div class="pvp-team-banner banner-blue">
+          <div class="pvp-banner-title">AZURE SENTINELS</div>
+          <div class="pvp-banner-count">${blueMembers.length} / ${teamSize} WARRIORS</div>
+        </div>
+        <div class="pvp-slots-container">
+          ${this.renderTeamSlots('blue', teamSize, blueMembers, myId, iAmHost)}
+        </div>
+      `;
+      stage.appendChild(rightCol);
+
+      modal.appendChild(stage);
+
+      // Bind slot switch clicks
+      this.bindSlotActions(modal);
+    } else if (this.activeTab === 'invite') {
+      const invitePanel = document.createElement('div');
+      invitePanel.className = 'pvp-tab-panel';
+      invitePanel.innerHTML = this.renderInviteContent();
+      this.bindInviteContent(invitePanel);
+      modal.appendChild(invitePanel);
+    } else if (this.activeTab === 'public') {
+      const publicPanel = document.createElement('div');
+      publicPanel.className = 'pvp-tab-panel';
+      publicPanel.innerHTML = this.renderPublicLobbiesContent();
+      this.bindPublicContent(publicPanel);
+      modal.appendChild(publicPanel);
     }
 
-    // Bottom Action Bar
+    // 4. Bottom Footer Action Bar
     const footer = document.createElement('div');
     footer.className = 'pvp-footer';
 
     footer.innerHTML = `
       <div class="pvp-footer-left">
-        <button class="pvp-sub-btn ${this.activeDrawer === 'invite' ? 'active' : ''}" data-action="toggle-invite">
-          👥 INVITE FIGHTERS
-        </button>
-        <button class="pvp-sub-btn ${this.activeDrawer === 'lobbies' ? 'active' : ''}" data-action="toggle-lobbies">
-          📜 BROWSE DUELS
-        </button>
-        <button class="pvp-sub-btn pvp-leave-btn" data-action="leave-lobby">
+        <button class="pvp-btn-leave" data-action="leave-lobby">
           🚪 LEAVE COLOSSEUM
         </button>
       </div>
 
       <div class="pvp-footer-right">
-        ${launchNotice ? `<div class="pvp-launch-hint">${escapeHtml(launchNotice)}</div>` : ''}
+        ${launchNotice ? `<div class="pvp-launch-warning">${escapeHtml(launchNotice)}</div>` : ''}
         ${
           iAmHost
             ? `
-              <button class="pvp-start-btn ${canLaunch ? 'ready-pulse' : 'disabled'}" data-action="start-tournament" ${!canLaunch ? 'disabled' : ''}>
+              <button class="pvp-btn-start ${canLaunch ? 'ready-to-launch' : 'disabled'}" data-action="start-tournament" ${!canLaunch ? 'disabled' : ''}>
                 ⚔️ COMMENCE TOURNAMENT ⚔️
               </button>
             `
             : `
-              <button class="pvp-ready-btn ${me?.ready ? 'is-ready' : 'not-ready'}" data-action="toggle-ready">
+              <button class="pvp-btn-ready ${me?.ready ? 'is-ready' : 'not-ready'}" data-action="toggle-ready">
                 ${me?.ready ? '⌛ CANCEL READY' : '⚔️ READY FOR BATTLE'}
               </button>
             `
@@ -479,15 +511,6 @@ export class TournamentLobbyUI {
       </div>
     `;
 
-    footer.querySelector('[data-action="toggle-invite"]')?.addEventListener('click', () => {
-      this.activeDrawer = this.activeDrawer === 'invite' ? 'none' : 'invite';
-      this.render();
-    });
-    footer.querySelector('[data-action="toggle-lobbies"]')?.addEventListener('click', () => {
-      this.activeDrawer = this.activeDrawer === 'lobbies' ? 'none' : 'lobbies';
-      if (this.activeDrawer === 'lobbies') network.browsePvpLobbies();
-      this.render();
-    });
     footer.querySelector('[data-action="leave-lobby"]')?.addEventListener('click', () => {
       this.handleLeaveOrClose();
     });
@@ -500,18 +523,15 @@ export class TournamentLobbyUI {
 
     modal.appendChild(footer);
 
-    // Toast Container
+    // Toast element
     const toast = document.createElement('div');
     toast.className = 'pvp-toast';
     modal.appendChild(toast);
 
     this.overlay.appendChild(modal);
-
-    // Bind slot-specific events (switching here or kicking)
-    this.bindSlotActions(modal);
   }
 
-  private renderPedestalSlots(
+  private renderTeamSlots(
     team: TournamentTeam,
     teamSize: number,
     teamMembers: LobbyMember[],
@@ -533,64 +553,50 @@ export class TournamentLobbyUI {
         const lvl = member.level || 1;
         const power = member.power || 0;
 
-        // Wax seal badge
-        let sealHtml = '';
+        let badgeHtml = '';
         if (member.isHost) {
-          sealHtml = '<div class="pvp-wax-seal pvp-seal-gold">👑 HOST</div>';
+          badgeHtml = '<span class="pvp-badge badge-host">👑 HOST</span>';
         } else if (member.ready) {
-          sealHtml = '<div class="pvp-wax-seal pvp-seal-green">✓ READY</div>';
+          badgeHtml = '<span class="pvp-badge badge-ready">✓ READY</span>';
         } else {
-          sealHtml = '<div class="pvp-wax-seal pvp-seal-amber">PREPARING</div>';
+          badgeHtml = '<span class="pvp-badge badge-wait">PREPARING</span>';
         }
 
         const canKick = iAmHost && !isMe;
         const memberAid = member.actorId || member.uuid;
 
         html += `
-          <div class="pvp-pedestal-card filled ${isMe ? 'is-me' : ''} ${isRed ? 'card-red' : 'card-blue'}">
-            <div class="pvp-pedestal-dais">
+          <div class="pvp-fighter-card ${isMe ? 'is-me' : ''} ${isRed ? 'card-red' : 'card-blue'}">
+            <div class="pvp-fighter-avatar">
               <img
                 class="pvp-pedestal-sprite ${isRed ? 'facing-right' : 'facing-left'}"
                 src="${heroFrame(clsId, 'idle', 0)}"
                 data-class="${escapeHtmlAttribute(clsId)}"
                 alt="${escapeHtmlAttribute(name)}"
               />
-              <div class="pvp-pedestal-rune-glow"></div>
             </div>
-
-            <div class="pvp-pedestal-info">
-              <div class="pvp-info-top">
+            <div class="pvp-fighter-info">
+              <div class="pvp-info-row1">
                 ${iconSrc ? `<img class="pvp-class-icon" src="${escapeHtmlAttribute(iconSrc)}" alt="" />` : ''}
-                <div class="pvp-name-cluster">
-                  <div class="pvp-fighter-name">${escapeHtml(name)} ${isMe ? '<span class="pvp-you-tag">[YOU]</span>' : ''}</div>
-                  <div class="pvp-fighter-sub">LV ${lvl} ${escapeHtml((clsDef?.name || clsId).toUpperCase())}</div>
-                </div>
-                ${sealHtml}
+                <span class="pvp-fighter-name">${escapeHtml(name)} ${isMe ? '<b class="pvp-you-tag">(YOU)</b>' : ''}</span>
+                ${badgeHtml}
               </div>
-
-              <div class="pvp-hp-bar-shell">
-                <div class="pvp-hp-bar-fill" style="width: 100%;"></div>
-                <div class="pvp-hp-bar-label">HP: ${hp} | PWR: ${power}</div>
+              <div class="pvp-info-row2">
+                <span class="pvp-class-label">LV ${lvl} ${escapeHtml((clsDef?.name || clsId).toUpperCase())}</span>
+                <span class="pvp-stat-hp">HP: ${hp}</span>
+                <span class="pvp-stat-pwr">PWR: ${power}</span>
               </div>
             </div>
-
-            ${canKick ? `<button class="pvp-kick-btn" data-action="kick" data-aid="${escapeHtmlAttribute(memberAid)}" title="Kick Player">✕</button>` : ''}
+            ${canKick ? `<button class="pvp-kick-btn" data-action="kick" data-aid="${escapeHtmlAttribute(memberAid)}" title="Kick Player">&times;</button>` : ''}
           </div>
         `;
       } else {
-        // Empty slot with MLBB Switch Here action
         html += `
-          <div class="pvp-pedestal-card empty ${isRed ? 'empty-red' : 'empty-blue'}" data-action="switch-to-team" data-team="${team}">
-            <div class="pvp-empty-sigil">✦</div>
-            <div class="pvp-empty-title">OPEN WARRIOR SLOT</div>
-            <div class="pvp-empty-actions">
-              <button class="pvp-slot-switch-btn" data-action="switch-to-team" data-team="${team}">
-                ⚔️ SWITCH HERE
-              </button>
-              <button class="pvp-slot-invite-btn" data-action="open-invite">
-                ➕ INVITE
-              </button>
-            </div>
+          <div class="pvp-empty-card" data-action="switch-here" data-team="${team}">
+            <div class="pvp-empty-label">✦ OPEN WARRIOR SLOT ✦</div>
+            <button class="pvp-empty-switch-btn" type="button" data-action="switch-here" data-team="${team}">
+              ⚔️ SWITCH HERE
+            </button>
           </div>
         `;
       }
@@ -600,19 +606,11 @@ export class TournamentLobbyUI {
   }
 
   private bindSlotActions(modal: HTMLElement): void {
-    modal.querySelectorAll<HTMLButtonElement>('[data-action="switch-to-team"]').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
+    modal.querySelectorAll<HTMLElement>('[data-action="switch-here"]').forEach((el) => {
+      el.addEventListener('click', (e) => {
         e.stopPropagation();
-        const targetTeam = btn.getAttribute('data-team') as TournamentTeam;
+        const targetTeam = el.getAttribute('data-team') as TournamentTeam;
         if (targetTeam) this.switchTeam(targetTeam);
-      });
-    });
-
-    modal.querySelectorAll<HTMLButtonElement>('[data-action="open-invite"]').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.activeDrawer = 'invite';
-        this.render();
       });
     });
 
@@ -631,57 +629,47 @@ export class TournamentLobbyUI {
     });
   }
 
-  private renderInviteDrawer(): string {
+  private renderInviteContent(): string {
     const onlineFriends = this.friends.filter(f => f.online);
     let friendsHtml = '';
 
     if (onlineFriends.length === 0) {
-      friendsHtml = '<div class="pvp-drawer-empty">No online friends found. Invite by Short ID below!</div>';
+      friendsHtml = '<div class="pvp-empty-list">No online guild members or friends found. Share your Player ID or Room Code below!</div>';
     } else {
       for (const f of onlineFriends) {
         const clsDef = classOf(f.classId);
         friendsHtml += `
-          <div class="pvp-friend-row">
-            <div class="pvp-friend-details">
+          <div class="pvp-friend-card">
+            <div class="pvp-friend-info">
               <span class="pvp-friend-name">${escapeHtml(f.name)}</span>
-              <span class="pvp-friend-meta">LV ${f.level} ${escapeHtml((clsDef?.name || f.classId || '').toUpperCase())} • ${escapeHtml(f.shortId)}</span>
+              <span class="pvp-friend-meta">LV ${f.level} ${escapeHtml((clsDef?.name || f.classId || '').toUpperCase())} • ID: ${escapeHtml(f.shortId)}</span>
             </div>
-            <button class="pvp-send-inv-btn" data-shortid="${escapeHtmlAttribute(f.shortId)}">INVITE</button>
+            <button class="pvp-invite-btn" data-shortid="${escapeHtmlAttribute(f.shortId)}">
+              INVITE
+            </button>
           </div>
         `;
       }
     }
 
     return `
-      <div class="pvp-drawer-header">
-        <span class="pvp-drawer-title">INVITE CHALLENGERS</span>
-        <button class="pvp-drawer-close-btn" data-action="close-drawer">✕</button>
-      </div>
-      <div class="pvp-drawer-body">
-        <div class="pvp-drawer-section">
-          <div class="pvp-drawer-sub">DIRECT INVITE BY PLAYER ID</div>
-          <div class="pvp-input-row">
-            <input type="text" class="pvp-shortid-input" placeholder="ENTER CECT-XXXX" maxlength="16" />
-            <button class="pvp-direct-send-btn">SEND INVITE</button>
-          </div>
+      <div class="pvp-panel-box">
+        <h2 class="pvp-panel-title">DIRECT INVITE BY PLAYER ID</h2>
+        <div class="pvp-direct-invite-bar">
+          <input type="text" class="pvp-id-input" placeholder="ENTER PLAYER ID (CECT-XXXX)" maxlength="16" />
+          <button class="pvp-send-id-btn">SEND CHALLENGE</button>
         </div>
-        <div class="pvp-drawer-section">
-          <div class="pvp-drawer-sub">ONLINE GUILD & ALLIES</div>
-          <div class="pvp-friends-list">
-            ${friendsHtml}
-          </div>
+
+        <h2 class="pvp-panel-title" style="margin-top: 18px;">ONLINE ALLIES & FRIENDS</h2>
+        <div class="pvp-friends-container">
+          ${friendsHtml}
         </div>
       </div>
     `;
   }
 
-  private bindInviteDrawerEvents(drawer: HTMLElement): void {
-    drawer.querySelector('[data-action="close-drawer"]')?.addEventListener('click', () => {
-      this.activeDrawer = 'none';
-      this.render();
-    });
-
-    drawer.querySelectorAll<HTMLButtonElement>('.pvp-send-inv-btn').forEach((btn) => {
+  private bindInviteContent(panel: HTMLElement): void {
+    panel.querySelectorAll<HTMLButtonElement>('.pvp-invite-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         const sid = btn.getAttribute('data-shortid');
         if (sid) {
@@ -689,15 +677,15 @@ export class TournamentLobbyUI {
           network.inviteFriend(sid);
           btn.textContent = 'SENT ✓';
           btn.disabled = true;
-          this.toast(`Invite sent to ${sid}!`);
+          this.toast(`Challenge sent to ${sid}!`);
         }
       });
     });
 
-    const sendBtn = drawer.querySelector<HTMLButtonElement>('.pvp-direct-send-btn');
-    const input = drawer.querySelector<HTMLInputElement>('.pvp-shortid-input');
+    const sendBtn = panel.querySelector<HTMLButtonElement>('.pvp-send-id-btn');
+    const input = panel.querySelector<HTMLInputElement>('.pvp-id-input');
 
-    const doSend = () => {
+    const handleSend = () => {
       const val = (input?.value || '').trim().toUpperCase();
       if (!val) return;
       audio.playClick();
@@ -706,61 +694,53 @@ export class TournamentLobbyUI {
       this.toast(`Colosseum challenge dispatched to ${val}!`);
     };
 
-    sendBtn?.addEventListener('click', doSend);
+    sendBtn?.addEventListener('click', handleSend);
     input?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') doSend();
+      if (e.key === 'Enter') handleSend();
     });
   }
 
-  private renderLobbiesDrawer(): string {
-    let listHtml = '';
-    const openDuels = (this.pvpLobbies || []).filter(l => l.isPvp && l.roomId !== this.state?.roomId);
+  private renderPublicLobbiesContent(): string {
+    const duels = (this.pvpLobbies || []).filter(l => l.isPvp && l.roomId !== this.state?.roomId);
+    let html = '';
 
-    if (openDuels.length === 0) {
-      listHtml = '<div class="pvp-drawer-empty">No active open duels found. Share your room code to challenge friends!</div>';
+    if (duels.length === 0) {
+      html = '<div class="pvp-empty-list">No other open Colosseum duels available right now. Invite friends to start a match!</div>';
     } else {
-      for (const lobby of openDuels) {
-        listHtml += `
-          <div class="pvp-lobby-row">
-            <div class="pvp-lobby-details">
-              <span class="pvp-lobby-host">Host: ${escapeHtml(lobby.hostName || 'Challenger')}</span>
-              <span class="pvp-lobby-meta">Format: ${(lobby.pvpFormat || '1v1').toUpperCase()} • Fighters: ${lobby.playerCount || 1}/${lobby.maxPlayers || 2}</span>
+      for (const d of duels) {
+        html += `
+          <div class="pvp-lobby-card">
+            <div class="pvp-lobby-info">
+              <span class="pvp-lobby-host">HOST: ${escapeHtml(d.hostName || 'Challenger')}</span>
+              <span class="pvp-lobby-meta">Format: ${(d.pvpFormat || '1v1').toUpperCase()} • Fighters: ${d.members || 1}/${d.maxPlayers || 2}</span>
             </div>
-            <button class="pvp-join-duel-btn" data-roomid="${escapeHtmlAttribute(lobby.roomId)}">JOIN DUEL</button>
+            <button class="pvp-join-duel-btn" data-roomid="${escapeHtmlAttribute(d.roomId)}">
+              JOIN ARENA
+            </button>
           </div>
         `;
       }
     }
 
     return `
-      <div class="pvp-drawer-header">
-        <span class="pvp-drawer-title">ACTIVE COLOSSEUM LOBBIES</span>
-        <button class="pvp-drawer-close-btn" data-action="close-drawer">✕</button>
-      </div>
-      <div class="pvp-drawer-body">
-        <div class="pvp-drawer-section">
-          <div class="pvp-lobby-list">
-            ${listHtml}
-          </div>
+      <div class="pvp-panel-box">
+        <h2 class="pvp-panel-title">OPEN COLOSSEUM LOBBIES</h2>
+        <div class="pvp-lobbies-container">
+          ${html}
         </div>
       </div>
     `;
   }
 
-  private bindLobbiesDrawerEvents(drawer: HTMLElement): void {
-    drawer.querySelector('[data-action="close-drawer"]')?.addEventListener('click', () => {
-      this.activeDrawer = 'none';
-      this.render();
-    });
-
-    drawer.querySelectorAll<HTMLButtonElement>('.pvp-join-duel-btn').forEach((btn) => {
+  private bindPublicContent(panel: HTMLElement): void {
+    panel.querySelectorAll<HTMLButtonElement>('.pvp-join-duel-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         const rid = btn.getAttribute('data-roomid');
         if (rid) {
           audio.playClick();
           network.leaveLobby();
           network.joinLobby(rid);
-          this.activeDrawer = 'none';
+          this.activeTab = 'arena';
           this.toast('Connecting to Colosseum duel...');
         }
       });
@@ -774,364 +754,303 @@ export class TournamentLobbyUI {
     style.textContent = `
       .tournament-lobby-backdrop {
         position: fixed; inset: 0;
-        background: radial-gradient(circle at center, rgba(14, 16, 26, 0.92) 0%, rgba(6, 7, 12, 0.98) 100%);
+        background: rgba(4, 5, 8, 0.88);
         display: flex; align-items: center; justify-content: center;
         z-index: 10000;
-        padding: 16px;
+        padding: 12px;
         box-sizing: border-box;
       }
 
       .pvp-modal-shell {
         position: relative;
-        width: 1100px; max-width: 96vw;
-        max-height: 94vh;
-        background: #0d0f17;
-        border: 2px solid #523826;
-        box-shadow: 0 0 50px rgba(0, 0, 0, 0.95), inset 0 0 30px rgba(180, 130, 40, 0.12);
+        width: 1020px; max-width: 96vw;
+        max-height: 92vh;
+        background: url('/assets/kenney-rpg-ui/panel_brown.png') repeat;
+        border: 4px solid #3d2817;
+        box-shadow: 0 0 40px rgba(0, 0, 0, 0.95), inset 0 0 20px rgba(0, 0, 0, 0.6);
         border-radius: 8px;
         display: flex; flex-direction: column;
-        color: #f1f5f9;
+        color: #f7e7ce;
         overflow: hidden;
-        font-family: 'Outfit', sans-serif;
+        font-family: 'Outfit', 'Inter', sans-serif;
       }
 
       .pvp-header {
         display: flex; justify-content: space-between; align-items: center;
-        padding: 14px 22px;
-        background: linear-gradient(180deg, #1b1625 0%, #111019 100%);
-        border-bottom: 2px solid #3d2f4a;
+        padding: 10px 18px;
+        background: rgba(18, 12, 7, 0.7);
+        border-bottom: 3px solid #5a3d24;
       }
-      .pvp-subcrest {
-        font-family: 'Cinzel', serif;
-        font-size: 10px; font-weight: 700; letter-spacing: 2px;
-        color: #c084fc; text-transform: uppercase;
+      .pvp-title {
+        margin: 0; font-family: 'Cinzel', Georgia, serif; font-size: 20px; font-weight: 900;
+        color: #fce79a; letter-spacing: 1.5px;
+        text-shadow: 0 2px 4px #000;
       }
-      .pvp-main-title {
-        font-family: 'Cinzel', serif;
-        margin: 2px 0 4px; font-size: 22px; font-weight: 900;
-        letter-spacing: 2px;
-        background: linear-gradient(180deg, #fef08a 0%, #eab308 50%, #ca8a04 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        text-shadow: 0 2px 8px rgba(234, 179, 8, 0.4);
-      }
-      .pvp-stat-strip {
-        display: flex; gap: 8px; align-items: center;
-        font-size: 11px; color: #94a3b8; letter-spacing: 0.5px;
-      }
-      .pvp-bullet { color: #583f6b; }
+      .pvp-subtitle { font-size: 11px; color: #b89f80; margin-top: 1px; font-weight: 600; }
 
-      .pvp-header-right { display: flex; align-items: center; gap: 12px; }
-      .pvp-room-code-badge {
+      .pvp-header-actions { display: flex; align-items: center; gap: 10px; }
+      .pvp-room-code-tag {
         display: flex; align-items: center; gap: 6px;
-        background: #191624; border: 1px solid #483d5a;
-        padding: 6px 12px; border-radius: 4px; cursor: pointer;
-        transition: all 0.15s ease;
+        background: url('/assets/kenney-rpg-ui/panelInset_brown.png') repeat;
+        padding: 4px 10px; border-radius: 4px; cursor: pointer;
+        border: 1px solid #735134;
       }
-      .pvp-room-code-badge:hover { border-color: #fbbf24; background: #221d30; }
-      .pvp-code-lbl { font-size: 10px; font-weight: 800; color: #a855f7; letter-spacing: 1px; }
-      .pvp-code-val { font-size: 11.5px; font-weight: 800; color: #f1f5f9; letter-spacing: 1.2px; font-family: monospace; }
-      .pvp-copy-btn { background: none; border: 0; color: #94a3b8; cursor: pointer; font-size: 12px; }
+      .pvp-room-code-tag:hover { border-color: #ffd770; }
+      .pvp-tag-label { font-size: 9.5px; font-weight: 800; color: #ffd770; }
+      .pvp-tag-val { font-size: 11px; font-weight: 800; color: #fff; font-family: monospace; }
+      .pvp-tag-copy { font-size: 11px; }
 
-      .pvp-close-top-btn {
-        background: #241d2d; border: 1px solid #6b537c; color: #cbd5e1;
-        width: 32px; height: 32px; border-radius: 4px; font-size: 14px;
-        font-weight: 900; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      .pvp-close-btn {
+        width: 34px; height: 34px;
+        background: url('/assets/kenney-rpg-ui/buttonSquare_brown.png') no-repeat center/100% 100%;
+        border: 0; color: #fca5a5; font-size: 20px; font-weight: 900;
+        cursor: pointer; display: flex; align-items: center; justify-content: center;
       }
-      .pvp-close-top-btn:hover { background: #7f1d1d; border-color: #ef4444; color: #fff; }
+      .pvp-close-btn:hover { filter: brightness(1.25); color: #fff; }
 
-      .pvp-format-bar {
+      .pvp-nav-tabs {
+        display: flex; gap: 8px; padding: 8px 18px;
+        background: rgba(10, 7, 4, 0.8);
+        border-bottom: 2px solid #4a321c;
+      }
+      .pvp-nav-tab {
+        padding: 8px 18px; font-family: 'Cinzel', serif; font-size: 12px; font-weight: 800;
+        letter-spacing: 0.8px; cursor: pointer; border: 0;
+        background: url('/assets/kenney-rpg-ui/buttonLong_brown.png') no-repeat center/100% 100%;
+        color: #d8c29d; transition: all 0.15s ease;
+      }
+      .pvp-nav-tab:hover { filter: brightness(1.2); color: #fff; }
+      .pvp-nav-tab.active {
+        background: url('/assets/kenney-rpg-ui/buttonLong_blue.png') no-repeat center/100% 100%;
+        color: #ffffff; text-shadow: 0 1px 3px #000;
+      }
+
+      .pvp-format-selector {
         display: flex; justify-content: space-between; align-items: center;
-        padding: 10px 22px;
-        background: #11121c;
-        border-bottom: 1px solid #282436;
+        padding: 6px 18px; background: rgba(0, 0, 0, 0.35);
+        border-bottom: 1px solid rgba(220, 180, 110, 0.2);
       }
-      .pvp-format-tabs { display: flex; gap: 10px; flex: 1; }
-      .pvp-format-tab {
-        flex: 1; padding: 7px 10px; display: flex; flex-direction: column; align-items: center;
-        background: #181724; border: 1px solid #353046; border-radius: 4px;
-        cursor: pointer; color: #94a3b8; transition: all 0.15s ease;
+      .pvp-format-buttons { display: flex; gap: 8px; }
+      .pvp-fmt-btn {
+        padding: 5px 12px; font-size: 11px; font-weight: 800;
+        background: url('/assets/kenney-rpg-ui/buttonSquare_brown.png') no-repeat center/100% 100%;
+        border: 0; color: #b89f80; cursor: pointer;
       }
-      .pvp-format-tab:hover:not(:disabled) { border-color: #fbbf24; background: #221f33; color: #f8fafc; }
-      .pvp-format-tab.active {
-        background: linear-gradient(180deg, #4c1d95 0%, #311160 100%);
-        border-color: #a855f7; color: #ffffff;
-        box-shadow: 0 0 14px rgba(168, 85, 247, 0.4);
+      .pvp-fmt-btn.active {
+        background: url('/assets/kenney-rpg-ui/buttonSquare_beige.png') no-repeat center/100% 100%;
+        color: #2b1807; font-weight: 900;
       }
-      .pvp-format-tab:disabled { opacity: 0.75; cursor: default; }
-      .pvp-tab-label { font-size: 12px; font-weight: 800; letter-spacing: 0.8px; margin-top: 1px; }
-      .pvp-tab-cap { font-size: 9.5px; opacity: 0.7; }
-      .pvp-guest-format-hint { font-size: 11px; color: #a855f7; font-style: italic; margin-left: 14px; }
+      .pvp-fmt-btn:disabled { opacity: 0.6; cursor: default; }
+      .pvp-host-only-note { font-size: 10px; color: #e2b153; font-style: italic; }
 
-      .pvp-stage {
-        display: grid; grid-template-columns: 1fr 140px 1fr;
-        flex: 1; min-height: 380px; max-height: 520px;
-        background: #090a10;
-        overflow-y: auto;
+      .pvp-versus-stage {
+        display: grid; grid-template-columns: 1fr 150px 1fr;
+        padding: 12px 16px; gap: 12px;
+        background: url('/assets/kenney-rpg-ui/panelInset_brown.png') repeat;
+        overflow-y: auto; max-height: 520px;
       }
 
-      .pvp-wing {
-        display: flex; flex-direction: column;
-        padding: 16px 20px;
-        box-sizing: border-box;
+      .pvp-team-col { display: flex; flex-direction: column; gap: 8px; }
+      .pvp-team-banner {
+        padding: 6px 12px; border-radius: 4px;
+        display: flex; justify-content: space-between; align-items: center;
+        font-family: 'Cinzel', serif; font-weight: 900;
       }
-      .pvp-wing-red { background: linear-gradient(90deg, rgba(153, 27, 27, 0.08) 0%, transparent 100%); }
-      .pvp-wing-blue { background: linear-gradient(270deg, rgba(30, 58, 138, 0.08) 0%, transparent 100%); }
+      .banner-red {
+        background: linear-gradient(90deg, #7f1d1d 0%, #450a0a 100%);
+        border: 1px solid #ef4444; color: #fecaca;
+      }
+      .banner-blue {
+        background: linear-gradient(90deg, #1e3a8a 0%, #172554 100%);
+        border: 1px solid #3b82f6; color: #bfdbfe;
+      }
+      .pvp-banner-title { font-size: 13px; letter-spacing: 1px; }
+      .pvp-banner-count { font-size: 10.5px; opacity: 0.85; font-family: 'Outfit', sans-serif; }
 
-      .pvp-wing-header {
-        display: flex; align-items: center; gap: 12px; margin-bottom: 12px;
-      }
-      .pvp-banner-crest {
-        font-size: 26px; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.8));
-      }
-      .pvp-wing-red .pvp-wing-title {
-        font-family: 'Cinzel', serif; font-size: 15px; font-weight: 900;
-        letter-spacing: 1.5px; color: #ef4444;
-      }
-      .pvp-wing-blue .pvp-wing-title {
-        font-family: 'Cinzel', serif; font-size: 15px; font-weight: 900;
-        letter-spacing: 1.5px; color: #3b82f6;
-      }
-      .pvp-wing-sub { font-size: 10px; color: #94a3b8; font-weight: 700; letter-spacing: 0.8px; }
+      .pvp-slots-container { display: flex; flex-direction: column; gap: 8px; }
 
-      .pvp-pedestals-column { display: flex; flex-direction: column; gap: 10px; }
-
-      .pvp-pedestal-card {
-        display: flex; align-items: center; gap: 12px;
-        border-radius: 6px; padding: 8px 12px;
-        position: relative; box-sizing: border-box;
-        transition: all 0.15s ease;
+      .pvp-fighter-card {
+        display: flex; align-items: center; gap: 10px;
+        padding: 6px 10px; border-radius: 4px; position: relative;
+        background: rgba(15, 10, 8, 0.75); border: 2px solid #5a3d24;
       }
-      .pvp-pedestal-card.card-red {
-        background: linear-gradient(180deg, rgba(20, 10, 14, 0.85) 0%, rgba(38, 12, 16, 0.95) 100%);
-        border: 1px solid rgba(239, 68, 68, 0.4);
-        box-shadow: 0 0 12px rgba(220, 38, 38, 0.2);
-      }
-      .pvp-pedestal-card.card-blue {
-        background: linear-gradient(180deg, rgba(10, 14, 25, 0.85) 0%, rgba(12, 22, 42, 0.95) 100%);
-        border: 1px solid rgba(59, 130, 246, 0.4);
-        box-shadow: 0 0 12px rgba(37, 99, 235, 0.2);
-      }
-      .pvp-pedestal-card.is-me {
-        border-color: #fbbf24 !important;
-        box-shadow: 0 0 18px rgba(251, 191, 36, 0.35) !important;
+      .pvp-fighter-card.card-red { border-color: rgba(239, 68, 68, 0.6); }
+      .pvp-fighter-card.card-blue { border-color: rgba(59, 130, 246, 0.6); }
+      .pvp-fighter-card.is-me {
+        border-color: #ffd770 !important;
+        box-shadow: 0 0 12px rgba(255, 215, 112, 0.4);
       }
 
-      .pvp-pedestal-card.empty {
-        min-height: 78px; justify-content: center; flex-direction: column;
-        border: 1px dashed rgba(255, 255, 255, 0.18);
-        background: rgba(255, 255, 255, 0.02);
-        cursor: pointer;
-      }
-      .pvp-pedestal-card.empty:hover {
-        background: rgba(255, 255, 255, 0.05);
-        border-color: #fbbf24;
-      }
-      .pvp-empty-sigil { font-size: 14px; opacity: 0.4; }
-      .pvp-empty-title { font-size: 10.5px; font-weight: 800; color: #64748b; letter-spacing: 1px; }
-      .pvp-empty-actions { display: flex; gap: 8px; margin-top: 4px; }
-      .pvp-slot-switch-btn {
-        padding: 4px 10px; font-size: 10px; font-weight: 800; border-radius: 3px;
-        background: #231c2e; border: 1px solid #7c5c96; color: #f1f5f9; cursor: pointer;
-      }
-      .pvp-slot-switch-btn:hover { background: #4c1d95; border-color: #c084fc; }
-      .pvp-slot-invite-btn {
-        padding: 4px 10px; font-size: 10px; font-weight: 800; border-radius: 3px;
-        background: #16222f; border: 1px solid #33618a; color: #93c5fd; cursor: pointer;
-      }
-      .pvp-slot-invite-btn:hover { background: #1e3a8a; }
-
-      .pvp-pedestal-dais {
-        width: 64px; height: 64px; position: relative;
-        display: flex; align-items: flex-end; justify-content: center;
-        background: radial-gradient(ellipse at bottom, rgba(255,255,255,0.08) 0%, transparent 70%);
+      .pvp-fighter-avatar {
+        width: 56px; height: 56px; display: flex; align-items: flex-end; justify-content: center;
+        background: rgba(0, 0, 0, 0.4); border-radius: 4px; overflow: hidden;
       }
       .pvp-pedestal-sprite {
-        height: 72px; width: auto; object-fit: cover; object-position: center bottom;
-        image-rendering: pixelated; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.85));
+        height: 60px; width: auto; object-fit: cover; object-position: center bottom;
+        image-rendering: pixelated;
       }
       .pvp-pedestal-sprite.facing-left { transform: scaleX(-1); }
 
-      .pvp-pedestal-info { flex: 1; display: flex; flex-direction: column; gap: 4px; }
-      .pvp-info-top { display: flex; align-items: center; gap: 8px; }
-      .pvp-class-icon { width: 24px; height: 24px; image-rendering: pixelated; border-radius: 3px; }
-      .pvp-name-cluster { flex: 1; }
-      .pvp-fighter-name { font-size: 13.5px; font-weight: 800; color: #f8fafc; letter-spacing: 0.5px; }
-      .pvp-you-tag { color: #fbbf24; font-size: 10px; margin-left: 4px; font-weight: 900; }
-      .pvp-fighter-sub { font-size: 10px; color: #94a3b8; font-weight: 700; }
+      .pvp-fighter-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+      .pvp-info-row1 { display: flex; align-items: center; gap: 6px; }
+      .pvp-class-icon { width: 20px; height: 20px; image-rendering: pixelated; border-radius: 2px; }
+      .pvp-fighter-name { font-size: 13px; font-weight: 800; color: #fff; }
+      .pvp-you-tag { color: #ffd770; font-size: 9.5px; margin-left: 3px; }
 
-      .pvp-wax-seal {
-        padding: 2px 7px; border-radius: 3px; font-size: 9.5px; font-weight: 900; letter-spacing: 0.8px;
-      }
-      .pvp-seal-gold { background: #78350f; border: 1px solid #fde047; color: #fef08a; }
-      .pvp-seal-green { background: #14532d; border: 1px solid #4ade80; color: #dcfce7; }
-      .pvp-seal-amber { background: #27272a; border: 1px solid #71717a; color: #d4d4d8; }
+      .pvp-badge { padding: 1px 6px; font-size: 8.5px; font-weight: 800; border-radius: 2px; }
+      .badge-host { background: #b45309; color: #fef3c7; border: 1px solid #fde047; }
+      .badge-ready { background: #166534; color: #dcfce7; border: 1px solid #4ade80; }
+      .badge-wait { background: #3f3f46; color: #d4d4d8; }
 
-      .pvp-hp-bar-shell {
-        position: relative; height: 16px; background: rgba(0, 0, 0, 0.65);
-        border: 1px solid #334155; border-radius: 3px; overflow: hidden;
+      .pvp-info-row2 {
+        display: flex; gap: 8px; font-size: 10px; color: #c4b5a0; font-weight: 700;
       }
-      .pvp-pedestal-card.card-red .pvp-hp-bar-fill {
-        height: 100%; background: linear-gradient(90deg, #b91c1c 0%, #ef4444 100%);
-      }
-      .pvp-pedestal-card.card-blue .pvp-hp-bar-fill {
-        height: 100%; background: linear-gradient(90deg, #1d4ed8 0%, #3b82f6 100%);
-      }
-      .pvp-hp-bar-label {
-        position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-        font-size: 9.5px; font-weight: 800; color: #f8fafc; letter-spacing: 0.5px;
-        text-shadow: 0 1px 2px #000;
-      }
+      .pvp-stat-hp { color: #86efac; }
+      .pvp-stat-pwr { color: #fde047; }
 
       .pvp-kick-btn {
-        background: #361717; border: 1px solid #7f1d1d; color: #f87171;
-        width: 22px; height: 22px; border-radius: 3px; cursor: pointer;
-        display: flex; align-items: center; justify-content: center; font-size: 11px;
+        background: #501010; border: 1px solid #991b1b; color: #fca5a5;
+        width: 22px; height: 22px; cursor: pointer; border-radius: 2px;
+        font-size: 14px; display: flex; align-items: center; justify-content: center;
       }
-      .pvp-kick-btn:hover { background: #991b1b; color: #fff; }
+      .pvp-kick-btn:hover { background: #b91c1c; color: #fff; }
 
-      .pvp-center-divider {
+      .pvp-empty-card {
+        height: 58px; display: flex; align-items: center; justify-content: space-between;
+        padding: 0 12px; border: 2px dashed rgba(220, 190, 140, 0.3);
+        background: rgba(0, 0, 0, 0.35); border-radius: 4px; cursor: pointer;
+      }
+      .pvp-empty-card:hover { border-color: #ffd770; background: rgba(0, 0, 0, 0.5); }
+      .pvp-empty-label { font-size: 10.5px; font-weight: 800; color: #94826b; }
+      .pvp-empty-switch-btn {
+        padding: 4px 10px; font-size: 10px; font-weight: 900;
+        background: url('/assets/kenney-rpg-ui/buttonSquare_brown.png') no-repeat center/100% 100%;
+        border: 0; color: #fce79a; cursor: pointer;
+      }
+      .pvp-empty-switch-btn:hover { filter: brightness(1.25); }
+
+      .pvp-center-col {
         display: flex; flex-direction: column; align-items: center; justify-content: center;
-        padding: 12px 8px; border-left: 1px solid #1e1b29; border-right: 1px solid #1e1b29;
-        gap: 14px; text-align: center;
+        gap: 12px; text-align: center;
       }
       .pvp-vs-emblem {
-        width: 54px; height: 54px; border-radius: 50%;
-        background: radial-gradient(circle at 35% 35%, #ca8a04 0%, #713f12 70%, #291806 100%);
-        border: 2px solid #fef08a;
-        box-shadow: 0 0 16px rgba(234, 179, 8, 0.45);
+        width: 52px; height: 52px; border-radius: 50%;
+        background: radial-gradient(circle at 35% 35%, #ffd770 0%, #996515 70%, #3d2305 100%);
+        border: 2px solid #fff; font-family: 'Cinzel', serif; font-size: 18px; font-weight: 900;
+        color: #fff; text-shadow: 0 2px 4px #000;
         display: flex; align-items: center; justify-content: center;
-      }
-      .pvp-vs-circle {
-        font-family: 'Cinzel', serif; font-size: 18px; font-weight: 900;
-        color: #ffffff; text-shadow: 0 2px 4px rgba(0,0,0,0.9);
+        box-shadow: 0 0 16px rgba(255, 215, 112, 0.45);
       }
 
-      .pvp-switch-btn {
-        padding: 8px 10px; font-size: 11px; font-weight: 900; letter-spacing: 0.8px;
-        background: linear-gradient(180deg, #372946 0%, #1e1628 100%);
-        border: 1px solid #c084fc; color: #f8fafc; border-radius: 4px;
-        cursor: pointer; box-shadow: 0 0 10px rgba(192, 132, 252, 0.25);
-        display: flex; flex-direction: column; align-items: center; gap: 2px;
-        transition: all 0.15s ease;
+      .pvp-switch-team-btn {
+        width: 130px; height: 46px;
+        background: url('/assets/kenney-rpg-ui/buttonLong_blue.png') no-repeat center/100% 100%;
+        border: 0; color: #fff; cursor: pointer;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        text-shadow: 0 1px 2px #000; font-family: 'Outfit', sans-serif;
       }
-      .pvp-switch-btn:hover:not(:disabled) {
-        background: linear-gradient(180deg, #6b21a8 0%, #4c1d95 100%);
-        border-color: #e9d5ff; transform: scale(1.03);
-      }
-      .pvp-switch-btn:disabled { opacity: 0.45; cursor: default; }
-      .pvp-switch-arrows { font-size: 16px; }
+      .pvp-switch-team-btn span { font-size: 9.5px; opacity: 0.9; }
+      .pvp-switch-team-btn b { font-size: 11.5px; font-weight: 900; }
+      .pvp-switch-team-btn:hover:not(:disabled) { filter: brightness(1.2); }
+      .pvp-switch-team-btn:disabled { opacity: 0.45; cursor: default; }
 
-      .pvp-arena-scroll {
-        background: #14131d; border: 1px solid #2f2b3e; border-radius: 4px;
-        padding: 8px 6px; width: 100%; box-sizing: border-box;
+      .pvp-balance-badge {
+        background: rgba(0, 0, 0, 0.55); border: 1px solid #5a3d24;
+        border-radius: 4px; padding: 6px 8px; width: 100%; box-sizing: border-box;
+        display: flex; flex-direction: column; gap: 2px;
       }
-      .pvp-scroll-head { font-size: 10px; font-weight: 800; color: #eab308; letter-spacing: 1px; }
-      .pvp-scroll-sub { font-size: 9px; color: #94a3b8; margin: 2px 0 4px; }
-      .pvp-scroll-body { font-size: 8.5px; color: #64748b; line-height: 1.3; }
+      .pvp-balance-badge b { font-size: 9px; color: #ffd770; letter-spacing: 0.8px; }
+      .pvp-balance-badge span { font-size: 8.5px; color: #b89f80; }
 
-      .pvp-drawer-panel {
-        background: #12131d; border-top: 1px solid #352e47; border-bottom: 1px solid #352e47;
-        padding: 12px 20px; max-height: 200px; overflow-y: auto;
+      .pvp-tab-panel {
+        padding: 16px 20px; overflow-y: auto; max-height: 480px;
+        background: url('/assets/kenney-rpg-ui/panelInset_brown.png') repeat;
       }
-      .pvp-drawer-header {
-        display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;
+      .pvp-panel-box { display: flex; flex-direction: column; }
+      .pvp-panel-title {
+        margin: 0 0 8px; font-family: 'Cinzel', serif; font-size: 13px; font-weight: 900;
+        color: #ffd770; letter-spacing: 1px;
       }
-      .pvp-drawer-title { font-size: 11px; font-weight: 900; color: #c084fc; letter-spacing: 1.2px; }
-      .pvp-drawer-close-btn {
-        background: none; border: 0; color: #94a3b8; font-size: 14px; cursor: pointer;
+      .pvp-direct-invite-bar { display: flex; gap: 8px; margin-bottom: 8px; }
+      .pvp-id-input {
+        flex: 1; max-width: 280px; padding: 8px 12px; font-size: 12px;
+        background: rgba(0, 0, 0, 0.6); border: 1px solid #5a3d24; color: #fff;
+        font-family: monospace; text-transform: uppercase; border-radius: 4px;
       }
-      .pvp-drawer-sub { font-size: 10px; font-weight: 800; color: #64748b; margin-bottom: 6px; }
-      .pvp-input-row { display: flex; gap: 8px; margin-bottom: 12px; }
-      .pvp-shortid-input {
-        flex: 1; max-width: 240px; padding: 6px 10px; background: #090a10;
-        border: 1px solid #39334d; color: #fff; font-family: monospace; font-size: 12px;
-        text-transform: uppercase; border-radius: 4px;
+      .pvp-send-id-btn {
+        padding: 8px 16px; font-weight: 900; font-size: 11px;
+        background: url('/assets/kenney-rpg-ui/buttonLong_blue.png') no-repeat center/100% 100%;
+        border: 0; color: #fff; cursor: pointer;
       }
-      .pvp-direct-send-btn {
-        padding: 6px 14px; background: #7c3aed; border: 1px solid #a78bfa;
-        color: #fff; font-size: 11px; font-weight: 800; border-radius: 4px; cursor: pointer;
-      }
-      .pvp-direct-send-btn:hover { background: #6d28d9; }
+      .pvp-send-id-btn:hover { filter: brightness(1.2); }
 
-      .pvp-friends-list, .pvp-lobby-list { display: flex; flex-direction: column; gap: 6px; }
-      .pvp-friend-row, .pvp-lobby-row {
+      .pvp-friends-container, .pvp-lobbies-container { display: flex; flex-direction: column; gap: 6px; }
+      .pvp-friend-card, .pvp-lobby-card {
         display: flex; justify-content: space-between; align-items: center;
-        background: #191827; border: 1px solid #2d293d; padding: 6px 12px; border-radius: 4px;
+        padding: 8px 12px; background: rgba(0, 0, 0, 0.45); border: 1px solid #5a3d24;
+        border-radius: 4px;
       }
-      .pvp-friend-details, .pvp-lobby-details { display: flex; flex-direction: column; }
-      .pvp-friend-name, .pvp-lobby-host { font-size: 12px; font-weight: 800; color: #f1f5f9; }
-      .pvp-friend-meta, .pvp-lobby-meta { font-size: 10px; color: #94a3b8; }
-      .pvp-send-inv-btn, .pvp-join-duel-btn {
-        padding: 5px 12px; font-size: 10.5px; font-weight: 800; border-radius: 3px;
-        background: #166534; border: 1px solid #4ade80; color: #f0fdf4; cursor: pointer;
+      .pvp-friend-name, .pvp-lobby-host { font-size: 13px; font-weight: 800; color: #fff; }
+      .pvp-friend-meta, .pvp-lobby-meta { font-size: 10.5px; color: #b89f80; margin-top: 1px; }
+      .pvp-invite-btn, .pvp-join-duel-btn {
+        padding: 6px 16px; font-size: 11px; font-weight: 900;
+        background: url('/assets/kenney-rpg-ui/buttonLong_blue.png') no-repeat center/100% 100%;
+        border: 0; color: #fff; cursor: pointer;
       }
-      .pvp-send-inv-btn:hover, .pvp-join-duel-btn:hover { background: #15803d; }
-      .pvp-drawer-empty { font-size: 11px; color: #64748b; font-style: italic; padding: 8px 0; }
+      .pvp-invite-btn:hover, .pvp-join-duel-btn:hover { filter: brightness(1.2); }
+      .pvp-empty-list { font-size: 11.5px; color: #94826b; font-style: italic; padding: 12px 0; }
 
       .pvp-footer {
         display: flex; justify-content: space-between; align-items: center;
-        padding: 12px 22px;
-        background: linear-gradient(180deg, #111018 0%, #0c0b12 100%);
-        border-top: 1px solid #282436;
+        padding: 10px 18px; background: rgba(18, 12, 7, 0.85);
+        border-top: 3px solid #5a3d24;
       }
-      .pvp-footer-left { display: flex; gap: 10px; }
-      .pvp-sub-btn {
-        padding: 8px 14px; font-size: 11px; font-weight: 800; letter-spacing: 0.8px;
-        background: #1c1b2b; border: 1px solid #36324a; color: #cbd5e1;
-        border-radius: 4px; cursor: pointer; transition: all 0.15s ease;
+      .pvp-footer-left { display: flex; gap: 8px; }
+      .pvp-btn-leave {
+        padding: 8px 16px; font-size: 11px; font-weight: 800;
+        background: url('/assets/kenney-rpg-ui/buttonLong_brown.png') no-repeat center/100% 100%;
+        border: 0; color: #e2cbb0; cursor: pointer;
       }
-      .pvp-sub-btn:hover { background: #27253b; border-color: #64748b; }
-      .pvp-sub-btn.active { background: #4c1d95; border-color: #a855f7; color: #fff; }
-      .pvp-leave-btn:hover { background: #450a0a; border-color: #ef4444; color: #fca5a5; }
+      .pvp-btn-leave:hover { filter: brightness(1.2); color: #fff; }
 
-      .pvp-footer-right { display: flex; align-items: center; gap: 14px; }
-      .pvp-launch-hint { font-size: 11px; color: #f59e0b; font-weight: 700; }
+      .pvp-footer-right { display: flex; align-items: center; gap: 12px; }
+      .pvp-launch-warning { font-size: 11px; color: #fbbf24; font-weight: 700; }
 
-      .pvp-ready-btn {
-        padding: 10px 24px; font-size: 13px; font-weight: 900; letter-spacing: 1px;
-        border-radius: 4px; cursor: pointer; transition: all 0.15s ease;
+      .pvp-btn-ready {
+        width: 180px; height: 42px;
+        background: url('/assets/kenney-rpg-ui/buttonLong_blue.png') no-repeat center/100% 100%;
+        border: 0; color: #fff; font-size: 12px; font-weight: 900; cursor: pointer;
+        text-shadow: 0 1px 2px #000;
       }
-      .pvp-ready-btn.not-ready {
-        background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
-        border: 1px solid #60a5fa; color: #fff;
-        box-shadow: 0 0 14px rgba(59, 130, 246, 0.4);
-      }
-      .pvp-ready-btn.is-ready {
-        background: linear-gradient(180deg, #15803d 0%, #14532d 100%);
-        border: 1px solid #4ade80; color: #dcfce7;
+      .pvp-btn-ready.is-ready {
+        background: url('/assets/kenney-rpg-ui/buttonLong_brown.png') no-repeat center/100% 100%;
+        color: #86efac;
       }
 
-      .pvp-start-btn {
-        padding: 11px 28px; font-size: 13.5px; font-weight: 900; letter-spacing: 1.2px;
-        font-family: 'Cinzel', serif; border-radius: 4px; cursor: pointer;
-        background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
-        border: 1px solid #fef08a; color: #1a0f02;
-        box-shadow: 0 0 20px rgba(245, 158, 11, 0.5);
-        transition: all 0.15s ease;
+      .pvp-btn-start {
+        width: 220px; height: 44px;
+        background: url('/assets/kenney-rpg-ui/buttonLong_blue.png') no-repeat center/100% 100%;
+        border: 0; color: #fff; font-family: 'Cinzel', serif; font-size: 13px; font-weight: 900;
+        cursor: pointer; text-shadow: 0 2px 4px #000;
       }
-      .pvp-start-btn:hover:not(:disabled) {
-        background: linear-gradient(180deg, #fbbf24 0%, #b45309 100%);
-        transform: scale(1.02);
+      .pvp-btn-start.ready-to-launch {
+        filter: drop-shadow(0 0 10px #ffd770) brightness(1.15);
+        animation: pvpPulse 1.2s infinite alternate;
       }
-      .pvp-start-btn.disabled, .pvp-start-btn:disabled {
-        opacity: 0.4; cursor: default; box-shadow: none; filter: grayscale(0.6);
+      .pvp-btn-start.disabled, .pvp-btn-start:disabled {
+        opacity: 0.45; cursor: default; filter: grayscale(0.8);
       }
-      .pvp-start-btn.ready-pulse {
-        animation: pvpGlowPulse 1.4s infinite alternate;
-      }
-      @keyframes pvpGlowPulse {
-        from { box-shadow: 0 0 12px rgba(245, 158, 11, 0.4); }
-        to { box-shadow: 0 0 28px rgba(245, 158, 11, 0.85), 0 0 8px #fef08a; }
+      @keyframes pvpPulse {
+        from { transform: scale(1); filter: drop-shadow(0 0 6px #ffd770); }
+        to { transform: scale(1.02); filter: drop-shadow(0 0 16px #ffd770); }
       }
 
       .pvp-toast {
-        position: absolute; bottom: 64px; left: 50%; transform: translateX(-50%) translateY(-8px);
-        background: #1f1b2d; border: 1px solid #8b5cf6; color: #ede9fe;
-        padding: 7px 18px; border-radius: 20px; font-size: 11px; font-weight: 800;
-        letter-spacing: 0.5px; opacity: 0; pointer-events: none;
-        transition: all 0.2s ease; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.8);
-        z-index: 20;
+        position: absolute; bottom: 58px; left: 50%; transform: translateX(-50%) translateY(-8px);
+        background: url('/assets/kenney-rpg-ui/panel_brown.png') repeat;
+        border: 2px solid #ffd770; color: #fff; padding: 6px 16px; border-radius: 4px;
+        font-size: 11px; font-weight: 800; opacity: 0; pointer-events: none;
+        transition: all 0.2s ease; z-index: 50; box-shadow: 0 4px 12px rgba(0,0,0,0.8);
       }
     `;
     document.head.appendChild(style);
