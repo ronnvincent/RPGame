@@ -329,6 +329,8 @@ export class SideViewGame {
       this.startTournamentMatch(match);
     });
     this.engine.onTournamentEnded = () => {
+      network.isPvpSession = false;
+      network.isPvpFallback = false;
       this.loadTownHub(false);
     };
 
@@ -342,6 +344,7 @@ export class SideViewGame {
     const joinCode = urlParams.get('joinRoom') || urlParams.get('room') || urlParams.get('pvp');
     if (joinCode) {
       const clean = joinCode.trim().toUpperCase();
+      network.isPvpSession = true;
       console.log(`[PVP] Found joinRoom URL param: ${clean}. Auto-joining Colosseum lobby...`);
       try {
         const cleanUrl = window.location.pathname + window.location.hash;
@@ -438,6 +441,10 @@ export class SideViewGame {
 
       mod.network.listenForPartyNextDungeon((data) => {
         if (!this.engine || this.engine.inTournamentMode) return;
+        if (data?.dungeonId === 'tournament_colosseum' || data?.dungeonId === 'tournament_arena' || (data as any)?.isPvp || mod.network.isPvpSession || mod.network.isPvpFallback) {
+          this.triggerTournamentJoinerTransition(data);
+          return;
+        }
         console.log('[NET] Received party_next_dungeon from host:', data);
         this.dialogue?.close();
         if (this.currentDungeonIndex !== data.dungeonIndex || this.engine.isTownMode) {
@@ -506,26 +513,52 @@ export class SideViewGame {
 
       mod.network.listenForEnemySync((enemies, waveIndex, dungeonIndex, dungeonId) => {
         if (this.engine?.inTournamentMode) return;
+        if (dungeonId === 'tournament_colosseum' || dungeonId === 'tournament_arena' || mod.network.isPvpSession || mod.network.isPvpFallback) {
+          this.triggerTournamentJoinerTransition();
+          return;
+        }
         this.applyEnemySnapshot(enemies, waveIndex, dungeonIndex, dungeonId);
       });
 
       // Host: a guest joined or reconnected and needs the whole world state.
       mod.network.onFullSyncRequest((requesterId) => {
-        if (!this.engine || !this.engine.isHost || this.engine.inTournamentMode) return;
+        if (!this.engine || !this.engine.isHost) return;
         const dungeon = DUNGEONS[this.currentDungeonIndex];
+        const isPvp = this.engine.inTournamentMode;
         mod.network.sendFullSync(requesterId, {
           waveIndex: this.currentWaveIndex,
           dungeonIndex: this.currentDungeonIndex,
-          dungeonId: dungeon?.id || this.engine.currentDungeonId,
-          enemies: this.engine.enemies,
-          runState: this.runController?.getSnapshot(),
-          encounterSnapshot: this.encounter.snapshot() ?? undefined,
+          dungeonId: isPvp ? (mod.network.isPvpFallback ? 'goblin_catacombs' : 'tournament_colosseum') : (dungeon?.id || this.engine.currentDungeonId),
+          enemies: isPvp ? [] : this.engine.enemies,
+          runState: isPvp ? undefined : this.runController?.getSnapshot(),
+          encounterSnapshot: isPvp ? undefined : (this.encounter.snapshot() ?? undefined),
+          isPvpMatch: isPvp,
+          tournamentMode: isPvp,
+          arenaTheme: 'tournament_colosseum',
+          pvpTeams: mod.network.currentLobbyState?.pvpTeams || (this.engine.tournamentMatch ? Object.fromEntries(this.engine.tournamentMatch.fighters.map(f => [f.id, f.team])) : undefined),
+          pvpFormat: this.engine.tournamentMatch?.config?.format || mod.network.currentLobbyState?.pvpFormat || '1v1',
         }, this.engine.groundY);
       });
 
       // Guest: apply the host's snapshot wholesale.
       mod.network.onFullSync((snapshot) => {
-        if (!this.engine || this.engine.isHost || this.engine.inTournamentMode) return;
+        if (!this.engine || this.engine.isHost) return;
+        const isHostPvp = Boolean((snapshot as any)?.isPvpMatch)
+          || Boolean((snapshot as any)?.tournamentMode)
+          || snapshot?.dungeonId === 'tournament_colosseum'
+          || snapshot?.dungeonId === 'tournament_arena'
+          || Boolean(mod.network.isPvpSession)
+          || Boolean(mod.network.isPvpFallback);
+
+        if (isHostPvp) {
+          if (!this.engine.inTournamentMode) {
+            console.log('[NET] Host is in PvP Tournament; auto-correcting Joiner to Arena...');
+            this.triggerTournamentJoinerTransition(snapshot);
+          }
+          return;
+        }
+
+        if (this.engine.inTournamentMode) return;
         console.log('[NET] Applying full_sync from host:', snapshot.enemies?.length, 'enemies');
         this.applyEnemySnapshot(snapshot.enemies, snapshot.waveIndex, snapshot.dungeonIndex, snapshot.dungeonId);
         if (snapshot.runState) this.applyRunSnapshot(snapshot.runState);
@@ -533,7 +566,13 @@ export class SideViewGame {
       });
 
       mod.network.onRunSync((runState, encounterSnapshot) => {
-        if (!this.engine || this.engine.isHost || this.engine.inTournamentMode) return;
+        if (!this.engine || this.engine.isHost) return;
+        if (this.engine.inTournamentMode || mod.network.isPvpSession || mod.network.isPvpFallback) {
+          if (!this.engine.inTournamentMode) {
+            this.triggerTournamentJoinerTransition();
+          }
+          return;
+        }
         this.applyRunSnapshot(runState);
         if (encounterSnapshot) this.applyEncounterSnapshot(encounterSnapshot);
       });
@@ -627,13 +666,21 @@ export class SideViewGame {
           || roomData?.dungeonId === 'tournament_arena'
           || roomData?.isPvp === true
           || Boolean(mod.network.currentLobbyState?.isPvp)
+          || Boolean(mod.network.isPvpSession)
           || Boolean(mod.network.isPvpFallback)
-          || Boolean(this.tournamentLobby?.isOpen);
+          || Boolean(this.tournamentLobby?.isOpen)
+          || Boolean(roomData?.pvpTeams)
+          || Boolean(mod.network.currentLobbyState?.pvpTeams)
+          || Boolean(roomData?.pvpFormat)
+          || Boolean(mod.network.currentLobbyState?.pvpFormat);
 
         if (isTournament) {
+          mod.network.isPvpSession = true;
           this.tournamentLobby?.close();
           const pvpFmt = (this.tournamentLobby?.currentFormat || roomData?.pvpFormat || mod.network.currentLobbyState?.pvpFormat || '1v1') as any;
-          const matchTheme = roomData?.dungeonId === 'tournament_arena' ? 'tournament_arena' : 'tournament_colosseum';
+          const matchTheme = (roomData?.dungeonId === 'tournament_arena' || roomData?.dungeonId === 'tournament_colosseum')
+            ? roomData.dungeonId
+            : 'tournament_colosseum';
           const match = new TournamentMatch({
             format: pvpFmt,
             roundsToWin: 2,
@@ -643,18 +690,21 @@ export class SideViewGame {
           const localActorId = mod.network.getActorId();
           const members = roomData.players || mod.network.currentLobbyState?.members || [];
           const myMember = members.find((m: any) => (m.actorId === localActorId || m.uuid === localActorId || m.socketId === mod.network.socket?.id));
-          const assignedTeam = (roomData.pvpTeams && roomData.pvpTeams[localActorId])
+          const teams = roomData?.pvpTeams || mod.network.currentLobbyState?.pvpTeams;
+          const assignedTeam = (teams && teams[localActorId])
+            || (mod.network.currentLobbyState?.pvpTeams && mod.network.currentLobbyState.pvpTeams[localActorId])
             || myMember?.team
             || (mod.network.isHost ? 'red' : 'blue');
           if (this.engine) {
             this.engine.pvpTeam = assignedTeam;
           }
-          match.setupTeamsFromLobby(members, localActorId, pvpFmt, roomData.pvpTeams, assignedTeam);
+          match.setupTeamsFromLobby(members, localActorId, pvpFmt, teams, assignedTeam);
           if (roomData.players) {
             for (const p of roomData.players) {
               if (p.socketId && mod.network.remotePlayers[p.socketId]) {
                 mod.network.remotePlayers[p.socketId].team = p.team
-                  || (roomData.pvpTeams && roomData.pvpTeams[p.actorId])
+                  || (teams && teams[p.actorId])
+                  || (mod.network.currentLobbyState?.pvpTeams && mod.network.currentLobbyState.pvpTeams[p.actorId])
                   || (p.actorId === localActorId ? assignedTeam : (assignedTeam === 'red' ? 'blue' : 'red'));
                 mod.network.remotePlayers[p.socketId].actorId = p.actorId;
               }
@@ -664,6 +714,16 @@ export class SideViewGame {
           return;
         }
         this.onSelectLocation(roomData.dungeonId, mod.network.isHost);
+      });
+
+      mod.network.onRemotePlayerMove((data: any) => {
+        if (!this.engine) return;
+        if (data?.team && (mod.network.isPvpSession || mod.network.isPvpFallback)) {
+          if (!this.engine.inTournamentMode) {
+            console.log('[PVP] Detected remote player with PvP team; auto-correcting Joiner to Arena...');
+            this.triggerTournamentJoinerTransition();
+          }
+        }
       });
 
       mod.network.onPvpHitReceived((packet: any) => {
@@ -866,6 +926,9 @@ export class SideViewGame {
     this.waveActive = false;
     this.engine.isVictoryOrWaveCleared = false;
     this.engine.isTownMode = true;
+    if (this.engine.inTournamentMode) {
+      this.engine.inTournamentMode = false;
+    }
     this.engine.enemies = [];
     this.engine.player.x = 450;
     this.engine.player.y = this.engine.groundY;
@@ -1972,12 +2035,57 @@ export class SideViewGame {
 
   public openTournamentLobby(): void {
     if (!this.engine) return;
+    network.isPvpSession = true;
     if (!this.tournamentLobby) {
       this.tournamentLobby = new TournamentLobbyUI(this.container, this.engine, (match) => {
         this.startTournamentMatch(match);
       });
     }
     this.tournamentLobby.open();
+  }
+
+  public triggerTournamentJoinerTransition(extraSyncData?: any): void {
+    if (!this.engine || this.engine.inTournamentMode) return;
+    console.log('[PVP] Auto-correcting Joiner from PvE Dungeon into Colosseum PvP Arena...');
+    network.isPvpSession = true;
+    this.tournamentLobby?.close();
+    this.worldMap?.close();
+    this.dialogue?.close();
+    this.coopLobby?.close();
+
+    const pvpFmt = (extraSyncData?.pvpFormat || this.tournamentLobby?.currentFormat || network.currentLobbyState?.pvpFormat || '1v1') as any;
+    const matchTheme = (extraSyncData?.arenaTheme === 'tournament_arena' || extraSyncData?.dungeonId === 'tournament_arena')
+      ? 'tournament_arena'
+      : 'tournament_colosseum';
+
+    const match = new TournamentMatch({
+      format: pvpFmt,
+      roundsToWin: 2,
+      roundDurationSec: 90,
+      mapTheme: matchTheme,
+    });
+
+    const localActorId = network.getActorId();
+    const members = network.currentLobbyState?.members || [];
+    const teams = extraSyncData?.pvpTeams || network.currentLobbyState?.pvpTeams;
+    const myMember = members.find((m: any) => (m.actorId === localActorId || m.uuid === localActorId || m.socketId === network.socket?.id));
+    const assignedTeam = (teams && teams[localActorId])
+      || myMember?.team
+      || (network.isHost ? 'red' : 'blue');
+
+    this.engine.pvpTeam = assignedTeam;
+    match.setupTeamsFromLobby(members as any, localActorId, pvpFmt, teams, assignedTeam);
+
+    for (const sid of Object.keys(network.remotePlayers)) {
+      const r = network.remotePlayers[sid];
+      if (r) {
+        r.team = (teams && r.actorId && teams[r.actorId])
+          || r.team
+          || (r.actorId === localActorId ? assignedTeam : (assignedTeam === 'red' ? 'blue' : 'red'));
+      }
+    }
+
+    this.startTournamentMatch(match);
   }
 
   public startTournamentMatch(match: TournamentMatch): void {

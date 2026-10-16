@@ -3485,6 +3485,8 @@ export class SideViewEngine {
         this.player.attackTimer > 0,
         this.isTownMode,
         this.networkSceneId,
+        this.inTournamentMode,
+        this.pvpTeam
       );
     }
 
@@ -6411,7 +6413,8 @@ export class SideViewEngine {
     this.inTournamentMode = true;
     this.tournamentMatch = match;
     this.isTownMode = false;
-    this.setBattleTheme((match.config.mapTheme as any) || 'tournament_arena');
+    this.currentDungeonId = (match.config.mapTheme as any) || 'tournament_colosseum';
+    this.setBattleTheme(this.currentDungeonId as any);
 
     if (this.canvasHeight > 0) {
       this.groundY = Math.round(this.canvasHeight - 20);
@@ -6534,9 +6537,7 @@ export class SideViewEngine {
       const totalBlue = match.fighters.filter(f => f.team === 'blue').length;
       const redAlive = match.fighters.filter(f => f.team === 'red' && f.isAlive).length;
       const blueAlive = match.fighters.filter(f => f.team === 'blue' && f.isAlive).length;
-      const roundElapsed = match.config.roundDurationSec - match.roundTimeRemaining;
-
-      if (totalRed > 0 && totalBlue > 0 && roundElapsed >= 3.0) {
+      if (totalRed > 0 && totalBlue > 0) {
         if (redAlive === 0 || blueAlive === 0) {
           const roundWinner = redAlive > 0 ? 'red' : blueAlive > 0 ? 'blue' : 'draw';
           match.resolveRoundEnd(roundWinner, 'wipe');

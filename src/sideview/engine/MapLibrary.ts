@@ -499,22 +499,20 @@ export const MAPS: Record<string, MapTheme> = {
   },
 
   // ---- Grand Colosseum: Tournament Battleground ----
-  // Authored specifically for balanced 1v1, 2v2, 3v3, and 4v4 PvP fighting.
-  // 8 distinct depth parallax layers and a measured ground line of 0.7972 so
-  // combatants stand firmly on the sandstone arena floor with zero float or sinking.
+  // Authored from Luis Zuno's (ansimuz) Gothicvania Patreon Collection.
+  // 7 layered parallax planes: night sky, drifting moon clouds, mountain lanterns,
+  // distant gothic spires, dark pine forest, and cobblestone town ground line.
   tournament_colosseum: {
-    sky: '#1a162b',
-    groundLine: 0.7972,
-    floor: { top: '#c2a66e', body: '#3a2e1d' },
+    sky: '#0b0c1b',
+    floor: { top: '#4a3852', body: '#150f1c' },
     layers: [
-      { src: `${PLX}/bg4/layer07_Sky.png`, scroll: 0.02, anchor: 'fill' },
-      { src: `${PLX}/bg2/layer08_Stars_1.png`, scroll: 0.04, anchor: 'fill', blend: 'screen', alpha: 0.35 },
-      { src: `${PLX}/bg4/layer06_Rocks.png`, scroll: 0.09, anchor: 'fill' },
-      { src: `${PLX}/bg4/layer05_Hills.png`, scroll: 0.18, anchor: 'fill' },
-      { src: `${PLX}/bg4/layer04_Clouds.png`, scroll: 0.26, anchor: 'fill', drift: -4, alpha: 0.5 },
-      { src: `${PLX}/bg4/layer03_Hills_Castle.png`, scroll: 0.45, anchor: 'fill' },
-      { src: `${PLX}/bg4/layer02_Trees_rocks.png`, scroll: 0.7, anchor: 'fill' },
-      { src: `${PLX}/bg4/layer01_Ground.png`, scroll: 1.0, anchor: 'fill' },
+      { src: `${GOTHIC_PATREON}/night-town-background-sky.png`, scroll: 0.02, anchor: 'fill' },
+      { src: `${GOTHIC_PATREON}/night-town-background-clouds.png`, scroll: 0.06, anchor: 'top', heightFrac: 0.60, drift: -4, alpha: 0.65 },
+      { src: `${GOTHIC_PATREON}/night-town-background-mountains.png`, scroll: 0.12, anchor: 'horizon', heightFrac: 0.85 },
+      { src: `${GOTHIC_PATREON}/night-town-background-mountains-lights.png`, scroll: 0.20, anchor: 'horizon', heightFrac: 0.85, alpha: 0.8 },
+      { src: `${GOTHIC_PATREON}/night-town-background-far-buildings.png`, scroll: 0.38, anchor: 'horizon', heightFrac: 0.40 },
+      { src: `${GOTHIC_PATREON}/night-town-background-forest.png`, scroll: 0.58, anchor: 'horizon', heightFrac: 0.45 },
+      { src: `${GOTHIC_PATREON}/night-town-background-town.png`, scroll: 1.0, anchor: 'horizon', heightFrac: 0.48 },
     ],
   },
 
@@ -532,6 +530,7 @@ export const MAPS: Record<string, MapTheme> = {
       { src: `${GOTHIC_PATREON}/night-town-background-mountains-lights.png`, scroll: 0.20, anchor: 'horizon', heightFrac: 0.85, alpha: 0.8 },
       { src: `${GOTHIC_PATREON}/night-town-background-far-buildings.png`, scroll: 0.38, anchor: 'horizon', heightFrac: 0.40 },
       { src: `${GOTHIC_PATREON}/night-town-background-forest.png`, scroll: 0.58, anchor: 'horizon', heightFrac: 0.45 },
+      { src: `${GOTHIC_PATREON}/night-town-background-town.png`, scroll: 1.0, anchor: 'horizon', heightFrac: 0.48 },
     ],
   },
 

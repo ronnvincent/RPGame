@@ -305,6 +305,11 @@ export interface FullSyncSnapshot {
   runState?: DungeonRunState;
   /** Optional live room simulation state for reconnecting guests. */
   encounterSnapshot?: DungeonEncounterSnapshot;
+  isPvpMatch?: boolean;
+  tournamentMode?: boolean;
+  arenaTheme?: string;
+  pvpTeams?: Record<string, 'red' | 'blue'>;
+  pvpFormat?: '1v1' | '2v2' | '3v3' | '4v4';
 }
 
 type SkillHandler = (
@@ -375,7 +380,9 @@ export class NetworkManager {
   private lobbyStateListeners: Set<(state: LobbyState) => void> = new Set();
   public currentLobbyState: LobbyState | null = null;
   public isPvpFallback: boolean = false;
+  public isPvpSession: boolean = false;
   private lastPvpCreateAttempt: any = null;
+  private onRemotePlayerMoveCb: ((data: any) => void) | null = null;
   private onLobbyLeftCb: (() => void) | null = null;
   private onFriendsCb: ((friends: FriendEntry[]) => void) | null = null;
   private onFriendNoticeCb: ((msg: string) => void) | null = null;
@@ -616,6 +623,14 @@ export class NetworkManager {
         existing.downed = !!data.downed;
         if (typeof data.hpPct === 'number') existing.hpPct = data.hpPct;
       }
+      if (data?.team) {
+        if (!existing) {
+          this.remotePlayers[data.socketId].team = data.team;
+        } else {
+          existing.team = data.team;
+        }
+      }
+      this.onRemotePlayerMoveCb?.(data);
     });
 
     this.socket.on('player_left', (data) => {
@@ -631,6 +646,9 @@ export class NetworkManager {
     this.socket.on('lobby_update', (data) => {
       this.setRoom(data.roomId);
       if (typeof data.isHost === 'boolean') this.setRole(data.isHost, 'lobby_update');
+      if (data?.isPvp || data?.pvpTeams || data?.pvpFormat || data?.dungeonId === 'tournament_colosseum' || data?.dungeonId === 'tournament_arena') {
+        this.isPvpSession = true;
+      }
       this.onLobbyUpdateCb?.(data);
     });
 
@@ -638,6 +656,15 @@ export class NetworkManager {
       this.debug('IN', 'dungeon_start', data);
       this.setRoom(data.roomId);
       this.setRole(Boolean(data.isHost), 'dungeon_start');
+      if (this.isPvpSession || this.isPvpFallback || data?.isPvp || data?.pvpTeams || data?.dungeonId === 'tournament_colosseum' || data?.dungeonId === 'tournament_arena') {
+        this.isPvpSession = true;
+        if (data) {
+          data.isPvp = true;
+          if (data.dungeonId === 'goblin_catacombs' || !data.dungeonId) {
+            data.dungeonId = 'tournament_colosseum';
+          }
+        }
+      }
       this.onDungeonStartCb?.(data);
     });
 
@@ -730,6 +757,9 @@ export class NetworkManager {
       this.debug('IN', 'lobby_state', { members: state?.members?.length });
       if (state?.roomId) this.setRoom(state.roomId);
       this.currentLobbyState = state;
+      if (state?.isPvp || state?.pvpTeams || state?.pvpFormat || state?.dungeonId === 'tournament_colosseum' || state?.dungeonId === 'tournament_arena' || this.isPvpFallback) {
+        this.isPvpSession = true;
+      }
       if (state) {
         this.onLobbyStateCb?.(state);
         this.lobbyStateListeners.forEach(listener => listener(state));
@@ -753,6 +783,7 @@ export class NetworkManager {
       this.setRoom(null);
       this.currentLobbyState = null;
       this.isPvpFallback = false;
+      this.isPvpSession = false;
       this.isHost = true;
       this.onLobbyLeftCb?.();
     });
@@ -1039,6 +1070,7 @@ export class NetworkManager {
     onUpdate?: (lobbyData: any) => void
   ) {
     if (!this.socket) this.connect();
+    this.isPvpSession = true;
     if (onUpdate) this.onLobbyUpdateCb = onUpdate;
     this.lastPvpCreateAttempt = { dungeonId, format, team, proposedCode, onUpdate };
     const uuid = localStorage.getItem('playerUUID');
@@ -1071,6 +1103,7 @@ export class NetworkManager {
 
   public browsePvpLobbies() {
     if (!this.socket) this.connect();
+    this.isPvpSession = true;
     this.socket?.emit('browse_pvp_lobbies');
   }
 
@@ -1166,9 +1199,12 @@ export class NetworkManager {
     isAttacking: boolean = false,
     isTownMode: boolean = false,
     sceneId: string = isTownMode ? 'town' : 'goblin_catacombs',
+    isTournament: boolean = false,
+    pvpTeam?: 'red' | 'blue'
   ) {
     if (!this.socket || !this.room) return;
-    const payload = {
+    const isPvpActive = Boolean(isTournament || this.isPvpSession || this.isPvpFallback);
+    const payload: any = {
       classId: playerState.characterClass ? playerState.characterClass.id : 'knight',
       // Quarter-pixel quantization is below visible sprite precision but keeps
       // tiny floating-point drift from defeating duplicate suppression.
@@ -1179,12 +1215,14 @@ export class NetworkManager {
       isAttacking,
       animState: playerState.animState || 'idle',
       isTownMode: Boolean(isTownMode),
-      sceneId,
+      sceneId: isPvpActive && this.isPvpFallback ? 'goblin_catacombs' : (isPvpActive ? 'tournament_colosseum' : sceneId),
       // Teammates need to see you are down, not merely standing still.
       downed: Boolean(playerState.downed),
       // Rounded to whole percent: this rides every move packet, and nobody can
       // read the difference between 61% and 61.4% on a sliver four pixels tall.
-      hpPct: Math.max(0, Math.min(100, Math.round((playerState.hp / Math.max(1, playerState.maxHp)) * 100)))
+      hpPct: Math.max(0, Math.min(100, Math.round((playerState.hp / Math.max(1, playerState.maxHp)) * 100))),
+      isTournament: isPvpActive,
+      team: pvpTeam || playerState.team,
     };
     const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
     if (!this.movementCadence.shouldSend(JSON.stringify(payload), now)) return;
@@ -1303,6 +1341,8 @@ export class NetworkManager {
   }
 
   public leaveLobby() {
+    this.isPvpFallback = false;
+    this.isPvpSession = false;
     if (!this.socket || !this.room) return;
     this.socket.emit('leave_lobby');
   }
@@ -1318,6 +1358,7 @@ export class NetworkManager {
 
   public async joinByRoomCode(code: string): Promise<boolean> {
     if (!this.socket) this.connect();
+    this.isPvpSession = true;
     const raw = (code || '').trim();
     if (!raw) return false;
 
@@ -1637,6 +1678,11 @@ export class NetworkManager {
       enemies: (snapshot.enemies || []).map(e => this.serializeEnemy(e, groundY)),
       ...(snapshot.runState ? { runState: snapshot.runState } : {}),
       ...(snapshot.encounterSnapshot ? { encounterSnapshot: snapshot.encounterSnapshot } : {}),
+      ...(snapshot.isPvpMatch ? { isPvpMatch: true } : {}),
+      ...(snapshot.tournamentMode ? { tournamentMode: true } : {}),
+      ...(snapshot.arenaTheme ? { arenaTheme: snapshot.arenaTheme } : {}),
+      ...(snapshot.pvpTeams ? { pvpTeams: snapshot.pvpTeams } : {}),
+      ...(snapshot.pvpFormat ? { pvpFormat: snapshot.pvpFormat } : {}),
     };
     this.debug('OUT', 'full_sync', {
       requesterId,
@@ -1644,6 +1690,10 @@ export class NetworkManager {
       runRevision: snapshot.runState?.revision,
     });
     this.socket.emit('full_sync', payload);
+  }
+
+  public onRemotePlayerMove(cb: (data: any) => void) {
+    this.onRemotePlayerMoveCb = cb;
   }
 
   /** Guest side: receives the host's snapshot. */

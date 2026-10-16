@@ -89,6 +89,7 @@ export class TournamentLobbyUI {
 
   public open(): void {
     if (this.overlay) this.close();
+    network.isPvpSession = true;
     audio.playPageTurn();
     this.injectStyle();
 
@@ -285,6 +286,7 @@ export class TournamentLobbyUI {
       this.toast('Please enter a valid Room Code.');
       return;
     }
+    network.isPvpSession = true;
     audio.playLevelUp();
     this.toast(`Connecting to Colosseum lobby ${clean}...`);
     this.isJoiningRoom = true;
@@ -967,6 +969,7 @@ export class TournamentLobbyUI {
         const rid = btn.getAttribute('data-roomid');
         if (rid) {
           audio.playClick();
+          network.isPvpSession = true;
           network.leaveLobby();
           network.joinLobby(rid);
           this.activeTab = 'arena';

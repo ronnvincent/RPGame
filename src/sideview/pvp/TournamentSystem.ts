@@ -459,14 +459,13 @@ export class TournamentMatch {
     if (this.status === 'active') {
       this.roundTimeRemaining -= dt;
 
-      // Check win condition: Team Wipe (only after at least 3.0s elapsed into active combat)
+      // Check win condition: Team Wipe (both teams must have fighters registered)
       const totalRed = this.fighters.filter(f => f.team === 'red').length;
       const totalBlue = this.fighters.filter(f => f.team === 'blue').length;
       const redAlive = this.fighters.filter(f => f.team === 'red' && f.isAlive).length;
       const blueAlive = this.fighters.filter(f => f.team === 'blue' && f.isAlive).length;
-      const roundElapsed = this.config.roundDurationSec - this.roundTimeRemaining;
 
-      if (totalRed > 0 && totalBlue > 0 && roundElapsed >= 3.0) {
+      if (totalRed > 0 && totalBlue > 0) {
         if (redAlive === 0 || blueAlive === 0) {
           const roundWinner: TournamentTeam | 'draw' = redAlive > 0 ? 'red' : blueAlive > 0 ? 'blue' : 'draw';
           this.resolveRoundEnd(roundWinner, 'wipe');
