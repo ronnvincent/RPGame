@@ -59,7 +59,8 @@
     "test:modals": "node test/modal-exit-buttons.test.mjs",
     "test:survive-speed": "node test/survive-and-speed-balance.test.mjs",
     "test:post-boss": "node --test test/post-boss-safety.test.mjs",
-    "test:team-lives": "node --test test/global-team-lives.test.mjs"
+    "test:team-lives": "node --test test/global-team-lives.test.mjs",
+    "test:tournament": "node --test test/tournament-pvp.test.mjs"
   },
   "keywords": [],
   "author": "",

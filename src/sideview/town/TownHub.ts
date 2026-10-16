@@ -116,6 +116,21 @@ export class TownHub {
       ]
     },
     {
+      id: 'arena_master_valerius',
+      name: 'Arena Master Valerius',
+      title: 'High Praetor of the Colosseum',
+      portrait: '/assets/ui_sprites/portrait_3.png',
+      x: 1220,
+      y: 0,
+      width: 52,
+      height: 66,
+      color: '#e11d48',
+      lore: [
+        "Arena Master Valerius: The Colosseum beckons! Test your blade in 1v1 duels, 2v2 skirmishes, or up to 4v4 team wars.",
+        "Arena Master Valerius: All combatants fight with normalized HP and our 0.22 PvP damage dampener. Only pure skill shall reign!"
+      ]
+    },
+    {
       id: 'portal_donald',
       name: 'Portal Master Donald',
       title: 'Keeper of Dimensional Gateways',
@@ -155,7 +170,8 @@ export class TownHub {
     npc: TownNPC,
     engine: SideViewEngine,
     dialogue: DialogueSystem,
-    onOpenWorldMap: () => void
+    onOpenWorldMap: () => void,
+    onOpenTournament?: () => void
   ) {
     audio.playDialogueBlip(500);
 
@@ -278,6 +294,18 @@ export class TownHub {
         onSelect: () => {
           dialogue.close();
           onOpenWorldMap();
+        }
+      });
+    }
+
+    if (npc.id === 'arena_master_valerius') {
+      options.push({
+        label: 'Enter Tournament Colosseum (1v1, 2v2, 3v3, 4v4)',
+        icon: '/assets/ui_sprites/icons/W_Sword001.png',
+        type: 'custom',
+        onSelect: () => {
+          dialogue.close();
+          onOpenTournament?.();
         }
       });
     }

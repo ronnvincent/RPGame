@@ -119,7 +119,7 @@ export function calculatePvpDamage(
   }
 
   // Clean old entries from recent damage window
-  target.recentDamageTaken = target.recentDamageTaken.filter(entry => nowMs - entry.time <= PVP_ANTI_BURST_WINDOW_MS);
+  target.recentDamageTaken = (target.recentDamageTaken || []).filter(entry => nowMs - entry.time <= PVP_ANTI_BURST_WINDOW_MS);
 
   // Check if anti-burst is already active
   let wasMitigated = false;
@@ -419,7 +419,8 @@ export class TournamentMatch {
       this.bannerTimer = 4.0;
     } else {
       // Advance to next round after delay
-      window.setTimeout(() => {
+      const timerFn = typeof window !== 'undefined' ? window.setTimeout : setTimeout;
+      timerFn(() => {
         if (this.status === 'round_end') {
           this.currentRound++;
           this.startRoundCountdown();

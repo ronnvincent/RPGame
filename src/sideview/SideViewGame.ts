@@ -57,6 +57,8 @@ import { CoopDebugOverlay } from './ui/CoopDebugOverlay';
 import { CoopLobbyUI } from './ui/CoopLobbyUI';
 import { RunSummaryUI, SummaryRow } from './ui/RunSummaryUI';
 import { installMobileStyles, findScrollable } from './ui/MobileUI';
+import { TournamentLobbyUI } from './ui/TournamentLobbyUI';
+import { TournamentMatch } from './pvp/TournamentSystem';
 import {
   InputAction,
   InputActionEvent,
@@ -104,6 +106,7 @@ export class SideViewGame {
   private partyStats: Record<string, SummaryRow> = {};
   private coopDebug: CoopDebugOverlay | null = null;
   public coopLobby: CoopLobbyUI | null = null;
+  public tournamentLobby: TournamentLobbyUI | null = null;
   private currentDungeonIndex: number = 0;
   private currentWaveIndex: number = 0;
   private currentWaveTotalEnemies: number = 0;
@@ -321,6 +324,13 @@ export class SideViewGame {
 
     this.runSummary = new RunSummaryUI(this.container);
     this.runSummary.onRematch = () => this.loadDungeon(this.currentDungeonIndex, true);
+
+    this.tournamentLobby = new TournamentLobbyUI(this.container, this.engine, (match) => {
+      this.startTournamentMatch(match);
+    });
+    this.engine.onTournamentEnded = () => {
+      this.loadTownHub(false);
+    };
 
     // Class and level travel with lobby packets so party cards can show them.
     this.refreshNetworkProfile();
@@ -1871,8 +1881,35 @@ export class SideViewGame {
     if (activeNpc) {
       this.townHub.interactWithNpc(activeNpc, this.engine, this.dialogue, () => {
         this.showScreen('map');
+      }, () => {
+        this.openTournamentLobby();
       });
     }
+  }
+
+  public openTournamentLobby(): void {
+    if (!this.engine) return;
+    if (!this.tournamentLobby) {
+      this.tournamentLobby = new TournamentLobbyUI(this.container, this.engine, (match) => {
+        this.startTournamentMatch(match);
+      });
+    }
+    this.tournamentLobby.open();
+  }
+
+  public startTournamentMatch(match: TournamentMatch): void {
+    if (!this.engine) return;
+    this.waveActive = false;
+    this.engine.isVictoryOrWaveCleared = false;
+    this.engine.isTownMode = false;
+    this.hud?.setQuestTrackerInDungeon(false);
+    this.hud?.setDungeonObjective(null);
+    this.hud?.setDungeonRelics([]);
+    this.hud?.setDungeonContextAction(null);
+
+    this.engine.startTournament(match);
+    audio.playDungeonBGM();
+    this.hud?.showToast(`Tournament Arena: ${match.config.format.toUpperCase()} Match Started!`);
   }
 
   private interactInDungeon(): boolean {
@@ -1902,9 +1939,9 @@ export class SideViewGame {
 
   /** Current control context. Gameplay actions cannot leak through a modal. */
   private resolveInputContext(): InputContext {
-    if (this.dialogue?.isOpen || this.coopLobby?.isOpen || this.hud?.isInputBlocking()) return 'menu';
+    if (this.dialogue?.isOpen || this.coopLobby?.isOpen || this.tournamentLobby?.isOpen || this.hud?.isInputBlocking()) return 'menu';
     if (this.container.querySelector(
-      '.world-map-modal, .quest-log-modal, .lb-backdrop, .rs-back, .dialogue-modal-backdrop',
+      '.world-map-modal, .quest-log-modal, .lb-backdrop, .rs-back, .dialogue-modal-backdrop, .tournament-lobby-modal',
     )) return 'menu';
     return 'gameplay';
   }

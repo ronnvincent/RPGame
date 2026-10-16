@@ -91,6 +91,12 @@ import {
 import { gameplaySprites } from './GameplaySpriteRenderer';
 import type { RelicDefinition } from '../dungeons/run/RunTypes';
 import { resolveEnemyVisual } from '../maps/EnemyVisualRegistry';
+import {
+  TournamentMatch,
+  calculatePvpDamage,
+  PVP_DAMAGE_MULTIPLIER,
+  getNormalizedPvpBaseHp,
+} from '../pvp/TournamentSystem';
 
 interface ActivePlayerBuff {
   stat: PlayerBuffStat;
@@ -214,6 +220,7 @@ export interface Platform {
 }
 
 export interface PlayerState {
+  name?: string;
   characterClass: CharacterClass;
   maxDungeonCleared: number;
   level: number;
@@ -556,6 +563,12 @@ export class SideViewEngine {
   /** Runs the slow-motion / freeze / declaration sequence for ultimates. */
   public readonly ultimate = new UltimateDirector();
   public battleTheme: BattleTheme = 'catacombs';
+  public tournamentMatch: TournamentMatch | null = null;
+  public inTournamentMode: boolean = false;
+  public onTournamentEnded: (() => void) | null = null;
+  private originalPlayerHpStats: { hp: number; maxHp: number } | null = null;
+  private tournamentEndTimer: number | null = null;
+  private lastTournamentRound: number = 0;
   private zoneHazards: BuiltZoneHazard[] = [];
   private zoneHazardClock = 0;
   private readonly zoneHazardLastDamageMs = new Map<string, number>();
@@ -914,11 +927,20 @@ export class SideViewEngine {
       && Number.isFinite(previousGroundY)
       && Math.abs(this.player.y - previousGroundY) <= 4;
 
-    this.platforms = buildZonePlatforms(theme, this.groundY, this.arenaWidth).map(platform => ({
-      ...platform,
-      type: 'one-way' as const,
-    }));
-    this.zoneHazards = buildZoneHazards(theme, this.groundY, this.arenaWidth);
+    if (this.inTournamentMode || (theme as string) === 'tournament_arena' || (theme as string) === 'tournament_colosseum') {
+      this.platforms = [
+        { x: 620, y: this.groundY - 95, width: 260, height: 20, type: 'one-way' as const },
+        { x: 1630, y: this.groundY - 140, width: 340, height: 22, type: 'one-way' as const },
+        { x: 2720, y: this.groundY - 95, width: 260, height: 20, type: 'one-way' as const },
+      ];
+      this.zoneHazards = [];
+    } else {
+      this.platforms = buildZonePlatforms(theme, this.groundY, this.arenaWidth).map(platform => ({
+        ...platform,
+        type: 'one-way' as const,
+      }));
+      this.zoneHazards = buildZoneHazards(theme, this.groundY, this.arenaWidth);
+    }
 
     // Canvas resizes move the play line. Keep grounded actors attached to the
     // surface that supported them instead of leaving them floating at the old
@@ -2775,6 +2797,16 @@ export class SideViewEngine {
   }
 
   private resolveEnemyDamage(enemy: EnemyInstance, rawDamage: number, fromRemote: boolean): number {
+    if (this.tournamentMatch && this.tournamentMatch.status === 'active') {
+      const fighter = this.tournamentMatch.fighters.find(f => f.id === enemy.id);
+      if (fighter) {
+        const pvpCalc = calculatePvpDamage(rawDamage, false, fighter, Date.now());
+        if (pvpCalc.triggeredAntiBurst) {
+          this.particles.addFloatingText(enemy.x, enemy.y - 30, 'ANTI-BURST ACTIVE!', '#38bdf8', true, 13);
+        }
+        return pvpCalc.finalDamage;
+      }
+    }
     const frailty = this.statusMagnitude(enemy, 'frailty');
     // Armor penetration (Darkrise stat) ignores a fraction of defence.
     const pen = Math.min(0.85, this.player.totalArmorPen || 0);
@@ -3188,6 +3220,9 @@ export class SideViewEngine {
     this.playerDefense = tickPlayerDefenseState(this.playerDefense, dt);
     this.updateCombatSpriteEffects(dt);
     this.updateEnergyShield(dt);
+    if (this.tournamentMatch) {
+      this.updateTournament(dt);
+    }
 
     // 0. Hit-Stop Micro Freeze check (Crunchy combat impact feeling)
     if (this.hitStopTimer > 0) {
@@ -4884,7 +4919,16 @@ export class SideViewEngine {
       if (!zone.allyMitigation) continue;
       if (Math.abs(this.player.x - zone.x) <= zone.radius) multiplier *= 1 - zone.allyMitigation;
     }
-    return Math.max(0.1, multiplier);
+    if (this.inTournamentMode) {
+      multiplier *= PVP_DAMAGE_MULTIPLIER;
+      if (this.tournamentMatch) {
+        const localFighter = this.tournamentMatch.fighters.find(f => f.isLocal);
+        if (localFighter && Date.now() < localFighter.antiBurstUntil) {
+          multiplier *= 0.70;
+        }
+      }
+    }
+    return Math.max(0.05, multiplier);
   }
 
   /** Seconds since the player last lost HP or shield. Drives ES regen. */
@@ -5873,14 +5917,14 @@ export class SideViewEngine {
 
         ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
         ctx.fillRect(-barW / 2, barY, barW, barH);
-        ctx.fillStyle = enemy.type === 'boss' ? '#ef4444' : enemy.type === 'elite' ? '#f59e0b' : '#22c55e';
+        ctx.fillStyle = this.inTournamentMode ? '#3b82f6' : (enemy.type === 'boss' ? '#ef4444' : enemy.type === 'elite' ? '#f59e0b' : '#22c55e');
         ctx.fillRect(-barW / 2, barY, barW * hpPercent, barH);
 
         // Enemy Name
         ctx.font = `bold ${enemy.type === 'boss' ? '12px' : '10px'} "Outfit", sans-serif`;
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = this.inTournamentMode ? '#93c5fd' : '#ffffff';
         ctx.textAlign = 'center';
-        ctx.fillText(enemy.name, 0, barY - 4);
+        ctx.fillText(this.inTournamentMode ? `[BLUE] ${enemy.name}` : enemy.name, 0, barY - 4);
 
         const statuses = this.statusesForEnemy(enemy);
         if (statuses.length) {
@@ -5936,6 +5980,15 @@ export class SideViewEngine {
       p.characterClass.themeColor,
       this.lastSkillIndex
     );
+
+    if (this.inTournamentMode) {
+      ctx.save();
+      ctx.font = 'bold 10px monospace';
+      ctx.fillStyle = '#fca5a5';
+      ctx.textAlign = 'center';
+      ctx.fillText('[RED] ' + (p.name || p.characterClass?.name || 'Hero'), p.x, p.y - p.height - 18);
+      ctx.restore();
+    }
 
     ctx.restore();
     // Render Remote Multiplayer Players
@@ -6010,6 +6063,9 @@ export class SideViewEngine {
     this.particles.drawScreenOverlays(ctx, virtualWidth, virtualHeight);
     // Cinematic dim/declaration are screen-space, above the scene and below DOM HUD.
     this.ultimate.draw(ctx, virtualWidth, virtualHeight);
+    if (this.tournamentMatch) {
+      this.drawTournamentOverlay(ctx, virtualWidth, virtualHeight);
+    }
     ctx.restore();
   }
 
@@ -6256,5 +6312,264 @@ export class SideViewEngine {
 
       ctx.restore();
     });
+  }
+
+  public startTournament(match: TournamentMatch): void {
+    this.inTournamentMode = true;
+    this.tournamentMatch = match;
+    this.isTownMode = false;
+    this.setBattleTheme('tournament_arena' as any);
+
+    // Cache original stats
+    if (!this.originalPlayerHpStats) {
+      this.originalPlayerHpStats = { hp: this.player.hp, maxHp: this.player.maxHp };
+    }
+
+    // Normalize player HP for fair PvP
+    const normalizedHp = getNormalizedPvpBaseHp(this.player.characterClass?.id || 'warrior');
+    this.player.maxHp = normalizedHp;
+    this.player.hp = normalizedHp;
+    this.player.downed = false;
+    this.player.x = 480;
+    this.player.y = this.groundY;
+    this.player.vx = 0;
+    this.player.vy = 0;
+
+    // Symmetrical Platforms for Tournament Arena
+    this.platforms = [
+      { x: 620, y: this.groundY - 95, width: 260, height: 20, type: 'one-way' as const },
+      { x: 1630, y: this.groundY - 140, width: 340, height: 22, type: 'one-way' as const },
+      { x: 2720, y: this.groundY - 95, width: 260, height: 20, type: 'one-way' as const },
+    ];
+    this.zoneHazards = [];
+
+    // Clear existing PvE enemies & projectiles
+    this.enemies = [];
+    this.particles.clearGameplayEntities();
+
+    // Spawn opposing team gladiators
+    const enemyFighters = match.fighters.filter(f => f.team === 'blue');
+    for (const fighter of enemyFighters) {
+      const enemy: EnemyInstance = {
+        id: fighter.id,
+        name: fighter.name,
+        type: 'mob',
+        role: 'bruiser',
+        x: fighter.x,
+        y: this.groundY,
+        vx: 0,
+        vy: 0,
+        hp: fighter.maxHp,
+        maxHp: fighter.maxHp,
+        atk: Math.round(fighter.maxHp * 0.05),
+        def: 30,
+        speed: 1.4,
+        facing: -1,
+        width: 36,
+        height: 52,
+        icon: '⚔️',
+        color: '#3b82f6',
+        attackRange: 60,
+        attackTimer: 0,
+        attackCooldown: 1.2,
+        hitStun: 0,
+        isGrounded: true,
+        isAttacking: false,
+        isDead: false,
+        isActive: true,
+        spawnDelay: 0,
+        expReward: 0,
+        goldReward: 0,
+      };
+      this.enemies.push(enemy);
+    }
+
+    // Start match countdown
+    this.lastTournamentRound = match.currentRound;
+    match.startMatch();
+  }
+
+  public endTournament(): void {
+    if (this.originalPlayerHpStats) {
+      this.player.maxHp = this.originalPlayerHpStats.maxHp;
+      this.player.hp = this.originalPlayerHpStats.hp;
+      this.originalPlayerHpStats = null;
+    }
+    this.inTournamentMode = false;
+    this.tournamentMatch = null;
+    this.isTownMode = true;
+    this.enemies = [];
+    this.particles.clearGameplayEntities();
+    this.setBattleTheme('catacombs');
+    this.onTournamentEnded?.();
+  }
+
+  private updateTournament(dt: number): void {
+    const match = this.tournamentMatch;
+    if (!match) return;
+
+    // Reset fighters and player on new round
+    if (this.lastTournamentRound !== match.currentRound) {
+      this.lastTournamentRound = match.currentRound;
+      const normalizedHp = getNormalizedPvpBaseHp(this.player.characterClass?.id || 'warrior');
+      this.player.hp = normalizedHp;
+      this.player.downed = false;
+      this.player.x = 480;
+      this.player.y = this.groundY;
+      this.player.vx = 0;
+      this.player.vy = 0;
+
+      this.enemies = [];
+      this.particles.clearGameplayEntities();
+      const enemyFighters = match.fighters.filter(f => f.team === 'blue');
+      for (const fighter of enemyFighters) {
+        fighter.currentHp = fighter.maxHp;
+        fighter.isAlive = true;
+        const enemy: EnemyInstance = {
+          id: fighter.id,
+          name: fighter.name,
+          type: 'mob',
+          role: 'bruiser',
+          x: fighter.x,
+          y: this.groundY,
+          vx: 0,
+          vy: 0,
+          hp: fighter.maxHp,
+          maxHp: fighter.maxHp,
+          atk: Math.round(fighter.maxHp * 0.05),
+          def: 30,
+          speed: 1.4,
+          facing: -1,
+          width: 36,
+          height: 52,
+          icon: '⚔️',
+          color: '#3b82f6',
+          attackRange: 60,
+          attackTimer: 0,
+          attackCooldown: 1.2,
+          hitStun: 0,
+          isGrounded: true,
+          isAttacking: false,
+          isDead: false,
+          isActive: true,
+          spawnDelay: 0,
+          expReward: 0,
+          goldReward: 0,
+        };
+        this.enemies.push(enemy);
+      }
+    }
+
+    // Sync local player HP with match record
+    const localFighter = match.fighters.find(f => f.isLocal);
+    if (localFighter) {
+      localFighter.currentHp = this.player.hp;
+      localFighter.isAlive = this.player.hp > 0 && !this.player.downed;
+      localFighter.x = this.player.x;
+    }
+
+    // Sync bot enemies HP with match fighters
+    for (const fighter of match.fighters) {
+      if (fighter.team === 'blue') {
+        const enemy = this.enemies.find(e => e.id === fighter.id);
+        if (!enemy || enemy.hp <= 0 || enemy.isDead) {
+          fighter.currentHp = 0;
+          fighter.isAlive = false;
+        } else {
+          fighter.currentHp = enemy.hp;
+          fighter.isAlive = true;
+          fighter.x = enemy.x;
+        }
+      }
+    }
+
+    // Update match state machine
+    match.update(dt);
+
+    // If local player died in tournament, handle round wipe
+    if (this.player.hp <= 0 && match.status === 'active') {
+      const redAlive = match.fighters.filter(f => f.team === 'red' && f.isAlive).length;
+      if (redAlive === 0) {
+        match.resolveRoundEnd('blue', 'wipe');
+      }
+    }
+
+    // Check if match ended
+    if (match.status === 'match_end') {
+      if (!this.tournamentEndTimer) {
+        this.tournamentEndTimer = window.setTimeout(() => {
+          this.tournamentEndTimer = null;
+          // Award gold if red won
+          if (match.matchWinner === 'red') {
+            const reward = match.config.format === '1v1' ? 1000 : match.config.format === '2v2' ? 2500 : 5000;
+            this.player.gold += reward;
+            this.particles.addFloatingText(this.player.x, this.player.y - 45, `+${reward} GOLD VICTORY!`, '#f59e0b', true, 16);
+          }
+          this.endTournament();
+        }, 3600);
+      }
+    }
+  }
+
+  public drawTournamentOverlay(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+    const match = this.tournamentMatch;
+    if (!match) return;
+
+    ctx.save();
+    // 1. Top HUD Scoreboard Bar
+    const barWidth = 320;
+    const barHeight = 36;
+    const barX = Math.round((width - barWidth) / 2);
+    const barY = 12;
+
+    ctx.fillStyle = 'rgba(10, 12, 18, 0.88)';
+    ctx.strokeStyle = 'rgba(212, 175, 55, 0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(barX, barY, barWidth, barHeight, 6);
+    ctx.fill();
+    ctx.stroke();
+
+    // Red Score
+    ctx.font = 'bold 13px "Outfit", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#ef4444';
+    ctx.fillText(`[RED] ${match.redScore}`, barX + 16, barY + 23);
+
+    // Center Round & Timer
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#f8fafc';
+    const mins = Math.floor(match.roundTimeRemaining / 60);
+    const secs = Math.floor(match.roundTimeRemaining % 60);
+    const timeStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+    ctx.fillText(`R${match.currentRound} | ${timeStr}`, barX + barWidth / 2, barY + 23);
+
+    // Blue Score
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#3b82f6';
+    ctx.fillText(`${match.blueScore} [BLUE]`, barX + barWidth - 16, barY + 23);
+
+    // 2. Center Banner if active
+    if (match.bannerTimer > 0 && match.bannerText) {
+      const bannerY = Math.round(height * 0.38);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+      ctx.fillRect(0, bannerY - 32, width, 68);
+
+      ctx.textAlign = 'center';
+      ctx.font = '900 24px "Outfit", sans-serif';
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
+      ctx.lineWidth = 4;
+      ctx.strokeText(match.bannerText, width / 2, bannerY);
+      ctx.fillStyle = match.bannerText.includes('RED') ? '#f87171' : match.bannerText.includes('BLUE') ? '#60a5fa' : '#fbbf24';
+      ctx.fillText(match.bannerText, width / 2, bannerY);
+
+      if (match.bannerSubtext) {
+        ctx.font = 'bold 12px "Outfit", sans-serif';
+        ctx.fillStyle = '#e2e8f0';
+        ctx.fillText(match.bannerSubtext, width / 2, bannerY + 22);
+      }
+    }
+
+    ctx.restore();
   }
 }
