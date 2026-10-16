@@ -2,7 +2,10 @@
 // engine, dungeon spawner, and authored ZoneContent contracts together.
 export { SideViewEngine } from '../src/sideview/engine/SideViewEngine';
 export { CHARACTER_CLASSES } from '../src/sideview/classes/ClassDefinitions';
-export { DUNGEONS, spawnWaveEnemies } from '../src/sideview/dungeons/DungeonManager';
+export { DUNGEONS, spawnWaveEnemies, spawnSurviveWaveReinforcements } from '../src/sideview/dungeons/DungeonManager';
+export { ITEM_DATABASE } from '../src/sideview/items/ItemDatabase';
+export { rollAffixes } from '../src/sideview/items/darkrise/affixes';
+export { MONSTER_CARDS } from '../src/sideview/items/darkrise/cards';
 export { buildZonePlatforms, getZoneSpawnLayout } from '../src/sideview/maps/ZoneContent';
 export { sprites } from '../src/sideview/engine/SpriteManager';
 export { audio } from '../src/sideview/engine/AudioManager';

@@ -163,7 +163,7 @@ export const ITEM_DATABASE: ItemData[] = [
     image: '/assets/rpg-icons/32x32/sword_01a.png',
     description: 'A blood-drinking ancient blade that thirsts for combat with extreme critical strikes.',
     price: 750,
-    stats: { atk: 58, crit: 0.22, speed: 1.0 }
+    stats: { atk: 58, crit: 0.22, speed: 0.3 }
   },
   {
     id: 'wep_void_daggers',
@@ -174,7 +174,7 @@ export const ITEM_DATABASE: ItemData[] = [
     image: '/assets/ui_sprites/icons/W_Dagger004.png',
     description: 'Daggers carved from shadow crystals. Slices the air with eerie silent lethality.',
     price: 650,
-    stats: { atk: 48, crit: 0.25, speed: 1.2 }
+    stats: { atk: 48, crit: 0.25, speed: 0.3 }
   },
   {
     id: 'wep_phoenix_staff',
@@ -208,7 +208,7 @@ export const ITEM_DATABASE: ItemData[] = [
     image: '/assets/rpg-icons/32x32/bow_03a.png',
     description: 'A sacred bow blessed by the goddess of the hunt. Never misses its prey.',
     price: 600,
-    stats: { atk: 50, crit: 0.20, speed: 1.0 }
+    stats: { atk: 50, crit: 0.20, speed: 0.3 }
   },
   {
     id: 'wep_iron_sword',
@@ -252,7 +252,7 @@ export const ITEM_DATABASE: ItemData[] = [
     image: '/assets/rpg-icons/32x32/bow_03e.png',
     description: 'Mythic bow whose arrows tear open micro-wormholes. Unmatched critical velocity and armor penetration.',
     price: 3450,
-    stats: { atk: 105, crit: 0.32, speed: 1.6, armorPen: 0.22 }
+    stats: { atk: 105, crit: 0.32, speed: 0.4, armorPen: 0.22 }
   },
 
   // --- HELMETS ---
@@ -276,7 +276,7 @@ export const ITEM_DATABASE: ItemData[] = [
     image: '/assets/rpg-icons/32x32/hat_01b.png',
     description: 'Enchanted dark cowl that obscures the wearers face in shadow.',
     price: 320,
-    stats: { def: 18, crit: 0.08, speed: 0.5 }
+    stats: { def: 18, crit: 0.08, speed: 0.2 }
   },
   {
     id: 'helm_archmage_cowl',
@@ -384,7 +384,7 @@ export const ITEM_DATABASE: ItemData[] = [
     image: '/assets/ui_sprites/icons/A_Shoes03.png',
     description: 'Comfortable traveling boots with steel-toed caps.',
     price: 120,
-    stats: { speed: 0.8, def: 8 }
+    stats: { speed: 0.3, def: 8 }
   },
   {
     id: 'boots_windwalker',
@@ -395,7 +395,7 @@ export const ITEM_DATABASE: ItemData[] = [
     image: '/assets/rpg-icons/32x32/boots_01c.png',
     description: 'Lightweight boots enchanted with gale currents. Greatly boosts dash and run speed.',
     price: 450,
-    stats: { speed: 2.2, crit: 0.06 }
+    stats: { speed: 0.5, crit: 0.06 }
   },
   {
     id: 'boots_hermes',
@@ -406,7 +406,7 @@ export const ITEM_DATABASE: ItemData[] = [
     image: '/assets/rpg-icons/32x32/boots_01e.png',
     description: 'Divine greaves carrying the blessing of the god of speed.',
     price: 900,
-    stats: { speed: 3.5, def: 22, crit: 0.12 }
+    stats: { speed: 0.8, def: 22, crit: 0.12 }
   },
   {
     id: 'boots_hermes_astral',
@@ -417,7 +417,7 @@ export const ITEM_DATABASE: ItemData[] = [
     image: '/assets/rpg-icons/32x32/boots_01e.png',
     description: 'Mythic astral boots that warp spacetime. Extreme dash responsiveness, movement speed, and cooldown acceleration.',
     price: 2600,
-    stats: { speed: 4.2, def: 36, hp: 200, rechargeSpeed: 0.16, crit: 0.14 }
+    stats: { speed: 1.1, def: 36, hp: 200, rechargeSpeed: 0.16, crit: 0.14 }
   },
 
   // --- WINGS ---
@@ -431,7 +431,7 @@ export const ITEM_DATABASE: ItemData[] = [
     image: '/assets/rpg-icons/32x32/crystal_01g.png',
     description: 'Glorious golden feather wings. Unlocks limitless aerial double-jumping and celestial glide.',
     price: 1500,
-    stats: { speed: 2.0, hp: 150, mp: 100, def: 20 }
+    stats: { speed: 0.5, hp: 150, mp: 100, def: 20 }
   },
   {
     id: 'wings_valkyrie',
@@ -442,7 +442,7 @@ export const ITEM_DATABASE: ItemData[] = [
     image: '/assets/rpg-icons/32x32/crystal_01h.png',
     description: 'Wings of sacred silver feathers that empower aerial double jumping.',
     price: 1200,
-    stats: { speed: 1.8, atk: 25, hp: 120 }
+    stats: { speed: 0.4, atk: 25, hp: 120 }
   },
   {
     id: 'wings_demon',
@@ -453,7 +453,7 @@ export const ITEM_DATABASE: ItemData[] = [
     image: '/assets/rpg-icons/32x32/crystal_01d.png',
     description: 'Dark demonic wings of the nether realm. Grants aerial double-jump and ruthless attack power.',
     price: 1100,
-    stats: { atk: 35, speed: 1.5, crit: 0.15 }
+    stats: { atk: 35, speed: 0.4, crit: 0.15 }
   },
   {
     id: 'wings_archangel',
@@ -465,7 +465,7 @@ export const ITEM_DATABASE: ItemData[] = [
     image: '/assets/rpg-icons/32x32/crystal_01e.png',
     description: 'Six transcendent wings composed of eternal starlight. Unmatched aerial agility and continuous life restoration.',
     price: 4200,
-    stats: { speed: 2.8, hp: 350, mp: 220, def: 32, crit: 0.16, rechargeSpeed: 0.18 }
+    stats: { speed: 0.7, hp: 350, mp: 220, def: 32, crit: 0.16, rechargeSpeed: 0.18 }
   },
 
   // --- RINGS ---
@@ -501,7 +501,7 @@ export const ITEM_DATABASE: ItemData[] = [
     image: '/assets/rpg-icons/32x32/ring_03a.png',
     description: 'Flawless diamond ring radiating universal combat prowess.',
     price: 1000,
-    stats: { atk: 30, def: 25, crit: 0.18, speed: 1.0 }
+    stats: { atk: 30, def: 25, crit: 0.18, speed: 0.3 }
   },
   {
     id: 'ring_chronos',

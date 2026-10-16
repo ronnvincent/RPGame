@@ -56,7 +56,8 @@
     "test:voting": "node test/dungeon-wave-voting.test.mjs",
     "test:inventory-loot": "node test/inventory-loot.test.mjs",
     "test:simulate-all-dungeons": "node tools/simulate-all-dungeons.mjs",
-    "test:modals": "node test/modal-exit-buttons.test.mjs"
+    "test:modals": "node test/modal-exit-buttons.test.mjs",
+    "test:survive-speed": "node test/survive-and-speed-balance.test.mjs"
   },
   "keywords": [],
   "author": "",

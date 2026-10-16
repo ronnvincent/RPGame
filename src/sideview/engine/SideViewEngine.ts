@@ -841,7 +841,10 @@ export class SideViewEngine {
 
     let atk = (p.baseAtk + bonusAtk) * lvlMultiplier;
     let def = (p.baseDef + bonusDef) * lvlMultiplier;
-    let spd = p.baseSpeed + bonusSpeed;
+    // Movement speed scaling: soft cap bonusSpeed above 3.0 so stacking speed remains
+    // rewarding without breaking physics or character control.
+    const effectiveBonusSpeed = bonusSpeed > 3.0 ? 3.0 + (bonusSpeed - 3.0) * 0.25 : bonusSpeed;
+    let spd = p.baseSpeed + effectiveBonusSpeed;
     let crit = p.baseCrit + bonusCrit;
     let attackSpeed = 1;
 
@@ -856,7 +859,7 @@ export class SideViewEngine {
 
     p.totalAtk = Math.round(atk * this.runRelicAttackMultiplier);
     p.totalDef = Math.round(def);
-    p.totalSpeed = Number(spd.toFixed(1));
+    p.totalSpeed = Number(Math.min(10.5, Math.max(2.0, spd)).toFixed(1));
     p.totalCrit = Number(crit.toFixed(2));
     p.totalAttackSpeed = Number(attackSpeed.toFixed(2));
 

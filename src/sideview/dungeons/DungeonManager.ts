@@ -865,6 +865,98 @@ export function spawnWaveEnemies(
   return instances;
 }
 
+/**
+ * Spawns a batch of reinforcement enemies for Survive waves / rooms across all dungeon maps.
+ * Mobs spawn safely away from the player at the outer arena edges.
+ */
+export function spawnSurviveWaveReinforcements(
+  dungeon: DungeonDefinition,
+  waveIndex: number,
+  arenaWidth: number,
+  playerX: number = 300,
+  groundY: number = 350,
+  count: number = 2,
+  nonce: number = 0,
+): EnemyInstance[] {
+  const wave = getWaveConfig(dungeon, waveIndex) || (dungeon.endless ? buildEndlessWave(dungeon, waveIndex) : undefined);
+  if (!wave || !wave.enemies || wave.enemies.length === 0) return [];
+
+  const mobTemplates = wave.enemies.filter(e => e.type !== 'boss');
+  const candidateTemplates = mobTemplates.length > 0 ? mobTemplates : wave.enemies;
+  const diffCfg = getDifficultyConfig();
+  const instances: EnemyInstance[] = [];
+
+  for (let i = 0; i < count; i++) {
+    const templateIndex = (nonce + i) % candidateTemplates.length;
+    const enemyTemplate = candidateTemplates[templateIndex];
+    const encounterSeed = `${dungeon.id}:surv:${waveIndex}:${nonce}:${i}`;
+    const eliteRoll = stableEncounterUnit(`${encounterSeed}:elite`);
+    const isElite = enemyTemplate.type === 'mob' && eliteRoll < ELITE_SPAWN_CHANCE;
+    const defectiveRoll = stableEncounterUnit(`${encounterSeed}:defective`);
+    const isDefective = enemyTemplate.type === 'mob' && !isElite && defectiveRoll < DEFECTIVE_SPAWN_CHANCE;
+    const isCloaked = enemyTemplate.type === 'mob' && !isElite && stableEncounterUnit(`${encounterSeed}:cloak`) < INVISIBLE_MOB_CHANCE;
+
+    const side = (i % 2 === 0) ? -1 : 1;
+    let x = side === -1 ? Math.max(90, arenaWidth * 0.1) : Math.min(arenaWidth - 90, arenaWidth * 0.9);
+    if (Math.abs(x - playerX) < 180) {
+      x = playerX <= arenaWidth * 0.5 ? Math.min(arenaWidth - 90, arenaWidth * 0.85) : Math.max(90, arenaWidth * 0.15);
+    }
+
+    const baseHp = enemyTemplate.maxHp * ENEMY_HP_SCALE * (isElite ? 2.4 : 1) * diffCfg.hpMult * (isDefective ? 1.5 : 1);
+    const role: EnemyRole = enemyTemplate.type === 'boss' ? 'boss' : 'assassin';
+    const tactic = role === 'boss' ? null : ENEMY_ROLE_TACTICS[role as EnemyRoleId];
+
+    instances.push({
+      id: `enemy_${dungeon.id}_surv_${waveIndex}_${nonce}_${i}_${slugEnemyId(enemyTemplate.name)}`,
+      name: isDefective ? `Defective ${enemyTemplate.name}` : isElite ? `Elite ${enemyTemplate.name}` : enemyTemplate.name,
+      isElite,
+      defective: isDefective,
+      isCloaked,
+      type: enemyTemplate.type,
+      icon: enemyTemplate.icon,
+      color: enemyTemplate.color,
+      maxHp: Math.max(1, Math.round(baseHp)),
+      hp: Math.max(1, Math.round(baseHp)),
+      atk: Math.round(enemyTemplate.atk * (isElite ? 1.45 : 1) * diffCfg.atkMult),
+      def: Math.round(enemyTemplate.def * (isElite ? 1.3 : 1) * diffCfg.defMult),
+      speed: enemyTemplate.speed * (tactic?.moveSpeedMultiplier || 1),
+      expReward: Math.round(enemyTemplate.expReward * (isElite ? 2.5 : 1) * diffCfg.expMult),
+      goldReward: Math.round(enemyTemplate.goldReward * (isElite ? 3 : 1) * diffCfg.goldMult),
+      width: enemyTemplate.width,
+      height: enemyTemplate.height,
+      attackRange: Math.max(60, tactic?.preferredRange || 60),
+      attackCooldown: Math.max(1.4, tactic?.action.cooldownSeconds || 2.2),
+      attackTimer: 0.5,
+      phases: enemyTemplate.phases,
+      currentPhase: 1,
+      specialAttackTimer: 0,
+      role,
+      eliteModifiers: [],
+      guardState: createGuardStaggerState({
+        maxGuard: 0,
+        staggerThreshold: 90,
+        guarding: false,
+      }),
+      attackProfileId: DEFAULT_ATTACK_PROFILE_BY_ROLE['assassin'],
+      intentSequence: 0,
+      roleActionCooldown: 1,
+      isActive: true,
+      spawnDelay: 0,
+      x,
+      y: Number.isFinite(groundY) ? groundY : 350,
+      vx: 0,
+      vy: 0,
+      isGrounded: true,
+      facing: x < playerX ? 1 : -1,
+      isAttacking: false,
+      hitStun: 0,
+      isDead: false,
+    });
+  }
+
+  return instances;
+}
+
 function stableEncounterUnit(value: string): number {
   let hash = 2166136261;
   for (let index = 0; index < value.length; index += 1) {

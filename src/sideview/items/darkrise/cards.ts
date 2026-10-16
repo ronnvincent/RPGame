@@ -43,7 +43,7 @@ export const MONSTER_CARDS: MonsterCardDef[] = [
     sourceDungeonId: 'sunlit_vale',
     bossName: 'Warband Chief Hadrik',
     allowedSlots: ['boots', 'ring'],
-    stats: { speed: 6 },
+    stats: { speed: 0.8 },
     lore: 'Swift as a raid at dawn.',
   },
   {
@@ -70,7 +70,7 @@ export const MONSTER_CARDS: MonsterCardDef[] = [
     sourceDungeonId: 'emerald_ridge',
     bossName: 'Alpha Greymane',
     allowedSlots: ['boots', 'ring'],
-    stats: { crit: 0.06, speed: 3 },
+    stats: { crit: 0.06, speed: 0.4 },
     lore: 'The pack follows it still.',
   },
   {

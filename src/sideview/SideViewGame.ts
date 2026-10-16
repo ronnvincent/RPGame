@@ -8,7 +8,7 @@ import { SaveManager } from './engine/SaveManager';
 import { SideViewEngine } from './engine/SideViewEngine';
 import { CharacterSelectUI } from './ui/CharacterSelectUI';
 import { GameHUD } from './ui/GameHUD';
-import { DUNGEONS, DungeonDefinition, spawnWaveEnemies, getWaveConfig } from './dungeons/DungeonManager';
+import { DUNGEONS, DungeonDefinition, spawnWaveEnemies, getWaveConfig, spawnSurviveWaveReinforcements } from './dungeons/DungeonManager';
 import {
   ALL_GAME_MODES,
   resolveVote,
@@ -123,6 +123,8 @@ export class SideViewGame {
   private dungeonFlowState: DungeonFlowState = 'WAVE_ACTIVE';
   private isTransitioningWave: boolean = false;
   private activeGameModeModifiers: GameModeModifiers = {};
+  private surviveReinforcementTimer: number = 0;
+  private surviveSpawnNonce: number = 0;
   private activeVotingOptions: GameModeOption[] = [];
   private activeVoteEndTimestamp: number = 0;
   private currentVoteTally: Map<string, string> = new Map();
@@ -1096,6 +1098,8 @@ export class SideViewGame {
     if (!node) return;
     if (force || this.runRoomId !== node.id) {
       this.runRoomId = node.id;
+      this.surviveReinforcementTimer = 0;
+      this.surviveSpawnNonce = 0;
       this.runDialogueKey = null;
       this.pendingDungeonInteraction = null;
       this.encounter.configureRoom(node, this.engine.arenaWidth, this.engine.groundY, `${state.seed}:${node.id}`);
@@ -1344,7 +1348,44 @@ export class SideViewGame {
         const encSnapshot = this.encounter.snapshot();
         const encSucceeded = encSnapshot?.objectiveStatus === 'succeeded';
 
-        if (runtime?.status === 'active' && (encSucceeded || livingEnemies === 0)) {
+        // Continuous Spawning for Survive Objective across all maps:
+        // Keep enemies continuously arriving so the player is actively engaged until the timer expires.
+        if (node.objective?.type === 'survive' && runtime?.status === 'active' && runtime.objectiveState?.status === 'active' && !encSucceeded) {
+          this.surviveReinforcementTimer += dt;
+          if (this.engine.isHost && (livingEnemies === 0 || (livingEnemies < 3 && this.surviveReinforcementTimer >= 1.5) || this.surviveReinforcementTimer >= 3.8)) {
+            if (livingEnemies < 6) {
+              this.surviveReinforcementTimer = 0;
+              const count = livingEnemies === 0 ? 3 : 2;
+              const dungeon = DUNGEONS[this.currentDungeonIndex];
+              if (dungeon) {
+                const waveIndex = node.kind === 'boss'
+                  ? Math.max(0, dungeon.waves.length - 1)
+                  : node.depth % Math.max(1, dungeon.waves.length);
+                const reinforcements = spawnSurviveWaveReinforcements(
+                  dungeon,
+                  waveIndex,
+                  this.engine.arenaWidth,
+                  this.engine.player.x,
+                  this.engine.groundY,
+                  count,
+                  ++this.surviveSpawnNonce,
+                );
+                for (const enemy of reinforcements) {
+                  this.engine.enemies.push(enemy);
+                  this.engine.particles.addFloatingText(enemy.x, enemy.y - 30, 'REINFORCEMENT!', '#f59e0b', true, 12);
+                }
+                this.engine.prepareEnemiesForRunRoom(node.kind);
+                this.currentWaveTotalEnemies = this.engine.enemies.length;
+                network.sendEnemySync(this.engine.enemies, this.engine.groundY, this.currentWaveIndex, this.currentDungeonIndex, dungeon.id);
+              }
+            }
+          }
+        }
+
+        const isSurviveFinished = node.objective?.type === 'survive'
+          && (encSucceeded || ((runtime?.objectiveState as any)?.elapsedMs ?? 0) >= (node.objective?.durationMs ?? 0));
+
+        if (runtime?.status === 'active' && (encSucceeded || isSurviveFinished || (node.objective?.type !== 'survive' && livingEnemies === 0))) {
           if (node.objective && runtime.objectiveState && runtime.objectiveState.status !== 'succeeded') {
             if (node.objective.type === 'destroy_nests') {
               for (const nestId of node.objective.nestObjectIds) {
@@ -1356,6 +1397,17 @@ export class SideViewGame {
               }
               for (const enemyId of runtime.objectiveState.spawnedEnemyIds) {
                 this.dispatchRun({ type: 'objective_event', event: { type: 'enemy_defeated', enemyId } });
+              }
+            } else if (node.objective.type === 'survive') {
+              const remainingMs = Math.max(1, (node.objective.durationMs || 30_000) - (((runtime.objectiveState as any).elapsedMs) || 0));
+              this.dispatchRun({ type: 'advance_time', deltaMs: remainingMs });
+              // Clear remaining survive mobs cleanly with victory sparks
+              for (const enemy of this.engine.enemies) {
+                if (!enemy.isDead && enemy.hp > 0) {
+                  enemy.hp = 0;
+                  enemy.isDead = true;
+                  this.engine.particles.playVfx('fx_spark_a', enemy.x, enemy.y - 12, { scale: 1.2 });
+                }
               }
             }
           }
@@ -1374,7 +1426,7 @@ export class SideViewGame {
             this.isAdvancingRunRoom = true;
             const target = state.graph.nodes.find(candidate => candidate.id === chosenExit.toRoomId);
             const targetName = target ? this.humanize(target.kind) : 'Next Chamber';
-            this.hud?.showToast(`Room Cleared! Advancing to ${targetName}...`);
+            this.hud?.showToast(node.objective?.type === 'survive' ? `Wave Survived! Advancing to ${targetName}...` : `Room Cleared! Advancing to ${targetName}...`);
             window.setTimeout(() => {
               this.isAdvancingRunRoom = false;
               if (this.runController?.getSnapshot().status === 'active' && this.runController.getSnapshot().currentRoomId === node.id) {
