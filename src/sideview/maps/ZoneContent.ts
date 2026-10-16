@@ -446,7 +446,8 @@ export function getZoneSpawnLayout(
   waveIndex: number,
   arenaWidth: number = 3600,
 ): ZoneSpawnPlan {
-  const source = ZONE_CONTENT[theme].spawn;
+  const content = getZoneContent(theme);
+  const source = content.spawn;
   const candidates = source.enemies.filter((x) => x < arenaWidth - 120);
   const seed = stableHash(`${theme}:${Math.max(0, Math.floor(waveIndex))}:${Math.floor(arenaWidth)}`);
   const rotation = candidates.length > 0 ? seed % candidates.length : 0;
@@ -469,7 +470,9 @@ export function buildZonePlatforms(
   groundY: number,
   arenaWidth: number = 3600,
 ): BuiltZonePlatform[] {
-  return ZONE_CONTENT[theme].platforms
+  const content = getZoneContent(theme);
+  if (!content || !content.platforms) return [];
+  return content.platforms
     .filter((platform) => platform.x + platform.width <= arenaWidth - 80)
     .map((platform) => ({
       x: platform.x,
@@ -484,7 +487,9 @@ export function buildZoneHazards(
   groundY: number,
   arenaWidth: number = 3600,
 ): BuiltZoneHazard[] {
-  const hazard = ZONE_CONTENT[theme].hazard;
+  if ((theme as string) === 'tournament_arena' || (theme as string) === 'tournament_colosseum') return [];
+  const content = getZoneContent(theme);
+  const hazard = content?.hazard;
   if (!hazard) return [];
   return hazard.anchors
     .filter((x) => x + hazard.radius < arenaWidth - 80)
@@ -498,12 +503,17 @@ export function getVisibleZoneDecorations(
   viewportWidth: number,
   margin: number = 160,
 ): VisibleZoneDecoration[] {
-  return ZONE_CONTENT[theme].decorations
+  if ((theme as string) === 'tournament_arena' || (theme as string) === 'tournament_colosseum') return [];
+  const content = getZoneContent(theme);
+  if (!content || !content.decorations) return [];
+  return content.decorations
     .filter((decoration) => decoration.plane === plane)
     .map((decoration) => ({ ...decoration, screenX: decoration.x - cameraX * decoration.parallax }))
     .filter((decoration) => decoration.screenX + decoration.width >= -margin && decoration.screenX <= viewportWidth + margin);
 }
 
 export function getZonePreloadPaths(theme: BattleTheme): string[] {
-  return [...new Set(ZONE_CONTENT[theme].preload.assets)];
+  const content = getZoneContent(theme);
+  if (!content || !content.preload?.assets) return [];
+  return [...new Set(content.preload.assets)];
 }

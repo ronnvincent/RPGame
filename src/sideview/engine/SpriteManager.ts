@@ -368,6 +368,7 @@ export class SpriteManager {
     groundY: number,
   ) {
     const content = getZoneContent(theme);
+    if (!content) return;
     for (const decoration of getVisibleZoneDecorations(theme, plane, cameraX, viewportWidth)) {
       const x = Math.round(decoration.screenX);
       const y = Math.round(groundY - decoration.yOffsetFromGround - decoration.height);
