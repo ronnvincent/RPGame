@@ -76,6 +76,7 @@ export class TournamentLobbyUI {
   private toastTimer: number | null = null;
   private generatedRoomCode: string = '';
   private isJoiningRoom: boolean = false;
+  private handshakeInterval: number | null = null;
 
   constructor(parent: HTMLElement, engine: SideViewEngine, onStartMatch: (match: TournamentMatch) => void) {
     this.parent = parent;
@@ -104,6 +105,13 @@ export class TournamentLobbyUI {
       this.generatedRoomCode = Math.floor(1000 + Math.random() * 9000).toString();
     }
 
+    // Periodically broadcast PvP handshake if host so guests auto-convert to PvP Colosseum
+    this.handshakeInterval = window.setInterval(() => {
+      if (network.isHost && network.room) {
+        network.broadcastPvpHandshake('tournament_colosseum', this.currentFormat);
+      }
+    }, 1200);
+
     // Subscribe to network events
     const unsubState = network.onLobbyState((state) => {
       this.isJoiningRoom = false;
@@ -117,6 +125,9 @@ export class TournamentLobbyUI {
       const myId = network.getActorId();
       if (state.pvpTeams && state.pvpTeams[myId]) {
         this.localTeam = state.pvpTeams[myId];
+      }
+      if (network.isHost && state.members && state.members.length > 1) {
+        network.broadcastPvpHandshake('tournament_colosseum', this.currentFormat);
       }
       if (state.started) {
         this.close();
@@ -201,6 +212,10 @@ export class TournamentLobbyUI {
     if (this.toastTimer !== null) {
       window.clearTimeout(this.toastTimer);
       this.toastTimer = null;
+    }
+    if (this.handshakeInterval !== null) {
+      window.clearInterval(this.handshakeInterval);
+      this.handshakeInterval = null;
     }
     for (const unsub of this.unsubs) unsub();
     this.unsubs = [];
@@ -402,6 +417,7 @@ export class TournamentLobbyUI {
 
   private startTournament(): void {
     audio.playLevelUp();
+    network.broadcastPvpHandshake('tournament_colosseum', this.currentFormat);
     network.startMatch();
   }
 

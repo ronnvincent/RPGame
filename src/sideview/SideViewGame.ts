@@ -136,6 +136,7 @@ export class SideViewGame {
   private hostVoteTimer: number | null = null;
   private waveCompletionWatchdogTimer: number | null = null;
   private localVotedModeId: string | null = null;
+  private tournamentHostBroadcastInterval: number | null = null;
   private lastTime: number = 0;
   private isRunning: boolean = false;
   private animationFrameId: number | null = null;
@@ -331,6 +332,10 @@ export class SideViewGame {
     this.engine.onTournamentEnded = () => {
       network.isPvpSession = false;
       network.isPvpFallback = false;
+      if (this.tournamentHostBroadcastInterval) {
+        window.clearInterval(this.tournamentHostBroadcastInterval);
+        this.tournamentHostBroadcastInterval = null;
+      }
       this.loadTownHub(false);
     };
 
@@ -718,11 +723,25 @@ export class SideViewGame {
 
       mod.network.onRemotePlayerMove((data: any) => {
         if (!this.engine) return;
-        if (data?.team && (mod.network.isPvpSession || mod.network.isPvpFallback)) {
-          if (!this.engine.inTournamentMode) {
+        if (data?.team || data?.isTournament || mod.network.isPvpSession || mod.network.isPvpFallback) {
+          if (!this.engine.inTournamentMode && !this.engine.isHost) {
             console.log('[PVP] Detected remote player with PvP team; auto-correcting Joiner to Arena...');
             this.triggerTournamentJoinerTransition();
           }
+        }
+      });
+
+      mod.network.onPvpHandshake((handshake) => {
+        console.log('[PVP] Handshake received from host:', handshake);
+        mod.network.isPvpSession = true;
+        mod.network.isPvpFallback = true;
+        if (this.coopLobby?.isOpen) {
+          this.coopLobby.close();
+          this.openTournamentLobby();
+        }
+        if (!this.engine?.inTournamentMode && !this.engine?.isHost) {
+          console.log('[PVP] Handshake received while outside tournament mode; auto-correcting Joiner to Arena...');
+          this.triggerTournamentJoinerTransition(handshake);
         }
       });
 
@@ -955,6 +974,10 @@ export class SideViewGame {
    */
   private applyEnemySnapshot(enemies: any[], waveIndex: number, dungeonIndex?: number, dungeonId?: string) {
     if (!this.engine || this.engine.isHost || this.engine.inTournamentMode) return;
+    if (network.isPvpSession || network.isPvpFallback || dungeonId === 'tournament_colosseum' || dungeonId === 'tournament_arena') {
+      this.triggerTournamentJoinerTransition();
+      return;
+    }
 
     this.lastEnemySyncAt = performance.now();
 
@@ -1095,6 +1118,11 @@ export class SideViewGame {
 
   public loadDungeon(dungeonIndex: number, broadcastParty: boolean = false) {
     if (!this.engine || this.engine.inTournamentMode) return;
+    if (network.isPvpSession || network.isPvpFallback) {
+      console.warn('[PVP] Intercepted attempt to load PvE dungeon during PvP session! Routing to Tournament Arena.');
+      this.triggerTournamentJoinerTransition();
+      return;
+    }
     this.waveActive = false;
     this.engine.isVictoryOrWaveCleared = false;
     this.engine.isTownMode = false;
@@ -2008,7 +2036,10 @@ export class SideViewGame {
    */
   public showScreen(which: 'map' | 'lobby' | 'none') {
     if (which !== 'map') this.worldMap?.close();
-    if (which !== 'lobby') this.coopLobby?.close();
+    if (which !== 'lobby') {
+      this.coopLobby?.close();
+      this.tournamentLobby?.close();
+    }
     this.hud?.closePanels();
 
     if (which === 'map') {
@@ -2017,7 +2048,11 @@ export class SideViewGame {
         this.engine?.player.level || 1,
       );
     } else if (which === 'lobby') {
-      this.coopLobby?.open();
+      if (network.isPvpSession || network.isPvpFallback) {
+        this.openTournamentLobby();
+      } else {
+        this.coopLobby?.open();
+      }
     }
   }
 
@@ -2048,13 +2083,14 @@ export class SideViewGame {
     if (!this.engine || this.engine.inTournamentMode) return;
     console.log('[PVP] Auto-correcting Joiner from PvE Dungeon into Colosseum PvP Arena...');
     network.isPvpSession = true;
+    network.isPvpFallback = true;
     this.tournamentLobby?.close();
     this.worldMap?.close();
     this.dialogue?.close();
     this.coopLobby?.close();
 
     const pvpFmt = (extraSyncData?.pvpFormat || this.tournamentLobby?.currentFormat || network.currentLobbyState?.pvpFormat || '1v1') as any;
-    const matchTheme = (extraSyncData?.arenaTheme === 'tournament_arena' || extraSyncData?.dungeonId === 'tournament_arena')
+    const matchTheme = (extraSyncData?.arenaTheme === 'tournament_arena' || extraSyncData?.dungeonId === 'tournament_arena' || extraSyncData?.theme === 'tournament_arena')
       ? 'tournament_arena'
       : 'tournament_colosseum';
 
@@ -2090,9 +2126,32 @@ export class SideViewGame {
 
   public startTournamentMatch(match: TournamentMatch): void {
     if (!this.engine) return;
+    network.isPvpSession = true;
+    network.isPvpFallback = true;
     this.waveActive = false;
     this.engine.isVictoryOrWaveCleared = false;
     this.engine.isTownMode = false;
+    this.runController = null;
+    this.runRoomId = null;
+    this.encounter.reset();
+
+    if (this.voteWatchdogTimer) {
+      window.clearTimeout(this.voteWatchdogTimer);
+      this.voteWatchdogTimer = null;
+    }
+    if (this.waveClearTimer) {
+      window.clearTimeout(this.waveClearTimer);
+      this.waveClearTimer = null;
+    }
+    if (this.hostVoteTimer) {
+      window.clearTimeout(this.hostVoteTimer);
+      this.hostVoteTimer = null;
+    }
+    if (this.waveCompletionWatchdogTimer) {
+      window.clearTimeout(this.waveCompletionWatchdogTimer);
+      this.waveCompletionWatchdogTimer = null;
+    }
+
     this.hud?.setQuestTrackerInDungeon(false);
     this.hud?.setDungeonObjective(null);
     this.hud?.setDungeonRelics([]);
@@ -2102,6 +2161,18 @@ export class SideViewGame {
     this.engine.startTournament(match);
     audio.playDungeonBGM();
     this.hud?.showToast(`Tournament Arena: ${match.config.format.toUpperCase()} Match Started!`);
+
+    // Host periodically emits PvP handshake to keep all joiners synced
+    if (network.isHost) {
+      if (this.tournamentHostBroadcastInterval) {
+        window.clearInterval(this.tournamentHostBroadcastInterval);
+      }
+      this.tournamentHostBroadcastInterval = window.setInterval(() => {
+        if (this.engine?.inTournamentMode && network.isHost && network.room) {
+          network.broadcastPvpHandshake('tournament_colosseum', match.config.format);
+        }
+      }, 1500);
+    }
   }
 
   private interactInDungeon(): boolean {

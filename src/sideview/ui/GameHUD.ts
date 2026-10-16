@@ -4876,19 +4876,29 @@ export class GameHUD {
       box.style.color = '#fff';
       box.style.width = '350px';
 
+      const isPvpInvite = Boolean((inviteData as any)?.isPvp)
+        || inviteData?.dungeonId === 'tournament_colosseum'
+        || inviteData?.dungeonId === 'tournament_arena'
+        || Boolean(network.isPvpSession)
+        || Boolean(network.isPvpFallback);
+
       const title = document.createElement('h2');
       title.id = 'coop-invite-title';
       title.className = 'rpg-title';
-      title.innerText = 'CO-OP INVITE';
+      title.innerText = isPvpInvite ? 'COLOSSEUM DUEL' : 'CO-OP INVITE';
       title.style.margin = '0 0 10px 0';
-      title.style.color = '#ffd700';
+      title.style.color = isPvpInvite ? '#ff4d4d' : '#ffd700';
 
       const msg = document.createElement('p');
       const inviter = document.createElement('strong');
-      const dungeon = document.createElement('strong');
       inviter.textContent = String(inviteData.fromName || 'A fellow adventurer');
-      dungeon.textContent = String(inviteData.dungeonId || 'an expedition').toUpperCase().replaceAll('_', ' ');
-      msg.append(inviter, document.createTextNode(' has invited you to clear '), dungeon, document.createTextNode('.'));
+      if (isPvpInvite) {
+        msg.append(inviter, document.createTextNode(' has challenged you to a Tournament Arena Battle!'));
+      } else {
+        const dungeon = document.createElement('strong');
+        dungeon.textContent = String(inviteData.dungeonId || 'an expedition').toUpperCase().replaceAll('_', ' ');
+        msg.append(inviter, document.createTextNode(' has invited you to clear '), dungeon, document.createTextNode('.'));
+      }
       msg.style.marginBottom = '20px';
       msg.style.lineHeight = '1.5';
 
@@ -4932,10 +4942,14 @@ export class GameHUD {
         dismiss();
 
         // Join room and wait for dungeon_start
-        // Accepting puts you in the party LOBBY. The run begins only when the
-        // leader presses START, which arrives as dungeon_start below.
         network.acceptInvite(inviteData.roomId);
-        this.game?.showScreen('lobby');
+        if (isPvpInvite) {
+          network.isPvpSession = true;
+          network.isPvpFallback = true;
+          this.game?.openTournamentLobby();
+        } else {
+          this.game?.showScreen('lobby');
+        }
       };
 
       btnWrapper.appendChild(acceptBtn);

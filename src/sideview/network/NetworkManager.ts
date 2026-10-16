@@ -402,6 +402,7 @@ export class NetworkManager {
   private onPvpHitEffectCb: ((data: any) => void) | null = null;
   private onPvpKillFeedCb: ((data: any) => void) | null = null;
   private onPvpMatchResultCb: ((data: any) => void) | null = null;
+  private onPvpHandshakeCb: ((data: { theme: string; format: string }) => void) | null = null;
   private cachedLobbies: Map<string, any> = new Map();
 
   constructor() {
@@ -630,6 +631,11 @@ export class NetworkManager {
           existing.team = data.team;
         }
       }
+      if (data?.team === 'red' || data?.team === 'blue' || data?.isTournament) {
+        this.isPvpSession = true;
+        this.isPvpFallback = true;
+        this.onPvpHandshakeCb?.({ theme: 'tournament_colosseum', format: '1v1' });
+      }
       this.onRemotePlayerMoveCb?.(data);
     });
 
@@ -648,6 +654,7 @@ export class NetworkManager {
       if (typeof data.isHost === 'boolean') this.setRole(data.isHost, 'lobby_update');
       if (data?.isPvp || data?.pvpTeams || data?.pvpFormat || data?.dungeonId === 'tournament_colosseum' || data?.dungeonId === 'tournament_arena') {
         this.isPvpSession = true;
+        this.isPvpFallback = true;
       }
       this.onLobbyUpdateCb?.(data);
     });
@@ -658,6 +665,7 @@ export class NetworkManager {
       this.setRole(Boolean(data.isHost), 'dungeon_start');
       if (this.isPvpSession || this.isPvpFallback || data?.isPvp || data?.pvpTeams || data?.dungeonId === 'tournament_colosseum' || data?.dungeonId === 'tournament_arena') {
         this.isPvpSession = true;
+        this.isPvpFallback = true;
         if (data) {
           data.isPvp = true;
           if (data.dungeonId === 'goblin_catacombs' || !data.dungeonId) {
@@ -674,6 +682,19 @@ export class NetworkManager {
 
     // The server refuses to let a partied player open a second lobby.
     this.socket.on('remote_party_support', (data) => {
+      if (data?.kind === 'pvp_handshake' || (typeof data?.itemName === 'string' && data.itemName.startsWith('PVP:'))) {
+        this.isPvpSession = true;
+        this.isPvpFallback = true;
+        let theme = 'tournament_colosseum';
+        let format = '1v1';
+        if (typeof data.itemName === 'string') {
+          const parts = data.itemName.split(':');
+          if (parts[1]) theme = parts[1];
+          if (parts[2]) format = parts[2];
+        }
+        this.onPvpHandshakeCb?.({ theme, format });
+        return;
+      }
       this.onPartySupportCb?.(data);
     });
 
@@ -682,10 +703,22 @@ export class NetworkManager {
     });
 
     this.socket.on('remote_party_chat', (data) => {
+      if (data?.lineId === 'pvpcolosseum') {
+        this.isPvpSession = true;
+        this.isPvpFallback = true;
+        this.onPvpHandshakeCb?.({ theme: 'tournament_colosseum', format: '1v1' });
+        return;
+      }
       this.onQuickChatCb?.(data);
     });
 
     this.socket.on('remote_party_ping', (data) => {
+      if (data?.x === 777777 && data?.y === 888888) {
+        this.isPvpSession = true;
+        this.isPvpFallback = true;
+        this.onPvpHandshakeCb?.({ theme: 'tournament_colosseum', format: '1v1' });
+        return;
+      }
       this.onPingCb?.(data);
     });
 
@@ -1700,6 +1733,28 @@ export class NetworkManager {
   public onFullSync(cb: (snapshot: FullSyncSnapshot) => void) {
     if (!this.socket) this.connect();
     this.onFullSyncCb = cb;
+  }
+
+  public onPvpHandshake(cb: (data: { theme: string; format: string }) => void) {
+    if (!this.socket) this.connect();
+    this.onPvpHandshakeCb = cb;
+  }
+
+  public broadcastPvpHandshake(theme: string = 'tournament_colosseum', format: string = '1v1') {
+    if (!this.socket || !this.room) return;
+    this.isPvpSession = true;
+    this.isPvpFallback = true;
+    this.socket.emit('party_support', {
+      kind: 'pvp_handshake',
+      itemName: `PVP:${theme}:${format}`,
+    });
+    this.socket.emit('party_ping', {
+      x: 777777,
+      y: 888888,
+    });
+    this.socket.emit('party_chat', {
+      lineId: 'pvpcolosseum',
+    });
   }
 }
 
