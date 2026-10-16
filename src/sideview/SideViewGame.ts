@@ -535,7 +535,28 @@ export class SideViewGame {
         } else if (payload.kind === 'loot') {
           this.hud?.showToast?.(`${payload.casterName} found ${payload.itemName}!`);
         } else if (payload.kind === 'downed') {
-          this.hud?.showToast?.(`${payload.casterName || 'A teammate'} is down!`);
+          if (typeof payload.count === 'number') {
+            this.engine.teamLivesRemaining = Math.max(0, Math.min(SideViewEngine.MAX_TEAM_LIVES, payload.count));
+            this.engine.teamDeaths = SideViewEngine.MAX_TEAM_LIVES - this.engine.teamLivesRemaining;
+          } else {
+            this.engine.teamDeaths++;
+            this.engine.teamLivesRemaining = Math.max(0, SideViewEngine.MAX_TEAM_LIVES - this.engine.teamDeaths);
+          }
+          audio.playHit();
+          this.hud?.showToast(`${payload.casterName || 'Teammate'} is DOWN! (${this.engine.teamLivesRemaining}/3 Team Lives remaining)`);
+          this.engine.particles.addFloatingText(this.engine.player.x, this.engine.player.y - 70, `TEAM LIFE LOST! ${this.engine.teamLivesRemaining}/3 LEFT`, '#f87171', true, 18);
+
+          if (this.engine.player.downed) {
+            this.hud?.showToast('ALL PARTY MEMBERS DOWNED - DEFEATED!');
+            this.engine.runOver = true;
+            this.onRunLost();
+          }
+        } else if (payload.kind === 'team_defeat') {
+          this.engine.teamLivesRemaining = 0;
+          this.engine.teamDeaths = SideViewEngine.MAX_TEAM_LIVES;
+          this.hud?.showToast(`ALL 3 TEAM LIVES LOST! (${payload.casterName || 'Party'} fell) - DEFEATED`);
+          this.engine.runOver = true;
+          this.onRunLost();
         } else if (payload.kind === 'buff') {
           this.engine.applyPartyBuff(
             payload.stat,

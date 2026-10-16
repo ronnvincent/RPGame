@@ -58,7 +58,8 @@
     "test:simulate-all-dungeons": "node tools/simulate-all-dungeons.mjs",
     "test:modals": "node test/modal-exit-buttons.test.mjs",
     "test:survive-speed": "node test/survive-and-speed-balance.test.mjs",
-    "test:post-boss": "node --test test/post-boss-safety.test.mjs"
+    "test:post-boss": "node --test test/post-boss-safety.test.mjs",
+    "test:team-lives": "node --test test/global-team-lives.test.mjs"
   },
   "keywords": [],
   "author": "",

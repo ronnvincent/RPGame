@@ -1605,6 +1605,30 @@ export class GameHUD {
       }
       .ally-rail.has-allies { display: flex; }
 
+      .team-lives-badge {
+        display: none;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 8px;
+        width: 152px;
+        background: rgba(14, 10, 16, 0.85);
+        border: 1px solid rgba(239, 68, 68, 0.35);
+        border-radius: 3px;
+        font-size: 10px;
+        font-weight: 700;
+        color: #fca5a5;
+        letter-spacing: 0.5px;
+      }
+      .team-lives-badge.is-visible { display: flex; }
+      .team-lives-badge .lives-val {
+        margin-left: auto;
+        color: #4ade80;
+        font-size: 11px;
+      }
+      .team-lives-badge .lives-val.critical {
+        color: #ef4444;
+      }
+
       .ally {
         display: flex; align-items: center; gap: 6px;
         padding: 3px 7px;
@@ -3438,6 +3462,10 @@ export class GameHUD {
            are single-player, so there is nothing to copy. Without this the
            downed and revive system is invisible until you happen to walk past
            the body: you cannot answer "is anyone in trouble" from the screen. -->
+      <div class="team-lives-badge" id="team-lives-badge">
+        <span>TEAM LIVES</span>
+        <span class="lives-val" id="team-lives-val">3/3</span>
+      </div>
       <div class="ally-rail" id="ally-rail"></div>
 
       <!-- Combined Zone Banner and Objective Status -->
@@ -5415,6 +5443,18 @@ export class GameHUD {
     if (!rail || !this.engine) return;
 
     const ids = Object.keys(network.remotePlayers);
+    const livesBadge = this.hudNode('team-lives-badge');
+    const livesVal = this.hudNode('team-lives-val');
+    if (livesBadge && livesVal) {
+      const show = !this.engine.isTownMode && ids.length > 0;
+      livesBadge.classList.toggle('is-visible', show);
+      if (show) {
+        const remaining = Math.max(0, this.engine.teamLivesRemaining ?? 3);
+        livesVal.textContent = `${remaining}/3`;
+        livesVal.classList.toggle('critical', remaining <= 1);
+      }
+    }
+
     if (!ids.length) {
       if (rail.classList.contains('has-allies')) {
         rail.classList.remove('has-allies');
@@ -5631,7 +5671,10 @@ export class GameHUD {
     const fill = this.container.querySelector('#downed-fill') as HTMLElement;
     if (fill) fill.style.width = `${pct * 100}%`;
     const sub = this.container.querySelector('#downed-sub') as HTMLElement;
-    if (sub) sub.textContent = `${left.toFixed(0)}s - a teammate can still reach you`;
+    if (sub) {
+      const remaining = Math.max(0, this.engine.teamLivesRemaining ?? 3);
+      sub.textContent = `${left.toFixed(0)}s - a teammate can still reach you (${remaining}/3 Team Lives remaining)`;
+    }
   }
 
   private paintPotionSlot() {

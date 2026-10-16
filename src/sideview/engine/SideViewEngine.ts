@@ -427,6 +427,8 @@ export class SideViewEngine {
   public resetRunStats() {
     this.resetCombatScene();
     this.player.revivesUsed = 0;
+    this.teamLivesRemaining = SideViewEngine.MAX_TEAM_LIVES;
+    this.teamDeaths = 0;
     this.enemyStatuses.clear();
     this.playerNegativeStatuses.length = 0;
     this.enemyPlayerTargets.clear();
@@ -582,6 +584,9 @@ export class SideViewEngine {
     this.particles.projectiles = this.particles.projectiles.filter(p => p.fromPlayer);
     this.player.iframeTimer = Math.max(this.player.iframeTimer, 5.0);
   }
+  public static readonly MAX_TEAM_LIVES = 3;
+  public teamLivesRemaining: number = 3;
+  public teamDeaths: number = 0;
   /** Pure timing state for dodge/parry; rendering resolves through sprite ids. */
   private playerDefense: PlayerDefenseState = createPlayerDefenseState();
   /** One elemental reaction per cast/target/reaction, including multi-hit skills. */
@@ -3124,6 +3129,31 @@ export class SideViewEngine {
     p.animState = 'dead';
     p.hp = 0;
 
+    if (network.isPartied) {
+      this.teamDeaths++;
+      this.teamLivesRemaining = Math.max(0, SideViewEngine.MAX_TEAM_LIVES - this.teamDeaths);
+
+      if (this.canBeRevived() && this.teamLivesRemaining > 0) {
+        p.downed = true;
+        p.downTimer = SideViewEngine.BLEED_OUT_SECONDS;
+        p.revivesUsed = (p.revivesUsed || 0) + 1;
+        this.cancelDelayedCombatTasks();
+        audio.playHit();
+        this.particles.addFloatingText(p.x, p.y - 46, `DOWNED! ${this.teamLivesRemaining}/3 TEAM LIVES LEFT!`, '#ff6b6b', true, 18);
+        network.sendPartySupport({ kind: 'downed', casterName: this.playerName(), count: this.teamLivesRemaining });
+        return;
+      }
+
+      // 3rd death occurred -> automatic defeat for the party
+      this.runOver = true;
+      this.cancelDelayedCombatTasks();
+      audio.playHit();
+      this.particles.addFloatingText(p.x, p.y - 46, '3/3 TEAM DEATHS - DEFEAT!', '#ef4444', true, 22);
+      network.sendPartySupport({ kind: 'team_defeat', casterName: this.playerName(), count: 0 });
+      this.onRunLost?.();
+      return;
+    }
+
     if (this.canBeRevived()) {
       p.downed = true;
       p.downTimer = SideViewEngine.BLEED_OUT_SECONDS;
@@ -4639,7 +4669,10 @@ export class SideViewEngine {
    * having already been picked up once this run, a killing blow is final.
    */
   private canBeRevived(): boolean {
-    return network.isPartied && (this.player.revivesUsed || 0) < 1;
+    if (!network.isPartied) return false;
+    // Shared global party deaths: up to 3 total team deaths allowed per run
+    if (this.teamLivesRemaining <= 0) return false;
+    return this.teamLivesRemaining > 0 || (this.player.revivesUsed || 0) < 1;
   }
 
   /** The nearest downed teammate within reach, if any. */
@@ -4719,6 +4752,9 @@ export class SideViewEngine {
     if (this.runOver) return;
     this.runOver = true;
     this.cancelDelayedCombatTasks();
+    if (network.isPartied) {
+      network.sendPartySupport({ kind: 'team_defeat', casterName: this.playerName(), count: 0 });
+    }
     this.onRunLost?.();
   }
 

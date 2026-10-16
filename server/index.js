@@ -2052,7 +2052,7 @@ io.on('connection', (socket) => {
   // helped the caster made the support classes pointless in co-op.
   socket.on('party_support', (data = {}) => {
     const p = players[socket.id];
-    const kinds = new Set(['heal', 'buff', 'cleanse', 'downed', 'revive', 'loot']);
+    const kinds = new Set(['heal', 'buff', 'cleanse', 'downed', 'revive', 'loot', 'team_defeat']);
     const buffStats = new Set([
       'atk',
       'def',
@@ -2084,7 +2084,7 @@ io.on('connection', (socket) => {
       kind: data.kind,
       amount: finiteNumber(data.amount, 1, 100_000) ? data.amount : undefined,
       percent: validPercent ? data.percent : undefined,
-      count: finiteNumber(data.count, 1, 5) ? Math.round(data.count) : undefined,
+      count: finiteNumber(data.count, 0, 10) ? Math.round(data.count) : undefined,
       stat: buffStats.has(data.stat) ? data.stat : undefined,
       multiplier: finiteNumber(data.multiplier, 0.1, 3) ? data.multiplier : undefined,
       duration: finiteNumber(data.duration, 0.1, 30) ? data.duration : undefined,

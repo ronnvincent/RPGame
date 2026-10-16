@@ -866,7 +866,7 @@ export class NetworkManager {
    * healed nobody who needed it.
    */
   public sendPartySupport(payload: {
-    kind: 'heal' | 'buff' | 'cleanse' | 'downed' | 'revive' | 'loot';
+    kind: 'heal' | 'buff' | 'cleanse' | 'downed' | 'revive' | 'loot' | 'team_defeat';
     amount?: number;
     percent?: number;
     count?: number;
