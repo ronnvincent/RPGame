@@ -3636,6 +3636,9 @@ export class GameHUD {
               <button class="pause-tile" id="toggle-lobby-btn">
                 <img src="/assets/ui_sprites/icons/I_Map.png" alt="" /><span>Party Lobby</span>
               </button>
+              <button class="pause-tile" id="toggle-tournament-btn" title="Tournament Colosseum (1v1, 2v2, 3v3, 4v4)">
+                <img src="/assets/ui_sprites/icons/W_Sword001.png" alt="" /><span>PvP Colosseum</span>
+              </button>
               <button class="pause-tile" id="toggle-skills-btn">
                 <img src="/assets/ui_sprites/icons/S_Buff01.png" alt="" /><span>Skills</span>
               </button>
@@ -4231,6 +4234,12 @@ export class GameHUD {
       e.stopPropagation();
       this.closeHudDialog(pauseBack);
       this.game?.showScreen('lobby');
+    });
+
+    this.container.querySelector('#toggle-tournament-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.closeHudDialog(pauseBack);
+      this.game?.openTournamentLobby();
     });
     this.container.querySelector('#play-close-btn')?.addEventListener('click', () => {
       this.closeHudDialog(playBack);
