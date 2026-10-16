@@ -393,6 +393,10 @@ export class SideViewGame {
 
       mod.network.listenForPartyReturnTown((returnData) => {
         console.log('[NET] Received party_return_town:', returnData);
+        if (this.engine?.inTournamentMode) {
+          console.warn('[NET] Ignored party_return_town packet during active PvP Tournament.');
+          return;
+        }
         this.dialogue?.close();
         if (this.engine && returnData?.socketId && returnData.socketId !== 'unknown') {
           const isSelfReturn = returnData.socketId === mod.network.socket?.id;
@@ -427,13 +431,13 @@ export class SideViewGame {
         // this fired for any sender - including this client's own echo - which
         // stranded a guest in town while the host stayed in the dungeon.
         const isSelf = returnData?.socketId === mod.network.socket?.id;
-        if (returnData?.fromHost && !isSelf && !this.engine?.isTownMode) {
+        if (returnData?.fromHost === true && !isSelf && !this.engine?.isTownMode && !this.engine?.inTournamentMode) {
           this.loadTownHub(false);
         }
       });
 
       mod.network.listenForPartyNextDungeon((data) => {
-        if (!this.engine) return;
+        if (!this.engine || this.engine.inTournamentMode) return;
         console.log('[NET] Received party_next_dungeon from host:', data);
         this.dialogue?.close();
         if (this.currentDungeonIndex !== data.dungeonIndex || this.engine.isTownMode) {
@@ -442,7 +446,7 @@ export class SideViewGame {
       });
 
       mod.network.listenForWaveSync((data) => {
-        if (!this.engine) return;
+        if (!this.engine || this.engine.inTournamentMode) return;
 
         this.lastEnemySyncAt = performance.now();
         this.currentWaveIndex = data.waveIndex;
@@ -501,12 +505,13 @@ export class SideViewGame {
       });
 
       mod.network.listenForEnemySync((enemies, waveIndex, dungeonIndex, dungeonId) => {
+        if (this.engine?.inTournamentMode) return;
         this.applyEnemySnapshot(enemies, waveIndex, dungeonIndex, dungeonId);
       });
 
       // Host: a guest joined or reconnected and needs the whole world state.
       mod.network.onFullSyncRequest((requesterId) => {
-        if (!this.engine || !this.engine.isHost) return;
+        if (!this.engine || !this.engine.isHost || this.engine.inTournamentMode) return;
         const dungeon = DUNGEONS[this.currentDungeonIndex];
         mod.network.sendFullSync(requesterId, {
           waveIndex: this.currentWaveIndex,
@@ -520,7 +525,7 @@ export class SideViewGame {
 
       // Guest: apply the host's snapshot wholesale.
       mod.network.onFullSync((snapshot) => {
-        if (!this.engine || this.engine.isHost) return;
+        if (!this.engine || this.engine.isHost || this.engine.inTournamentMode) return;
         console.log('[NET] Applying full_sync from host:', snapshot.enemies?.length, 'enemies');
         this.applyEnemySnapshot(snapshot.enemies, snapshot.waveIndex, snapshot.dungeonIndex, snapshot.dungeonId);
         if (snapshot.runState) this.applyRunSnapshot(snapshot.runState);
@@ -528,7 +533,7 @@ export class SideViewGame {
       });
 
       mod.network.onRunSync((runState, encounterSnapshot) => {
-        if (!this.engine || this.engine.isHost) return;
+        if (!this.engine || this.engine.isHost || this.engine.inTournamentMode) return;
         this.applyRunSnapshot(runState);
         if (encounterSnapshot) this.applyEncounterSnapshot(encounterSnapshot);
       });
@@ -622,20 +627,21 @@ export class SideViewGame {
           || roomData?.dungeonId === 'tournament_arena'
           || roomData?.isPvp === true
           || Boolean(mod.network.currentLobbyState?.isPvp)
+          || Boolean(mod.network.isPvpFallback)
           || Boolean(this.tournamentLobby?.isOpen);
 
         if (isTournament) {
           this.tournamentLobby?.close();
           const pvpFmt = (this.tournamentLobby?.currentFormat || roomData?.pvpFormat || mod.network.currentLobbyState?.pvpFormat || '1v1') as any;
+          const matchTheme = roomData?.dungeonId === 'tournament_arena' ? 'tournament_arena' : 'tournament_colosseum';
           const match = new TournamentMatch({
             format: pvpFmt,
             roundsToWin: 2,
             roundDurationSec: 90,
-            mapTheme: roomData?.dungeonId === 'tournament_arena' ? 'tournament_arena' : 'tournament_colosseum',
+            mapTheme: matchTheme,
           });
           const localActorId = mod.network.getActorId();
           const members = roomData.players || mod.network.currentLobbyState?.members || [];
-          match.setupTeamsFromLobby(members, localActorId, pvpFmt);
           const myMember = members.find((m: any) => (m.actorId === localActorId || m.uuid === localActorId || m.socketId === mod.network.socket?.id));
           const assignedTeam = (roomData.pvpTeams && roomData.pvpTeams[localActorId])
             || myMember?.team
@@ -643,6 +649,7 @@ export class SideViewGame {
           if (this.engine) {
             this.engine.pvpTeam = assignedTeam;
           }
+          match.setupTeamsFromLobby(members, localActorId, pvpFmt, roomData.pvpTeams, assignedTeam);
           if (roomData.players) {
             for (const p of roomData.players) {
               if (p.socketId && mod.network.remotePlayers[p.socketId]) {
@@ -868,7 +875,8 @@ export class SideViewGame {
     audio.playTownBGM();
     this.hud?.showToast('Arrived at Haven of Eldermoor');
 
-    if (broadcastParty) {
+    const isTournament = this.engine.inTournamentMode;
+    if (broadcastParty && !isTournament) {
       Promise.resolve({ network }).then(mod => {
         mod.network.sendPartyReturnTown(this.engine!.player, this.engine!.groundY);
       });
@@ -883,7 +891,7 @@ export class SideViewGame {
    * so guest-side VFX and summoned minions that reference an enemy survive.
    */
   private applyEnemySnapshot(enemies: any[], waveIndex: number, dungeonIndex?: number, dungeonId?: string) {
-    if (!this.engine || this.engine.isHost) return;
+    if (!this.engine || this.engine.isHost || this.engine.inTournamentMode) return;
 
     this.lastEnemySyncAt = performance.now();
 
@@ -1023,7 +1031,7 @@ export class SideViewGame {
   }
 
   public loadDungeon(dungeonIndex: number, broadcastParty: boolean = false) {
-    if (!this.engine) return;
+    if (!this.engine || this.engine.inTournamentMode) return;
     this.waveActive = false;
     this.engine.isVictoryOrWaveCleared = false;
     this.engine.isTownMode = false;

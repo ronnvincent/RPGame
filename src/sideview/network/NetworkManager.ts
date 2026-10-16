@@ -374,6 +374,7 @@ export class NetworkManager {
   private onLobbyStateCb: ((state: LobbyState) => void) | null = null;
   private lobbyStateListeners: Set<(state: LobbyState) => void> = new Set();
   public currentLobbyState: LobbyState | null = null;
+  public isPvpFallback: boolean = false;
   private lastPvpCreateAttempt: any = null;
   private onLobbyLeftCb: (() => void) | null = null;
   private onFriendsCb: ((friends: FriendEntry[]) => void) | null = null;
@@ -701,6 +702,7 @@ export class NetworkManager {
         console.warn('[NET] Server does not yet have tournament_colosseum in min levels; seamlessly falling back to goblin_catacombs...');
         const prev = this.lastPvpCreateAttempt;
         this.lastPvpCreateAttempt = null;
+        this.isPvpFallback = true;
         this.createPvpLobby('goblin_catacombs', prev.format, prev.team, prev.proposedCode, prev.onUpdate);
         return;
       }
@@ -750,6 +752,7 @@ export class NetworkManager {
     this.socket.on('lobby_left', () => {
       this.setRoom(null);
       this.currentLobbyState = null;
+      this.isPvpFallback = false;
       this.isHost = true;
       this.onLobbyLeftCb?.();
     });
@@ -1202,6 +1205,10 @@ export class NetworkManager {
 
   public sendPartyReturnTown(playerState: PlayerState, groundY: number) {
     if (!this.socket || !this.room) return;
+    if (this.currentLobbyState?.isPvp || this.isPvpFallback) {
+      console.warn('[NET] Suppressed automatic sendPartyReturnTown in PvP Colosseum session.');
+      return;
+    }
     const payload = {
       x: playerState.x,
       y: this.toNetworkY(playerState.y, groundY),

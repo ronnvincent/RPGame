@@ -581,8 +581,11 @@ const DUNGEON_MIN_LEVELS = Object.freeze({
   castle_approach: 13,
   void_nexus: 14,
   endless_arena: 16,
-  tournament_arena: 1,
+});
+
+const PVP_ARENA_MIN_LEVELS = Object.freeze({
   tournament_colosseum: 1,
+  tournament_arena: 1,
 });
 
 function socketIdForActor(actorId) {
@@ -1449,10 +1452,12 @@ io.on('connection', (socket) => {
        return;
     }
     const isPvp = Boolean(data.isPvp);
-    const dungeonId = (isPvp && (!data.dungeonId || !DUNGEON_MIN_LEVELS[data.dungeonId]))
-      ? 'tournament_colosseum'
+    const dungeonId = isPvp
+      ? (data.dungeonId || 'tournament_colosseum')
       : data.dungeonId;
-    const canonicalMinLevel = DUNGEON_MIN_LEVELS[dungeonId];
+    const canonicalMinLevel = isPvp
+      ? (PVP_ARENA_MIN_LEVELS[dungeonId] ?? DUNGEON_MIN_LEVELS[dungeonId] ?? 1)
+      : (DUNGEON_MIN_LEVELS[dungeonId] ?? PVP_ARENA_MIN_LEVELS[dungeonId]);
     if (!Number.isInteger(canonicalMinLevel)) {
       socket.emit('lobby_error', { msg: 'Invalid dungeon.' });
       return;
@@ -1479,12 +1484,11 @@ io.on('connection', (socket) => {
 
     const newRoomId = `room_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
     const roomCode = generateShortRoomCode(data.proposedCode);
-    const isPvp = Boolean(data.isPvp);
     const pvpFormat = ['1v1', '2v2', '3v3', '4v4'].includes(data.pvpFormat) ? data.pvpFormat : '1v1';
     const initialTeam = data.team === 'blue' ? 'blue' : 'red';
 
     rooms[newRoomId] = {
-      dungeonId: data.dungeonId,
+      dungeonId,
       // Sent by the host's client from the dungeon definition, so there is one
       // source of truth for the requirement rather than a copy here that can
       // fall behind.
@@ -1505,7 +1509,7 @@ io.on('connection', (socket) => {
     socket.emit('lobby_update', {
       roomId: newRoomId,
       roomCode,
-      dungeonId: data.dungeonId,
+      dungeonId,
       isHost: true,
       players: [ { name: p.name, shortId: p.shortId } ]
     });
@@ -2478,7 +2482,7 @@ io.on('connection', (socket) => {
     const p = players[socket.id];
     if (!isRoomHost(p)) return;
     if (!safeId(data.dungeonId, 64) || !Number.isInteger(data.dungeonIndex) || data.dungeonIndex < 0 || data.dungeonIndex > 10000) return;
-    if (!Object.hasOwn(DUNGEON_MIN_LEVELS, data.dungeonId)) return;
+    if (!Object.hasOwn(DUNGEON_MIN_LEVELS, data.dungeonId) && !Object.hasOwn(PVP_ARENA_MIN_LEVELS, data.dungeonId)) return;
     const room = rooms[p.room];
     if (!room) return;
     room.dungeonId = data.dungeonId;

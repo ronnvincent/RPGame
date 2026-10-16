@@ -213,9 +213,11 @@ export class TournamentMatch {
   }
 
   public setupTeamsFromLobby(
-    members: { actorId?: string; uuid?: string; name: string; classId?: string | null; team?: 'red' | 'blue' }[],
+    members: { actorId?: string; uuid?: string; name: string; classId?: string | null; team?: 'red' | 'blue'; socketId?: string }[],
     localActorId: string,
-    format: TournamentFormat = this.config.format
+    format: TournamentFormat = this.config.format,
+    pvpTeams?: Record<string, 'red' | 'blue'>,
+    assignedTeam?: 'red' | 'blue'
   ): void {
     this.config.format = format;
     this.fighters = [];
@@ -223,12 +225,16 @@ export class TournamentMatch {
     let blueIndex = 0;
 
     for (const m of members) {
-      const id = m.actorId || m.uuid || `actor_${Math.random()}`;
-      const isLocal = id === localActorId;
-      const team: TournamentTeam = m.team === 'blue' ? 'blue' : 'red';
+      const id = m.actorId || m.uuid || m.socketId || `actor_${Math.random()}`;
+      const isLocal = id === localActorId || m.uuid === localActorId || (Boolean(m.socketId) && m.socketId === localActorId);
+      let team: TournamentTeam = (pvpTeams && (pvpTeams[m.actorId || ''] || pvpTeams[m.uuid || '']))
+        || m.team
+        || (isLocal ? (assignedTeam || 'red') : 'blue');
+      if (team !== 'red' && team !== 'blue') team = 'blue';
+
       const className = m.classId || 'warrior';
       const hp = getNormalizedPvpBaseHp(className);
-      const spawnX = team === 'red' ? (480 + redIndex * 70) : (1620 - blueIndex * 70);
+      const spawnX = team === 'red' ? (480 + redIndex * 70) : (2950 - blueIndex * 70);
       if (team === 'red') redIndex++;
       else blueIndex++;
 
@@ -252,6 +258,60 @@ export class TournamentMatch {
         lastCcTime: 0,
         ccImmunityUntil: 0,
       });
+    }
+
+    const teamSize = TOURNAMENT_FORMAT_TEAM_SIZES[format] || 1;
+
+    // Balance teams if all human participants were placed on the same team
+    const initialRed = this.fighters.filter(f => f.team === 'red');
+    const initialBlue = this.fighters.filter(f => f.team === 'blue');
+
+    if (initialBlue.length === 0 && this.fighters.length >= 2) {
+      const opponent = this.fighters.find(f => !f.isLocal);
+      if (opponent) {
+        opponent.team = 'blue';
+        opponent.x = 2950;
+      }
+    } else if (initialRed.length === 0 && this.fighters.length >= 2) {
+      const opponent = this.fighters.find(f => !f.isLocal);
+      if (opponent) {
+        opponent.team = 'red';
+        opponent.x = 480;
+      }
+    }
+
+    // If opponent team is still completely empty (e.g. 1-player testing or bot battle), spawn bot gladiators
+    if (this.fighters.filter(f => f.team === 'blue').length === 0) {
+      const enemyArchetypes = [
+        { name: 'Gladiator Marcus', class: 'warrior' },
+        { name: 'Valkyrie Freya', class: 'heroknight' },
+        { name: 'Shadowblade Kael', class: 'nightborne' },
+        { name: 'Archmage Zephyr', class: 'wizard' },
+      ];
+      for (let i = 0; i < teamSize; i++) {
+        const arch = enemyArchetypes[i % enemyArchetypes.length];
+        const hp = getNormalizedPvpBaseHp(arch.class);
+        this.fighters.push({
+          id: `blue_bot_${i}`,
+          name: arch.name,
+          team: 'blue',
+          isLocal: false,
+          isBot: true,
+          className: arch.class,
+          maxHp: hp,
+          currentHp: hp,
+          kills: 0,
+          damageDealt: 0,
+          isAlive: true,
+          x: 2950 - i * 70,
+          y: 0,
+          antiBurstUntil: 0,
+          recentDamageTaken: [],
+          ccCount: 0,
+          lastCcTime: 0,
+          ccImmunityUntil: 0,
+        });
+      }
     }
   }
 
@@ -399,14 +459,19 @@ export class TournamentMatch {
     if (this.status === 'active') {
       this.roundTimeRemaining -= dt;
 
-      // Check win condition: Team Wipe
+      // Check win condition: Team Wipe (only after at least 3.0s elapsed into active combat)
+      const totalRed = this.fighters.filter(f => f.team === 'red').length;
+      const totalBlue = this.fighters.filter(f => f.team === 'blue').length;
       const redAlive = this.fighters.filter(f => f.team === 'red' && f.isAlive).length;
       const blueAlive = this.fighters.filter(f => f.team === 'blue' && f.isAlive).length;
+      const roundElapsed = this.config.roundDurationSec - this.roundTimeRemaining;
 
-      if (redAlive === 0 || blueAlive === 0) {
-        const roundWinner: TournamentTeam | 'draw' = redAlive > 0 ? 'red' : blueAlive > 0 ? 'blue' : 'draw';
-        this.resolveRoundEnd(roundWinner, 'wipe');
-        return;
+      if (totalRed > 0 && totalBlue > 0 && roundElapsed >= 3.0) {
+        if (redAlive === 0 || blueAlive === 0) {
+          const roundWinner: TournamentTeam | 'draw' = redAlive > 0 ? 'red' : blueAlive > 0 ? 'blue' : 'draw';
+          this.resolveRoundEnd(roundWinner, 'wipe');
+          return;
+        }
       }
 
       // Check win condition: Timeout Health Lead

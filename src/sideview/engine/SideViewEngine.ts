@@ -6512,9 +6512,12 @@ export class SideViewEngine {
     }
 
     // Sync real remote fighters from NetworkManager
+    const remoteList = Object.values(network.remotePlayers);
     for (const fighter of match.fighters) {
       if (fighter.isLocal) continue;
-      const remote = network.remotePlayers[fighter.id];
+      const remote = network.remotePlayers[fighter.id]
+        || remoteList.find(r => r.actorId === fighter.id || (Boolean(r.name) && r.name === fighter.name))
+        || (match.config.format === '1v1' && remoteList.length === 1 ? remoteList[0] : undefined);
       if (remote) {
         fighter.x = remote.x;
         fighter.isAlive = !remote.downed && (remote.hpPct === undefined || remote.hpPct > 0);
@@ -6527,11 +6530,17 @@ export class SideViewEngine {
 
     // Check round wipe condition in active state
     if (match.status === 'active') {
+      const totalRed = match.fighters.filter(f => f.team === 'red').length;
+      const totalBlue = match.fighters.filter(f => f.team === 'blue').length;
       const redAlive = match.fighters.filter(f => f.team === 'red' && f.isAlive).length;
       const blueAlive = match.fighters.filter(f => f.team === 'blue' && f.isAlive).length;
-      if (redAlive === 0 || blueAlive === 0) {
-        const roundWinner = redAlive > 0 ? 'red' : blueAlive > 0 ? 'blue' : 'draw';
-        match.resolveRoundEnd(roundWinner, 'wipe');
+      const roundElapsed = match.config.roundDurationSec - match.roundTimeRemaining;
+
+      if (totalRed > 0 && totalBlue > 0 && roundElapsed >= 3.0) {
+        if (redAlive === 0 || blueAlive === 0) {
+          const roundWinner = redAlive > 0 ? 'red' : blueAlive > 0 ? 'blue' : 'draw';
+          match.resolveRoundEnd(roundWinner, 'wipe');
+        }
       }
     }
 
