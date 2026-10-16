@@ -631,14 +631,27 @@ export class SideViewGame {
             format: pvpFmt,
             roundsToWin: 2,
             roundDurationSec: 90,
-            mapTheme: 'tournament_colosseum',
+            mapTheme: roomData?.dungeonId === 'tournament_arena' ? 'tournament_arena' : 'tournament_colosseum',
           });
           const localActorId = mod.network.getActorId();
           const members = roomData.players || mod.network.currentLobbyState?.members || [];
           match.setupTeamsFromLobby(members, localActorId, pvpFmt);
           const myMember = members.find((m: any) => (m.actorId === localActorId || m.uuid === localActorId || m.socketId === mod.network.socket?.id));
+          const assignedTeam = (roomData.pvpTeams && roomData.pvpTeams[localActorId])
+            || myMember?.team
+            || (mod.network.isHost ? 'red' : 'blue');
           if (this.engine) {
-            this.engine.pvpTeam = myMember?.team || 'red';
+            this.engine.pvpTeam = assignedTeam;
+          }
+          if (roomData.players) {
+            for (const p of roomData.players) {
+              if (p.socketId && mod.network.remotePlayers[p.socketId]) {
+                mod.network.remotePlayers[p.socketId].team = p.team
+                  || (roomData.pvpTeams && roomData.pvpTeams[p.actorId])
+                  || (p.actorId === localActorId ? assignedTeam : (assignedTeam === 'red' ? 'blue' : 'red'));
+                mod.network.remotePlayers[p.socketId].actorId = p.actorId;
+              }
+            }
           }
           this.startTournamentMatch(match);
           return;

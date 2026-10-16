@@ -75,7 +75,7 @@ export function getZonePresentationMetrics(
   layer: ZonePresentationLayer,
   options: ZonePresentationOptions = {},
 ): ZonePresentationMetrics {
-  const profile = getZoneContent(theme).atmosphere;
+  const profile = (getZoneContent(theme) || getZoneContent('castle_approach')).atmosphere;
   const quality = options.quality ?? 'balanced';
   if (layer === 'above-entities') {
     const frameShapes = ZONE_PRESENTATION_BUDGETS.frameShapes;
@@ -482,7 +482,7 @@ export function drawZonePresentation(
   const height = Math.max(0, Number.isFinite(viewportHeight) ? viewportHeight : 0);
   if (!width || !height) return { ...metrics, motes: 0, shafts: 0, fogBands: 0, frameShapes: 0, totalPrimitives: 0 };
 
-  const profile = getZoneContent(theme).atmosphere;
+  const profile = (getZoneContent(theme) || getZoneContent('castle_approach')).atmosphere;
   const elapsed = options.reducedMotion
     ? 0
     : positiveModulo(options.elapsedSeconds ?? 0, 4_096);

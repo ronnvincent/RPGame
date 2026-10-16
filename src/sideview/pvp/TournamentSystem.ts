@@ -228,7 +228,7 @@ export class TournamentMatch {
       const team: TournamentTeam = m.team === 'blue' ? 'blue' : 'red';
       const className = m.classId || 'warrior';
       const hp = getNormalizedPvpBaseHp(className);
-      const spawnX = team === 'red' ? (450 + redIndex * 120) : (2950 - blueIndex * 120);
+      const spawnX = team === 'red' ? (480 + redIndex * 70) : (1620 - blueIndex * 70);
       if (team === 'red') redIndex++;
       else blueIndex++;
 
@@ -274,7 +274,7 @@ export class TournamentMatch {
       kills: 0,
       damageDealt: 0,
       isAlive: true,
-      x: 750,
+      x: 480,
       y: 0,
       antiBurstUntil: 0,
       recentDamageTaken: [],
@@ -304,7 +304,7 @@ export class TournamentMatch {
         kills: 0,
         damageDealt: 0,
         isAlive: true,
-        x: 750 - i * 90,
+        x: 480 - i * 70,
         y: 0,
         antiBurstUntil: 0,
         recentDamageTaken: [],
@@ -336,7 +336,7 @@ export class TournamentMatch {
         kills: 0,
         damageDealt: 0,
         isAlive: true,
-        x: 1350 + i * 90,
+        x: 1620 - i * 70,
         y: 0,
         antiBurstUntil: 0,
         recentDamageTaken: [],

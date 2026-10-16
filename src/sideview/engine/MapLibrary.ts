@@ -532,7 +532,6 @@ export const MAPS: Record<string, MapTheme> = {
       { src: `${GOTHIC_PATREON}/night-town-background-mountains-lights.png`, scroll: 0.20, anchor: 'horizon', heightFrac: 0.85, alpha: 0.8 },
       { src: `${GOTHIC_PATREON}/night-town-background-far-buildings.png`, scroll: 0.38, anchor: 'horizon', heightFrac: 0.40 },
       { src: `${GOTHIC_PATREON}/night-town-background-forest.png`, scroll: 0.58, anchor: 'horizon', heightFrac: 0.45 },
-      { src: `${GOTHIC_PATREON}/night-town-background-town.png`, scroll: 1.0, anchor: 'horizon', heightFrac: 0.48 },
     ],
   },
 

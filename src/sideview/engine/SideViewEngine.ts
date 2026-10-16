@@ -2360,7 +2360,7 @@ export class SideViewEngine {
 
         const dx = remoteP.x - p.x;
         const forward = dx * p.facing;
-        const effectiveRadius = Math.max(skill.aoeRadius || 60, skill.range * 0.65 || 80);
+        const effectiveRadius = Math.max(skill.aoeRadius || 60, skill.range * 0.65 || 80, 75);
         if (Math.abs(remoteP.x - centerX) <= effectiveRadius + 28 || (forward >= -15 && forward <= effectiveRadius + 28)) {
           this.applyPvpAttackHitToRemotePlayer(socketId, remoteP, damage, rolledCrit, skill.name);
           this.player.comboCount++;
@@ -6411,7 +6411,7 @@ export class SideViewEngine {
     this.inTournamentMode = true;
     this.tournamentMatch = match;
     this.isTownMode = false;
-    this.setBattleTheme('tournament_arena' as any);
+    this.setBattleTheme((match.config.mapTheme as any) || 'tournament_arena');
 
     if (this.canvasHeight > 0) {
       this.groundY = Math.round(this.canvasHeight - 20);
@@ -6427,7 +6427,7 @@ export class SideViewEngine {
     this.player.maxHp = normalizedHp;
     this.player.hp = normalizedHp;
     this.player.downed = false;
-    this.player.x = this.pvpTeam === 'blue' ? 2950 : 750;
+    this.player.x = this.pvpTeam === 'blue' ? 1620 : 480;
     this.player.facing = this.pvpTeam === 'blue' ? -1 : 1;
     this.player.y = this.groundY;
     this.player.vx = 0;
@@ -6485,7 +6485,7 @@ export class SideViewEngine {
       this.player.hp = normalizedHp;
       this.player.downed = false;
       this.player.animState = 'idle';
-      this.player.x = this.pvpTeam === 'blue' ? 2950 : 750;
+      this.player.x = this.pvpTeam === 'blue' ? 1620 : 480;
       this.player.facing = this.pvpTeam === 'blue' ? -1 : 1;
       this.player.y = this.groundY;
       this.player.vx = 0;
@@ -6568,7 +6568,7 @@ export class SideViewEngine {
     audio.playHit(isCrit);
 
     network.sendPvpAttackHit({
-      targetActorId: socketId,
+      targetActorId: remoteP.actorId || socketId,
       damage: finalDmg,
       isCrit,
       skillName,

@@ -429,7 +429,7 @@ export const ZONE_CONTENT = Object.freeze(
 );
 
 export function getZoneContent(theme: BattleTheme): ZoneContentDefinition {
-  return ZONE_CONTENT[theme];
+  return ZONE_CONTENT[theme] || ZONE_CONTENT['castle_approach'] || ZONE_CONTENT['town'];
 }
 
 function stableHash(value: string): number {

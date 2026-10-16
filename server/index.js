@@ -2004,15 +2004,16 @@ io.on('connection', (socket) => {
     if (!room || !room.isPvp || !room.started) return;
     if (!safeId(data.targetActorId)) return;
 
-    const targetPlayer = playersByActor[data.targetActorId];
+    const targetPlayer = playersByActor[data.targetActorId] || players[data.targetActorId];
     if (!targetPlayer || targetPlayer.room !== p.room) return;
 
-    const attackerTeam = (room.pvpTeams && room.pvpTeams[p.actorId]) || 'red';
-    const targetTeam = (room.pvpTeams && room.pvpTeams[data.targetActorId]) || 'red';
+    const targetActorId = targetPlayer.actorId;
+    const attackerTeam = (room.pvpTeams && room.pvpTeams[p.actorId]) || (p.actorId === room.hostActorId ? 'red' : 'blue');
+    const targetTeam = (room.pvpTeams && room.pvpTeams[targetActorId]) || (targetActorId === room.hostActorId ? 'red' : 'blue');
     if (attackerTeam === targetTeam) return; // Strict No Friendly Fire
 
     const dmg = Math.max(1, Math.min(999999, Math.round(Number(data.damage) || 1)));
-    const targetSid = socketIdForActor(data.targetActorId);
+    const targetSid = targetPlayer.socketId || socketIdForActor(targetActorId);
     if (targetSid) {
       io.to(targetSid).emit('pvp_hit_received', {
         attackerActorId: p.actorId,
@@ -2029,7 +2030,7 @@ io.on('connection', (socket) => {
     // Broadcast visual effect to spectators & other combatants in the arena
     socket.to(p.room).emit('pvp_hit_effect', {
       attackerActorId: p.actorId,
-      targetActorId: data.targetActorId,
+      targetActorId,
       damage: dmg,
       isCrit: !!data.isCrit,
       hitX: Number(data.hitX) || 0,
@@ -2432,6 +2433,8 @@ io.on('connection', (socket) => {
     p.sceneId = sceneId;
     socket.to(p.room).emit('remote_player_move', {
       socketId: socket.id,
+      actorId: p.actorId,
+      team: (room.pvpTeams && room.pvpTeams[p.actorId]) || (p.actorId === room.hostActorId ? 'red' : 'blue'),
       classId,
       name: p.name,
       x: data.x,

@@ -66,6 +66,7 @@ export interface RunStats {
 }
 
 export interface RemotePlayerState {
+  actorId?: string;
   classId?: string;
   name: string;
   x: number;
@@ -575,6 +576,8 @@ export class NetworkManager {
       const existing = this.remotePlayers[data.socketId];
       if (!existing) {
         this.remotePlayers[data.socketId] = {
+          actorId: data.actorId,
+          team: data.team,
           classId: data.classId,
           name: data.name || 'Player',
           x: data.x, y: data.y, facing: data.facing,
@@ -591,6 +594,8 @@ export class NetworkManager {
           targetY: data.y
         };
       } else {
+        if (data.actorId) existing.actorId = data.actorId;
+        if (data.team) existing.team = data.team;
         existing.classId = data.classId;
         existing.name = data.name || existing.name;
         const environmentChanged = existing.isTownMode !== !!data.isTownMode;
