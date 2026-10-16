@@ -29,6 +29,7 @@ import {
   network,
   type PlayerDamagePacket,
   type PlayerDamageStatus,
+  type RemotePlayerState,
 } from '../network/NetworkManager';
 import { quickChatById } from '../network/QuickChat';
 import {
@@ -421,6 +422,13 @@ export class SideViewEngine {
   private delayedCombatTasks = new Set<number>();
   /** Set when the run has been lost, so defeat is announced exactly once. */
   public runOver = false;
+  public inTournamentMode: boolean = false;
+  public tournamentMatch: TournamentMatch | null = null;
+  public pvpTeam: 'red' | 'blue' = 'red';
+  private lastTournamentRound: number = 0;
+  private tournamentEndTimer: number | null = null;
+  private originalPlayerHpStats: { hp: number; maxHp: number } | null = null;
+  public onTournamentEnded?: () => void;
 
   // What you actually did this run. Nothing tracked contribution before, so a
   // finished dungeon said nothing about who carried it - and a co-op run with
@@ -563,12 +571,6 @@ export class SideViewEngine {
   /** Runs the slow-motion / freeze / declaration sequence for ultimates. */
   public readonly ultimate = new UltimateDirector();
   public battleTheme: BattleTheme = 'catacombs';
-  public tournamentMatch: TournamentMatch | null = null;
-  public inTournamentMode: boolean = false;
-  public onTournamentEnded: (() => void) | null = null;
-  private originalPlayerHpStats: { hp: number; maxHp: number } | null = null;
-  private tournamentEndTimer: number | null = null;
-  private lastTournamentRound: number = 0;
   private zoneHazards: BuiltZoneHazard[] = [];
   private zoneHazardClock = 0;
   private readonly zoneHazardLastDamageMs = new Map<string, number>();
@@ -2340,6 +2342,31 @@ export class SideViewEngine {
       this.player.comboCount++;
       this.player.comboTimer = 3;
       quests.onComboReached(this.player.comboCount);
+    }
+
+    // PvP Opponent Hit Detection against real connected players
+    if (this.inTournamentMode) {
+      const p = this.player;
+      for (const socketId in network.remotePlayers) {
+        const remoteP = network.remotePlayers[socketId];
+        if (remoteP.isTownMode || remoteP.downed) continue;
+        const myTeam = this.pvpTeam || 'red';
+        const oppTeam = remoteP.team || (myTeam === 'red' ? 'blue' : 'red');
+        if (oppTeam === myTeam) continue;
+
+        const remoteWorldY = remoteP.y + this.groundY;
+        const vertical = Math.abs((remoteWorldY - 24) - centerY);
+        if (vertical > 140) continue;
+
+        const dx = remoteP.x - p.x;
+        const forward = dx * p.facing;
+        const effectiveRadius = Math.max(skill.aoeRadius || 60, skill.range * 0.65 || 80);
+        if (Math.abs(remoteP.x - centerX) <= effectiveRadius + 28 || (forward >= -15 && forward <= effectiveRadius + 28)) {
+          this.applyPvpAttackHitToRemotePlayer(socketId, remoteP, damage, rolledCrit, skill.name);
+          this.player.comboCount++;
+          this.player.comboTimer = 3;
+        }
+      }
     }
   }
 
@@ -5347,6 +5374,25 @@ export class SideViewEngine {
             }
           }
         }
+
+        // PvP Projectile Hit Detection against opposing players
+        if (this.inTournamentMode) {
+          const myTeam = this.pvpTeam || 'red';
+          for (const socketId in network.remotePlayers) {
+            const remoteP = network.remotePlayers[socketId];
+            if (remoteP.isTownMode || remoteP.downed) continue;
+            const oppTeam = remoteP.team || (myTeam === 'red' ? 'blue' : 'red');
+            if (oppTeam === myTeam) continue;
+            const remoteWorldY = remoteP.y + this.groundY;
+            const dist = Math.hypot(remoteP.x - proj.x, (remoteWorldY - 24) - proj.y);
+            if (dist <= proj.radius + 28) {
+              this.applyPvpAttackHitToRemotePlayer(socketId, remoteP, proj.damage || 50, proj.isCrit, 'Shot');
+              this.particles.completeProjectile(proj, remoteP.x, remoteWorldY - 18);
+              this.particles.removeProjectileAt(i);
+              break;
+            }
+          }
+        }
       }
     }
   }
@@ -5988,10 +6034,22 @@ export class SideViewEngine {
 
     if (this.inTournamentMode) {
       ctx.save();
-      ctx.font = 'bold 10px monospace';
-      ctx.fillStyle = '#fca5a5';
+      const myTeam = this.pvpTeam || 'red';
+      const myText = myTeam === 'red' ? '#fca5a5' : '#93c5fd';
+      ctx.font = 'bold 11px "Outfit", sans-serif';
+      ctx.fillStyle = myText;
+      ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+      ctx.lineWidth = 3;
       ctx.textAlign = 'center';
-      ctx.fillText('[RED] ' + (p.name || p.characterClass?.name || 'Hero'), p.x, p.y - p.height - 18);
+      const label = `[${myTeam === 'red' ? 'RED' : 'BLUE'}] ${p.name || p.characterClass?.name || 'Hero'}`;
+      ctx.strokeText(label, p.x, p.y - p.height - 18);
+      ctx.fillText(label, p.x, p.y - p.height - 18);
+
+      // Glowing Ground Aura
+      ctx.fillStyle = myTeam === 'red' ? 'rgba(239, 68, 68, 0.22)' : 'rgba(59, 130, 246, 0.22)';
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, 28, 8, 0, 0, Math.PI * 2);
+      ctx.fill();
       ctx.restore();
     }
 
@@ -6003,9 +6061,25 @@ export class SideViewEngine {
         // Only render remote player if they are in the same environment (Town vs Dungeon)
         if (Boolean(remoteP.isTownMode) !== Boolean(this.isTownMode)) continue;
 
+        const isPvp = this.inTournamentMode;
+        const rTeam = remoteP.team || (this.pvpTeam === 'red' ? 'blue' : 'red');
+        const teamColor = rTeam === 'red' ? '#ef4444' : '#3b82f6';
+        const teamText = rTeam === 'red' ? '#fca5a5' : '#93c5fd';
+        const teamGlow = rTeam === 'red' ? 'rgba(239, 68, 68, 0.8)' : 'rgba(59, 130, 246, 0.8)';
+
         ctx.save();
         ctx.globalAlpha = 0.95;
-        ctx.filter = 'drop-shadow(0 0 6px rgba(79, 173, 229, 0.7))'; // subtle blue glow
+        ctx.filter = `drop-shadow(0 0 6px ${isPvp ? teamGlow : 'rgba(79, 173, 229, 0.7)'})`;
+
+        // Ground Team Aura
+        if (isPvp) {
+          ctx.save();
+          ctx.fillStyle = rTeam === 'red' ? 'rgba(239, 68, 68, 0.22)' : 'rgba(59, 130, 246, 0.22)';
+          ctx.beginPath();
+          ctx.ellipse(remoteP.x, remoteP.y + this.groundY, 28, 8, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
         
         const rAnimState = (remoteP.animState || 'idle') as 'idle' | 'run' | 'attack' | 'jump' | 'dead';
         const rIsRun = rAnimState === 'run';
@@ -6019,22 +6093,36 @@ export class SideViewEngine {
           rAnimState,
           remoteP.facing,
           remoteP.isAttacking ? 0.2 : 0,
-          '#4fade5',
+          isPvp ? teamColor : '#4fade5',
           remoteP.lastSkillIndex ?? 0
         );
         
-        // Remote Name
+        // Remote Name & Team Plate
         ctx.globalAlpha = 1.0;
         ctx.filter = 'none';
         ctx.font = 'bold 11px "Outfit", sans-serif';
-        ctx.fillStyle = '#4fade5';
-        ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillStyle = isPvp ? teamText : '#4fade5';
+        ctx.strokeStyle = 'rgba(0,0,0,0.8)';
         ctx.lineWidth = 3;
         ctx.textAlign = 'center';
-        const nameText = remoteP.name || 'Player';
+        const nameText = isPvp ? `[${rTeam.toUpperCase()}] ${remoteP.name || 'Gladiator'}` : (remoteP.name || 'Player');
         const nameY = remoteP.y + this.groundY - 45;
         ctx.strokeText(nameText, remoteP.x, nameY);
         ctx.fillText(nameText, remoteP.x, nameY);
+
+        // Overhead HP bar in PvP
+        if (isPvp) {
+          const rHpPct = typeof remoteP.hpPct === 'number' ? Math.max(0, Math.min(1, remoteP.hpPct)) : (remoteP.downed ? 0 : 1);
+          const barW = 44;
+          const barH = 5;
+          const barX = remoteP.x - barW / 2;
+          const barY = remoteP.y + this.groundY - 58;
+
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+          ctx.fillRect(barX, barY, barW, barH);
+          ctx.fillStyle = teamColor;
+          ctx.fillRect(barX, barY, barW * rHpPct, barH);
+        }
         
         ctx.restore();
       }
@@ -6339,11 +6427,11 @@ export class SideViewEngine {
     this.player.maxHp = normalizedHp;
     this.player.hp = normalizedHp;
     this.player.downed = false;
-    this.player.x = 750;
+    this.player.x = this.pvpTeam === 'blue' ? 2950 : 750;
+    this.player.facing = this.pvpTeam === 'blue' ? -1 : 1;
     this.player.y = this.groundY;
     this.player.vx = 0;
     this.player.vy = 0;
-    this.player.facing = 1;
     this.player.isGrounded = true;
     this.player.hasJumpedOnce = false;
 
@@ -6362,46 +6450,9 @@ export class SideViewEngine {
     ];
     this.zoneHazards = [];
 
-    // Clear existing PvE enemies & projectiles
+    // Clear existing PvE enemies & projectiles - Real Players only!
     this.enemies = [];
     this.particles.clearGameplayEntities();
-
-    // Spawn opposing team gladiators
-    const enemyFighters = match.fighters.filter(f => f.team === 'blue');
-    for (const fighter of enemyFighters) {
-      const enemy: EnemyInstance = {
-        id: fighter.id,
-        name: fighter.name,
-        type: 'mob',
-        role: 'bruiser',
-        x: fighter.x,
-        y: this.groundY,
-        vx: 0,
-        vy: 0,
-        hp: fighter.maxHp,
-        maxHp: fighter.maxHp,
-        atk: Math.round(fighter.maxHp * 0.05),
-        def: 30,
-        speed: 1.4,
-        facing: -1,
-        width: 36,
-        height: 52,
-        icon: '⚔️',
-        color: '#3b82f6',
-        attackRange: 60,
-        attackTimer: 0,
-        attackCooldown: 1.2,
-        hitStun: 0,
-        isGrounded: true,
-        isAttacking: false,
-        isDead: false,
-        isActive: true,
-        spawnDelay: 0,
-        expReward: 0,
-        goldReward: 0,
-      };
-      this.enemies.push(enemy);
-    }
 
     // Start match countdown
     this.lastTournamentRound = match.currentRound;
@@ -6433,11 +6484,12 @@ export class SideViewEngine {
       const normalizedHp = getNormalizedPvpBaseHp(this.player.characterClass?.id || 'warrior');
       this.player.hp = normalizedHp;
       this.player.downed = false;
-      this.player.x = 750;
+      this.player.animState = 'idle';
+      this.player.x = this.pvpTeam === 'blue' ? 2950 : 750;
+      this.player.facing = this.pvpTeam === 'blue' ? -1 : 1;
       this.player.y = this.groundY;
       this.player.vx = 0;
       this.player.vy = 0;
-      this.player.facing = 1;
       this.player.isGrounded = true;
       this.player.hasJumpedOnce = false;
 
@@ -6449,43 +6501,6 @@ export class SideViewEngine {
 
       this.enemies = [];
       this.particles.clearGameplayEntities();
-      const enemyFighters = match.fighters.filter(f => f.team === 'blue');
-      for (const fighter of enemyFighters) {
-        fighter.currentHp = fighter.maxHp;
-        fighter.isAlive = true;
-        const enemy: EnemyInstance = {
-          id: fighter.id,
-          name: fighter.name,
-          type: 'mob',
-          role: 'bruiser',
-          x: fighter.x,
-          y: this.groundY,
-          vx: 0,
-          vy: 0,
-          hp: fighter.maxHp,
-          maxHp: fighter.maxHp,
-          atk: Math.round(fighter.maxHp * 0.05),
-          def: 30,
-          speed: 1.4,
-          facing: -1,
-          width: 36,
-          height: 52,
-          icon: '⚔️',
-          color: '#3b82f6',
-          attackRange: 60,
-          attackTimer: 0,
-          attackCooldown: 1.2,
-          hitStun: 0,
-          isGrounded: true,
-          isAttacking: false,
-          isDead: false,
-          isActive: true,
-          spawnDelay: 0,
-          expReward: 0,
-          goldReward: 0,
-        };
-        this.enemies.push(enemy);
-      }
     }
 
     // Sync local player HP with match record
@@ -6496,29 +6511,27 @@ export class SideViewEngine {
       localFighter.x = this.player.x;
     }
 
-    // Sync bot enemies HP with match fighters
+    // Sync real remote fighters from NetworkManager
     for (const fighter of match.fighters) {
-      if (fighter.team === 'blue') {
-        const enemy = this.enemies.find(e => e.id === fighter.id);
-        if (!enemy || enemy.hp <= 0 || enemy.isDead) {
-          fighter.currentHp = 0;
-          fighter.isAlive = false;
-        } else {
-          fighter.currentHp = enemy.hp;
-          fighter.isAlive = true;
-          fighter.x = enemy.x;
-        }
+      if (fighter.isLocal) continue;
+      const remote = network.remotePlayers[fighter.id];
+      if (remote) {
+        fighter.x = remote.x;
+        fighter.isAlive = !remote.downed && (remote.hpPct === undefined || remote.hpPct > 0);
+        fighter.currentHp = remote.hpPct !== undefined ? Math.round(remote.hpPct * fighter.maxHp) : (remote.downed ? 0 : fighter.maxHp);
       }
     }
 
     // Update match state machine
     match.update(dt);
 
-    // If local player died in tournament, handle round wipe
-    if (this.player.hp <= 0 && match.status === 'active') {
+    // Check round wipe condition in active state
+    if (match.status === 'active') {
       const redAlive = match.fighters.filter(f => f.team === 'red' && f.isAlive).length;
-      if (redAlive === 0) {
-        match.resolveRoundEnd('blue', 'wipe');
+      const blueAlive = match.fighters.filter(f => f.team === 'blue' && f.isAlive).length;
+      if (redAlive === 0 || blueAlive === 0) {
+        const roundWinner = redAlive > 0 ? 'red' : blueAlive > 0 ? 'blue' : 'draw';
+        match.resolveRoundEnd(roundWinner, 'wipe');
       }
     }
 
@@ -6527,8 +6540,8 @@ export class SideViewEngine {
       if (!this.tournamentEndTimer) {
         this.tournamentEndTimer = window.setTimeout(() => {
           this.tournamentEndTimer = null;
-          // Award gold if red won
-          if (match.matchWinner === 'red') {
+          // Award gold if player's team won
+          if (match.matchWinner === this.pvpTeam) {
             const reward = match.config.format === '1v1' ? 1000 : match.config.format === '2v2' ? 2500 : 5000;
             this.player.gold += reward;
             this.particles.addFloatingText(this.player.x, this.player.y - 45, `+${reward} GOLD VICTORY!`, '#f59e0b', true, 16);
@@ -6537,6 +6550,122 @@ export class SideViewEngine {
         }, 3600);
       }
     }
+  }
+
+  public applyPvpAttackHitToRemotePlayer(
+    socketId: string,
+    remoteP: RemotePlayerState,
+    rawDamage: number,
+    isCrit: boolean,
+    skillName?: string
+  ): void {
+    let finalDmg = rawDamage * 0.22;
+    if (isCrit) finalDmg = Math.min(finalDmg * 1.5, rawDamage * 0.22 * 1.35);
+    finalDmg = Math.max(1, Math.round(finalDmg));
+
+    this.particles.addFloatingText(remoteP.x, remoteP.y + this.groundY - 30, `${isCrit ? 'CRIT! ' : ''}-${finalDmg}`, isCrit ? '#f59e0b' : '#ef4444', isCrit, 16);
+    this.particles.playVfx('hit_spark', remoteP.x, remoteP.y + this.groundY - 15, { facing: this.player.facing });
+    audio.playHit(isCrit);
+
+    network.sendPvpAttackHit({
+      targetActorId: socketId,
+      damage: finalDmg,
+      isCrit,
+      skillName,
+      hitX: remoteP.x,
+      hitY: remoteP.y + this.groundY,
+    });
+  }
+
+  public receivePvpHit(packet: {
+    attackerActorId: string;
+    attackerName: string;
+    attackerTeam: string;
+    damage: number;
+    isCrit: boolean;
+    skillName?: string;
+    hitX: number;
+    hitY: number;
+  }): void {
+    if (!this.inTournamentMode || this.player.hp <= 0 || this.player.downed) return;
+    if (this.player.iframeTimer > 0) return;
+
+    const rawDmg = packet.damage;
+    const mitigated = Math.max(1, Math.round(afterDefence(rawDmg, this.player.totalDef)));
+    const { hpDamage, absorbed } = this.absorbPlayerDamage(mitigated);
+
+    this.player.hp = Math.max(0, this.player.hp - hpDamage);
+    this.damageTaken += hpDamage;
+    this.lastHurtAt = performance.now();
+    this.player.iframeTimer = 0.22;
+
+    audio.playHit(packet.isCrit);
+    this.particles.triggerScreenShake(packet.isCrit ? 4 : 2, 0.2);
+    if (absorbed > 0) {
+      this.particles.addFloatingText(this.player.x, this.player.y - 45, `SHIELD -${absorbed}`, '#60a5fa', false, 13);
+    }
+    this.particles.addFloatingText(
+      this.player.x,
+      this.player.y - 25,
+      `-${hpDamage}`,
+      packet.isCrit ? '#fbbf24' : '#f87171',
+      packet.isCrit,
+      18
+    );
+
+    if (this.player.hp <= 0) {
+      this.player.hp = 0;
+      this.player.downed = true;
+      this.player.animState = 'dead';
+      this.player.vx = 0;
+      network.sendPvpPlayerDowned(packet.attackerActorId, packet.attackerName);
+    }
+  }
+
+  public showPvpHitEffect(packet: {
+    attackerActorId: string;
+    targetActorId: string;
+    damage: number;
+    isCrit: boolean;
+    hitX: number;
+    hitY: number;
+  }): void {
+    const x = Number(packet.hitX) || 0;
+    const y = Number(packet.hitY) || this.groundY;
+    this.particles.addFloatingText(x, y - 25, `-${packet.damage}`, packet.isCrit ? '#fbbf24' : '#ef4444', packet.isCrit, 15);
+    this.particles.playVfx('hit_spark', x, y - 15, { facing: 1 });
+  }
+
+  public showPvpKillFeed(packet: {
+    downedActorId: string;
+    downedName: string;
+    downedTeam: string;
+    killerActorId?: string;
+    killerName?: string;
+    killerTeam?: string;
+  }): void {
+    const killer = packet.killerName || 'The Arena';
+    const victim = packet.downedName || 'Warrior';
+    const killerTeam = packet.killerTeam || 'red';
+    const killerColor = killerTeam === 'red' ? '#f87171' : '#60a5fa';
+    const text = `${killer} downed ${victim}!`;
+    this.particles.addFloatingText(this.arenaWidth / 2, this.groundY - 120, text, killerColor, true, 22);
+    audio.playSlash('heavy', 1.1);
+  }
+
+  public handlePvpMatchResult(packet: {
+    winningTeam: 'red' | 'blue';
+    losingTeam: 'red' | 'blue';
+    mvpActorId?: string;
+    mvpName?: string;
+  }): void {
+    if (!this.tournamentMatch) return;
+    this.tournamentMatch.matchWinner = packet.winningTeam;
+    this.tournamentMatch.status = 'match_end';
+    const iWon = packet.winningTeam === this.pvpTeam;
+    this.tournamentMatch.bannerText = iWon ? 'VICTORY!' : 'DEFEAT!';
+    this.tournamentMatch.bannerSubtext = `${packet.winningTeam === 'red' ? 'Crimson' : 'Azure'} team claims arena glory!`;
+    this.tournamentMatch.bannerTimer = 4.0;
   }
 
   public drawTournamentOverlay(ctx: CanvasRenderingContext2D, width: number, height: number): void {

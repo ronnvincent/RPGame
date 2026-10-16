@@ -601,7 +601,45 @@ export class SideViewGame {
       // host's own START - has a listener when the packet lands.
       mod.network.onDungeonStart((roomData: any) => {
         this.worldMap?.close();
+        if (roomData.dungeonId === 'tournament_colosseum' || roomData.dungeonId === 'tournament_arena') {
+          this.tournamentLobby?.close();
+          const match = new TournamentMatch({
+            format: (this.tournamentLobby?.currentFormat || '1v1') as any,
+            roundsToWin: 2,
+            roundDurationSec: 90,
+            mapTheme: 'tournament_colosseum',
+          });
+          const localActorId = mod.network.getActorId();
+          const members = roomData.players || [];
+          match.setupTeamsFromLobby(members, localActorId, (this.tournamentLobby?.currentFormat || '1v1') as any);
+          const myMember = members.find((m: any) => (m.actorId === localActorId || m.uuid === localActorId || m.socketId === mod.network.socket?.id));
+          if (this.engine) {
+            this.engine.pvpTeam = myMember?.team || 'red';
+          }
+          this.startTournamentMatch(match);
+          return;
+        }
         this.onSelectLocation(roomData.dungeonId, mod.network.isHost);
+      });
+
+      mod.network.onPvpHitReceived((packet: any) => {
+        if (!this.engine || !this.engine.inTournamentMode) return;
+        this.engine.receivePvpHit(packet);
+      });
+
+      mod.network.onPvpHitEffect((packet: any) => {
+        if (!this.engine || !this.engine.inTournamentMode) return;
+        this.engine.showPvpHitEffect(packet);
+      });
+
+      mod.network.onPvpKillFeed((packet: any) => {
+        if (!this.engine || !this.engine.inTournamentMode) return;
+        this.engine.showPvpKillFeed(packet);
+      });
+
+      mod.network.onPvpMatchResult((packet: any) => {
+        if (!this.engine || !this.engine.inTournamentMode) return;
+        this.engine.handlePvpMatchResult(packet);
       });
 
       mod.network.onQuickChat((payload) => {

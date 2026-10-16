@@ -581,6 +581,8 @@ const DUNGEON_MIN_LEVELS = Object.freeze({
   castle_approach: 13,
   void_nexus: 14,
   endless_arena: 16,
+  tournament_arena: 1,
+  tournament_colosseum: 1,
 });
 
 function socketIdForActor(actorId) {
@@ -643,11 +645,17 @@ function broadcastRoles(roomId) {
 function buildLobbyState(roomId) {
   const room = rooms[roomId];
   if (!room) return null;
+  const maxCap = room.isPvp
+    ? (room.pvpFormat === '4v4' ? 8 : room.pvpFormat === '3v3' ? 6 : room.pvpFormat === '2v2' ? 4 : 2)
+    : MAX_PARTY;
   return {
     roomId,
     dungeonId: room.dungeonId,
-    maxPlayers: MAX_PARTY,
+    maxPlayers: maxCap,
     started: room.started,
+    isPvp: Boolean(room.isPvp),
+    pvpFormat: room.pvpFormat || '1v1',
+    pvpTeams: room.pvpTeams || {},
     members: room.members.map(actorId => {
       const rec = playersByActor[actorId] || {};
       return {
@@ -661,6 +669,7 @@ function buildLobbyState(roomId) {
         classId: rec.classId || null,
         level: rec.level || 1,
         power: rec.power || 0,
+        team: (room.pvpTeams && room.pvpTeams[actorId]) || 'red',
         ready: actorId === room.hostActorId ? true : !!room.ready[actorId],
         isHost: actorId === room.hostActorId,
         online: !!rec.socketId
@@ -920,6 +929,7 @@ const RATE_LIMITS = {
   quick_join: [6, 5_000],
   lobby_ready: [12, 5_000],
   lobby_start: [5, 5_000],
+  kick_member: [6, 5_000],
   profile_update: [20, 5_000],
   player_move: [40, 1000],
   player_skill: [20, 1000],
@@ -1450,6 +1460,10 @@ io.on('connection', (socket) => {
     applyProfile(p, data);
 
     const newRoomId = `room_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const isPvp = Boolean(data.isPvp);
+    const pvpFormat = ['1v1', '2v2', '3v3', '4v4'].includes(data.pvpFormat) ? data.pvpFormat : '1v1';
+    const initialTeam = data.team === 'blue' ? 'blue' : 'red';
+
     rooms[newRoomId] = {
       dungeonId: data.dungeonId,
       // Sent by the host's client from the dungeon definition, so there is one
@@ -1459,7 +1473,10 @@ io.on('connection', (socket) => {
       hostActorId: p.actorId,
       members: [p.actorId],
       ready: {},
-      started: false
+      started: false,
+      isPvp,
+      pvpFormat,
+      pvpTeams: { [p.actorId]: initialTeam }
     };
     p.room = newRoomId;
     socket.join(newRoomId);
@@ -1492,6 +1509,25 @@ io.on('connection', (socket) => {
     await pushFriendList(p.uuid);
   });
 
+  socket.on('kick_member', (data = {}) => {
+    const p = players[socket.id];
+    if (!p || !p.room) return;
+    const room = rooms[p.room];
+    if (!room || room.hostActorId !== p.actorId) return;
+    const targetActorId = data.actorId;
+    if (!targetActorId || targetActorId === p.actorId) return;
+    const target = playersByActor[targetActorId];
+    if (target && target.socketId) {
+      const targetSocket = io.sockets.sockets.get(target.socketId);
+      if (targetSocket) {
+        targetSocket.leave(p.room);
+        targetSocket.emit('lobby_left');
+        targetSocket.emit('lobby_error', { msg: 'You were kicked from the colosseum lobby.' });
+      }
+    }
+    removeMemberFromRoom(targetActorId, p.room);
+  });
+
   /**
    * Open parties anyone may join.
    *
@@ -1500,26 +1536,34 @@ io.on('connection', (socket) => {
    * the people most likely to try it once. A room is listed only while it is
    * still a lobby: not started, not full, and within the joiner's level.
    */
-  function openLobbies(forLevel) {
+  function openLobbies(forLevel, pvpOnly = false) {
     return Object.entries(rooms)
-      .filter(([, room]) =>
-        !room.started &&
-        room.members.length < MAX_PARTY &&
-        (room.minLevel || 1) <= forLevel &&
-        // At least one member still connected. members[] holds uuids, which
-        // outlive the socket, so counting the array alone advertised rooms
-        // whose players had all left - and quick join walked straight into
-        // one of those empty rooms instead of the party that was waiting.
-        room.members.some(actorId => playersByActor[actorId]?.socketId))
+      .filter(([, room]) => {
+        if (room.started) return false;
+        if (pvpOnly && !room.isPvp) return false;
+        if (!pvpOnly && room.isPvp) return false;
+        const maxCap = room.isPvp
+          ? (room.pvpFormat === '4v4' ? 8 : room.pvpFormat === '3v3' ? 6 : room.pvpFormat === '2v2' ? 4 : 2)
+          : MAX_PARTY;
+        if (room.members.length >= maxCap) return false;
+        if ((room.minLevel || 1) > forLevel) return false;
+        return room.members.some(actorId => playersByActor[actorId]?.socketId);
+      })
       .map(([roomId, room]) => {
         const host = playersByActor[room.hostActorId];
+        const maxCap = room.isPvp
+          ? (room.pvpFormat === '4v4' ? 8 : room.pvpFormat === '3v3' ? 6 : room.pvpFormat === '2v2' ? 4 : 2)
+          : MAX_PARTY;
         return {
           roomId,
           dungeonId: room.dungeonId,
           minLevel: room.minLevel || 1,
           hostName: host?.name || 'Adventurer',
           members: room.members.length,
-          maxPlayers: MAX_PARTY,
+          maxPlayers: maxCap,
+          isPvp: Boolean(room.isPvp),
+          pvpFormat: room.pvpFormat || '1v1',
+          pvpTeams: room.pvpTeams || {},
         };
       })
       .sort((a, b) => b.members - a.members);
@@ -1528,7 +1572,13 @@ io.on('connection', (socket) => {
   socket.on('browse_lobbies', () => {
     const p = players[socket.id];
     if (!p) return;
-    socket.emit('lobby_list', { lobbies: openLobbies(p.level || 1) });
+    socket.emit('lobby_list', { lobbies: openLobbies(p.level || 1, false) });
+  });
+
+  socket.on('browse_pvp_lobbies', () => {
+    const p = players[socket.id];
+    if (!p) return;
+    socket.emit('pvp_lobby_list', { lobbies: openLobbies(p.level || 1, true) });
   });
 
   /** The fullest room we qualify for - joining a party of three beats a party of one. */
@@ -1653,6 +1703,20 @@ io.on('connection', (socket) => {
     if (notReady.length > 0) {
       socket.emit('lobby_error', { msg: 'Not everyone is ready yet.' });
       return;
+    }
+
+    if (room.isPvp) {
+      let redCount = 0;
+      let blueCount = 0;
+      for (const mid of room.members) {
+        if ((room.pvpTeams && room.pvpTeams[mid]) === 'blue') blueCount++;
+        else redCount++;
+      }
+      if (redCount < 1 || blueCount < 1) {
+        socket.emit('lobby_error', { msg: 'Colosseum battles require at least 1 player on Crimson (Red) and 1 on Azure (Blue)!' });
+        return;
+      }
+      room.downedPlayers = new Set();
     }
 
     room.started = true;
@@ -1780,11 +1844,14 @@ io.on('connection', (socket) => {
 
     const alreadyMember = room.members.includes(p.actorId);
     if (room.started && !alreadyMember) {
-      socket.emit('invite_error', { msg: 'That run has already started.' });
+      socket.emit('invite_error', { msg: 'That match has already started.' });
       return;
     }
-    if (!alreadyMember && room.members.length >= MAX_PARTY) {
-      socket.emit('invite_error', { msg: 'Party is full.' });
+    const maxCap = room.isPvp
+      ? (room.pvpFormat === '4v4' ? 8 : room.pvpFormat === '3v3' ? 6 : room.pvpFormat === '2v2' ? 4 : 2)
+      : MAX_PARTY;
+    if (!alreadyMember && room.members.length >= maxCap) {
+      socket.emit('invite_error', { msg: 'Lobby is full.' });
       return;
     }
 
@@ -1802,14 +1869,156 @@ io.on('connection', (socket) => {
 
     // Join the LOBBY. The run no longer auto-starts here - the host launches it
     // with lobby_start once everyone has readied up.
-    if (!alreadyMember) room.members.push(p.actorId);
+    if (!alreadyMember) {
+      room.members.push(p.actorId);
+      if (room.isPvp) {
+        if (!room.pvpTeams) room.pvpTeams = {};
+        const maxPerTeam = room.pvpFormat === '4v4' ? 4 : room.pvpFormat === '3v3' ? 3 : room.pvpFormat === '2v2' ? 2 : 1;
+        let redCount = 0;
+        let blueCount = 0;
+        for (const mid of room.members) {
+          if (mid === p.actorId) continue;
+          if (room.pvpTeams[mid] === 'blue') blueCount++;
+          else redCount++;
+        }
+        if (blueCount < redCount && blueCount < maxPerTeam) {
+          room.pvpTeams[p.actorId] = 'blue';
+        } else if (redCount < maxPerTeam) {
+          room.pvpTeams[p.actorId] = 'red';
+        } else {
+          room.pvpTeams[p.actorId] = 'blue';
+        }
+      }
+    }
     p.room = data.roomId;
     socket.join(data.roomId);
 
-    console.log(`${p.name} joined lobby ${data.roomId} (${room.members.length}/${MAX_PARTY})`);
+    console.log(`${p.name} joined lobby ${data.roomId} (${room.members.length}/${maxCap})`);
 
     broadcastRoles(data.roomId);
     broadcastLobby(data.roomId);
+  });
+
+  // Switch PvP Team (Mobile Legends style Red vs Blue)
+  socket.on('pvp_switch_team', (data = {}) => {
+    const p = players[socket.id];
+    if (!p || !p.room) return;
+    const room = rooms[p.room];
+    if (!room || !room.isPvp || room.started) return;
+
+    const targetTeam = data.targetTeam === 'blue' ? 'blue' : 'red';
+    const currentTeam = (room.pvpTeams && room.pvpTeams[p.actorId]) || 'red';
+    if (targetTeam === currentTeam) return;
+
+    const maxPerTeam = room.pvpFormat === '4v4' ? 4 : room.pvpFormat === '3v3' ? 3 : room.pvpFormat === '2v2' ? 2 : 1;
+    let targetCount = 0;
+    for (const mid of room.members) {
+      if (mid === p.actorId) continue;
+      if (((room.pvpTeams && room.pvpTeams[mid]) || 'red') === targetTeam) {
+        targetCount++;
+      }
+    }
+    if (targetCount >= maxPerTeam) {
+      socket.emit('lobby_error', { msg: `${targetTeam === 'red' ? 'Crimson (Red)' : 'Azure (Blue)'} team is full!` });
+      return;
+    }
+
+    if (!room.pvpTeams) room.pvpTeams = {};
+    room.pvpTeams[p.actorId] = targetTeam;
+    console.log(`[PVP] ${p.name} switched to team ${targetTeam} in ${p.room}`);
+    broadcastLobby(p.room);
+  });
+
+  // Host alters PvP format (1v1, 2v2, 3v3, 4v4)
+  socket.on('pvp_set_format', (data = {}) => {
+    const p = players[socket.id];
+    if (!p || !p.room) return;
+    const room = rooms[p.room];
+    if (!room || !room.isPvp || room.started) return;
+    if (p.actorId !== room.hostActorId) {
+      socket.emit('lobby_error', { msg: 'Only the party leader can change the format.' });
+      return;
+    }
+    const fmt = data.format;
+    if (!['1v1', '2v2', '3v3', '4v4'].includes(fmt)) return;
+    room.pvpFormat = fmt;
+    console.log(`[PVP] Host ${p.name} updated format to ${fmt} for ${p.room}`);
+    broadcastLobby(p.room);
+  });
+
+  // Direct Player vs Player Attack Relay
+  socket.on('pvp_attack_hit', (data = {}) => {
+    const p = players[socket.id];
+    if (!p || !p.room) return;
+    const room = rooms[p.room];
+    if (!room || !room.isPvp || !room.started) return;
+    if (!safeId(data.targetActorId)) return;
+
+    const targetPlayer = playersByActor[data.targetActorId];
+    if (!targetPlayer || targetPlayer.room !== p.room) return;
+
+    const attackerTeam = (room.pvpTeams && room.pvpTeams[p.actorId]) || 'red';
+    const targetTeam = (room.pvpTeams && room.pvpTeams[data.targetActorId]) || 'red';
+    if (attackerTeam === targetTeam) return; // Strict No Friendly Fire
+
+    const dmg = Math.max(1, Math.min(999999, Math.round(Number(data.damage) || 1)));
+    const targetSid = socketIdForActor(data.targetActorId);
+    if (targetSid) {
+      io.to(targetSid).emit('pvp_hit_received', {
+        attackerActorId: p.actorId,
+        attackerName: p.name,
+        attackerTeam,
+        damage: dmg,
+        isCrit: !!data.isCrit,
+        skillName: typeof data.skillName === 'string' ? data.skillName.slice(0, 32) : undefined,
+        hitX: Number(data.hitX) || 0,
+        hitY: Number(data.hitY) || 0,
+      });
+    }
+
+    // Broadcast visual effect to spectators & other combatants in the arena
+    socket.to(p.room).emit('pvp_hit_effect', {
+      attackerActorId: p.actorId,
+      targetActorId: data.targetActorId,
+      damage: dmg,
+      isCrit: !!data.isCrit,
+      hitX: Number(data.hitX) || 0,
+      hitY: Number(data.hitY) || 0,
+    });
+  });
+
+  // Player Downed / Kill Notification
+  socket.on('pvp_player_downed', (data = {}) => {
+    const p = players[socket.id];
+    if (!p || !p.room) return;
+    const room = rooms[p.room];
+    if (!room || !room.isPvp || !room.started) return;
+
+    if (!room.downedPlayers) room.downedPlayers = new Set();
+    room.downedPlayers.add(p.actorId);
+
+    const downedTeam = (room.pvpTeams && room.pvpTeams[p.actorId]) || 'red';
+    const killerTeam = downedTeam === 'red' ? 'blue' : 'red';
+
+    io.to(p.room).emit('pvp_kill_feed', {
+      downedActorId: p.actorId,
+      downedName: p.name,
+      downedTeam,
+      killerActorId: data.killerActorId || null,
+      killerName: data.killerName || 'The Colosseum',
+      killerTeam,
+    });
+
+    const teamMembers = room.members.filter(mid => ((room.pvpTeams && room.pvpTeams[mid]) || 'red') === downedTeam);
+    const allDowned = teamMembers.length > 0 && teamMembers.every(mid => room.downedPlayers.has(mid));
+    if (allDowned) {
+      io.to(p.room).emit('pvp_match_result', {
+        winningTeam: killerTeam,
+        losingTeam: downedTeam,
+        mvpActorId: data.killerActorId || p.actorId,
+        mvpName: data.killerName || p.name,
+      });
+    }
   });
 
   // A client that just (re)joined asks the host for a complete state snapshot.

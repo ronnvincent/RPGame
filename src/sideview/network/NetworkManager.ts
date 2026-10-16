@@ -78,6 +78,8 @@ export interface RemotePlayerState {
   sceneId?: string;
   /** Down and bleeding out, waiting for someone to reach them. */
   downed?: boolean;
+  /** Team assignment in PvP ('red' | 'blue') */
+  team?: 'red' | 'blue';
   /** Their health as a fraction, so the ally rail can show it. */
   hpPct?: number;
   /** Skill slot of their current swing, for attack animation variety. */
@@ -124,6 +126,7 @@ export interface LobbyMember {
   classId: string | null;
   level: number;
   power?: number;
+  team?: 'red' | 'blue';
   ready: boolean;
   isHost: boolean;
   online: boolean;
@@ -134,6 +137,9 @@ export interface LobbyState {
   dungeonId: string;
   maxPlayers: number;
   started: boolean;
+  isPvp?: boolean;
+  pvpFormat?: '1v1' | '2v2' | '3v3' | '4v4';
+  pvpTeams?: Record<string, 'red' | 'blue'>;
   members: LobbyMember[];
 }
 
@@ -363,6 +369,8 @@ export class NetworkManager {
   private onRoleChangeCb: ((isHost: boolean) => void) | null = null;
   private onLobbyErrorCb: ((msg: string) => void) | null = null;
   private onLobbyStateCb: ((state: LobbyState) => void) | null = null;
+  private lobbyStateListeners: Set<(state: LobbyState) => void> = new Set();
+  public currentLobbyState: LobbyState | null = null;
   private onLobbyLeftCb: (() => void) | null = null;
   private onFriendsCb: ((friends: FriendEntry[]) => void) | null = null;
   private onFriendNoticeCb: ((msg: string) => void) | null = null;
@@ -377,6 +385,11 @@ export class NetworkManager {
   private onStartGameModeVoteCb: ((data: StartGameModeVotePacket) => void) | null = null;
   private onCastGameModeVoteCb: ((data: CastGameModeVotePacket) => void) | null = null;
   private onGameModeVoteResultCb: ((data: GameModeVoteResultPacket) => void) | null = null;
+  private onPvpLobbyListCb: ((lobbies: any[]) => void) | null = null;
+  private onPvpHitReceivedCb: ((data: any) => void) | null = null;
+  private onPvpHitEffectCb: ((data: any) => void) | null = null;
+  private onPvpKillFeedCb: ((data: any) => void) | null = null;
+  private onPvpMatchResultCb: ((data: any) => void) | null = null;
 
   constructor() {
     NetworkManager.instance = this;
@@ -419,7 +432,7 @@ export class NetworkManager {
   /** One actor per browser/device. Account UUID remains shared for saves and
    * friends, but two devices logged into one account must not collapse into a
    * single party member. */
-  private getActorId(): string {
+  public getActorId(): string {
     const accountUuid = localStorage.getItem('playerUUID') || '';
     const existing = localStorage.getItem(this.actorStorageKey);
     const existingOwner = localStorage.getItem(this.actorOwnerStorageKey);
@@ -602,6 +615,26 @@ export class NetworkManager {
       this.onLobbyListCb?.(data?.lobbies || []);
     });
 
+    this.socket.on('pvp_lobby_list', (data) => {
+      this.onPvpLobbyListCb?.(data?.lobbies || []);
+    });
+
+    this.socket.on('pvp_hit_received', (data) => {
+      this.onPvpHitReceivedCb?.(data);
+    });
+
+    this.socket.on('pvp_hit_effect', (data) => {
+      this.onPvpHitEffectCb?.(data);
+    });
+
+    this.socket.on('pvp_kill_feed', (data) => {
+      this.onPvpKillFeedCb?.(data);
+    });
+
+    this.socket.on('pvp_match_result', (data) => {
+      this.onPvpMatchResultCb?.(data);
+    });
+
     // Quick join is answered with a room to enter, so the join runs through the
     // same path an accepted invite does rather than a second way in.
     this.socket.on('quick_join_room', (data) => {
@@ -629,7 +662,11 @@ export class NetworkManager {
     this.socket.on('lobby_state', (state: LobbyState) => {
       this.debug('IN', 'lobby_state', { members: state?.members?.length });
       if (state?.roomId) this.setRoom(state.roomId);
-      if (state) this.onLobbyStateCb?.(state);
+      this.currentLobbyState = state;
+      if (state) {
+        this.onLobbyStateCb?.(state);
+        this.lobbyStateListeners.forEach(listener => listener(state));
+      }
     });
 
     this.socket.on('friends_list', (data) => {
@@ -647,6 +684,7 @@ export class NetworkManager {
 
     this.socket.on('lobby_left', () => {
       this.setRoom(null);
+      this.currentLobbyState = null;
       this.isHost = true;
       this.onLobbyLeftCb?.();
     });
@@ -925,6 +963,72 @@ export class NetworkManager {
     this.onLobbyListCb = cb;
   }
 
+  public createPvpLobby(dungeonId: string, format: '1v1' | '2v2' | '3v3' | '4v4' = '1v1', team: 'red' | 'blue' = 'red', onUpdate?: (lobbyData: any) => void) {
+    if (!this.socket) this.connect();
+    if (onUpdate) this.onLobbyUpdateCb = onUpdate;
+    const uuid = localStorage.getItem('playerUUID');
+    const name = localStorage.getItem('playerName');
+    const shortId = localStorage.getItem('playerShortId');
+    this.socket?.emit('create_lobby', {
+      dungeonId,
+      minLevel: 1,
+      isPvp: true,
+      pvpFormat: format,
+      team,
+      uuid,
+      actorId: this.getActorId(),
+      name,
+      shortId,
+      ...this.profile,
+    });
+  }
+
+  public switchPvpTeam(targetTeam: 'red' | 'blue') {
+    if (!this.socket) this.connect();
+    this.socket?.emit('pvp_switch_team', { targetTeam });
+  }
+
+  public setPvpFormat(format: '1v1' | '2v2' | '3v3' | '4v4') {
+    if (!this.socket) this.connect();
+    this.socket?.emit('pvp_set_format', { format });
+  }
+
+  public browsePvpLobbies() {
+    if (!this.socket) this.connect();
+    this.socket?.emit('browse_pvp_lobbies');
+  }
+
+  public sendPvpAttackHit(payload: {
+    targetActorId: string;
+    damage: number;
+    isCrit?: boolean;
+    skillName?: string;
+    hitX: number;
+    hitY: number;
+  }) {
+    this.socket?.emit('pvp_attack_hit', payload);
+  }
+
+  public sendPvpPlayerDowned(killerActorId?: string, killerName?: string) {
+    this.socket?.emit('pvp_player_downed', { killerActorId, killerName });
+  }
+
+  public onPvpLobbyList(cb: (lobbies: any[]) => void) {
+    this.onPvpLobbyListCb = cb;
+  }
+  public onPvpHitReceived(cb: (data: any) => void) {
+    this.onPvpHitReceivedCb = cb;
+  }
+  public onPvpHitEffect(cb: (data: any) => void) {
+    this.onPvpHitEffectCb = cb;
+  }
+  public onPvpKillFeed(cb: (data: any) => void) {
+    this.onPvpKillFeedCb = cb;
+  }
+  public onPvpMatchResult(cb: (data: any) => void) {
+    this.onPvpMatchResultCb = cb;
+  }
+
   /** Ask the server for the best open party and join it. */
   public quickJoin() {
     if (!this.socket) this.connect();
@@ -1090,9 +1194,13 @@ export class NetworkManager {
 
   // ================= LOBBY =================
 
-  public onLobbyState(cb: (state: LobbyState) => void) {
+  public onLobbyState(cb: (state: LobbyState) => void): () => void {
     if (!this.socket) this.connect();
+    this.lobbyStateListeners.add(cb);
     this.onLobbyStateCb = cb;
+    return () => {
+      this.lobbyStateListeners.delete(cb);
+    };
   }
 
   public onLobbyLeft(cb: () => void) {
@@ -1117,6 +1225,15 @@ export class NetworkManager {
   public leaveLobby() {
     if (!this.socket || !this.room) return;
     this.socket.emit('leave_lobby');
+  }
+
+  public kickMember(shortId?: string, actorId?: string) {
+    if (!this.socket || !this.room) return;
+    this.socket.emit('kick_member', { shortId, actorId });
+  }
+
+  public joinLobby(roomId: string) {
+    this.acceptInvite(roomId);
   }
 
   // ================= FRIENDS =================

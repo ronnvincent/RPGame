@@ -212,6 +212,49 @@ export class TournamentMatch {
     this.roundTimeRemaining = this.config.roundDurationSec;
   }
 
+  public setupTeamsFromLobby(
+    members: { actorId?: string; uuid?: string; name: string; classId?: string | null; team?: 'red' | 'blue' }[],
+    localActorId: string,
+    format: TournamentFormat = this.config.format
+  ): void {
+    this.config.format = format;
+    this.fighters = [];
+    let redIndex = 0;
+    let blueIndex = 0;
+
+    for (const m of members) {
+      const id = m.actorId || m.uuid || `actor_${Math.random()}`;
+      const isLocal = id === localActorId;
+      const team: TournamentTeam = m.team === 'blue' ? 'blue' : 'red';
+      const className = m.classId || 'warrior';
+      const hp = getNormalizedPvpBaseHp(className);
+      const spawnX = team === 'red' ? (450 + redIndex * 120) : (2950 - blueIndex * 120);
+      if (team === 'red') redIndex++;
+      else blueIndex++;
+
+      this.fighters.push({
+        id,
+        name: m.name || 'Gladiator',
+        team,
+        isLocal,
+        isBot: false,
+        className,
+        maxHp: hp,
+        currentHp: hp,
+        kills: 0,
+        damageDealt: 0,
+        isAlive: true,
+        x: spawnX,
+        y: 0,
+        antiBurstUntil: 0,
+        recentDamageTaken: [],
+        ccCount: 0,
+        lastCcTime: 0,
+        ccImmunityUntil: 0,
+      });
+    }
+  }
+
   public setupTeams(localPlayerName: string, localClassName: string, format: TournamentFormat = this.config.format): void {
     this.config.format = format;
     this.fighters = [];
