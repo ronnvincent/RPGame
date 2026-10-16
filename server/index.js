@@ -638,6 +638,16 @@ function broadcastRoles(roomId) {
   });
 }
 
+function generateShortRoomCode() {
+  let code;
+  let attempts = 0;
+  do {
+    code = Math.floor(1000 + Math.random() * 9000).toString();
+    attempts++;
+  } while (attempts < 50 && Object.values(rooms).some(r => r.code === code));
+  return code;
+}
+
 /**
  * Full lobby snapshot. This is the single payload the lobby UI renders from -
  * slots, readiness, who the host is, and which dungeon is queued.
@@ -650,6 +660,7 @@ function buildLobbyState(roomId) {
     : MAX_PARTY;
   return {
     roomId,
+    roomCode: room.code || roomId,
     dungeonId: room.dungeonId,
     maxPlayers: maxCap,
     started: room.started,
@@ -1460,6 +1471,7 @@ io.on('connection', (socket) => {
     applyProfile(p, data);
 
     const newRoomId = `room_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const roomCode = generateShortRoomCode();
     const isPvp = Boolean(data.isPvp);
     const pvpFormat = ['1v1', '2v2', '3v3', '4v4'].includes(data.pvpFormat) ? data.pvpFormat : '1v1';
     const initialTeam = data.team === 'blue' ? 'blue' : 'red';
@@ -1476,14 +1488,16 @@ io.on('connection', (socket) => {
       started: false,
       isPvp,
       pvpFormat,
-      pvpTeams: { [p.actorId]: initialTeam }
+      pvpTeams: { [p.actorId]: initialTeam },
+      code: roomCode,
     };
     p.room = newRoomId;
     socket.join(newRoomId);
-    console.log(`${p.name} created lobby ${newRoomId}`);
+    console.log(`${p.name} created lobby ${newRoomId} (code: ${roomCode})`);
 
     socket.emit('lobby_update', {
       roomId: newRoomId,
+      roomCode,
       dungeonId: data.dungeonId,
       isHost: true,
       players: [ { name: p.name, shortId: p.shortId } ]
@@ -1556,6 +1570,7 @@ io.on('connection', (socket) => {
           : MAX_PARTY;
         return {
           roomId,
+          roomCode: room.code || roomId,
           dungeonId: room.dungeonId,
           minLevel: room.minLevel || 1,
           hostName: host?.name || 'Adventurer',
@@ -1812,30 +1827,42 @@ io.on('connection', (socket) => {
     if (callback) callback({ success: true, msg: `Invite sent to ${targetName}!` });
   });
 
-  // Accept Invite
+  // Accept Invite or Join by Room Code
   socket.on('accept_invite', (data = {}) => {
-    console.log(`[INVITE] accept_invite requested by socket ${socket.id}`);
+    console.log(`[INVITE] accept_invite requested by socket ${socket.id} for ${data.roomId}`);
     const p = ensureRegistered(data);
-
     if (!p) return;
-    if (!safeId(data.roomId, 128)) {
-      socket.emit('invite_error', { msg: 'Invalid lobby.' });
-      return;
+
+    let targetRoomId = data.roomId;
+    let room = rooms[targetRoomId];
+    if (!room && typeof targetRoomId === 'string') {
+      const cleanTarget = targetRoomId.trim().toUpperCase();
+      const foundEntry = Object.entries(rooms).find(([id, r]) => {
+        return id.toUpperCase() === cleanTarget
+          || (r.code && r.code.toUpperCase() === cleanTarget)
+          || (`PVP-${r.code}`.toUpperCase() === cleanTarget);
+      });
+      if (foundEntry) {
+        targetRoomId = foundEntry[0];
+        room = foundEntry[1];
+      }
     }
 
-    const room = rooms[data.roomId];
     if (!room) {
-      socket.emit('invite_error', { msg: 'Lobby no longer exists.' });
+      socket.emit('invite_error', { msg: 'Lobby not found. Check the Room Code.' });
       return;
     }
 
-    // A socket may belong to exactly one gameplay room. Previously accepting a
-    // second invite joined the Socket.IO room without removing the first,
-    // leaking combat/voice packets between two parties.
+    // A socket may belong to exactly one gameplay room. If alone in a lobby, clean it up
     const previousRoom = p.room ? rooms[p.room] : null;
-    if (previousRoom && p.room !== data.roomId) {
+    if (previousRoom && previousRoom.members.length > 1 && p.room !== targetRoomId) {
       socket.emit('invite_error', { msg: 'Leave your current party before joining another.' });
       return;
+    }
+    if (previousRoom && previousRoom.members.length <= 1 && p.room !== targetRoomId) {
+      socket.leave(p.room);
+      removeMemberFromRoom(p.actorId, p.room);
+      p.room = null;
     }
     if (p.room && !previousRoom) {
       socket.leave(p.room);

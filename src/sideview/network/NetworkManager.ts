@@ -47,6 +47,7 @@ export interface RemoteCombatDefenseResultPacket extends CombatDefenseResultPack
 /** An open party shown in the browser. */
 export interface OpenLobby {
   roomId: string;
+  roomCode?: string;
   dungeonId: string;
   minLevel: number;
   hostName: string;
@@ -134,6 +135,7 @@ export interface LobbyMember {
 
 export interface LobbyState {
   roomId: string;
+  roomCode?: string;
   dungeonId: string;
   maxPlayers: number;
   started: boolean;
@@ -1234,6 +1236,12 @@ export class NetworkManager {
 
   public joinLobby(roomId: string) {
     this.acceptInvite(roomId);
+  }
+
+  public joinByRoomCode(code: string) {
+    if (!this.socket) this.connect();
+    const clean = code.trim().toUpperCase();
+    this.acceptInvite(clean);
   }
 
   // ================= FRIENDS =================
