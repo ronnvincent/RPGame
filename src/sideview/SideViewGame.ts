@@ -618,17 +618,24 @@ export class SideViewGame {
       // host's own START - has a listener when the packet lands.
       mod.network.onDungeonStart((roomData: any) => {
         this.worldMap?.close();
-        if (roomData.dungeonId === 'tournament_colosseum' || roomData.dungeonId === 'tournament_arena') {
+        const isTournament = roomData?.dungeonId === 'tournament_colosseum'
+          || roomData?.dungeonId === 'tournament_arena'
+          || roomData?.isPvp === true
+          || Boolean(mod.network.currentLobbyState?.isPvp)
+          || Boolean(this.tournamentLobby?.isOpen);
+
+        if (isTournament) {
           this.tournamentLobby?.close();
+          const pvpFmt = (this.tournamentLobby?.currentFormat || roomData?.pvpFormat || mod.network.currentLobbyState?.pvpFormat || '1v1') as any;
           const match = new TournamentMatch({
-            format: (this.tournamentLobby?.currentFormat || '1v1') as any,
+            format: pvpFmt,
             roundsToWin: 2,
             roundDurationSec: 90,
             mapTheme: 'tournament_colosseum',
           });
           const localActorId = mod.network.getActorId();
-          const members = roomData.players || [];
-          match.setupTeamsFromLobby(members, localActorId, (this.tournamentLobby?.currentFormat || '1v1') as any);
+          const members = roomData.players || mod.network.currentLobbyState?.members || [];
+          match.setupTeamsFromLobby(members, localActorId, pvpFmt);
           const myMember = members.find((m: any) => (m.actorId === localActorId || m.uuid === localActorId || m.socketId === mod.network.socket?.id));
           if (this.engine) {
             this.engine.pvpTeam = myMember?.team || 'red';

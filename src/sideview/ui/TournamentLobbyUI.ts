@@ -75,6 +75,7 @@ export class TournamentLobbyUI {
   private releaseFocus: (() => void) | null = null;
   private toastTimer: number | null = null;
   private generatedRoomCode: string = '';
+  private isJoiningRoom: boolean = false;
 
   constructor(parent: HTMLElement, engine: SideViewEngine, onStartMatch: (match: TournamentMatch) => void) {
     this.parent = parent;
@@ -104,6 +105,7 @@ export class TournamentLobbyUI {
 
     // Subscribe to network events
     const unsubState = network.onLobbyState((state) => {
+      this.isJoiningRoom = false;
       this.state = state;
       if (state.roomCode) {
         this.generatedRoomCode = String(state.roomCode).replace(/^PVP-/i, '');
@@ -134,10 +136,12 @@ export class TournamentLobbyUI {
     });
 
     network.onLobbyLeft(() => {
+      if (this.isJoiningRoom) return;
       this.close();
     });
 
     network.onLobbyError((msg) => {
+      this.isJoiningRoom = false;
       this.toast(msg);
     });
 
@@ -207,6 +211,7 @@ export class TournamentLobbyUI {
       this.overlay.parentNode.removeChild(this.overlay);
     }
     this.overlay = null;
+    this.isJoiningRoom = false;
   }
 
   private handleLeaveOrClose(): void {
@@ -282,8 +287,12 @@ export class TournamentLobbyUI {
     }
     audio.playLevelUp();
     this.toast(`Connecting to Colosseum lobby ${clean}...`);
-    await network.joinByRoomCode(clean);
+    this.isJoiningRoom = true;
+    const success = await network.joinByRoomCode(clean);
     this.activeTab = 'arena';
+    if (!success) {
+      this.isJoiningRoom = false;
+    }
   }
 
   private async showQrCodeModal(): Promise<void> {
@@ -416,9 +425,14 @@ export class TournamentLobbyUI {
     for (const m of rawMembers) {
       const aid = m.actorId || m.uuid;
       const isMe = aid === myId;
-      const assigned = isMe
-        ? this.localTeam
-        : ((st?.pvpTeams && st.pvpTeams[aid]) || m.team || 'red');
+      const serverAssigned = (st?.pvpTeams && st.pvpTeams[aid]) || m.team;
+      let assigned = serverAssigned;
+      if (!assigned) {
+        assigned = isMe ? this.localTeam : (this.localTeam === 'red' ? 'blue' : 'red');
+      }
+      if (isMe && serverAssigned && serverAssigned !== this.localTeam) {
+        this.localTeam = serverAssigned;
+      }
 
       if (assigned === 'blue') {
         blueMembers.push(m);

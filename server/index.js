@@ -1755,6 +1755,9 @@ io.on('connection', (socket) => {
         io.to(sid).emit('dungeon_start', {
           roomId: p.room,
           dungeonId: room.dungeonId,
+          isPvp: Boolean(room.isPvp),
+          pvpFormat: room.pvpFormat || '1v1',
+          pvpTeams: room.pvpTeams || {},
           players: roster,
           isHost: actorId === room.hostActorId
         });
@@ -1937,13 +1940,13 @@ io.on('connection', (socket) => {
         }
       }
     }
-    p.room = data.roomId;
-    socket.join(data.roomId);
+    p.room = targetRoomId;
+    socket.join(targetRoomId);
 
-    console.log(`${p.name} joined lobby ${data.roomId} (${room.members.length}/${maxCap})`);
+    console.log(`${p.name} joined lobby ${targetRoomId} (${room.members.length}/${maxCap})`);
 
-    broadcastRoles(data.roomId);
-    broadcastLobby(data.roomId);
+    broadcastRoles(targetRoomId);
+    broadcastLobby(targetRoomId);
   });
 
   // Switch PvP Team (Mobile Legends style Red vs Blue)
