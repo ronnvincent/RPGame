@@ -393,9 +393,51 @@ export class NetworkManager {
   private onPvpHitEffectCb: ((data: any) => void) | null = null;
   private onPvpKillFeedCb: ((data: any) => void) | null = null;
   private onPvpMatchResultCb: ((data: any) => void) | null = null;
+  private cachedLobbies: Map<string, any> = new Map();
 
   constructor() {
     NetworkManager.instance = this;
+  }
+
+  private updateLobbyCache(lobbies: any[]) {
+    if (!Array.isArray(lobbies)) return;
+    for (const l of lobbies) {
+      if (l && l.roomId) {
+        this.cachedLobbies.set(l.roomId, l);
+      }
+    }
+  }
+
+  public findLobbyIdByCode(input: string): string | null {
+    if (!input) return null;
+    const clean = input.trim();
+    const upper = clean.toUpperCase();
+    const withoutPvp = upper.replace(/^PVP-/, '');
+    const pureDigits = withoutPvp.replace(/[^0-9]/g, '');
+
+    for (const lobby of this.cachedLobbies.values()) {
+      const rid = String(lobby.roomId || '');
+      const rcode = String(lobby.roomCode || '').toUpperCase();
+      const ridUpper = rid.toUpperCase();
+      const ridDigits = rid.replace(/[^0-9]/g, '');
+
+      // 1. Exact match on roomId or roomCode
+      if (ridUpper === upper || ridUpper === withoutPvp) return rid;
+      if (rcode && (rcode === upper || rcode === withoutPvp || rcode === pureDigits)) return rid;
+      if (rcode && `PVP-${rcode}` === upper) return rid;
+
+      // 2. Suffix match on raw roomId (e.g. input "_507" matching "..._507")
+      if (withoutPvp.startsWith('_') && ridUpper.endsWith(withoutPvp)) return rid;
+
+      // 3. Digits match (e.g. input "507" or "6507" matching end of "..._507" or "...6507")
+      if (pureDigits.length >= 3) {
+        if (ridUpper.endsWith(`_${pureDigits}`)) return rid;
+        if (ridDigits.endsWith(pureDigits)) return rid;
+        if (rcode && rcode.endsWith(pureDigits)) return rid;
+      }
+    }
+
+    return null;
   }
 
   private debug(direction: 'OUT' | 'IN', event: string, payload: any) {
@@ -615,11 +657,15 @@ export class NetworkManager {
     });
 
     this.socket.on('lobby_list', (data) => {
-      this.onLobbyListCb?.(data?.lobbies || []);
+      const list = data?.lobbies || [];
+      this.updateLobbyCache(list);
+      this.onLobbyListCb?.(list);
     });
 
     this.socket.on('pvp_lobby_list', (data) => {
-      this.onPvpLobbyListCb?.(data?.lobbies || []);
+      const list = data?.lobbies || [];
+      this.updateLobbyCache(list);
+      this.onPvpLobbyListCb?.(list);
     });
 
     this.socket.on('pvp_hit_received', (data) => {
@@ -666,7 +712,11 @@ export class NetworkManager {
 
     this.socket.on('invite_error', (data) => {
       console.warn('[NET] invite_error:', data?.msg);
-      this.onLobbyErrorCb?.(data?.msg || 'Could not join that party.');
+      let userMsg = data?.msg || 'Could not join that party.';
+      if (userMsg === 'Lobby no longer exists.') {
+        userMsg = 'Colosseum lobby not found or has expired. Please verify the 4-digit code with the host.';
+      }
+      this.onLobbyErrorCb?.(userMsg);
     });
 
     this.socket.on('lobby_state', (state: LobbyState) => {
@@ -1254,10 +1304,66 @@ export class NetworkManager {
     this.acceptInvite(roomId);
   }
 
-  public joinByRoomCode(code: string) {
+  public async joinByRoomCode(code: string): Promise<boolean> {
     if (!this.socket) this.connect();
-    const clean = code.trim().toUpperCase();
-    this.acceptInvite(clean);
+    const raw = (code || '').trim();
+    if (!raw) return false;
+
+    // 1. Check if we already have the lobby in cache
+    let resolvedId = this.findLobbyIdByCode(raw);
+
+    // 2. If not found in cache and not already a full room ID, query open lobbies and wait briefly
+    if (!resolvedId && !raw.startsWith('room_')) {
+      this.browsePvpLobbies();
+      this.browseLobbies();
+
+      await new Promise<void>((resolve) => {
+        let settled = false;
+        const timer = setTimeout(() => {
+          if (!settled) {
+            settled = true;
+            resolve();
+          }
+        }, 500);
+
+        const checkMatch = () => {
+          if (settled) return;
+          const found = this.findLobbyIdByCode(raw);
+          if (found) {
+            settled = true;
+            clearTimeout(timer);
+            resolve();
+          }
+        };
+
+        const prevPvp = this.onPvpLobbyListCb;
+        const prevCoop = this.onLobbyListCb;
+        this.onPvpLobbyListCb = (lobbies) => {
+          prevPvp?.(lobbies);
+          checkMatch();
+        };
+        this.onLobbyListCb = (lobbies) => {
+          prevCoop?.(lobbies);
+          checkMatch();
+        };
+      });
+
+      resolvedId = this.findLobbyIdByCode(raw);
+    }
+
+    const targetRoomId = resolvedId || raw.toUpperCase().replace(/^PVP-/, '');
+
+    // 3. If currently in our own solo lobby, leave it first so older server won't reject with "Leave current party"
+    if (this.room && this.room !== targetRoomId) {
+      const isSolo = !this.currentLobbyState?.members || this.currentLobbyState.members.length <= 1;
+      if (isSolo) {
+        this.leaveLobby();
+        await new Promise(r => setTimeout(r, 60));
+      }
+    }
+
+    this.acceptInvite(targetRoomId);
+    return true;
   }
 
   // ================= FRIENDS =================

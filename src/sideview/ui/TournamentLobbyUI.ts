@@ -158,6 +158,7 @@ export class TournamentLobbyUI {
 
     network.requestFriends();
     network.browsePvpLobbies();
+    network.browseLobbies();
 
     (this.parent || document.body).appendChild(this.overlay);
     this.render();
@@ -255,11 +256,13 @@ export class TournamentLobbyUI {
   }
 
   public getShortRoomCode(): string {
-    if (this.state?.roomCode) {
-      return String(this.state.roomCode).replace(/^PVP-/i, '').trim().toUpperCase();
+    if (this.state?.roomCode && this.state.roomCode !== this.state.roomId) {
+      const clean = String(this.state.roomCode).replace(/^PVP-/i, '').replace(/[^A-Za-z0-9]/g, '');
+      if (clean.length >= 4) return clean.slice(-4).toUpperCase();
     }
-    if (this.state?.roomId && this.state.roomId.startsWith('room_')) {
-      return this.state.roomId.slice(-4).toUpperCase();
+    if (this.state?.roomId) {
+      const digits = this.state.roomId.replace(/[^0-9]/g, '');
+      if (digits.length >= 4) return digits.slice(-4);
     }
     if (!this.generatedRoomCode) {
       this.generatedRoomCode = Math.floor(1000 + Math.random() * 9000).toString();
@@ -271,7 +274,7 @@ export class TournamentLobbyUI {
     return `PVP-${this.getShortRoomCode()}`;
   }
 
-  public joinRoomByCode(inputCode: string): void {
+  public async joinRoomByCode(inputCode: string): Promise<void> {
     const clean = inputCode.trim().toUpperCase();
     if (!clean) {
       this.toast('Please enter a valid Room Code.');
@@ -279,7 +282,7 @@ export class TournamentLobbyUI {
     }
     audio.playLevelUp();
     this.toast(`Connecting to Colosseum lobby ${clean}...`);
-    network.joinByRoomCode(clean);
+    await network.joinByRoomCode(clean);
     this.activeTab = 'arena';
   }
 
@@ -289,9 +292,11 @@ export class TournamentLobbyUI {
     const existing = this.overlay.querySelector('.pvp-qr-modal-backdrop');
     if (existing) existing.remove();
 
+    const fullId = this.state?.roomId || '';
     const shortCode = this.getShortRoomCode();
     const displayCode = this.getDisplayRoomCode();
-    const joinUrl = `${window.location.origin}${window.location.pathname}?joinRoom=${encodeURIComponent(shortCode)}`;
+    const joinParam = fullId.startsWith('room_') ? fullId : shortCode;
+    const joinUrl = `${window.location.origin}${window.location.pathname}?joinRoom=${encodeURIComponent(joinParam)}`;
 
     let qrSvg = '';
     try {

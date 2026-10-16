@@ -1844,14 +1844,23 @@ io.on('connection', (socket) => {
     let room = rooms[targetRoomId];
     if (!room && typeof targetRoomId === 'string') {
       const rawTarget = targetRoomId.trim().toUpperCase();
-      const pureDigits = rawTarget.replace(/^PVP-/, '');
+      const withoutPvp = rawTarget.replace(/^PVP-/, '');
+      const pureDigits = withoutPvp.replace(/[^0-9]/g, '');
       const foundEntry = Object.entries(rooms).find(([id, r]) => {
         const rCode = String(r.code || '').trim().toUpperCase();
-        return id.toUpperCase() === rawTarget
-          || id.toUpperCase() === pureDigits
-          || id.toUpperCase() === `ROOM_${pureDigits}`
-          || rCode === pureDigits
-          || `PVP-${rCode}` === rawTarget;
+        const idUpper = id.toUpperCase();
+        const idDigits = id.replace(/[^0-9]/g, '');
+        if (idUpper === rawTarget || idUpper === withoutPvp) return true;
+        if (idUpper === `ROOM_${withoutPvp}` || idUpper === `ROOM_${pureDigits}`) return true;
+        if (rCode && (rCode === rawTarget || rCode === withoutPvp || rCode === pureDigits)) return true;
+        if (rCode && `PVP-${rCode}` === rawTarget) return true;
+        if (withoutPvp.startsWith('_') && idUpper.endsWith(withoutPvp)) return true;
+        if (pureDigits.length >= 3) {
+          if (idUpper.endsWith(`_${pureDigits}`)) return true;
+          if (idDigits.endsWith(pureDigits)) return true;
+          if (rCode && rCode.endsWith(pureDigits)) return true;
+        }
+        return false;
       });
       if (foundEntry) {
         targetRoomId = foundEntry[0];
