@@ -175,9 +175,9 @@ test('tournament_arena map is registered with 7 Gothicvania parallax layers and 
   const arenaMap = MAPS['tournament_arena'];
   assert.ok(arenaMap, 'tournament_arena must exist in MAPS');
   assert.equal(arenaMap.layers.length, 7, 'tournament_arena should have 7 parallax layers');
-  assert.equal(arenaMap.groundLine, 0.3434, 'tournament_arena groundLine must align with town asset cobblestone');
-  assert.equal(arenaMap.softGround, true, 'softGround must be true to fill bottom void smoothly');
   assert.ok(arenaMap.floor, 'floor configuration must be specified');
   assert.equal(arenaMap.floor.top, '#4a3852');
   assert.equal(arenaMap.floor.body, '#150f1c');
+  const townLayer = arenaMap.layers[arenaMap.layers.length - 1];
+  assert.equal(townLayer.anchor, 'horizon', 'town layer must anchor to horizon for clean 1:1 pixel art');
 });

@@ -1906,6 +1906,7 @@ export class SideViewGame {
     this.hud?.setDungeonObjective(null);
     this.hud?.setDungeonRelics([]);
     this.hud?.setDungeonContextAction(null);
+    this.hud?.setWaveInfo(`COLOSSEUM - ${match.config.format.toUpperCase()}`, match.fighters.filter(f => f.team === 'blue').length);
 
     this.engine.startTournament(match);
     audio.playDungeonBGM();
@@ -2155,7 +2156,7 @@ export class SideViewGame {
         }
 
         // In Dungeon Mode: check wave progression
-        if (!this.engine.isTownMode) {
+        if (!this.engine.isTownMode && !this.engine.inTournamentMode) {
           const livingEnemies = this.engine.enemies.filter(e => !e.isDead);
           const aliveEnemies = this.engine.enemies.filter(e => e.hp > 0 && !e.isDead);
           const enemiesRemaining = aliveEnemies.length;

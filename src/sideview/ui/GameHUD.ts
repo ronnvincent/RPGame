@@ -4043,6 +4043,10 @@ export class GameHUD {
 
     this.container.querySelector('#leave-dungeon-btn')?.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (this.engine.inTournamentMode) {
+        this.engine.endTournament();
+        return;
+      }
       promptLeaveDungeon();
     });
 
@@ -5088,12 +5092,20 @@ export class GameHUD {
       if (waveBanner) waveBanner.style.display = 'flex';
     }
 
-    // Wave Banner in Town vs Dungeon
+    // Wave Banner in Town vs Dungeon vs Tournament
     const waveTitle = this.hudNode('wave-title-text');
     const waveMobs = this.hudNode('wave-mobs-text');
     if (this.engine.isTownMode && waveTitle && waveMobs) {
       waveTitle.textContent = 'HAVEN OF ELDERMOOR';
       waveMobs.textContent = 'Peaceful Town Sanctuary';
+    } else if (this.engine.inTournamentMode && waveTitle && waveMobs) {
+      const match = this.engine.tournamentMatch;
+      const format = match ? match.config.format.toUpperCase() : 'PVP';
+      const round = match ? `Round ${match.currentRound} / ${match.config.roundsToWin * 2 - 1}` : 'Match';
+      waveTitle.textContent = `COLOSSEUM - ${format} (${round})`;
+      const aliveGladiators = this.engine.enemies.filter(e => !e.isDead).length;
+      const scoreStr = match ? `[RED] ${match.redScore} - ${match.blueScore} [BLUE] | ` : '';
+      waveMobs.textContent = `${scoreStr}Gladiators: ${aliveGladiators}`;
     }
 
     const leaveBtn = this.hudNode('leave-dungeon-btn');

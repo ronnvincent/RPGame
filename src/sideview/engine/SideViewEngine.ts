@@ -929,9 +929,9 @@ export class SideViewEngine {
 
     if (this.inTournamentMode || (theme as string) === 'tournament_arena' || (theme as string) === 'tournament_colosseum') {
       this.platforms = [
-        { x: 620, y: this.groundY - 95, width: 260, height: 20, type: 'one-way' as const },
-        { x: 1630, y: this.groundY - 140, width: 340, height: 22, type: 'one-way' as const },
-        { x: 2720, y: this.groundY - 95, width: 260, height: 20, type: 'one-way' as const },
+        { x: 580, y: this.groundY - 75, width: 220, height: 20, type: 'one-way' as const },
+        { x: 950, y: this.groundY - 120, width: 260, height: 22, type: 'one-way' as const },
+        { x: 1320, y: this.groundY - 75, width: 220, height: 20, type: 'one-way' as const },
       ];
       this.zoneHazards = [];
     } else {
@@ -3991,6 +3991,11 @@ export class SideViewEngine {
       }
 
       // Hit stun
+      if (this.inTournamentMode && this.tournamentMatch?.status === 'countdown') {
+        enemy.vx = 0;
+        enemy.isAttacking = false;
+        continue;
+      }
       if (enemy.hitStun > 0 || (enemy.guardState?.staggeredRemaining || 0) > 0) {
         enemy.hitStun -= dt;
         enemy.vx *= 0.4;
@@ -6320,6 +6325,10 @@ export class SideViewEngine {
     this.isTownMode = false;
     this.setBattleTheme('tournament_arena' as any);
 
+    if (this.canvasHeight > 0) {
+      this.groundY = Math.round(this.canvasHeight - 20);
+    }
+
     // Cache original stats
     if (!this.originalPlayerHpStats) {
       this.originalPlayerHpStats = { hp: this.player.hp, maxHp: this.player.maxHp };
@@ -6330,16 +6339,26 @@ export class SideViewEngine {
     this.player.maxHp = normalizedHp;
     this.player.hp = normalizedHp;
     this.player.downed = false;
-    this.player.x = 480;
+    this.player.x = 750;
     this.player.y = this.groundY;
     this.player.vx = 0;
     this.player.vy = 0;
+    this.player.facing = 1;
+    this.player.isGrounded = true;
+    this.player.hasJumpedOnce = false;
+
+    // Immediately snap camera to the player so they are centered and visible on screen
+    const targetCamX = this.canvasWidth > 0
+      ? Math.max(0, Math.min(this.arenaWidth - this.canvasWidth, this.player.x - this.canvasWidth * 0.5))
+      : 400;
+    this.cameraX = targetCamX;
+    this.cameraLeadOffset = 0;
 
     // Symmetrical Platforms for Tournament Arena
     this.platforms = [
-      { x: 620, y: this.groundY - 95, width: 260, height: 20, type: 'one-way' as const },
-      { x: 1630, y: this.groundY - 140, width: 340, height: 22, type: 'one-way' as const },
-      { x: 2720, y: this.groundY - 95, width: 260, height: 20, type: 'one-way' as const },
+      { x: 580, y: this.groundY - 75, width: 220, height: 20, type: 'one-way' as const },
+      { x: 950, y: this.groundY - 120, width: 260, height: 22, type: 'one-way' as const },
+      { x: 1320, y: this.groundY - 75, width: 220, height: 20, type: 'one-way' as const },
     ];
     this.zoneHazards = [];
 
@@ -6400,7 +6419,7 @@ export class SideViewEngine {
     this.isTownMode = true;
     this.enemies = [];
     this.particles.clearGameplayEntities();
-    this.setBattleTheme('catacombs');
+    this.setBattleTheme('town');
     this.onTournamentEnded?.();
   }
 
@@ -6414,10 +6433,19 @@ export class SideViewEngine {
       const normalizedHp = getNormalizedPvpBaseHp(this.player.characterClass?.id || 'warrior');
       this.player.hp = normalizedHp;
       this.player.downed = false;
-      this.player.x = 480;
+      this.player.x = 750;
       this.player.y = this.groundY;
       this.player.vx = 0;
       this.player.vy = 0;
+      this.player.facing = 1;
+      this.player.isGrounded = true;
+      this.player.hasJumpedOnce = false;
+
+      const targetCamX = this.canvasWidth > 0
+        ? Math.max(0, Math.min(this.arenaWidth - this.canvasWidth, this.player.x - this.canvasWidth * 0.5))
+        : 400;
+      this.cameraX = targetCamX;
+      this.cameraLeadOffset = 0;
 
       this.enemies = [];
       this.particles.clearGameplayEntities();
@@ -6517,7 +6545,7 @@ export class SideViewEngine {
 
     ctx.save();
     // 1. Top HUD Scoreboard Bar
-    const barWidth = 320;
+    const barWidth = Math.min(320, width - 20);
     const barHeight = 36;
     const barX = Math.round((width - barWidth) / 2);
     const barY = 12;
@@ -6526,7 +6554,11 @@ export class SideViewEngine {
     ctx.strokeStyle = 'rgba(212, 175, 55, 0.5)';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.roundRect(barX, barY, barWidth, barHeight, 6);
+    if (ctx.roundRect) {
+      ctx.roundRect(barX, barY, barWidth, barHeight, 6);
+    } else {
+      ctx.rect(barX, barY, barWidth, barHeight);
+    }
     ctx.fill();
     ctx.stroke();
 
@@ -6549,9 +6581,27 @@ export class SideViewEngine {
     ctx.fillStyle = '#3b82f6';
     ctx.fillText(`${match.blueScore} [BLUE]`, barX + barWidth - 16, barY + 23);
 
-    // 2. Center Banner if active
-    if (match.bannerTimer > 0 && match.bannerText) {
-      const bannerY = Math.round(height * 0.38);
+    // 2. Center Banner if active or during countdown
+    if (match.status === 'countdown') {
+      const bannerY = Math.round(height * 0.40);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.70)';
+      ctx.fillRect(0, bannerY - 36, width, 74);
+
+      ctx.textAlign = 'center';
+      ctx.font = '900 28px "Outfit", sans-serif';
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
+      ctx.lineWidth = 4;
+      const countVal = Math.ceil(match.countdownRemaining);
+      const text = countVal > 0 ? `MATCH STARTS IN ${countVal}...` : 'FIGHT!';
+      ctx.strokeText(text, width / 2, bannerY);
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillText(text, width / 2, bannerY);
+
+      ctx.font = 'bold 12px "Outfit", sans-serif';
+      ctx.fillStyle = '#e2e8f0';
+      ctx.fillText(`ROUND ${match.currentRound} - BEST OF ${match.config.roundsToWin * 2 - 1}`, width / 2, bannerY + 22);
+    } else if (match.bannerTimer > 0 && match.bannerText) {
+      const bannerY = Math.round(height * 0.40);
       ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
       ctx.fillRect(0, bannerY - 32, width, 68);
 
