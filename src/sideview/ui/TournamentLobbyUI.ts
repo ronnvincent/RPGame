@@ -29,6 +29,7 @@ import {
   escapeHtmlAttribute,
   installModalFocusTrap,
 } from './UiSafety';
+import QRCode from 'qrcode';
 
 const STYLE_ID = 'tournament-lobby-style';
 
@@ -73,6 +74,7 @@ export class TournamentLobbyUI {
   private unsubs: Array<() => void> = [];
   private releaseFocus: (() => void) | null = null;
   private toastTimer: number | null = null;
+  private generatedRoomCode: string = '';
 
   constructor(parent: HTMLElement, engine: SideViewEngine, onStartMatch: (match: TournamentMatch) => void) {
     this.parent = parent;
@@ -95,9 +97,17 @@ export class TournamentLobbyUI {
     this.overlay.setAttribute('aria-modal', 'true');
     this.overlay.setAttribute('aria-labelledby', 'pvp-colosseum-title');
 
+    // Ensure unique room code is generated immediately
+    if (!this.generatedRoomCode) {
+      this.generatedRoomCode = Math.floor(1000 + Math.random() * 9000).toString();
+    }
+
     // Subscribe to network events
     const unsubState = network.onLobbyState((state) => {
       this.state = state;
+      if (state.roomCode) {
+        this.generatedRoomCode = String(state.roomCode).replace(/^PVP-/i, '');
+      }
       if (state.pvpFormat && ['1v1', '2v2', '3v3', '4v4'].includes(state.pvpFormat)) {
         this.currentFormat = state.pvpFormat;
       }
@@ -135,12 +145,15 @@ export class TournamentLobbyUI {
     if (network.currentLobbyState && network.currentLobbyState.isPvp) {
       this.state = network.currentLobbyState;
       if (this.state.pvpFormat) this.currentFormat = this.state.pvpFormat;
+      if (this.state.roomCode) {
+        this.generatedRoomCode = String(this.state.roomCode).replace(/^PVP-/i, '');
+      }
       const myId = network.getActorId();
       if (this.state.pvpTeams && this.state.pvpTeams[myId]) {
         this.localTeam = this.state.pvpTeams[myId];
       }
     } else {
-      network.createPvpLobby('tournament_colosseum', this.currentFormat, this.localTeam);
+      network.createPvpLobby('tournament_colosseum', this.currentFormat, this.localTeam, this.getShortRoomCode());
     }
 
     network.requestFriends();
@@ -241,16 +254,24 @@ export class TournamentLobbyUI {
     };
   }
 
-  private getDisplayRoomCode(): string {
-    const code = this.state?.roomCode || this.state?.roomId;
-    if (!code) return 'PVP-7492';
-    if (code.startsWith('room_')) {
-      return code.slice(-4).toUpperCase();
+  public getShortRoomCode(): string {
+    if (this.state?.roomCode) {
+      return String(this.state.roomCode).replace(/^PVP-/i, '').trim().toUpperCase();
     }
-    return code;
+    if (this.state?.roomId && this.state.roomId.startsWith('room_')) {
+      return this.state.roomId.slice(-4).toUpperCase();
+    }
+    if (!this.generatedRoomCode) {
+      this.generatedRoomCode = Math.floor(1000 + Math.random() * 9000).toString();
+    }
+    return this.generatedRoomCode;
   }
 
-  private joinRoomByCode(inputCode: string): void {
+  public getDisplayRoomCode(): string {
+    return `PVP-${this.getShortRoomCode()}`;
+  }
+
+  public joinRoomByCode(inputCode: string): void {
     const clean = inputCode.trim().toUpperCase();
     if (!clean) {
       this.toast('Please enter a valid Room Code.');
@@ -260,6 +281,75 @@ export class TournamentLobbyUI {
     this.toast(`Connecting to Colosseum lobby ${clean}...`);
     network.joinByRoomCode(clean);
     this.activeTab = 'arena';
+  }
+
+  private async showQrCodeModal(): Promise<void> {
+    if (!this.overlay) return;
+    audio.playClick();
+    const existing = this.overlay.querySelector('.pvp-qr-modal-backdrop');
+    if (existing) existing.remove();
+
+    const shortCode = this.getShortRoomCode();
+    const displayCode = this.getDisplayRoomCode();
+    const joinUrl = `${window.location.origin}${window.location.pathname}?joinRoom=${encodeURIComponent(shortCode)}`;
+
+    let qrSvg = '';
+    try {
+      qrSvg = await QRCode.toString(joinUrl, {
+        type: 'svg',
+        margin: 2,
+        color: {
+          dark: '#261405',
+          light: '#fcf6e8',
+        },
+      });
+    } catch (e) {
+      console.error('Failed to generate QR Code:', e);
+    }
+
+    const qrBackdrop = document.createElement('div');
+    qrBackdrop.className = 'pvp-qr-modal-backdrop';
+    qrBackdrop.innerHTML = `
+      <div class="pvp-qr-modal-card">
+        <div class="pvp-qr-modal-header">
+          <h2 class="pvp-qr-modal-title">⚔️ SCAN TO JOIN COLOSSEUM</h2>
+          <button class="pvp-qr-close-btn" type="button" aria-label="Close QR modal">&times;</button>
+        </div>
+        <div class="pvp-qr-modal-body">
+          <div class="pvp-qr-svg-wrapper">
+            ${qrSvg || '<div class="pvp-qr-fallback">Could not generate QR code.</div>'}
+          </div>
+          <div class="pvp-qr-code-display">
+            <span class="pvp-qr-code-lbl">ROOM CODE:</span>
+            <span class="pvp-qr-code-val">${escapeHtml(displayCode)}</span>
+          </div>
+          <p class="pvp-qr-instructions">
+            Scan this QR code with your mobile device's camera to enter the lobby directly without typing!
+          </p>
+          <div class="pvp-qr-link-row">
+            <input type="text" class="pvp-qr-link-input" readonly value="${escapeHtmlAttribute(joinUrl)}" />
+            <button class="pvp-qr-copy-link-btn" type="button">📋 COPY LINK</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    qrBackdrop.querySelector('.pvp-qr-close-btn')?.addEventListener('click', () => {
+      audio.playClick();
+      qrBackdrop.remove();
+    });
+    qrBackdrop.addEventListener('click', (e) => {
+      if (e.target === qrBackdrop) {
+        audio.playClick();
+        qrBackdrop.remove();
+      }
+    });
+    qrBackdrop.querySelector('.pvp-qr-copy-link-btn')?.addEventListener('click', () => {
+      navigator.clipboard?.writeText(joinUrl);
+      this.toast('Direct Join Link copied to clipboard!');
+    });
+
+    this.overlay.appendChild(qrBackdrop);
   }
 
   private switchTeam(targetTeam: TournamentTeam): void {
@@ -358,6 +448,9 @@ export class TournamentLobbyUI {
       </div>
 
       <div class="pvp-header-actions">
+        <button class="pvp-qr-btn" data-action="open-qr" title="Generate QR Code for Mobile Players">
+          📱 QR CODE
+        </button>
         <div class="pvp-quick-code-badge" title="Share this code for friends to join directly!" data-action="copy-code">
           <span class="pvp-badge-lbl">ROOM CODE:</span>
           <span class="pvp-badge-val">${escapeHtml(roomCode)}</span>
@@ -367,6 +460,9 @@ export class TournamentLobbyUI {
       </div>
     `;
 
+    header.querySelector('[data-action="open-qr"]')?.addEventListener('click', () => {
+      this.showQrCodeModal();
+    });
     header.querySelector('[data-action="copy-code"]')?.addEventListener('click', () => {
       navigator.clipboard?.writeText(roomCode);
       this.toast(`Room Code ${roomCode} copied to clipboard!`);
@@ -750,7 +846,10 @@ export class TournamentLobbyUI {
             <span class="pvp-share-lbl">CURRENT ARENA ROOM CODE:</span>
             <span class="pvp-share-val">${escapeHtml(roomCode)}</span>
           </div>
-          <button class="pvp-share-copy-btn" data-action="copy-share-code">📋 COPY CODE TO SHARE</button>
+          <div class="pvp-share-code-btns">
+            <button class="pvp-share-qr-btn" data-action="open-qr-invite">📱 SHOW QR CODE</button>
+            <button class="pvp-share-copy-btn" data-action="copy-share-code">📋 COPY CODE</button>
+          </div>
         </div>
 
         <h2 class="pvp-panel-title" style="margin-top: 14px;">DIRECT CHALLENGE BY PLAYER ID</h2>
@@ -768,6 +867,10 @@ export class TournamentLobbyUI {
   }
 
   private bindInviteContent(panel: HTMLElement): void {
+    panel.querySelector('[data-action="open-qr-invite"]')?.addEventListener('click', () => {
+      this.showQrCodeModal();
+    });
+
     panel.querySelector('[data-action="copy-share-code"]')?.addEventListener('click', () => {
       const code = this.getDisplayRoomCode();
       navigator.clipboard?.writeText(code);
@@ -894,7 +997,15 @@ export class TournamentLobbyUI {
       }
       .pvp-subtitle { font-size: 11px; color: #b89f80; margin-top: 1px; font-weight: 600; }
 
-      .pvp-header-actions { display: flex; align-items: center; gap: 10px; }
+      .pvp-header-actions { display: flex; align-items: center; gap: 8px; }
+      .pvp-qr-btn {
+        padding: 6px 12px; font-size: 11px; font-weight: 900;
+        background: url('/assets/kenney-rpg-ui/buttonLong_blue.png') no-repeat center/100% 100%;
+        border: 0; color: #fff; cursor: pointer; text-shadow: 0 1px 2px #000;
+        display: flex; align-items: center; gap: 4px;
+        transition: filter 0.15s ease;
+      }
+      .pvp-qr-btn:hover { filter: brightness(1.2); }
       .pvp-quick-code-badge {
         display: flex; align-items: center; gap: 6px;
         background: url('/assets/kenney-rpg-ui/panelInset_brown.png') repeat;
@@ -1131,12 +1242,86 @@ export class TournamentLobbyUI {
       .pvp-share-code-left { display: flex; align-items: center; gap: 8px; }
       .pvp-share-lbl { font-size: 11px; font-weight: 900; color: #ffd770; }
       .pvp-share-val { font-size: 18px; font-weight: 900; color: #fff; font-family: monospace; letter-spacing: 2px; }
+      .pvp-share-code-btns { display: flex; gap: 6px; }
+      .pvp-share-qr-btn {
+        padding: 6px 12px; font-size: 11px; font-weight: 900;
+        background: url('/assets/kenney-rpg-ui/buttonLong_brown.png') no-repeat center/100% 100%;
+        border: 0; color: #ffd770; cursor: pointer; text-shadow: 0 1px 2px #000;
+      }
+      .pvp-share-qr-btn:hover { filter: brightness(1.2); color: #fff; }
       .pvp-share-copy-btn {
         padding: 6px 14px; font-size: 11px; font-weight: 900;
         background: url('/assets/kenney-rpg-ui/buttonLong_blue.png') no-repeat center/100% 100%;
         border: 0; color: #fff; cursor: pointer; text-shadow: 0 1px 2px #000;
       }
       .pvp-share-copy-btn:hover { filter: brightness(1.2); }
+
+      /* QR Code Modal Styles */
+      .pvp-qr-modal-backdrop {
+        position: absolute; inset: 0;
+        background: rgba(0, 0, 0, 0.85);
+        display: flex; align-items: center; justify-content: center;
+        z-index: 200; backdrop-filter: blur(2px);
+      }
+      .pvp-qr-modal-card {
+        width: 380px; max-width: 90vw;
+        background: url('/assets/kenney-rpg-ui/panel_brown.png') repeat;
+        border: 4px solid #3d2817; border-radius: 8px;
+        box-shadow: 0 0 40px rgba(0, 0, 0, 0.95), inset 0 0 20px rgba(0, 0, 0, 0.6);
+        padding: 16px 20px; color: #f7e7ce;
+        display: flex; flex-direction: column; align-items: center; text-align: center;
+        box-sizing: border-box;
+      }
+      .pvp-qr-modal-header {
+        width: 100%; display: flex; justify-content: space-between; align-items: center;
+        margin-bottom: 12px; border-bottom: 1px solid #5a3d24; padding-bottom: 8px;
+      }
+      .pvp-qr-modal-title {
+        margin: 0; font-family: 'Cinzel', serif; font-size: 15px; font-weight: 900;
+        color: #ffd770; letter-spacing: 1px;
+      }
+      .pvp-qr-close-btn {
+        background: url('/assets/kenney-rpg-ui/buttonSquare_brown.png') no-repeat center/100% 100%;
+        border: 0; width: 28px; height: 28px; color: #fca5a5; font-size: 18px; font-weight: 900;
+        cursor: pointer; display: flex; align-items: center; justify-content: center;
+      }
+      .pvp-qr-close-btn:hover { filter: brightness(1.25); color: #fff; }
+      .pvp-qr-modal-body {
+        width: 100%; display: flex; flex-direction: column; align-items: center;
+      }
+      .pvp-qr-svg-wrapper {
+        background: #fdf6e2; padding: 12px; border-radius: 6px;
+        border: 3px solid #3d240f; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        margin-bottom: 10px; display: flex; align-items: center; justify-content: center;
+      }
+      .pvp-qr-svg-wrapper svg {
+        width: 180px; height: 180px; display: block;
+      }
+      .pvp-qr-code-display {
+        display: flex; align-items: center; gap: 8px;
+        background: url('/assets/kenney-rpg-ui/panelInset_brown.png') repeat;
+        padding: 5px 14px; border-radius: 4px; border: 1px solid #735134;
+        margin-bottom: 8px;
+      }
+      .pvp-qr-code-lbl { font-size: 11px; font-weight: 800; color: #ffd770; }
+      .pvp-qr-code-val { font-size: 16px; font-weight: 900; color: #fff; font-family: monospace; letter-spacing: 1.5px; }
+      .pvp-qr-instructions {
+        font-size: 11px; color: #c4b5a0; margin: 4px 0 10px; line-height: 1.4;
+      }
+      .pvp-qr-link-row {
+        width: 100%; display: flex; gap: 6px;
+      }
+      .pvp-qr-link-input {
+        flex: 1; padding: 6px 8px; font-size: 10.5px;
+        background: rgba(0, 0, 0, 0.6); border: 1px solid #5a3d24; color: #fff;
+        font-family: monospace; border-radius: 3px;
+      }
+      .pvp-qr-copy-link-btn {
+        padding: 6px 12px; font-size: 10.5px; font-weight: 900;
+        background: url('/assets/kenney-rpg-ui/buttonLong_blue.png') no-repeat center/100% 100%;
+        border: 0; color: #fff; cursor: pointer; white-space: nowrap;
+      }
+      .pvp-qr-copy-link-btn:hover { filter: brightness(1.2); }
 
       .pvp-panel-title {
         margin: 0 0 8px; font-family: 'Cinzel', serif; font-size: 13px; font-weight: 900;

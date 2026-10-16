@@ -59,9 +59,20 @@ export function getGameServerOrigin(): string {
   const fromVite = viteServerOrigin();
   if (fromVite) return fromVite;
 
-  const isLocal = window.location.hostname === 'localhost'
-    || window.location.hostname === '127.0.0.1';
-  return isLocal ? LOCAL_SERVER_ORIGIN : DEFAULT_PRODUCTION_SERVER_ORIGIN;
+  const hostname = window.location.hostname;
+  const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+  if (isLocal) return LOCAL_SERVER_ORIGIN;
+
+  // Support local Wi-Fi / LAN testing on mobile devices (192.168.x.x, 10.x.x.x, 172.16-31.x.x, .local)
+  const isPrivateIp = /^192\.168\./.test(hostname)
+    || /^10\./.test(hostname)
+    || /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname)
+    || hostname.endsWith('.local');
+  if (isPrivateIp) {
+    return `http://${hostname}:3001`;
+  }
+
+  return DEFAULT_PRODUCTION_SERVER_ORIGIN;
 }
 
 export function getGameApiBase(): string {

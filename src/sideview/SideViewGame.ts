@@ -336,6 +336,23 @@ export class SideViewGame {
     this.refreshNetworkProfile();
 
     this.setupInputListeners();
+
+    // Mobile / Direct Link Auto-Join via URL parameter (?joinRoom=XXXX or ?room=XXXX)
+    const urlParams = new URLSearchParams(window.location.search);
+    const joinCode = urlParams.get('joinRoom') || urlParams.get('room') || urlParams.get('pvp');
+    if (joinCode) {
+      const clean = joinCode.trim().toUpperCase();
+      console.log(`[PVP] Found joinRoom URL param: ${clean}. Auto-joining Colosseum lobby...`);
+      try {
+        const cleanUrl = window.location.pathname + window.location.hash;
+        window.history.replaceState({}, document.title, cleanUrl);
+      } catch (_) {}
+
+      window.setTimeout(() => {
+        this.openTournamentLobby();
+        this.tournamentLobby?.joinRoomByCode(clean);
+      }, 600);
+    }
     
     // Setup Multiplayer Sync Listeners
     Promise.resolve({ network }).then(mod => {

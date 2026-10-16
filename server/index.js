@@ -638,7 +638,10 @@ function broadcastRoles(roomId) {
   });
 }
 
-function generateShortRoomCode() {
+function generateShortRoomCode(proposedCode) {
+  if (proposedCode && /^[0-9]{4}$/.test(proposedCode) && !Object.values(rooms).some(r => r.code === proposedCode)) {
+    return proposedCode;
+  }
   let code;
   let attempts = 0;
   do {
@@ -1299,7 +1302,7 @@ function socketIdentity(socket, data = {}) {
   const shortSource = auth?.shortId || data.shortId;
   const name = safeDisplayName(nameSource);
   const shortId = typeof shortSource === 'string' ? shortSource.trim().toUpperCase().slice(0, 16) : '';
-  if (!uuid || !name || !/^[A-Z0-9]{4,16}$/.test(shortId)) return null;
+  if (!uuid || !name || !/^[A-Z0-9_-]{3,24}$/i.test(shortId)) return null;
 
   const requestedActor = typeof data.actorId === 'string' ? data.actorId.trim() : '';
   const actorId = safeId(requestedActor)
@@ -1445,7 +1448,11 @@ io.on('connection', (socket) => {
        console.error(`[LOBBY] ERROR: Player not found for socket ${socket.id} during create_lobby!`);
        return;
     }
-    const canonicalMinLevel = DUNGEON_MIN_LEVELS[data.dungeonId];
+    const isPvp = Boolean(data.isPvp);
+    const dungeonId = (isPvp && (!data.dungeonId || !DUNGEON_MIN_LEVELS[data.dungeonId]))
+      ? 'tournament_colosseum'
+      : data.dungeonId;
+    const canonicalMinLevel = DUNGEON_MIN_LEVELS[dungeonId];
     if (!Number.isInteger(canonicalMinLevel)) {
       socket.emit('lobby_error', { msg: 'Invalid dungeon.' });
       return;
@@ -1471,7 +1478,7 @@ io.on('connection', (socket) => {
     applyProfile(p, data);
 
     const newRoomId = `room_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-    const roomCode = generateShortRoomCode();
+    const roomCode = generateShortRoomCode(data.proposedCode);
     const isPvp = Boolean(data.isPvp);
     const pvpFormat = ['1v1', '2v2', '3v3', '4v4'].includes(data.pvpFormat) ? data.pvpFormat : '1v1';
     const initialTeam = data.team === 'blue' ? 'blue' : 'red';
@@ -1836,11 +1843,15 @@ io.on('connection', (socket) => {
     let targetRoomId = data.roomId;
     let room = rooms[targetRoomId];
     if (!room && typeof targetRoomId === 'string') {
-      const cleanTarget = targetRoomId.trim().toUpperCase();
+      const rawTarget = targetRoomId.trim().toUpperCase();
+      const pureDigits = rawTarget.replace(/^PVP-/, '');
       const foundEntry = Object.entries(rooms).find(([id, r]) => {
-        return id.toUpperCase() === cleanTarget
-          || (r.code && r.code.toUpperCase() === cleanTarget)
-          || (`PVP-${r.code}`.toUpperCase() === cleanTarget);
+        const rCode = String(r.code || '').trim().toUpperCase();
+        return id.toUpperCase() === rawTarget
+          || id.toUpperCase() === pureDigits
+          || id.toUpperCase() === `ROOM_${pureDigits}`
+          || rCode === pureDigits
+          || `PVP-${rCode}` === rawTarget;
       });
       if (foundEntry) {
         targetRoomId = foundEntry[0];
@@ -1849,7 +1860,7 @@ io.on('connection', (socket) => {
     }
 
     if (!room) {
-      socket.emit('invite_error', { msg: 'Lobby not found. Check the Room Code.' });
+      socket.emit('invite_error', { msg: `Colosseum lobby "${data.roomId}" not found. Please check the 4-digit code.` });
       return;
     }
 

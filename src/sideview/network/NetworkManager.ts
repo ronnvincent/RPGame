@@ -965,7 +965,13 @@ export class NetworkManager {
     this.onLobbyListCb = cb;
   }
 
-  public createPvpLobby(dungeonId: string, format: '1v1' | '2v2' | '3v3' | '4v4' = '1v1', team: 'red' | 'blue' = 'red', onUpdate?: (lobbyData: any) => void) {
+  public createPvpLobby(
+    dungeonId: string,
+    format: '1v1' | '2v2' | '3v3' | '4v4' = '1v1',
+    team: 'red' | 'blue' = 'red',
+    proposedCode?: string,
+    onUpdate?: (lobbyData: any) => void
+  ) {
     if (!this.socket) this.connect();
     if (onUpdate) this.onLobbyUpdateCb = onUpdate;
     const uuid = localStorage.getItem('playerUUID');
@@ -977,6 +983,7 @@ export class NetworkManager {
       isPvp: true,
       pvpFormat: format,
       team,
+      proposedCode,
       uuid,
       actorId: this.getActorId(),
       name,
