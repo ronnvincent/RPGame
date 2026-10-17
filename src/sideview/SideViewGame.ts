@@ -770,15 +770,19 @@ export class SideViewGame {
             this.engine.pvpTeam = assignedTeam;
           }
           match.setupTeamsFromLobby(members, localActorId, pvpFmt, teams, assignedTeam);
-          if (roomData.players) {
-            for (const p of roomData.players) {
-              if (p.socketId && mod.network.remotePlayers[p.socketId]) {
-                mod.network.remotePlayers[p.socketId].team = p.team
-                  || (teams && teams[p.actorId])
-                  || (mod.network.currentLobbyState?.pvpTeams && mod.network.currentLobbyState.pvpTeams[p.actorId])
-                  || (p.actorId === localActorId ? assignedTeam : (assignedTeam === 'red' ? 'blue' : 'red'));
-                mod.network.remotePlayers[p.socketId].actorId = p.actorId;
-              }
+          // The match roster is the one place that knows every side. Copy it
+          // onto the render cache instead of guessing "the opposite colour":
+          // a missing team packet used to turn a teammate into an enemy.
+          for (const fighter of match.fighters) {
+            if (fighter.isLocal) continue;
+            for (const [sid, remote] of Object.entries(mod.network.remotePlayers)) {
+              if (!remote) continue;
+              const matches = sid === fighter.id
+                || remote.actorId === fighter.id
+                || (Boolean(remote.name) && remote.name === fighter.name);
+              if (!matches) continue;
+              remote.team = fighter.team;
+              if (!remote.actorId) remote.actorId = fighter.id;
             }
           }
           // The server seats the bench itself; never infer it from missing
@@ -2208,8 +2212,14 @@ export class SideViewGame {
 
     const localActorId = network.getActorId();
     const members = network.currentLobbyState?.members || [];
+    // A stale (or absent) snapshot used to build a one-player match: the
+    // local player was not in the roster, a team of bots was invented, and
+    // the result looked exactly like "everyone is on every side". Wait for
+    // the server's dungeon_start instead.
+    if (members.length === 0) return;
     const teams = extraSyncData?.pvpTeams || network.currentLobbyState?.pvpTeams;
     const myMember = members.find((m: any) => (m.actorId === localActorId || m.uuid === localActorId || m.socketId === network.socket?.id));
+    if (!myMember) return;
     const assignedTeam = (teams && teams[localActorId])
       || myMember?.team
       || (network.isHost ? 'red' : 'blue');

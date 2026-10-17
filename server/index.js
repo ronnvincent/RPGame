@@ -904,7 +904,11 @@ function buildLobbyState(roomId) {
         classId: rec.classId || null,
         level: rec.level || 1,
         power: rec.power || 0,
-        team: (room.pvpTeams && room.pvpTeams[actorId]) || 'red',
+        // A bench seat is not a colour. Reporting 'red' for a spectator made
+        // every client-side fallback put the watcher in a fighting slot.
+        team: room.isPvp
+          ? (pvpSeatOf(room, actorId) === PVP_SPECTATOR_SEAT ? undefined : pvpSeatOf(room, actorId))
+          : ((room.pvpTeams && room.pvpTeams[actorId]) || 'red'),
         seat: room.isPvp ? pvpSeatOf(room, actorId) : ((room.pvpTeams && room.pvpTeams[actorId]) || 'red'),
         slot: room.isPvp && room.pvpSlots ? room.pvpSlots[actorId] : undefined,
         ready: actorId === room.hostActorId ? true : !!room.ready[actorId],
@@ -2362,22 +2366,35 @@ io.on('connection', (socket) => {
       // the ready-up the challenger was just asked for.
       if (room.ready) delete room.ready[p.actorId];
       if (room.isPvp) {
+        // Seating is per chair, never per head-count. The old counter treated
+        // a bench spectator as a Crimson fighter (they have no team entry),
+        // and it never checked that the chair it picked was free. A newcomer
+        // could then land on top of somebody - or, worse, be folded onto a
+        // side that already had a full roster.
         if (!room.pvpTeams) room.pvpTeams = {};
-        const maxPerTeam = room.pvpFormat === '4v4' ? 4 : room.pvpFormat === '3v3' ? 3 : room.pvpFormat === '2v2' ? 2 : 1;
-        let redCount = 0;
-        let blueCount = 0;
-        for (const mid of room.members) {
-          if (mid === p.actorId) continue;
-          if (room.pvpTeams[mid] === 'blue') blueCount++;
-          else redCount++;
+        if (!room.pvpSlots) room.pvpSlots = {};
+        if (!room.pvpSpectators) room.pvpSpectators = {};
+        // Park the newcomer on the bench first. Until they have a seat,
+        // pvpSeatOf() would default them to Crimson and every head-count
+        // (including the "is this team full?" check) would be one too high.
+        pvpSetSeat(room, p.actorId, PVP_SPECTATOR_SEAT);
+        room.pvpSlots[p.actorId] = Math.max(0, pvpFirstFreeSeat(room, PVP_SPECTATOR_SEAT));
+        ensurePvpSeats(room);
+
+        const redSlots = pvpSeatOccupants(room, 'red').length;
+        const blueSlots = pvpSeatOccupants(room, 'blue').length;
+        const redSeat = pvpFirstFreeSeat(room, 'red');
+        const blueSeat = pvpFirstFreeSeat(room, 'blue');
+        const preferRed = redSeat >= 0 && (blueSeat < 0 || redSlots <= blueSlots);
+        if (preferRed) {
+          pvpSetSeat(room, p.actorId, 'red');
+          room.pvpSlots[p.actorId] = redSeat;
+        } else if (blueSeat >= 0) {
+          pvpSetSeat(room, p.actorId, 'blue');
+          room.pvpSlots[p.actorId] = blueSeat;
         }
-        if (blueCount < redCount && blueCount < maxPerTeam) {
-          room.pvpTeams[p.actorId] = 'blue';
-        } else if (redCount < maxPerTeam) {
-          room.pvpTeams[p.actorId] = 'red';
-        } else {
-          room.pvpTeams[p.actorId] = 'blue';
-        }
+        // Both sides are full: the bench seat assigned above is final. The
+        // people already seated - including the watchers - keep their chairs.
       }
     }
     p.room = targetRoomId;
@@ -2483,9 +2500,15 @@ io.on('connection', (socket) => {
     if (!targetPlayer || targetPlayer.room !== p.room) return;
 
     const targetActorId = targetPlayer.actorId;
-    const attackerTeam = (room.pvpTeams && room.pvpTeams[p.actorId]) || (p.actorId === room.hostActorId ? 'red' : 'blue');
-    const targetTeam = (room.pvpTeams && room.pvpTeams[targetActorId]) || (targetActorId === room.hostActorId ? 'red' : 'blue');
-    if (attackerTeam === targetTeam && room.members.length > 2) return; // Strict No Friendly Fire (allow 1v1 edge case)
+    // The seat is the only truth. A bench spectator has no team at all, and a
+    // missing entry used to be guessed as "red for the host, blue otherwise",
+    // which let the wrong colour count as an enemy.
+    const attackerTeam = pvpTeamOf(room, p.actorId);
+    const targetTeam = pvpTeamOf(room, targetActorId);
+    if (!attackerTeam || !targetTeam) return;
+    // No friendly fire, including the old 1v1 exception. Two players on the
+    // same colour are allies no matter how many people are in the room.
+    if (attackerTeam === targetTeam) return;
 
     const dmg = Math.max(1, Math.min(999999, Math.round(Number(data.damage) || 1)));
     const targetSid = targetPlayer.socketId || socketIdForActor(targetActorId);
@@ -2529,6 +2552,10 @@ io.on('connection', (socket) => {
 
     pvpRoomState(room);
     const downedTeam = pvpTeamOf(room, p.actorId);
+    // Only a fighter can fall. A bench spectator has no team; without this
+    // guard their (empty) team matched every other spectator and a stray
+    // packet could settle a round nobody fought.
+    if (!downedTeam) return;
     const killerTeam = downedTeam === 'red' ? 'blue' : 'red';
 
     // Replays of the death that just ended a round must not score it twice.

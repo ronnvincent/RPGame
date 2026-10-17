@@ -106,6 +106,8 @@ function startPractice() {
   engine.startTournament(match);
   match.startMatch();
   match.update(3.1);
+  // A round cannot be settled by a wipe during its opening grace window.
+  match.update(1);
   return { engine, match, botId: match.fighters.find(f => f.isBot).id };
 }
 
@@ -242,6 +244,8 @@ test('killing the bot settles the round, and the second kill hands over the resu
   await new Promise(resolve => setTimeout(resolve, 2800));
   for (let i = 0; i < 120 && match.status !== 'active'; i += 1) engine.update(0.1);
   assert.equal(match.status, 'active', 'round two starts after the break');
+  // Round two has an opening grace window before a wipe can settle it.
+  engine.update(1);
   const roundTwoBot = network.remotePlayers[botId];
   for (let i = 0; i < 60 && roundTwoBot.hpPct > 0; i += 1) {
     engine.applyPvpAttackHitToRemotePlayer(botId, roundTwoBot, 5000, false, 'Test Slash');

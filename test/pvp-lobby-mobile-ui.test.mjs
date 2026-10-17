@@ -294,7 +294,12 @@ test('a benched player can leave the bench from a tab with no stage', () => {
     pvpTeams: { mate: 'red' },
     pvpSeats: { mate: 0 },
     pvpBenchSize: 2,
-    members: [member('me', 'spectator', 0), member('mate', 'red', 0)],
+    // The room snapshot is the authority now: this player is a benched
+    // guest, so the host flag lives on the other member.
+    members: [
+      { ...member('me', 'spectator', 0), isHost: false },
+      { ...member('mate', 'red', 0), isHost: true },
+    ],
   };
   // A benched *guest*: the host's footer belongs to the launch button.
   const wasHost = network.isHost;

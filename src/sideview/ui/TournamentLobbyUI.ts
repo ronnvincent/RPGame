@@ -70,6 +70,13 @@ export class TournamentLobbyUI {
   private engine: SideViewEngine;
   public currentFormat: TournamentFormat = '1v1';
   private localTeam: TournamentTeam = 'red';
+  /**
+   * The seat the server last told us we hold. It survives a snapshot that
+   * momentarily forgets us (a lagging lobby_state, a state from before our
+   * join was written): without it the fallback put a benched spectator in a
+   * fighting slot, which is exactly what a new arrival used to trigger.
+   */
+  private localSeat: 'red' | 'blue' | 'spectator' = 'red';
   private onStartMatchCb: (match: TournamentMatch) => void;
 
   private state: LobbyState | null = null;
@@ -132,8 +139,11 @@ export class TournamentLobbyUI {
         this.currentFormat = state.pvpFormat;
       }
       const myId = network.getActorId();
-      if (state.pvpTeams && state.pvpTeams[myId]) {
-        this.localTeam = state.pvpTeams[myId];
+      const me = state.members?.find(m => m.actorId === myId || m.uuid === myId);
+      if (me?.seat) {
+        this.applyLocalSeat(me.seat);
+      } else if (state.pvpTeams && state.pvpTeams[myId]) {
+        this.applyLocalSeat(state.pvpTeams[myId]);
       }
       if (network.isHost && state.members && state.members.length > 1) {
         network.broadcastPvpHandshake('tournament_colosseum', this.currentFormat, 'lobby');
@@ -174,8 +184,11 @@ export class TournamentLobbyUI {
         this.generatedRoomCode = String(this.state.roomCode).replace(/^PVP-/i, '');
       }
       const myId = network.getActorId();
-      if (this.state.pvpTeams && this.state.pvpTeams[myId]) {
-        this.localTeam = this.state.pvpTeams[myId];
+      const me = this.state.members?.find(m => m.actorId === myId || m.uuid === myId);
+      if (me?.seat) {
+        this.applyLocalSeat(me.seat);
+      } else if (this.state.pvpTeams && this.state.pvpTeams[myId]) {
+        this.applyLocalSeat(this.state.pvpTeams[myId]);
       }
     } else {
       network.createPvpLobby('tournament_colosseum', this.currentFormat, this.localTeam, this.getShortRoomCode());
@@ -307,7 +320,8 @@ export class TournamentLobbyUI {
       classId: p?.characterClass?.id || storedClass || 'warrior',
       level: p?.level || storedLevel || 1,
       power: (p as any)?.power || 150,
-      team: this.localTeam,
+      team: this.localSeat === 'spectator' ? undefined : this.localSeat,
+      seat: this.localSeat,
       ready: false,
       isHost: network.isHost,
       online: true,
@@ -425,6 +439,33 @@ export class TournamentLobbyUI {
     this.pickSeat(targetTeam);
   }
 
+  /** Remember the seat the server just assigned to us. */
+  private applyLocalSeat(seat: 'red' | 'blue' | 'spectator' | undefined | null): void {
+    if (seat !== 'red' && seat !== 'blue' && seat !== 'spectator') return;
+    this.localSeat = seat;
+    if (seat !== 'spectator') this.localTeam = seat;
+  }
+
+  /**
+   * Which seat a member is in.
+   *
+   * The server's `seat` is the truth. `pvpTeams` is the next-best record, and a
+   * member's own `team` field only matters for old snapshots. A spectator is
+   * never inferred: the bench is a seat, not something you fall out of.
+   */
+  private resolveSeat(member: LobbyMember, isMe: boolean): 'red' | 'blue' | 'spectator' {
+    if (member.seat === 'spectator') return 'spectator';
+    if (member.seat === 'red' || member.seat === 'blue') return member.seat;
+    const key = member.actorId || member.uuid;
+    const fromRoom = key ? this.state?.pvpTeams?.[key] : undefined;
+    if (fromRoom === 'red' || fromRoom === 'blue') return fromRoom;
+    if (member.team === 'red' || member.team === 'blue') return member.team;
+    // Nobody else's missing data is allowed to move us: the last seat the
+    // server gave us wins over any local guess.
+    if (isMe) return this.localSeat;
+    return this.localTeam === 'red' ? 'blue' : 'red';
+  }
+
   /**
    * Take a seat: a team position or a chair on the bench.
    *
@@ -435,7 +476,7 @@ export class TournamentLobbyUI {
     const myId = network.getActorId();
     audio.playClick();
 
-    if (seat !== 'spectator') this.localTeam = seat;
+    this.applyLocalSeat(seat);
 
     if (this.state) {
       const me = this.state.members.find(m => m.actorId === myId || m.uuid === myId);
@@ -470,8 +511,19 @@ export class TournamentLobbyUI {
     this.render();
   }
 
+  /** Host rights as the room sees them, not as this browser's role guess. */
+  private isHostNow(): boolean {
+    const myId = network.getActorId();
+    const me = this.state?.members?.find(m => m.actorId === myId || m.uuid === myId);
+    return me ? Boolean(me.isHost) : network.isHost;
+  }
+
   private toggleReady(): void {
     audio.playClick();
+    // Readying up is the challengers' job. The host launches; the server
+    // ignores a host ready packet (and their badge is the crown), so the
+    // button must not pretend otherwise either.
+    if (this.isHostNow()) return;
     const myId = network.getActorId();
     const me = this.state?.members.find(m => m.actorId === myId || m.uuid === myId);
     const nextReady = !(me?.ready);
@@ -481,6 +533,10 @@ export class TournamentLobbyUI {
   }
 
   private startTournament(): void {
+    if (!this.isHostNow()) {
+      this.toast('Only the host can start the match.');
+      return;
+    }
     audio.playLevelUp();
     network.broadcastPvpHandshake('tournament_colosseum', this.currentFormat, 'match');
     network.startMatch();
@@ -537,6 +593,14 @@ export class TournamentLobbyUI {
 
     // Ensure local player is always placed on slot
     const rawMembers = st?.members && st.members.length > 0 ? [...st.members] : [self];
+    // Adopt the server's seat before any fallback can speak. A snapshot that
+    // does not list us yet must not turn a bench seat into a team seat.
+    const authoritativeMe = st?.members?.find(m => m.actorId === myId || m.uuid === myId);
+    if (authoritativeMe?.seat) {
+      this.applyLocalSeat(authoritativeMe.seat);
+    } else if (st?.pvpTeams?.[myId]) {
+      this.applyLocalSeat(st.pvpTeams[myId]);
+    }
     if (!rawMembers.some(m => m.actorId === myId || m.uuid === myId)) {
       rawMembers.unshift(self);
     }
@@ -552,11 +616,8 @@ export class TournamentLobbyUI {
     for (const m of rawMembers) {
       const aid = m.actorId || m.uuid;
       const isMe = aid === myId;
-      const seat = m.seat || (st?.pvpTeams && st.pvpTeams[aid]) || m.team
-        || (isMe ? this.localTeam : (this.localTeam === 'red' ? 'blue' : 'red'));
-      if (isMe && seat !== 'spectator' && seat !== this.localTeam) {
-        this.localTeam = seat;
-      }
+      const seat = this.resolveSeat(m, isMe);
+      if (isMe) this.applyLocalSeat(seat);
 
       if (seat === 'spectator') benchMembers.push(m);
       else if (seat === 'blue') blueMembers.push(m);
@@ -572,11 +633,13 @@ export class TournamentLobbyUI {
     const redSlots = this.seatRows(redMembers, teamSize);
     const blueSlots = this.seatRows(blueMembers, teamSize);
     const benchSlots = this.seatRows(benchMembers, benchSize);
-    const meSeat = rawMembers.find(m => (m.actorId || m.uuid) === myId)?.seat
-      || (st?.pvpTeams && st.pvpTeams[myId])
-      || this.localTeam;
+    const meSeat = this.resolveSeat(me, true);
 
-    const iAmHost = network.isHost;
+    // Host rights come from the room itself. `network.isHost` starts out true
+    // before the first role packet (and returns to true when a player leaves
+    // the party), so a guest could be shown the host's START button and no
+    // READY button at all.
+    const iAmHost = authoritativeMe ? Boolean(authoritativeMe.isHost) : network.isHost;
     const hasBothTeams = redMembers.length >= 1 && blueMembers.length >= 1;
     // Bench spectators are not fighters: their readiness cannot block a fight
     // they are not in.

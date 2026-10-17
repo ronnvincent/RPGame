@@ -126,6 +126,8 @@ import {
   PVP_DAMAGE_MULTIPLIER,
   PVP_SUDDEN_DEATH_DAMAGE_MULTIPLIER,
   getNormalizedPvpBaseHp,
+  pvpWipeWinner,
+  resetRemoteCombatants,
   TOURNAMENT_FORMAT_TEAM_SIZES,
   type PvpMatchSummary,
   type TournamentFighter,
@@ -2453,10 +2455,10 @@ export class SideViewEngine {
       const p = this.player;
       for (const socketId in network.remotePlayers) {
         const remoteP = network.remotePlayers[socketId];
-        if (remoteP.isTownMode || remoteP.downed) continue;
-        const myTeam = this.pvpTeam || 'red';
-        const oppTeam = remoteP.team || (myTeam === 'red' ? 'blue' : 'red');
-        if (oppTeam === myTeam) continue;
+        // Only a rostered fighter on the other side can be hit. The old
+        // fallback guessed "the opposite colour" whenever a team was missing,
+        // so a teammate with a dropped team packet took friendly damage.
+        if (!this.pvpCanHitRemote(socketId, remoteP)) continue;
 
         const remoteWorldY = remoteP.y + this.groundY;
         const vertical = Math.abs((remoteWorldY - 24) - centerY);
@@ -5548,12 +5550,9 @@ export class SideViewEngine {
 
         // PvP Projectile Hit Detection against opposing players
         if (this.inTournamentMode) {
-          const myTeam = this.pvpTeam || 'red';
           for (const socketId in network.remotePlayers) {
             const remoteP = network.remotePlayers[socketId];
-            if (remoteP.isTownMode || remoteP.downed) continue;
-            const oppTeam = remoteP.team || (myTeam === 'red' ? 'blue' : 'red');
-            if (oppTeam === myTeam) continue;
+            if (!this.pvpCanHitRemote(socketId, remoteP)) continue;
             const remoteWorldY = remoteP.y + this.groundY;
             const dist = Math.hypot(remoteP.x - proj.x, (remoteWorldY - 24) - proj.y);
             if (dist <= proj.radius + 28) {
@@ -6244,7 +6243,12 @@ export class SideViewEngine {
         if (Boolean(remoteP.isTownMode) !== Boolean(this.isTownMode)) continue;
 
         const isPvp = this.inTournamentMode;
-        const rTeam = remoteP.team || (this.pvpTeam === 'red' ? 'blue' : 'red');
+        // In a duel, draw only rostered fighters and only in their real
+        // colour. A spectator (or a leftover from a co-op run) has no
+        // business appearing as a body in the ring.
+        const fighter = isPvp ? this.pvpFighterForRemote(socketId, remoteP) : null;
+        if (isPvp && !fighter) continue;
+        const rTeam: 'red' | 'blue' = fighter?.team || remoteP.team || (this.pvpTeam === 'red' ? 'blue' : 'red');
         const teamColor = rTeam === 'red' ? '#ef4444' : '#3b82f6';
         const teamText = rTeam === 'red' ? '#fca5a5' : '#93c5fd';
         const teamGlow = rTeam === 'red' ? 'rgba(239, 68, 68, 0.8)' : 'rgba(59, 130, 246, 0.8)';
@@ -7040,6 +7044,12 @@ export class SideViewEngine {
       this.pvpPauseActive = false;
       setSpectatorFollow(this.spectatorView, true);
 
+      // Every combatant stands up for the new round, not just the bots. A real
+      // opponent's `downed` flag lives in the movement cache, and copying it
+      // back into the match on the first frame of round two settled that
+      // round instantly - two quick rounds and the victory card appeared
+      // after a single kill.
+      resetRemoteCombatants(network.remotePlayers);
       for (const bot of this.arenaBots) {
         resetArenaBot(bot);
         const remote = network.remotePlayers[bot.id];
@@ -7072,21 +7082,25 @@ export class SideViewEngine {
       localFighter.x = this.player.x;
     }
 
-    // Sync real remote fighters from NetworkManager
+    // Sync real remote fighters from NetworkManager.
+    //
+    // Position always follows the movement cache; life only while the round
+    // is actually live. A death flag left over from the previous round (or a
+    // client that has not respawned yet) must not wipe a team during the
+    // countdown or the instant "FIGHT!" appears.
     const remoteList = Object.values(network.remotePlayers);
     for (const fighter of match.fighters) {
       if (fighter.isLocal) continue;
       const remote = network.remotePlayers[fighter.id]
-        || remoteList.find(r => r.actorId === fighter.id || (Boolean(r.name) && r.name === fighter.name))
-        || (match.config.format === '1v1' && remoteList.length === 1 ? remoteList[0] : undefined);
-      if (remote) {
-        fighter.x = remote.x;
-        fighter.isAlive = !remote.downed && (remote.hpPct === undefined || remote.hpPct > 0);
-        const normPct = remote.hpPct !== undefined
-          ? (remote.hpPct > 1 ? remote.hpPct / 100 : remote.hpPct)
-          : (remote.downed ? 0 : 1);
-        fighter.currentHp = Math.round(Math.max(0, Math.min(1, normPct)) * fighter.maxHp);
-      }
+        || remoteList.find(r => r.actorId === fighter.id || (Boolean(r.name) && r.name === fighter.name));
+      if (!remote) continue;
+      fighter.x = remote.x;
+      if (match.status !== 'active') continue;
+      fighter.isAlive = !remote.downed && (remote.hpPct === undefined || remote.hpPct > 0);
+      const normPct = remote.hpPct !== undefined
+        ? (remote.hpPct > 1 ? remote.hpPct / 100 : remote.hpPct)
+        : (remote.downed ? 0 : 1);
+      fighter.currentHp = Math.round(Math.max(0, Math.min(1, normPct)) * fighter.maxHp);
     }
 
     // Practice opponents run BEFORE the match state machine. The state
@@ -7100,18 +7114,12 @@ export class SideViewEngine {
     // Update match state machine
     match.update(dt);
 
-    // Check round wipe condition in active state
-    if (match.status === 'active') {
-      const totalRed = match.fighters.filter(f => f.team === 'red').length;
-      const totalBlue = match.fighters.filter(f => f.team === 'blue').length;
-      const redAlive = match.fighters.filter(f => f.team === 'red' && f.isAlive).length;
-      const blueAlive = match.fighters.filter(f => f.team === 'blue' && f.isAlive).length;
-      if (totalRed > 0 && totalBlue > 0) {
-        if (redAlive === 0 || blueAlive === 0) {
-          const roundWinner = redAlive > 0 ? 'red' : blueAlive > 0 ? 'blue' : 'draw';
-          match.resolveRoundEnd(roundWinner, 'wipe');
-        }
-      }
+    // Check round wipe condition in active state. The match applies the same
+    // rule with the same grace window, so this only covers a fighter whose
+    // life changed after match.update() ran this frame.
+    if (match.canSettleWipe()) {
+      const roundWinner = pvpWipeWinner(match.fighters);
+      if (roundWinner) match.resolveRoundEnd(roundWinner, 'wipe');
     }
 
     // Check if match ended
@@ -7157,6 +7165,9 @@ export class SideViewEngine {
     isCrit: boolean,
     skillName?: string
   ): void {
+    // Defence in depth: a teammate can never be damaged, even if a caller
+    // forgot to filter. Practice bots pass because they own a fighter.
+    if (!this.pvpCanHitRemote(socketId, remoteP)) return;
     const scale = PVP_DAMAGE_MULTIPLIER * this.pvpDamageScale();
     let finalDmg = rawDamage * scale;
     if (isCrit) finalDmg = Math.min(finalDmg * 1.5, rawDamage * scale * 1.35);
@@ -7220,6 +7231,10 @@ export class SideViewEngine {
     if (this.pvpObserverFlag) return;
     if (!this.inTournamentMode || this.player.hp <= 0 || this.player.downed) return;
     if (this.player.iframeTimer > 0) return;
+    // A teammate cannot hurt us. If the incoming packet disagrees with the
+    // room's sides, the packet is wrong - not the team.
+    if (packet.attackerTeam !== 'red' && packet.attackerTeam !== 'blue') return;
+    if (packet.attackerTeam === this.pvpTeam) return;
 
     const rawDmg = packet.damage;
     const mitigated = Math.max(1, Math.round(afterDefence(rawDmg, this.player.totalDef)));
@@ -7354,6 +7369,43 @@ export class SideViewEngine {
     this.particles.addScreenFlash('#ffffff', 0.1, 0.055);
     this.particles.triggerScreenShake(2.4, 0.16);
     audio.playSlash('heavy', 1.1);
+  }
+
+  /**
+   * The match fighter a remote player owns.
+   *
+   * A bench spectator is in the room but not on the roster, so they have no
+   * fighter. Every PvP rule (drawing, targeting, damage) keys off this, which
+   * is what keeps a watcher or a stale co-op entry from being treated as an
+   * enemy on the other colour.
+   */
+  private pvpFighterForRemote(
+    socketId: string,
+    remote: { actorId?: string; name?: string } | null | undefined,
+  ): TournamentFighter | null {
+    const match = this.tournamentMatch;
+    if (!match || !remote) return null;
+    const id = remote.actorId || '';
+    const name = remote.name || '';
+    return match.fighters.find(f =>
+      f.id === socketId
+      || (id !== '' && f.id === id)
+      || (name !== '' && f.name === name)
+    ) || null;
+  }
+
+  /** True only when the remote is a rostered fighter on the other side. */
+  private pvpCanHitRemote(
+    socketId: string,
+    remote: RemotePlayerState | null | undefined,
+  ): boolean {
+    if (!this.inTournamentMode || !remote) return false;
+    if (remote.isTownMode || remote.downed) return false;
+    const fighter = this.pvpFighterForRemote(socketId, remote);
+    if (!fighter) return false;
+    const team = fighter.team;
+    if (team !== 'red' && team !== 'blue') return false;
+    return team !== (this.pvpTeam || 'red');
   }
 
   /** Living teammates the spectator camera can follow. */

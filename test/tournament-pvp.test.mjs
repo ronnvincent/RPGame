@@ -176,9 +176,10 @@ test('tournament match flow manages round wipes, scoring, and champion coronatio
   assert.equal(match.redScore, 0);
   assert.equal(match.blueScore, 0);
 
-  // Countdown elapses
+  // Countdown elapses, then the round runs past its opening grace window.
   match.update(3.1);
   assert.equal(match.status, 'active');
+  match.update(1);
 
   // Blue player wiped
   const blue = match.fighters.find(f => f.team === 'blue');
@@ -196,6 +197,7 @@ test('tournament match flow manages round wipes, scoring, and champion coronatio
   match.startRoundCountdown();
   match.update(3.1);
   assert.equal(match.status, 'active');
+  match.update(1);
 
   // Blue wiped again in Round 2
   const blue2 = match.fighters.find(f => f.team === 'blue');
@@ -216,6 +218,7 @@ test('each settled round reports its scoreboard once and never ends the match ea
   match.onRoundResolved = record => reported.push({ ...record });
   match.startMatch();
   match.update(3.1);
+  match.update(1); // clear the opening wipe grace
 
   const blue = match.fighters.find(f => f.team === 'blue');
   blue.currentHp = 0;
@@ -235,6 +238,7 @@ test('each settled round reports its scoreboard once and never ends the match ea
   match.currentRound = 2;
   match.startRoundCountdown();
   match.update(3.1);
+  match.update(1);
   const blue2 = match.fighters.find(f => f.team === 'blue');
   blue2.currentHp = Math.round(blue2.maxHp * 0.2);
   match.roundTimeRemaining = 0;

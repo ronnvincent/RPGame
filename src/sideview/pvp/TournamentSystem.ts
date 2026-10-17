@@ -40,6 +40,57 @@ export const PVP_SUDDEN_DEATH_TIE_MARGIN = 0.5;
 
 export const PVP_ROUNDS_TO_WIN = 2;
 
+/**
+ * How long a round must be live before a team wipe can settle it.
+ *
+ * A client used to re-run its round-end check on the first frame of the new
+ * round, while the enemy's "downed" flag from the previous round was still in
+ * the movement cache. Two rounds were awarded in the same instant and a
+ * best-of-three showed its victory card after the first kill. A short floor
+ * gives the round-start reset a chance to reach every client first.
+ */
+export const PVP_WIPE_GRACE_SEC = 0.75;
+
+/** The winner of a wipe, or null while both teams still have someone up. */
+export function pvpWipeWinner(
+  fighters: ReadonlyArray<{ team: 'red' | 'blue'; isAlive: boolean }>,
+): 'red' | 'blue' | 'draw' | null {
+  const hasRed = fighters.some(f => f.team === 'red');
+  const hasBlue = fighters.some(f => f.team === 'blue');
+  if (!hasRed || !hasBlue) return null;
+  const redAlive = fighters.some(f => f.team === 'red' && f.isAlive);
+  const blueAlive = fighters.some(f => f.team === 'blue' && f.isAlive);
+  if (redAlive && blueAlive) return null;
+  if (!redAlive && !blueAlive) return 'draw';
+  return redAlive ? 'red' : 'blue';
+}
+
+/**
+ * Put every remote fighter back on their feet for a new round.
+ *
+ * The match record resets itself, but the render cache did not: a fighter who
+ * died in round one stayed `downed` in `network.remotePlayers`, and the first
+ * alive-sync of round two copied that corpse straight back into the match.
+ * Bots were reset by the practice loop; real opponents were not.
+ */
+export function resetRemoteCombatants(
+  remotes: Record<string, {
+    downed?: boolean;
+    hpPct?: number;
+    isAttacking?: boolean;
+    animState?: string;
+    isTownMode?: boolean;
+  } | undefined>,
+): void {
+  for (const remote of Object.values(remotes)) {
+    if (!remote || remote.isTownMode) continue;
+    remote.downed = false;
+    remote.hpPct = 100;
+    remote.isAttacking = false;
+    if (remote.animState === 'dead') remote.animState = 'idle';
+  }
+}
+
 export type TournamentFormat = '1v1' | '2v2' | '3v3' | '4v4';
 export type TournamentTeam = 'red' | 'blue';
 export type TournamentStatus = 'idle' | 'countdown' | 'active' | 'round_end' | 'match_end';
@@ -225,6 +276,8 @@ export class TournamentMatch {
   public redScore: number = 0;
   public blueScore: number = 0;
   public roundTimeRemaining: number = PVP_ROUND_DURATION_SEC;
+  /** Seconds the current round has actually been live (not counting). */
+  public roundActiveSeconds: number = 0;
   public countdownRemaining: number = 3;
   /** True while the round is in its overtime window. */
   public suddenDeath: boolean = false;
@@ -284,7 +337,8 @@ export class TournamentMatch {
     localActorId: string,
     format: TournamentFormat = this.config.format,
     pvpTeams?: Record<string, 'red' | 'blue'>,
-    assignedTeam?: 'red' | 'blue'
+    assignedTeam?: 'red' | 'blue',
+    options: { practiceBots?: boolean } = {}
   ): void {
     this.config.format = format;
     this.fighters = [];
@@ -347,26 +401,19 @@ export class TournamentMatch {
 
     const teamSize = TOURNAMENT_FORMAT_TEAM_SIZES[format] || 1;
 
-    // Balance teams if all human participants were placed on the same team
-    const initialRed = this.fighters.filter(f => f.team === 'red');
-    const initialBlue = this.fighters.filter(f => f.team === 'blue');
+    // Teams are the room's decision, never this function's.
+    //
+    // It used to "balance" a roster that arrived all on one side by moving a
+    // real player to the other colour. That is how allies ended up fighting
+    // each other: the lobby said Azure, the arena said Crimson, and both
+    // clients drew a different match. A real launch always has a player on
+    // each side (the server refuses it otherwise), so a one-sided roster can
+    // only mean practice.
+    const humans = this.fighters.filter(f => !f.isBot);
+    const practiceBots = options.practiceBots ?? (humans.length === 1 && humans[0].isLocal);
 
-    if (initialBlue.length === 0 && this.fighters.length >= 2) {
-      const opponent = this.fighters.find(f => !f.isLocal);
-      if (opponent) {
-        opponent.team = 'blue';
-        opponent.x = 2950;
-      }
-    } else if (initialRed.length === 0 && this.fighters.length >= 2) {
-      const opponent = this.fighters.find(f => !f.isLocal);
-      if (opponent) {
-        opponent.team = 'red';
-        opponent.x = 480;
-      }
-    }
-
-    // If opponent team is still completely empty (e.g. 1-player testing or bot battle), spawn bot gladiators
-    if (this.fighters.filter(f => f.team === 'blue').length === 0) {
+    // If opponent team is still completely empty (a practice bout), spawn bot gladiators
+    if (practiceBots && this.fighters.filter(f => f.team === 'blue').length === 0) {
       const enemyArchetypes = [
         { name: 'Gladiator Marcus', class: 'warrior' },
         { name: 'Valkyrie Freya', class: 'heroknight' },
@@ -513,6 +560,7 @@ export class TournamentMatch {
     this.status = 'countdown';
     this.countdownRemaining = 3;
     this.roundTimeRemaining = this.config.roundDurationSec;
+    this.roundActiveSeconds = 0;
     this.suddenDeath = false;
     this.suddenDeathRemaining = 0;
     this.roundTeamDamage = { red: 0, blue: 0 };
@@ -562,18 +610,16 @@ export class TournamentMatch {
     }
 
     if (this.status === 'active') {
+      this.roundActiveSeconds += dt;
       if (!this.suddenDeath) this.roundTimeRemaining -= dt;
 
-      // Check win condition: Team Wipe (both teams must have fighters registered)
-      const totalRed = this.fighters.filter(f => f.team === 'red').length;
-      const totalBlue = this.fighters.filter(f => f.team === 'blue').length;
-      const redAlive = this.fighters.filter(f => f.team === 'red' && f.isAlive).length;
-      const blueAlive = this.fighters.filter(f => f.team === 'blue' && f.isAlive).length;
-
-      if (totalRed > 0 && totalBlue > 0) {
-        if (redAlive === 0 || blueAlive === 0) {
-          const roundWinner: TournamentTeam | 'draw' = redAlive > 0 ? 'red' : blueAlive > 0 ? 'blue' : 'draw';
-          this.resolveRoundEnd(roundWinner, 'wipe');
+      // Check win condition: Team Wipe (both teams must have fighters registered).
+      // A dead fighter carried over from the previous round cannot settle the
+      // new one before the round-start reset has gone out to both clients.
+      if (this.canSettleWipe()) {
+        const wiped = pvpWipeWinner(this.fighters);
+        if (wiped) {
+          this.resolveRoundEnd(wiped, 'wipe');
           return;
         }
       }
@@ -621,7 +667,15 @@ export class TournamentMatch {
     this.roundTimeRemaining = 0;
   }
 
+  /** True once a wipe may legitimately settle the round. */
+  public canSettleWipe(): boolean {
+    return this.status === 'active' && this.roundActiveSeconds >= PVP_WIPE_GRACE_SEC;
+  }
+
   public resolveRoundEnd(winner: TournamentTeam | 'draw', reason: 'wipe' | 'health_lead' | 'sudden_death'): void {
+    // One settlement per round. A wipe packet and the local simulation can
+    // both end up here on the same frame; the second must not score again.
+    if (this.status !== 'active') return;
     this.status = 'round_end';
     this.suddenDeath = false;
     this.suddenDeathRemaining = 0;
