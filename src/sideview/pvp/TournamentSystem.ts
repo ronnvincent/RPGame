@@ -12,6 +12,34 @@
  * - Symmetrical arena platform geometry & tight grounding
  */
 
+/**
+ * Length of a single Colosseum round, in seconds.
+ *
+ * 90s ended most rounds on the clock rather than on a kill - a dampened
+ * damage multiplier means a full HP bar takes a while to strip, so the
+ * players spent the last third of every round racing a timer they could not
+ * beat. Three minutes gives a duel room to breathe and lets a round end the
+ * way it should: with someone down.
+ */
+export const PVP_ROUND_DURATION_SEC = 180;
+
+/**
+ * Overtime.
+ *
+ * A round that expires with both teams on the same total health percentage used
+ * to settle as a draw, which is the least satisfying result a duel can produce -
+ * and in a best-of-three it can happen twice. Instead the round continues for a
+ * short sudden-death window with damage dialled up, so the deadlock resolves
+ * into a kill. If the window runs out too, the team that did more damage in the
+ * round takes it, and only a genuinely identical round is a draw.
+ */
+export const PVP_SUDDEN_DEATH_SEC = 30;
+export const PVP_SUDDEN_DEATH_DAMAGE_MULTIPLIER = 1.7;
+/** Health percentages within this margin count as tied. */
+export const PVP_SUDDEN_DEATH_TIE_MARGIN = 0.5;
+
+export const PVP_ROUNDS_TO_WIN = 2;
+
 export type TournamentFormat = '1v1' | '2v2' | '3v3' | '4v4';
 export type TournamentTeam = 'red' | 'blue';
 export type TournamentStatus = 'idle' | 'countdown' | 'active' | 'round_end' | 'match_end';
@@ -33,7 +61,9 @@ export interface TournamentFighter {
   maxHp: number;
   currentHp: number;
   kills: number;
+  deaths: number;
   damageDealt: number;
+  damageTaken: number;
   isAlive: boolean;
   x: number;
   y: number;
@@ -194,26 +224,63 @@ export class TournamentMatch {
   public currentRound: number = 1;
   public redScore: number = 0;
   public blueScore: number = 0;
-  public roundTimeRemaining: number = 90;
+  public roundTimeRemaining: number = PVP_ROUND_DURATION_SEC;
   public countdownRemaining: number = 3;
+  /** True while the round is in its overtime window. */
+  public suddenDeath: boolean = false;
+  public suddenDeathRemaining: number = 0;
+  /** Damage each team dealt this round, used as the overtime tiebreak. */
+  public roundTeamDamage: { red: number; blue: number } = { red: 0, blue: 0 };
   public roundHistory: TournamentRoundRecord[] = [];
   public matchWinner: TournamentTeam | null = null;
   public bannerText: string = '';
   public bannerSubtext: string = '';
   public bannerTimer: number = 0;
+  /**
+   * Called once per settled round, before any match-end decision. The host
+   * mirrors these results to the server so both clients score from the same
+   * board, and so a round that ends on the clock is recorded too.
+   */
+  public onRoundResolved?: (record: TournamentRoundRecord) => void;
+
+  /** The fighter who contributed most this match: kills first, then damage. */
+  public get mvp(): TournamentFighter | null {
+    if (!this.fighters.length) return null;
+    return [...this.fighters].sort((a, b) => (
+      (b.kills - a.kills) || (b.damageDealt - a.damageDealt) || (a.deaths - b.deaths)
+    ))[0] || null;
+  }
+
+  /** Credit a blow to the team that landed it. Drives the overtime tiebreak. */
+  public recordTeamDamage(team: TournamentTeam, amount: number): void {
+    const rounded = Math.max(0, Math.round(amount));
+    if (!rounded) return;
+    this.roundTeamDamage[team] += rounded;
+  }
 
   constructor(config?: Partial<TournamentMatchConfig>) {
     this.config = {
       format: config?.format || '1v1',
       roundsToWin: config?.roundsToWin || 2, // Best of 3
-      roundDurationSec: config?.roundDurationSec || 90,
+      roundDurationSec: config?.roundDurationSec || PVP_ROUND_DURATION_SEC,
       mapTheme: config?.mapTheme || 'tournament_colosseum',
     };
     this.roundTimeRemaining = this.config.roundDurationSec;
   }
 
   public setupTeamsFromLobby(
-    members: { actorId?: string; uuid?: string; name: string; classId?: string | null; team?: 'red' | 'blue'; socketId?: string }[],
+    members: {
+      actorId?: string;
+      uuid?: string;
+      name: string;
+      classId?: string | null;
+      team?: 'red' | 'blue';
+      socketId?: string;
+      /** A bench spectator is in the lobby but never in the match. */
+      seat?: 'red' | 'blue' | 'spectator';
+      /** The chair they chose; spawn order follows it. */
+      slot?: number;
+    }[],
     localActorId: string,
     format: TournamentFormat = this.config.format,
     pvpTeams?: Record<string, 'red' | 'blue'>,
@@ -224,7 +291,23 @@ export class TournamentMatch {
     let redIndex = 0;
     let blueIndex = 0;
 
-    for (const m of members) {
+    // Seats are part of the lineup: two players who picked chairs 0 and 2 must
+    // stand in that order, not in whatever order the roster happened to list
+    // them. The bench is not on the field at all.
+    const seeded = members
+      .filter(m => m.seat !== 'spectator')
+      .map((m, order) => {
+        const id = m.actorId || m.uuid || m.socketId || '';
+        const team = (pvpTeams && (pvpTeams[m.actorId || ''] || pvpTeams[m.uuid || ''])) || m.team || 'red';
+        return { m, order, team, slot: Number.isInteger(m.slot) ? Number(m.slot) : Number.MAX_SAFE_INTEGER };
+      })
+      .sort((a, b) => {
+        if (a.team !== b.team) return a.team === 'red' ? -1 : 1;
+        return (a.slot - b.slot) || (a.order - b.order);
+      })
+      .map(entry => entry.m);
+
+    for (const m of seeded) {
       const id = m.actorId || m.uuid || m.socketId || `actor_${Math.random()}`;
       const isLocal = id === localActorId || m.uuid === localActorId || (Boolean(m.socketId) && m.socketId === localActorId);
       let team: TournamentTeam = (pvpTeams && (pvpTeams[m.actorId || ''] || pvpTeams[m.uuid || '']))
@@ -248,7 +331,9 @@ export class TournamentMatch {
         maxHp: hp,
         currentHp: hp,
         kills: 0,
+        deaths: 0,
         damageDealt: 0,
+        damageTaken: 0,
         isAlive: true,
         x: spawnX,
         y: 0,
@@ -301,7 +386,9 @@ export class TournamentMatch {
           maxHp: hp,
           currentHp: hp,
           kills: 0,
+          deaths: 0,
           damageDealt: 0,
+          damageTaken: 0,
           isAlive: true,
           x: 2950 - i * 70,
           y: 0,
@@ -332,7 +419,9 @@ export class TournamentMatch {
       maxHp: localHp,
       currentHp: localHp,
       kills: 0,
+      deaths: 0,
       damageDealt: 0,
+      damageTaken: 0,
       isAlive: true,
       x: 480,
       y: 0,
@@ -362,7 +451,9 @@ export class TournamentMatch {
         maxHp: hp,
         currentHp: hp,
         kills: 0,
+        deaths: 0,
         damageDealt: 0,
+        damageTaken: 0,
         isAlive: true,
         x: 480 - i * 70,
         y: 0,
@@ -394,7 +485,9 @@ export class TournamentMatch {
         maxHp: hp,
         currentHp: hp,
         kills: 0,
+        deaths: 0,
         damageDealt: 0,
+        damageTaken: 0,
         isAlive: true,
         x: 1620 - i * 70,
         y: 0,
@@ -420,6 +513,9 @@ export class TournamentMatch {
     this.status = 'countdown';
     this.countdownRemaining = 3;
     this.roundTimeRemaining = this.config.roundDurationSec;
+    this.suddenDeath = false;
+    this.suddenDeathRemaining = 0;
+    this.roundTeamDamage = { red: 0, blue: 0 };
     this.bannerText = 'ROUND ' + this.currentRound;
     this.bannerSubtext = 'Prepare for Battle!';
     this.bannerTimer = 1.2;
@@ -456,8 +552,17 @@ export class TournamentMatch {
       return;
     }
 
+    if (this.status === 'active' && this.suddenDeath) {
+      this.suddenDeathRemaining -= dt;
+      if (this.suddenDeathRemaining <= 0) {
+        this.suddenDeathRemaining = 0;
+        this.settleExpiredRound(true);
+        return;
+      }
+    }
+
     if (this.status === 'active') {
-      this.roundTimeRemaining -= dt;
+      if (!this.suddenDeath) this.roundTimeRemaining -= dt;
 
       // Check win condition: Team Wipe (both teams must have fighters registered)
       const totalRed = this.fighters.filter(f => f.team === 'red').length;
@@ -474,32 +579,64 @@ export class TournamentMatch {
       }
 
       // Check win condition: Timeout Health Lead
-      if (this.roundTimeRemaining <= 0) {
+      if (!this.suddenDeath && this.roundTimeRemaining <= 0) {
         this.roundTimeRemaining = 0;
-        const redHpPercent = this.getTeamTotalHpPercent('red');
-        const blueHpPercent = this.getTeamTotalHpPercent('blue');
-
-        let roundWinner: TournamentTeam | 'draw' = 'draw';
-        if (redHpPercent > blueHpPercent) roundWinner = 'red';
-        else if (blueHpPercent > redHpPercent) roundWinner = 'blue';
-
-        this.resolveRoundEnd(roundWinner, 'health_lead');
+        this.settleExpiredRound(false);
       }
     }
   }
 
+  /**
+   * The round clock ran out. A clear health lead wins it; a tie sends the round
+   * to sudden death, and only a sudden death that also expires falls back to
+   * the damage tiebreak (and finally, a draw).
+   */
+  private settleExpiredRound(wasSuddenDeath: boolean): void {
+    const redHpPercent = this.getTeamTotalHpPercent('red');
+    const blueHpPercent = this.getTeamTotalHpPercent('blue');
+    const tied = Math.abs(redHpPercent - blueHpPercent) <= PVP_SUDDEN_DEATH_TIE_MARGIN;
+
+    let roundWinner: TournamentTeam | 'draw' = 'draw';
+    if (!tied) {
+      roundWinner = redHpPercent > blueHpPercent ? 'red' : 'blue';
+    } else if (!wasSuddenDeath) {
+      this.beginSuddenDeath();
+      return;
+    } else {
+      // Overtime expired level. The team that dealt more damage earned the
+      // round; identical damage is the only honest draw left.
+      const { red, blue } = this.roundTeamDamage;
+      if (red !== blue) roundWinner = red > blue ? 'red' : 'blue';
+    }
+
+    this.resolveRoundEnd(roundWinner, wasSuddenDeath ? 'sudden_death' : 'health_lead');
+  }
+
+  private beginSuddenDeath(): void {
+    this.suddenDeath = true;
+    this.suddenDeathRemaining = PVP_SUDDEN_DEATH_SEC;
+    this.bannerText = 'SUDDEN DEATH';
+    this.bannerSubtext = 'First team to fall loses the round';
+    this.bannerTimer = 2.4;
+    this.roundTimeRemaining = 0;
+  }
+
   public resolveRoundEnd(winner: TournamentTeam | 'draw', reason: 'wipe' | 'health_lead' | 'sudden_death'): void {
     this.status = 'round_end';
+    this.suddenDeath = false;
+    this.suddenDeathRemaining = 0;
     if (winner === 'red') this.redScore++;
     else if (winner === 'blue') this.blueScore++;
 
-    this.roundHistory.push({
+    const record: TournamentRoundRecord = {
       roundNumber: this.currentRound,
       winner,
       reason,
       redScore: this.redScore,
       blueScore: this.blueScore,
-    });
+    };
+    this.roundHistory.push(record);
+    this.onRoundResolved?.(record);
 
     if (winner === 'red') {
       this.bannerText = 'TEAM RED VICTORY!';
@@ -511,18 +648,19 @@ export class TournamentMatch {
     this.bannerSubtext = `Score: Red ${this.redScore} - ${this.blueScore} Blue`;
     this.bannerTimer = 2.5;
 
-    // Check if match won
-    if (this.redScore >= this.config.roundsToWin) {
-      this.matchWinner = 'red';
+    // Check if match won. The headline is written from the LOCAL player's
+    // side: a blue player used to see "DEFEAT!" while their own team won.
+    if (this.redScore >= this.config.roundsToWin || this.blueScore >= this.config.roundsToWin) {
+      const winner: TournamentTeam = this.redScore >= this.config.roundsToWin ? 'red' : 'blue';
+      this.matchWinner = winner;
       this.status = 'match_end';
-      this.bannerText = 'CHAMPION OF THE ARENA!';
-      this.bannerSubtext = 'Team Red claims match victory!';
-      this.bannerTimer = 4.0;
-    } else if (this.blueScore >= this.config.roundsToWin) {
-      this.matchWinner = 'blue';
-      this.status = 'match_end';
-      this.bannerText = 'DEFEAT!';
-      this.bannerSubtext = 'Team Blue claims match victory!';
+      const localTeam = this.fighters.find(f => f.isLocal)?.team ?? 'red';
+      const mvp = this.mvp;
+      const teamName = winner === 'red' ? 'Crimson' : 'Azure';
+      this.bannerText = winner === localTeam ? 'CHAMPION OF THE ARENA!' : 'DEFEAT!';
+      this.bannerSubtext = mvp
+        ? `${mvp.name} takes MVP · ${teamName} claims the match`
+        : `${teamName} claims the match`;
       this.bannerTimer = 4.0;
     } else {
       // Advance to next round after delay
@@ -543,4 +681,78 @@ export class TournamentMatch {
     const max = teamFighters.reduce((s, f) => s + f.maxHp, 0);
     return max > 0 ? (current / max) : 0;
   }
+}
+
+/** One row of the post-match scoreboard. */
+export interface PvpScoreboardRow {
+  id: string;
+  name: string;
+  team: TournamentTeam;
+  className: string;
+  isLocal: boolean;
+  isBot: boolean;
+  kills: number;
+  deaths: number;
+  damageDealt: number;
+  damageTaken: number;
+}
+
+export interface PvpMatchSummary {
+  winningTeam: TournamentTeam | null;
+  redScore: number;
+  blueScore: number;
+  rounds: TournamentRoundRecord[];
+  rows: PvpScoreboardRow[];
+  /** Best performer: kills first, then damage dealt. */
+  mvp: PvpScoreboardRow | null;
+  localTeam: TournamentTeam;
+  localWon: boolean;
+  /** How many rounds needed overtime. Worth calling out on the card. */
+  suddenDeathRounds: number;
+  format: TournamentFormat;
+}
+
+/**
+ * A plain-data snapshot of a finished match.
+ *
+ * The results card, the reward breakdown and the local PvP record all read
+ * from this one object, so the number a player sees on the card is the same
+ * number written into their record.
+ */
+export function buildPvpMatchSummary(
+  match: TournamentMatch,
+  localTeam: TournamentTeam,
+): PvpMatchSummary {
+  const rows: PvpScoreboardRow[] = match.fighters.map(f => ({
+    id: f.id,
+    name: f.name,
+    team: f.team,
+    className: f.className,
+    isLocal: f.isLocal,
+    isBot: f.isBot,
+    kills: Math.max(0, f.kills | 0),
+    deaths: Math.max(0, f.deaths | 0),
+    damageDealt: Math.max(0, Math.round(f.damageDealt)),
+    damageTaken: Math.max(0, Math.round(f.damageTaken || 0)),
+  }));
+
+  const mvpRow = [...rows].sort((a, b) => (
+    (b.kills - a.kills) || (b.damageDealt - a.damageDealt) || (a.deaths - b.deaths)
+  ))[0] || null;
+
+  const winningTeam = match.matchWinner
+    || (match.redScore === match.blueScore ? null : match.redScore > match.blueScore ? 'red' : 'blue');
+
+  return {
+    winningTeam,
+    redScore: match.redScore,
+    blueScore: match.blueScore,
+    rounds: [...match.roundHistory],
+    rows,
+    mvp: mvpRow,
+    localTeam,
+    localWon: winningTeam === localTeam,
+    suddenDeathRounds: match.roundHistory.filter(r => r.reason === 'sudden_death').length,
+    format: match.config.format,
+  };
 }

@@ -20,9 +20,16 @@ import {
   type TournamentTeam,
   TOURNAMENT_FORMAT_TEAM_SIZES,
   getNormalizedPvpBaseHp,
+  PVP_ROUND_DURATION_SEC,
 } from '../pvp/TournamentSystem';
 import { network, type LobbyState, type LobbyMember, type FriendEntry } from '../network/NetworkManager';
 import { CHARACTER_CLASSES } from '../classes/ClassDefinitions';
+import {
+  describePvpRecord,
+  loadPvpRecord,
+  pvpRating,
+  pvpTitleFor,
+} from '../pvp/PvpRecord';
 import { HERO_SPRITES, heroFrame } from '../engine/HeroSprites';
 import {
   escapeHtml,
@@ -30,6 +37,7 @@ import {
   installModalFocusTrap,
 } from './UiSafety';
 import QRCode from 'qrcode';
+import { PvpCareerUI } from './PvpCareerUI';
 
 const STYLE_ID = 'tournament-lobby-style';
 
@@ -77,6 +85,7 @@ export class TournamentLobbyUI {
   private generatedRoomCode: string = '';
   private isJoiningRoom: boolean = false;
   private handshakeInterval: number | null = null;
+  private careerPanel: PvpCareerUI | null = null;
 
   constructor(parent: HTMLElement, engine: SideViewEngine, onStartMatch: (match: TournamentMatch) => void) {
     this.parent = parent;
@@ -128,9 +137,6 @@ export class TournamentLobbyUI {
       }
       if (network.isHost && state.members && state.members.length > 1) {
         network.broadcastPvpHandshake('tournament_colosseum', this.currentFormat, 'lobby');
-      }
-      if (!network.isHost && network.room) {
-        network.sendReady(true);
       }
       if (state.started) {
         this.close();
@@ -223,6 +229,9 @@ export class TournamentLobbyUI {
     for (const unsub of this.unsubs) unsub();
     this.unsubs = [];
 
+    this.careerPanel?.close();
+    this.careerPanel = null;
+
     this.releaseFocus?.();
     this.releaseFocus = null;
 
@@ -231,6 +240,32 @@ export class TournamentLobbyUI {
     }
     this.overlay = null;
     this.isJoiningRoom = false;
+  }
+
+  /**
+   * The career chip is the only place the record lives in the lobby, so it
+   * doubles as the way in to the full page.
+   */
+  private openCareerPanel(): void {
+    if (!this.overlay) return;
+    const player = this.engine.player;
+    const classDef = player.characterClass;
+    const data = {
+      record: loadPvpRecord(),
+      playerName: player.name || classDef?.name || 'Champion',
+      className: classDef?.name || 'Warrior',
+      classId: classDef?.id,
+      level: player.level || 1,
+    };
+    if (this.careerPanel) {
+      this.careerPanel.setData(data);
+      this.careerPanel.open();
+      return;
+    }
+    // Mounted on the body, not inside the lobby: a nested dialog would let
+    // every Escape and Tab reach the lobby's own focus trap as well.
+    this.careerPanel = new PvpCareerUI(document.body, data);
+    this.careerPanel.open();
   }
 
   private handleLeaveOrClose(): void {
@@ -273,7 +308,7 @@ export class TournamentLobbyUI {
       level: p?.level || storedLevel || 1,
       power: (p as any)?.power || 150,
       team: this.localTeam,
-      ready: true,
+      ready: false,
       isHost: network.isHost,
       online: true,
     };
@@ -387,13 +422,40 @@ export class TournamentLobbyUI {
   }
 
   private switchTeam(targetTeam: TournamentTeam): void {
+    this.pickSeat(targetTeam);
+  }
+
+  /**
+   * Take a seat: a team position or a chair on the bench.
+   *
+   * The local snapshot is updated first so the grid answers the tap on the
+   * same frame; the server's broadcast is the authority and replaces it.
+   */
+  private pickSeat(seat: 'red' | 'blue' | 'spectator', slot?: number): void {
+    const myId = network.getActorId();
     audio.playClick();
-    this.localTeam = targetTeam;
+
+    if (seat !== 'spectator') this.localTeam = seat;
+
     if (this.state) {
-      if (!this.state.pvpTeams) this.state.pvpTeams = {};
-      this.state.pvpTeams[network.getActorId()] = targetTeam;
+      const me = this.state.members.find(m => m.actorId === myId || m.uuid === myId);
+      if (me) {
+        me.seat = seat;
+        if (slot !== undefined) me.slot = slot;
+        if (seat === 'spectator') me.team = undefined;
+        else me.team = seat;
+      }
+      if (!this.state.pvpSeats) this.state.pvpSeats = {};
+      if (slot !== undefined) this.state.pvpSeats[myId] = slot;
+      if (seat === 'spectator') {
+        if (this.state.pvpTeams) delete this.state.pvpTeams[myId];
+      } else {
+        if (!this.state.pvpTeams) this.state.pvpTeams = {};
+        this.state.pvpTeams[myId] = seat;
+      }
     }
-    network.switchPvpTeam(targetTeam);
+
+    network.pickPvpSeat(seat, slot);
     this.render();
   }
 
@@ -420,9 +482,47 @@ export class TournamentLobbyUI {
 
   private startTournament(): void {
     audio.playLevelUp();
-    network.sendReady(true);
     network.broadcastPvpHandshake('tournament_colosseum', this.currentFormat, 'match');
     network.startMatch();
+  }
+
+  /**
+   * A bout against the arena's own gladiator.
+   *
+   * The Colosseum is unplayable with nobody else online, which is exactly when
+   * a new player wants to learn the map. Practice is a fully local match: the
+   * room is left first, so no other player can be pulled into a fight that is
+   * not on the server's scoreboard.
+   */
+  /**
+   * A practice bout uses the format on screen: 3v3 practice is a real 3v3,
+   * with the missing slots filled by arena bots on both sides. The empty side
+   * is filled by the match, the player's own side by the engine at match
+   * start. A 1v1 remains a clean duel.
+   */
+  private startPracticeMatch(): void {
+    const self = this.getLocalMember();
+    const actorId = network.getActorId() || 'local_player';
+    const format = this.currentFormat;
+    const match = new TournamentMatch({
+      format,
+      roundsToWin: 2,
+      roundDurationSec: PVP_ROUND_DURATION_SEC,
+      mapTheme: 'tournament_colosseum',
+    });
+    this.engine.pvpTeam = 'red';
+    match.setupTeamsFromLobby(
+      [{ actorId, uuid: self.uuid, name: self.name, classId: self.classId, team: 'red' }],
+      actorId,
+      format,
+      { [actorId]: 'red' },
+      'red',
+    );
+
+    audio.playLevelUp();
+    network.leaveLobby();
+    this.close();
+    this.onStartMatchCb(match);
   }
 
   private render(): void {
@@ -432,49 +532,73 @@ export class TournamentLobbyUI {
     const st = this.state;
     const teamSize = TOURNAMENT_FORMAT_TEAM_SIZES[this.currentFormat];
     const myId = network.getActorId();
-    const me = this.getLocalMember();
+    const self = this.getLocalMember();
     const roomCode = this.getDisplayRoomCode();
 
     // Ensure local player is always placed on slot
-    const rawMembers = st?.members && st.members.length > 0 ? [...st.members] : [me];
+    const rawMembers = st?.members && st.members.length > 0 ? [...st.members] : [self];
     if (!rawMembers.some(m => m.actorId === myId || m.uuid === myId)) {
-      rawMembers.unshift(me);
+      rawMembers.unshift(self);
     }
+    const me = rawMembers.find(m => m.actorId === myId || m.uuid === myId) || self;
 
+    // Every member owns one seat. The bench is a seat too, so it is split out
+    // here and never counted as a fighter - a spectator must not stand in for
+    // an empty team when the host checks whether a match can launch.
     const redMembers: LobbyMember[] = [];
     const blueMembers: LobbyMember[] = [];
+    const benchMembers: LobbyMember[] = [];
 
     for (const m of rawMembers) {
       const aid = m.actorId || m.uuid;
       const isMe = aid === myId;
-      const serverAssigned = (st?.pvpTeams && st.pvpTeams[aid]) || m.team;
-      let assigned = serverAssigned;
-      if (!assigned) {
-        assigned = isMe ? this.localTeam : (this.localTeam === 'red' ? 'blue' : 'red');
-      }
-      if (isMe && serverAssigned && serverAssigned !== this.localTeam) {
-        this.localTeam = serverAssigned;
+      const seat = m.seat || (st?.pvpTeams && st.pvpTeams[aid]) || m.team
+        || (isMe ? this.localTeam : (this.localTeam === 'red' ? 'blue' : 'red'));
+      if (isMe && seat !== 'spectator' && seat !== this.localTeam) {
+        this.localTeam = seat;
       }
 
-      if (assigned === 'blue') {
-        blueMembers.push(m);
-      } else {
-        redMembers.push(m);
-      }
+      if (seat === 'spectator') benchMembers.push(m);
+      else if (seat === 'blue') blueMembers.push(m);
+      else redMembers.push(m);
     }
+
+    const benchSize = Math.max(
+      2,
+      st?.pvpBenchSize || 0,
+      teamSize,
+      rawMembers.length - teamSize * 2,
+    );
+    const redSlots = this.seatRows(redMembers, teamSize);
+    const blueSlots = this.seatRows(blueMembers, teamSize);
+    const benchSlots = this.seatRows(benchMembers, benchSize);
+    const meSeat = rawMembers.find(m => (m.actorId || m.uuid) === myId)?.seat
+      || (st?.pvpTeams && st.pvpTeams[myId])
+      || this.localTeam;
 
     const iAmHost = network.isHost;
     const hasBothTeams = redMembers.length >= 1 && blueMembers.length >= 1;
-    const allGuestsReady = rawMembers.every(m => m.isHost || m.ready);
+    // Bench spectators are not fighters: their readiness cannot block a fight
+    // they are not in.
+    const fighters = rawMembers.filter(m => (m.seat || m.team) !== 'spectator');
+    const allGuestsReady = fighters.every(m => m.isHost || m.ready);
     const canLaunch = iAmHost && hasBothTeams && allGuestsReady;
 
     let launchNotice = '';
-    if (!hasBothTeams) {
+    if (meSeat === 'spectator') {
+      launchNotice = 'You are on the spectator bench — the bout starts without you.';
+    } else if (!hasBothTeams) {
       launchNotice = 'Requires at least 1 warrior on Crimson and 1 on Azure.';
     } else if (!allGuestsReady) {
-      const unreadyCount = rawMembers.filter(m => !m.isHost && !m.ready).length;
+      const unreadyCount = fighters.filter(m => !m.isHost && !m.ready).length;
       launchNotice = `Waiting for ${unreadyCount} challenger${unreadyCount > 1 ? 's' : ''} to ready up.`;
     }
+
+    // The Colosseum record travels with the room code: a challenger can see
+    // who they are about to fight before they commit to it.
+    const record = loadPvpRecord();
+    const careerTitle = pvpTitleFor(record);
+    const careerLine = describePvpRecord(record);
 
     const modal = document.createElement('div');
     modal.className = 'pvp-modal-shell';
@@ -489,6 +613,10 @@ export class TournamentLobbyUI {
       </div>
 
       <div class="pvp-header-actions">
+        <button type="button" class="pvp-career-chip" data-action="open-career" title="Open your Colosseum career" aria-label="Open your Colosseum career">
+          <b>${escapeHtml(careerTitle)}</b>
+          <span>${escapeHtml(careerLine)} · ${pvpRating(record)} RATING</span>
+        </button>
         <button class="pvp-qr-btn" data-action="open-qr" title="Generate QR Code for Mobile Players">
           📱 QR CODE
         </button>
@@ -503,6 +631,9 @@ export class TournamentLobbyUI {
 
     header.querySelector('[data-action="open-qr"]')?.addEventListener('click', () => {
       this.showQrCodeModal();
+    });
+    header.querySelector('[data-action="open-career"]')?.addEventListener('click', () => {
+      this.openCareerPanel();
     });
     header.querySelector('[data-action="copy-code"]')?.addEventListener('click', () => {
       navigator.clipboard?.writeText(roomCode);
@@ -617,7 +748,7 @@ export class TournamentLobbyUI {
           <div class="pvp-banner-count">${redMembers.length} / ${teamSize} FIGHTERS</div>
         </div>
         <div class="pvp-slots-container">
-          ${this.renderTeamSlots('red', teamSize, redMembers, myId, iAmHost)}
+          ${this.renderTeamSlots('red', teamSize, redSlots, myId, iAmHost)}
         </div>
       `;
       stage.appendChild(leftCol);
@@ -657,10 +788,27 @@ export class TournamentLobbyUI {
           <div class="pvp-banner-count">${blueMembers.length} / ${teamSize} FIGHTERS</div>
         </div>
         <div class="pvp-slots-container">
-          ${this.renderTeamSlots('blue', teamSize, blueMembers, myId, iAmHost)}
+          ${this.renderTeamSlots('blue', teamSize, blueSlots, myId, iAmHost)}
         </div>
       `;
       stage.appendChild(rightCol);
+
+      // The bench sits above both teams, exactly where a Colosseum broadcast
+      // puts its observers. It is a real row of the stage, not a floating
+      // overlay, so it never covers a team slot on a short screen.
+      const bench = document.createElement('div');
+      bench.className = 'pvp-spectator-bench';
+      bench.innerHTML = `
+        <div class="pvp-bench-head">
+          <span class="pvp-bench-title">◉ SPECTATOR BENCH</span>
+          <span class="pvp-bench-sub">${benchMembers.length}/${benchSize} watching · tap a chair to sit, or a name to swap</span>
+        </div>
+        <div class="pvp-bench-chairs">
+          ${this.renderBenchSlots(benchSlots, myId)}
+        </div>
+        ${meSeat === 'spectator' ? '<div class="pvp-bench-note">You are on the bench — tap any team slot to drop back in.</div>' : ''}
+      `;
+      stage.insertBefore(bench, stage.firstChild);
 
       modal.appendChild(stage);
 
@@ -689,6 +837,9 @@ export class TournamentLobbyUI {
         <button class="pvp-btn-leave" data-action="leave-lobby">
           🚪 LEAVE COLOSSEUM
         </button>
+        <button class="pvp-btn-practice" data-action="practice-bots" title="Play a local 1v1 against an arena bot">
+          🎯 PRACTICE VS BOT
+        </button>
       </div>
 
       <div class="pvp-footer-right">
@@ -700,11 +851,17 @@ export class TournamentLobbyUI {
                 ⚔️ COMMENCE TOURNAMENT ⚔️
               </button>
             `
-            : `
-              <button class="pvp-btn-ready ${me?.ready ? 'is-ready' : 'not-ready'}" data-action="toggle-ready">
-                ${me?.ready ? '⌛ CANCEL READY' : '⚔️ READY FOR BATTLE'}
-              </button>
-            `
+            : meSeat === 'spectator'
+              ? `
+                <button class="pvp-btn-ready not-ready" data-action="take-team-seat" title="Leave the bench and take a team seat">
+                  👁 WATCHING — TAKE A SEAT
+                </button>
+              `
+              : `
+                <button class="pvp-btn-ready ${me?.ready ? 'is-ready' : 'not-ready'}" data-action="toggle-ready">
+                  ${me?.ready ? '⌛ CANCEL READY' : '⚔️ READY FOR BATTLE'}
+                </button>
+              `
         }
       </div>
     `;
@@ -712,8 +869,14 @@ export class TournamentLobbyUI {
     footer.querySelector('[data-action="leave-lobby"]')?.addEventListener('click', () => {
       this.handleLeaveOrClose();
     });
+    footer.querySelector('[data-action="practice-bots"]')?.addEventListener('click', () => {
+      this.startPracticeMatch();
+    });
     footer.querySelector('[data-action="toggle-ready"]')?.addEventListener('click', () => {
       this.toggleReady();
+    });
+    footer.querySelector('[data-action="take-team-seat"]')?.addEventListener('click', () => {
+      this.pickSeat(this.localTeam);
     });
     footer.querySelector('[data-action="start-tournament"]')?.addEventListener('click', () => {
       if (canLaunch) this.startTournament();
@@ -729,10 +892,30 @@ export class TournamentLobbyUI {
     this.overlay.appendChild(modal);
   }
 
+  /**
+   * Lay members out by the seat they actually hold.
+   *
+   * The old grid was just "the first N members in join order", so a player who
+   * picked the third chair still appeared second, and the only empty card that
+   * responded was the first one. Slots are explicit now; a missing or taken
+   * slot falls back to the first free chair instead of overlapping someone.
+   */
+  private seatRows(members: LobbyMember[], size: number): Array<LobbyMember | null> {
+    const rows: Array<LobbyMember | null> = new Array(Math.max(0, size)).fill(null);
+    for (const member of members) {
+      const wanted = typeof member.slot === 'number' ? member.slot : -1;
+      const index = wanted >= 0 && wanted < rows.length && !rows[wanted]
+        ? wanted
+        : rows.findIndex(row => !row);
+      if (index >= 0) rows[index] = member;
+    }
+    return rows;
+  }
+
   private renderTeamSlots(
     team: TournamentTeam,
     teamSize: number,
-    teamMembers: LobbyMember[],
+    rows: Array<LobbyMember | null>,
     myId: string,
     iAmHost: boolean
   ): string {
@@ -741,7 +924,7 @@ export class TournamentLobbyUI {
     const roleList = isRed ? RED_ROLE_SLOTS : BLUE_ROLE_SLOTS;
 
     for (let i = 0; i < teamSize; i++) {
-      const member = teamMembers[i] || null;
+      const member = rows[i] || null;
       const role = roleList[i % roleList.length];
 
       if (member) {
@@ -765,9 +948,13 @@ export class TournamentLobbyUI {
 
         const canKick = iAmHost && !isMe;
         const memberAid = member.actorId || member.uuid;
+        // Someone else's seat is a swap target: tap it and they inherit yours.
+        const seatAction = isMe
+          ? ''
+          : `data-action="pick-seat" data-seat="${team}" data-slot="${i}" role="button" tabindex="0" title="Take this seat - swaps with ${escapeHtmlAttribute(name)}"`;
 
         html += `
-          <div class="pvp-fighter-card ${isMe ? 'is-me' : ''} ${isRed ? 'card-red' : 'card-blue'}">
+          <div class="pvp-fighter-card ${isMe ? 'is-me' : ''} ${isRed ? 'card-red' : 'card-blue'} ${isMe ? '' : 'is-swappable'}" ${seatAction}>
             <div class="pvp-fighter-avatar">
               <img
                 class="pvp-pedestal-sprite ${isRed ? 'facing-right' : 'facing-left'}"
@@ -795,7 +982,7 @@ export class TournamentLobbyUI {
       } else {
         // Authentic Character Slot in Empty State
         html += `
-          <div class="pvp-fighter-card pvp-empty-slot ${isRed ? 'empty-red' : 'empty-blue'}" data-action="switch-here" data-team="${team}">
+          <div class="pvp-fighter-card pvp-empty-slot ${isRed ? 'empty-red' : 'empty-blue'}" data-action="pick-seat" data-seat="${team}" data-slot="${i}" role="button" tabindex="0" title="Take this open seat">
             <div class="pvp-fighter-avatar pvp-empty-avatar">
               <div class="pvp-avatar-silhouette">${role.icon}</div>
               <div class="pvp-avatar-sigil">✦</div>
@@ -810,7 +997,7 @@ export class TournamentLobbyUI {
               </div>
             </div>
             <div class="pvp-empty-action-group">
-              <button class="pvp-slot-claim-btn" type="button" data-action="switch-here" data-team="${team}">
+              <button class="pvp-slot-claim-btn" type="button" data-action="pick-seat" data-seat="${team}" data-slot="${i}">
                 ⚔️ CLAIM
               </button>
               <button class="pvp-slot-inv-btn" type="button" data-action="open-invite">
@@ -825,12 +1012,59 @@ export class TournamentLobbyUI {
     return html;
   }
 
+  /**
+   * The bench above the teams.
+   *
+   * Spectators are real seats, not a queue: a chair can be taken, given up,
+   * or swapped with somebody already sitting on it.
+   */
+  private renderBenchSlots(rows: Array<LobbyMember | null>, myId: string): string {
+    let html = '';
+    rows.forEach((member, index) => {
+      if (!member) {
+        html += `
+          <button type="button" class="pvp-bench-chair is-open" data-action="pick-seat" data-seat="spectator" data-slot="${index}" title="Watch this bout from the bench">
+            <span class="pvp-bench-plus">＋</span>
+            <span class="pvp-bench-name">WATCH</span>
+          </button>
+        `;
+        return;
+      }
+      const isMe = member.actorId === myId || member.uuid === myId;
+      const clsId = member.classId || 'warrior';
+      const name = member.name || 'Challenger';
+      html += `
+        <button type="button" class="pvp-bench-chair is-taken ${isMe ? 'is-me' : ''}" data-action="pick-seat" data-seat="spectator" data-slot="${index}" title="${isMe ? 'You are on the bench' : `Swap seats with ${escapeHtmlAttribute(name)}`}">
+          <img
+            class="pvp-bench-avatar"
+            src="${heroFrame(clsId, 'idle', 0)}"
+            alt=""
+            loading="lazy"
+            onerror="this.style.visibility='hidden';"
+          />
+          <span class="pvp-bench-name">${escapeHtml(name)}${isMe ? ' <b>(YOU)</b>' : ''}</span>
+        </button>
+      `;
+    });
+    return html;
+  }
+
   private bindSlotActions(modal: HTMLElement): void {
-    modal.querySelectorAll<HTMLElement>('[data-action="switch-here"]').forEach((el) => {
-      el.addEventListener('click', (e) => {
+    modal.querySelectorAll<HTMLElement>('[data-action="pick-seat"]').forEach((el) => {
+      const take = (e: Event) => {
         e.stopPropagation();
-        const targetTeam = el.getAttribute('data-team') as TournamentTeam;
-        if (targetTeam) this.switchTeam(targetTeam);
+        e.preventDefault();
+        const seat = el.getAttribute('data-seat') as 'red' | 'blue' | 'spectator' | null;
+        if (!seat) return;
+        const rawSlot = el.getAttribute('data-slot');
+        const slot = rawSlot === null ? undefined : Number(rawSlot);
+        this.pickSeat(seat, Number.isInteger(slot) ? slot : undefined);
+      };
+      el.addEventListener('click', take);
+      // A seat is a button in all but markup: let the keyboard take it too.
+      el.addEventListener('keydown', (e) => {
+        const key = (e as KeyboardEvent).key;
+        if (key === 'Enter' || key === ' ') take(e);
       });
     });
 
@@ -1141,6 +1375,52 @@ export class TournamentLobbyUI {
         overflow-y: auto; flex: 1; min-height: 0;
       }
 
+      /* The bench is the first row of the stage, above both teams. */
+      .pvp-spectator-bench {
+        grid-column: 1 / -1;
+        position: sticky; top: 0; z-index: 2;
+        display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+        padding: 6px 10px;
+        background: url('/assets/kenney-rpg-ui/panelInset_beige.png') repeat;
+        border: 2px solid #2a1a10; border-radius: 4px;
+        box-shadow: 0 0 0 1px rgba(255, 236, 190, 0.28) inset;
+        image-rendering: pixelated;
+      }
+      .pvp-bench-head { display: flex; flex-direction: column; gap: 1px; min-width: 150px; }
+      .pvp-bench-title {
+        font-family: 'Cinzel', serif; font-weight: 900; font-size: 11px;
+        letter-spacing: 0.06em; color: #3a2415; text-shadow: 0 1px 0 rgba(255, 244, 214, 0.5);
+      }
+      .pvp-bench-sub { font-size: 8.5px; color: #6b4a2c; }
+      .pvp-bench-chairs { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1; }
+      .pvp-bench-chair {
+        display: inline-flex; align-items: center; gap: 5px;
+        min-height: 30px; padding: 3px 9px 3px 4px;
+        border: 2px solid #3a2415; border-radius: 3px;
+        background: url('/assets/kenney-rpg-ui/buttonSquare_brown.png') repeat;
+        color: #f6e7c8; font-family: 'Outfit', sans-serif; font-size: 9.5px; font-weight: 800;
+        cursor: pointer; image-rendering: pixelated;
+      }
+      .pvp-bench-chair:hover { filter: brightness(1.18); }
+      .pvp-bench-chair:focus-visible { outline: 2px solid #fbbf24; outline-offset: 2px; }
+      .pvp-bench-chair.is-open {
+        background: rgba(0, 0, 0, 0.22); border-style: dashed; color: #6b4a2c;
+      }
+      .pvp-bench-chair.is-me { outline: 2px solid #93c5fd; outline-offset: 1px; }
+      .pvp-bench-plus { font-size: 13px; font-weight: 900; line-height: 1; }
+      .pvp-bench-avatar {
+        width: 24px; height: 24px; object-fit: contain;
+        image-rendering: pixelated; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
+      }
+      .pvp-bench-name { white-space: nowrap; }
+      .pvp-bench-name b { color: #93c5fd; font-size: 8px; }
+      .pvp-bench-note {
+        flex-basis: 100%; font-size: 9px; font-weight: 700; color: #7c2d12;
+      }
+      .pvp-fighter-card.is-swappable { cursor: pointer; }
+      .pvp-fighter-card.is-swappable:hover { filter: brightness(1.1); }
+      .pvp-fighter-card.is-swappable:focus-visible { outline: 2px solid #fbbf24; outline-offset: 2px; }
+
       .pvp-team-col { display: flex; flex-direction: column; gap: 8px; }
       .pvp-team-banner {
         padding: 6px 12px; border-radius: 4px;
@@ -1272,6 +1552,44 @@ export class TournamentLobbyUI {
       .pvp-switch-team-btn b { font-size: 11.5px; font-weight: 900; }
       .pvp-switch-team-btn:hover:not(:disabled) { filter: brightness(1.2); }
       .pvp-switch-team-btn:disabled { opacity: 0.45; cursor: default; }
+
+      .pvp-career-chip {
+        appearance: none;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 1px;
+        padding: 3px 8px;
+        background: rgba(0, 0, 0, 0.35);
+        border: 1px solid #735134;
+        border-radius: 3px;
+        max-width: 190px;
+        color: inherit;
+        font: inherit;
+        text-align: right;
+        cursor: pointer;
+      }
+      .pvp-career-chip:hover { border-color: #b8860b; background: rgba(60, 38, 14, 0.55); }
+      .pvp-career-chip:focus-visible { outline: 2px solid #ffe08a; outline-offset: 2px; }
+      .pvp-career-chip b {
+        font-family: 'Cinzel', serif;
+        font-size: 10px;
+        font-weight: 900;
+        color: #ffd770;
+        letter-spacing: 0.4px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+      }
+      .pvp-career-chip span {
+        font-size: 8.5px;
+        color: #b89f80;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+      }
 
       .pvp-balance-badge {
         background: rgba(0, 0, 0, 0.55); border: 1px solid #5a3d24;
@@ -1421,6 +1739,15 @@ export class TournamentLobbyUI {
       }
       .pvp-btn-leave:hover { filter: brightness(1.2); color: #fff; }
 
+      /* Practice is a local bout, not a room action: same chrome, quieter. */
+      .pvp-btn-practice {
+        padding: 8px 14px; font-size: 10.5px; font-weight: 800;
+        background: url('/assets/kenney-rpg-ui/buttonLong_grey.png') no-repeat center/100% 100%;
+        border: 0; color: #e6dcc9; cursor: pointer;
+        letter-spacing: 0.3px;
+      }
+      .pvp-btn-practice:hover { filter: brightness(1.2); color: #fff; }
+
       .pvp-footer-right { display: flex; align-items: center; gap: 12px; }
       .pvp-launch-warning { font-size: 11px; color: #fbbf24; font-weight: 700; }
 
@@ -1481,6 +1808,12 @@ export class TournamentLobbyUI {
         .pvp-format-selector { padding: 2px 10px; }
         .pvp-fmt-btn { padding: 2px 8px; font-size: 9px; }
         .pvp-versus-stage { padding: 6px 8px; gap: 6px; grid-template-columns: 1fr 105px 1fr; }
+        .pvp-spectator-bench { gap: 6px; padding: 4px 6px; }
+        .pvp-bench-head { min-width: 0; flex: 1 1 100%; flex-direction: row; gap: 6px; align-items: baseline; }
+        .pvp-bench-title { font-size: 9.5px; }
+        .pvp-bench-sub { font-size: 7.5px; }
+        .pvp-bench-chair { min-height: 26px; font-size: 8.5px; padding: 2px 6px 2px 3px; }
+        .pvp-bench-avatar { width: 20px; height: 20px; }
         .pvp-team-banner { padding: 3px 6px; }
         .pvp-banner-title { font-size: 11px; }
         .pvp-banner-count { font-size: 8.5px; }
@@ -1512,6 +1845,9 @@ export class TournamentLobbyUI {
       @media (max-width: 720px) {
         .pvp-header { flex-wrap: wrap; }
         .pvp-header-actions { width: 100%; justify-content: space-between; }
+        /* The room code and the QR button are the two things needed to invite;
+           a career chip is the first thing to go when the row runs out. */
+        .pvp-career-chip { display: none; }
         .pvp-versus-stage { grid-template-columns: 1fr; gap: 8px; }
         .pvp-center-col { flex-direction: row; justify-content: center; gap: 8px; }
         .pvp-balance-badge { display: none; }

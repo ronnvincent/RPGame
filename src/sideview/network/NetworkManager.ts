@@ -129,6 +129,10 @@ export interface LobbyMember {
   level: number;
   power?: number;
   team?: 'red' | 'blue';
+  /** Which seat this member holds; the bench watches instead of fighting. */
+  seat?: 'red' | 'blue' | 'spectator';
+  /** Position inside that seat (0-based). */
+  slot?: number;
   ready: boolean;
   isHost: boolean;
   online: boolean;
@@ -143,6 +147,8 @@ export interface LobbyState {
   isPvp?: boolean;
   pvpFormat?: '1v1' | '2v2' | '3v3' | '4v4';
   pvpTeams?: Record<string, 'red' | 'blue'>;
+  pvpSeats?: Record<string, number>;
+  pvpBenchSize?: number;
   members: LobbyMember[];
 }
 
@@ -336,6 +342,14 @@ export class NetworkManager {
    */
   public isHost: boolean = true;
 
+  /**
+   * The scene id a PvP room actually lives in. `isPvpFallback` only means the
+   * room may be hosted on an older server, so it must not be used to guess the
+   * scene: sending `goblin_catacombs` while fighting in a real Colosseum room
+   * made the server reject every movement packet.
+   */
+  public pvpSceneId: string = 'tournament_colosseum';
+
   private readonly debugKey = 'rpg_debug_multiplayer';
   private readonly actorStorageKey = 'multiplayerActorId';
   private readonly actorOwnerStorageKey = 'multiplayerActorAccount';
@@ -402,12 +416,35 @@ export class NetworkManager {
   private onPvpHitEffectCb: ((data: any) => void) | null = null;
   private onPvpKillFeedCb: ((data: any) => void) | null = null;
   private onPvpMatchResultCb: ((data: any) => void) | null = null;
+  private onPvpRoundResultCb: ((data: any) => void) | null = null;
+  private onPvpRematchStateCb: ((data: any) => void) | null = null;
+  private onPvpPeerDroppedCb: ((name: string) => void) | null = null;
   private onPvpHandshakeCb: ((data: { theme: string; format: string; phase: 'lobby' | 'match' }) => void) | null = null;
   private processedPvpHits: Set<string> = new Set();
+  private pendingPvpFallbacks: Map<string, ReturnType<typeof setTimeout>> = new Map();
   private cachedLobbies: Map<string, any> = new Map();
 
   constructor() {
     NetworkManager.instance = this;
+  }
+
+  /**
+   * Remember a hit as delivered.
+   *
+   * Both the authoritative `pvp_hit_received` packet and the `party_support`
+   * fallback carry the same `hitId`; whichever arrived first used to claim it,
+   * so a fallback that beat the packet delivered the hit with the wrong team
+   * and at the wrong coordinates, and the real packet was then discarded.
+   * Marking also cancels a fallback still waiting out its grace window.
+   */
+  private markPvpHitDelivered(hitId: string): void {
+    this.processedPvpHits.add(hitId);
+    setTimeout(() => this.processedPvpHits.delete(hitId), 6000);
+    const pending = this.pendingPvpFallbacks.get(hitId);
+    if (pending !== undefined) {
+      clearTimeout(pending);
+      this.pendingPvpFallbacks.delete(hitId);
+    }
   }
 
   private updateLobbyCache(lobbies: any[]) {
@@ -632,7 +669,13 @@ export class NetworkManager {
           existing.team = data.team;
         }
       }
-      if ((data?.team === 'red' || data?.team === 'blue' || data?.isTournament) && !data?.isTownMode) {
+      // Co-op movement is relayed with a team as well, so the room's own mode
+      // decides whether a moving teammate means "a duel is live". Without this
+      // a dungeon crawl could be mistaken for a Colosseum match.
+      const pvpRoom = data?.isPvp === true
+        || this.currentLobbyState?.isPvp === true
+        || Boolean(this.currentLobbyState?.pvpFormat);
+      if (pvpRoom && (data?.team === 'red' || data?.team === 'blue' || data?.isTournament) && !data?.isTownMode) {
         this.isPvpSession = true;
         this.isPvpFallback = true;
         this.onPvpHandshakeCb?.({ theme: 'tournament_colosseum', format: '1v1', phase: 'match' });
@@ -646,8 +689,15 @@ export class NetworkManager {
 
     // A disconnected actor keeps its room slot during the mobile reconnect
     // grace period, but its old socket id must stop rendering immediately.
+    // The name is read before the state is deleted, so the arena can say who
+    // dropped instead of silently losing a fighter.
     this.socket.on('player_disconnected', (data) => {
-      if (data?.socketId) delete this.remotePlayers[data.socketId];
+      if (!data?.socketId) return;
+      const dropped = this.remotePlayers[data.socketId];
+      if (dropped?.team || this.currentLobbyState?.isPvp) {
+        this.onPvpPeerDroppedCb?.(dropped?.name || data.name || 'A fighter');
+      }
+      delete this.remotePlayers[data.socketId];
     });
 
     this.socket.on('lobby_update', (data) => {
@@ -668,6 +718,8 @@ export class NetworkManager {
         this.isPvpSession = true;
         this.isPvpFallback = true;
         if (data) {
+          // Keep the room's real scene id before the legacy display rewrite.
+          if (data.dungeonId) this.pvpSceneId = data.dungeonId;
           data.isPvp = true;
           if (data.dungeonId === 'goblin_catacombs' || !data.dungeonId) {
             data.dungeonId = 'tournament_colosseum';
@@ -708,35 +760,48 @@ export class NetworkManager {
         const damage = typeof data.amount === 'number' ? data.amount : 1;
         const mySid = this.socket?.id;
 
-        if (hitId && this.processedPvpHits.has(hitId)) return;
-        if (hitId) {
-          this.processedPvpHits.add(hitId);
-          setTimeout(() => this.processedPvpHits.delete(hitId), 6000);
-        }
+        if (hitId && (this.processedPvpHits.has(hitId) || this.pendingPvpFallbacks.has(hitId))) return;
 
         const isForMe = data.targetSocketId ? data.targetSocketId === mySid : true;
-        if (isForMe) {
-          this.onPvpHitReceivedCb?.({
-            attackerActorId: data.socketId,
-            attackerName: data.casterName || 'Opponent',
-            attackerTeam: 'opp',
-            damage,
-            isCrit,
-            skillName,
-            hitX: 0,
-            hitY: 0,
-            hitId,
-          });
-        } else {
-          this.onPvpHitEffectCb?.({
-            attackerActorId: data.socketId,
-            targetActorId: data.targetSocketId || '',
-            damage,
-            isCrit,
-            hitX: 0,
-            hitY: 0,
-          });
+        const deliverFallback = () => {
+          if (isForMe) {
+            this.onPvpHitReceivedCb?.({
+              attackerActorId: data.socketId,
+              attackerName: data.casterName || 'Opponent',
+              attackerTeam: 'opp',
+              damage,
+              isCrit,
+              skillName,
+              hitX: 0,
+              hitY: 0,
+              hitId,
+            });
+          } else {
+            this.onPvpHitEffectCb?.({
+              attackerActorId: data.socketId,
+              targetActorId: data.targetSocketId || '',
+              damage,
+              isCrit,
+              hitX: 0,
+              hitY: 0,
+            });
+          }
+        };
+
+        // The relay is the guaranteed channel, but it is also the blind one:
+        // it has no team and no hit position. Give the real packet a moment
+        // to arrive before using it.
+        if (!hitId) {
+          deliverFallback();
+          return;
         }
+        const timer = setTimeout(() => {
+          this.pendingPvpFallbacks.delete(hitId);
+          if (this.processedPvpHits.has(hitId)) return;
+          this.markPvpHitDelivered(hitId);
+          deliverFallback();
+        }, 150);
+        this.pendingPvpFallbacks.set(hitId, timer);
         return;
       }
 
@@ -744,13 +809,23 @@ export class NetworkManager {
         const parts = data.itemName.split(':');
         const killerActorId = parts[1] || undefined;
         const killerName = parts[2] || undefined;
+        // Teams come from the room, never from a guess: the feed used to paint
+        // every kill red-vs-blue, so a blue player's kill looked like a
+        // friendly fire incident on their own HUD.
+        const teams = this.currentLobbyState?.pvpTeams || {};
+        const downedActorId = (data.actorId as string) || (data.socketId as string) || '';
+        const downedTeam = teams[downedActorId]
+          || (teams[data.socketId as string] as 'red' | 'blue' | undefined)
+          || 'red';
+        const killerTeam = (killerActorId && teams[killerActorId])
+          || (downedTeam === 'red' ? 'blue' : 'red');
         this.onPvpKillFeedCb?.({
           downedActorId: data.socketId,
           downedName: data.casterName || 'Warrior',
-          downedTeam: 'red',
+          downedTeam,
           killerActorId,
           killerName,
-          killerTeam: 'blue',
+          killerTeam,
         });
         return;
       }
@@ -799,10 +874,7 @@ export class NetworkManager {
     this.socket.on('pvp_hit_received', (data) => {
       const hitId = data?.hitId;
       if (hitId && this.processedPvpHits.has(hitId)) return;
-      if (hitId) {
-        this.processedPvpHits.add(hitId);
-        setTimeout(() => this.processedPvpHits.delete(hitId), 6000);
-      }
+      if (hitId) this.markPvpHitDelivered(hitId);
       this.onPvpHitReceivedCb?.(data);
     });
 
@@ -816,6 +888,18 @@ export class NetworkManager {
 
     this.socket.on('pvp_match_result', (data) => {
       this.onPvpMatchResultCb?.(data);
+    });
+
+    // The server settles rounds (wipes) and mirrors host-reported clock
+    // results, so every client scores from the same board.
+    this.socket.on('pvp_round_result', (data) => {
+      this.onPvpRoundResultCb?.(data);
+    });
+
+    // Rematch tally for the results card. The launch itself still arrives as a
+    // normal dungeon_start, so a rematch takes the same path as a first match.
+    this.socket.on('pvp_rematch_state', (data) => {
+      this.onPvpRematchStateCb?.(data);
     });
 
     // Quick join is answered with a room to enter, so the join runs through the
@@ -857,6 +941,7 @@ export class NetworkManager {
     this.socket.on('lobby_state', (state: LobbyState) => {
       this.debug('IN', 'lobby_state', { members: state?.members?.length });
       if (state?.roomId) this.setRoom(state.roomId);
+      if (state?.isPvp && state.dungeonId) this.pvpSceneId = state.dungeonId;
       this.currentLobbyState = state;
       if (state?.isPvp || state?.pvpTeams || state?.pvpFormat || state?.dungeonId === 'tournament_colosseum' || state?.dungeonId === 'tournament_arena' || this.isPvpFallback) {
         this.isPvpSession = true;
@@ -1172,6 +1257,7 @@ export class NetworkManager {
   ) {
     if (!this.socket) this.connect();
     this.isPvpSession = true;
+    this.pvpSceneId = dungeonId;
     if (onUpdate) this.onLobbyUpdateCb = onUpdate;
     this.lastPvpCreateAttempt = { dungeonId, format, team, proposedCode, onUpdate };
     const uuid = localStorage.getItem('playerUUID');
@@ -1197,6 +1283,15 @@ export class NetworkManager {
     this.socket?.emit('pvp_switch_team', { targetTeam });
   }
 
+  /**
+   * Take a lobby seat. `slot` is the chair inside that seat; omit it to take
+   * the first free one. Picking an occupied chair swaps the two players.
+   */
+  public pickPvpSeat(seat: 'red' | 'blue' | 'spectator', slot?: number) {
+    if (!this.socket) this.connect();
+    this.socket?.emit('pvp_pick_seat', { seat, slot });
+  }
+
   public setPvpFormat(format: '1v1' | '2v2' | '3v3' | '4v4') {
     if (!this.socket) this.connect();
     this.socket?.emit('pvp_set_format', { format });
@@ -1218,8 +1313,7 @@ export class NetworkManager {
     hitY: number;
   }) {
     const hitId = `hit_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
-    this.processedPvpHits.add(hitId);
-    setTimeout(() => this.processedPvpHits.delete(hitId), 6000);
+    this.markPvpHitDelivered(hitId);
 
     // Primary: direct pvp_attack_hit
     this.socket?.emit('pvp_attack_hit', { ...payload, hitId });
@@ -1259,6 +1353,48 @@ export class NetworkManager {
   }
   public onPvpMatchResult(cb: (data: any) => void) {
     this.onPvpMatchResultCb = cb;
+  }
+  public onPvpRoundResult(cb: (data: any) => void) {
+    this.onPvpRoundResultCb = cb;
+  }
+
+  public onPvpRematchState(cb: (data: any) => void) {
+    this.onPvpRematchStateCb = cb;
+  }
+
+  /** A Colosseum fighter dropped; their slot is held for the grace period. */
+  public onPvpPeerDropped(cb: (name: string) => void) {
+    this.onPvpPeerDroppedCb = cb;
+  }
+
+  /** Cast the local player's vote for a rematch in the current room. */
+  public sendPvpRematchVote() {
+    if (!this.socket || !this.room) return;
+    this.socket.emit('pvp_rematch_vote');
+  }
+
+  /** Ask for the current rematch tally when the results card opens. */
+  public requestPvpRematchState() {
+    if (!this.socket || !this.room) return;
+    this.socket.emit('pvp_rematch_status');
+  }
+
+  /** Host only: mirrors a locally settled round to the server's scoreboard. */
+  public sendPvpRoundReport(record: {
+    roundNumber: number;
+    winner: 'red' | 'blue' | 'draw';
+    reason: string;
+    redScore: number;
+    blueScore: number;
+  }) {
+    if (!this.socket || !this.room) return;
+    this.socket.emit('pvp_round_report', {
+      roundNumber: record.roundNumber,
+      winner: record.winner,
+      reason: record.reason,
+      redScore: record.redScore,
+      blueScore: record.blueScore,
+    });
   }
 
   /** Ask the server for the best open party and join it. */
@@ -1338,7 +1474,7 @@ export class NetworkManager {
       isAttacking,
       animState: playerState.animState || 'idle',
       isTownMode: Boolean(isTownMode),
-      sceneId: isPvpActive && this.isPvpFallback ? 'goblin_catacombs' : (isPvpActive ? 'tournament_colosseum' : sceneId),
+      sceneId: isPvpActive ? this.pvpSceneId : sceneId,
       // Teammates need to see you are down, not merely standing still.
       downed: Boolean(playerState.downed),
       // Rounded to whole percent: this rides every move packet, and nobody can

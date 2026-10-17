@@ -58,7 +58,17 @@ import { CoopLobbyUI } from './ui/CoopLobbyUI';
 import { RunSummaryUI, SummaryRow } from './ui/RunSummaryUI';
 import { installMobileStyles, findScrollable } from './ui/MobileUI';
 import { TournamentLobbyUI } from './ui/TournamentLobbyUI';
-import { TournamentMatch } from './pvp/TournamentSystem';
+import { PvpResultsUI, type PvpResultsAction } from './ui/PvpResultsUI';
+import { PvpSpectatorBar } from './ui/PvpSpectatorBar';
+import { SPECTATOR_VIEW, wheelZoomSteps } from './pvp/SpectatorCamera';
+import type { PvpMatchSummary } from './pvp/TournamentSystem';
+import {
+  loadPvpRecord,
+  savePvpRecord,
+  settlePvpMatch,
+  pvpTitleFor,
+} from './pvp/PvpRecord';
+import { TournamentMatch, PVP_ROUND_DURATION_SEC } from './pvp/TournamentSystem';
 import {
   InputAction,
   InputActionEvent,
@@ -107,6 +117,14 @@ export class SideViewGame {
   private coopDebug: CoopDebugOverlay | null = null;
   public coopLobby: CoopLobbyUI | null = null;
   public tournamentLobby: TournamentLobbyUI | null = null;
+  /** Post-match scoreboard / rematch card. Null while no match is settling. */
+  private pvpResults: PvpResultsUI | null = null;
+  private spectatorBar: PvpSpectatorBar | null = null;
+  /** Pointers on the arena canvas while spectating (drag and pinch). */
+  private spectatorPointers = new Map<number, { x: number; y: number }>();
+  private spectatorPinchDistance = 0;
+  /** Held movement keys while the spectator camera has the wheel. */
+  private spectatorKeys = new Set<string>();
   private currentDungeonIndex: number = 0;
   private currentWaveIndex: number = 0;
   private currentWaveTotalEnemies: number = 0;
@@ -317,6 +335,19 @@ export class SideViewGame {
     this.hud = new GameHUD(this.container, this.engine, this);
     this.hud.worldMapUI = this.worldMap;
 
+    this.spectatorBar = new PvpSpectatorBar(this.container, {
+      onPrev: () => this.engine?.cycleSpectateTarget(-1),
+      onNext: () => this.engine?.cycleSpectateTarget(1),
+      onToggleFollow: () => this.engine?.toggleSpectatorFollow(),
+      onZoomIn: () => this.engine?.nudgeSpectatorZoom(1),
+      onZoomOut: () => this.engine?.nudgeSpectatorZoom(-1),
+      onTogglePause: () => {
+        this.engine?.toggleSpectatorPause();
+        this.syncSpectatorBar();
+      },
+    });
+    this.setupSpectatorCameraInput();
+
     // No-op unless ?coopdebug=1 (or the rpg_debug_multiplayer key) is set.
     this.coopDebug = new CoopDebugOverlay(this.container);
 
@@ -330,14 +361,38 @@ export class SideViewGame {
       this.startTournamentMatch(match);
     });
     this.engine.onTournamentEnded = () => {
+      this.pvpResults?.close();
+      this.pvpResults = null;
+      this.spectatorBar?.close();
+      this.spectatorKeys.clear();
+      this.spectatorPointers.clear();
       network.isPvpSession = false;
       network.isPvpFallback = false;
       if (this.tournamentHostBroadcastInterval) {
         window.clearInterval(this.tournamentHostBroadcastInterval);
         this.tournamentHostBroadcastInterval = null;
       }
+      this.hud?.setPvpMode(false);
       this.loadTownHub(false);
     };
+    // A finished match hands over to the results card instead of a three-second
+    // banner. The engine keeps the arena standing until the player picks
+    // rematch, the lobby, or town, so the card is not fighting a scene change.
+    this.engine.onPvpMatchEnded = (summary) => this.presentPvpResults(summary);
+
+    network.onPvpPeerDropped((name) => {
+      if (!this.engine?.inTournamentMode) return;
+      this.hud?.showToast(`${name} disconnected — their slot is held for 45s.`);
+    });
+
+    network.onPvpRematchState((state: any) => {
+      this.pvpResults?.setRematchState({
+        votes: Math.max(0, Number(state?.votes) || 0),
+        total: Math.max(0, Number(state?.total) || 0),
+        needed: Math.max(0, Number(state?.needed) || 0),
+        started: Boolean(state?.started),
+      });
+    });
 
     // Class and level travel with lobby packets so party cards can show them.
     this.refreshNetworkProfile();
@@ -447,7 +502,7 @@ export class SideViewGame {
       mod.network.listenForPartyNextDungeon((data) => {
         if (!this.engine || this.engine.inTournamentMode) return;
         if (data?.dungeonId === 'tournament_colosseum' || data?.dungeonId === 'tournament_arena' || (data as any)?.isPvp || mod.network.isPvpSession || mod.network.isPvpFallback) {
-          this.triggerTournamentJoinerTransition(data);
+          if (!this.tournamentLobby?.isOpen) this.triggerTournamentJoinerTransition(data);
           return;
         }
         console.log('[NET] Received party_next_dungeon from host:', data);
@@ -519,7 +574,7 @@ export class SideViewGame {
       mod.network.listenForEnemySync((enemies, waveIndex, dungeonIndex, dungeonId) => {
         if (this.engine?.inTournamentMode) return;
         if (dungeonId === 'tournament_colosseum' || dungeonId === 'tournament_arena' || mod.network.isPvpSession || mod.network.isPvpFallback) {
-          this.triggerTournamentJoinerTransition();
+          if (!this.tournamentLobby?.isOpen) this.triggerTournamentJoinerTransition();
           return;
         }
         this.applyEnemySnapshot(enemies, waveIndex, dungeonIndex, dungeonId);
@@ -528,6 +583,14 @@ export class SideViewGame {
       // Host: a guest joined or reconnected and needs the whole world state.
       mod.network.onFullSyncRequest((requesterId) => {
         if (!this.engine || !this.engine.isHost) return;
+        // A newcomer asks for state the moment the server assigns its role.
+        // While the Colosseum is still staging there is no run to hand over -
+        // and `currentDungeonId` can still hold the arena id from the previous
+        // match. A snapshot labelled that way reads as a live match and pulls
+        // the newcomer into the arena before START is ever pressed.
+        const stagingPvp = this.tournamentLobby?.isOpen
+          || ((mod.network.isPvpSession || mod.network.isPvpFallback) && !this.engine.inTournamentMode);
+        if (stagingPvp) return;
         const dungeon = DUNGEONS[this.currentDungeonIndex];
         const isPvp = this.engine.inTournamentMode;
         mod.network.sendFullSync(requesterId, {
@@ -548,12 +611,15 @@ export class SideViewGame {
       // Guest: apply the host's snapshot wholesale.
       mod.network.onFullSync((snapshot) => {
         if (!this.engine || this.engine.isHost) return;
+        // Only the snapshot itself may claim a live PvP match. The local
+        // session flags are true for anyone merely sitting in a Colosseum
+        // lobby, so treating them as evidence launched the arena for every
+        // joiner the moment its role was assigned.
         const isHostPvp = Boolean((snapshot as any)?.isPvpMatch)
           || Boolean((snapshot as any)?.tournamentMode)
           || snapshot?.dungeonId === 'tournament_colosseum'
           || snapshot?.dungeonId === 'tournament_arena'
-          || Boolean(mod.network.isPvpSession)
-          || Boolean(mod.network.isPvpFallback);
+          || Boolean((snapshot as any)?.pvpFormat);
 
         if (isHostPvp) {
           if (!this.engine.inTournamentMode) {
@@ -573,7 +639,7 @@ export class SideViewGame {
       mod.network.onRunSync((runState, encounterSnapshot) => {
         if (!this.engine || this.engine.isHost) return;
         if (this.engine.inTournamentMode || mod.network.isPvpSession || mod.network.isPvpFallback) {
-          if (!this.engine.inTournamentMode) {
+          if (!this.engine.inTournamentMode && !this.tournamentLobby?.isOpen) {
             this.triggerTournamentJoinerTransition();
           }
           return;
@@ -689,7 +755,7 @@ export class SideViewGame {
           const match = new TournamentMatch({
             format: pvpFmt,
             roundsToWin: 2,
-            roundDurationSec: 90,
+            roundDurationSec: PVP_ROUND_DURATION_SEC,
             mapTheme: matchTheme,
           });
           const localActorId = mod.network.getActorId();
@@ -715,7 +781,11 @@ export class SideViewGame {
               }
             }
           }
-          this.startTournamentMatch(match);
+          // The server seats the bench itself; never infer it from missing
+          // team data, which a lagging snapshot could also produce.
+          const spectating = roomData?.isSpectator === true
+            || myMember?.seat === 'spectator';
+          this.startTournamentMatch(match, spectating);
           return;
         }
         this.onSelectLocation(roomData.dungeonId, mod.network.isHost);
@@ -723,9 +793,13 @@ export class SideViewGame {
 
       mod.network.onRemotePlayerMove((data: any) => {
         if (!this.engine) return;
-        // Only trigger match transition if remote player is active in combat (not town mode)
-        // and Joiner is not currently sitting in the lobby
-        if ((data?.team || data?.isTournament) && !data?.isTownMode && !this.tournamentLobby?.isOpen) {
+        // Co-op movement carries a team too, so only a Colosseum room may be
+        // interpreted as a live duel. And while the staging lobby is open the
+        // only way into the arena is the server's dungeon_start.
+        const pvpRoom = data?.isPvp === true
+          || mod.network.currentLobbyState?.isPvp === true
+          || Boolean(mod.network.currentLobbyState?.pvpFormat);
+        if (pvpRoom && (data?.team || data?.isTournament) && !data?.isTownMode && !this.tournamentLobby?.isOpen) {
           if (!this.engine.inTournamentMode && !this.engine.isHost) {
             console.log('[PVP] Detected remote player active in PvP match; auto-correcting Joiner to Arena...');
             this.triggerTournamentJoinerTransition();
@@ -738,9 +812,14 @@ export class SideViewGame {
         mod.network.isPvpSession = true;
         mod.network.isPvpFallback = true;
         if (handshake.phase === 'match') {
+          // A "match" handshake also rides on movement relays, so it is not
+          // proof that the host pressed START. While the Colosseum lobby is
+          // open, only the server's dungeon_start may leave the staging room;
+          // otherwise a newcomer was dragged into the arena the instant it
+          // joined, which is exactly what the ready-up screen exists to stop.
+          if (this.tournamentLobby?.isOpen) return;
           // Host has launched or is in the match: transition joiner to arena
           if (this.coopLobby?.isOpen) this.coopLobby.close();
-          if (this.tournamentLobby?.isOpen) this.tournamentLobby.close();
           if (!this.engine?.inTournamentMode && !this.engine?.isHost) {
             console.log('[PVP] Match is active on host; transitioning Joiner to Arena...');
             this.triggerTournamentJoinerTransition(handshake);
@@ -774,6 +853,12 @@ export class SideViewGame {
       mod.network.onPvpMatchResult((packet: any) => {
         if (!this.engine || !this.engine.inTournamentMode) return;
         this.engine.handlePvpMatchResult(packet);
+      });
+
+      // Server-settled round result: the shared scoreboard every client reads.
+      mod.network.onPvpRoundResult((packet: any) => {
+        if (!this.engine || !this.engine.inTournamentMode) return;
+        this.engine.applyPvpRoundResult(packet);
       });
 
       mod.network.onQuickChat((payload) => {
@@ -2098,6 +2183,9 @@ export class SideViewGame {
 
   public triggerTournamentJoinerTransition(extraSyncData?: any): void {
     if (!this.engine || this.engine.inTournamentMode) return;
+    // The host's match begins with its own START, which the server turns into
+    // dungeon_start for the room. A fallback packet must never launch the host.
+    if (this.engine.isHost) return;
     console.log('[PVP] Auto-correcting Joiner from PvE Dungeon into Colosseum PvP Arena...');
     network.isPvpSession = true;
     network.isPvpFallback = true;
@@ -2114,7 +2202,7 @@ export class SideViewGame {
     const match = new TournamentMatch({
       format: pvpFmt,
       roundsToWin: 2,
-      roundDurationSec: 90,
+      roundDurationSec: PVP_ROUND_DURATION_SEC,
       mapTheme: matchTheme,
     });
 
@@ -2126,6 +2214,7 @@ export class SideViewGame {
       || myMember?.team
       || (network.isHost ? 'red' : 'blue');
 
+    const spectating = myMember?.seat === 'spectator';
     this.engine.pvpTeam = assignedTeam;
     match.setupTeamsFromLobby(members as any, localActorId, pvpFmt, teams, assignedTeam);
 
@@ -2138,11 +2227,111 @@ export class SideViewGame {
       }
     }
 
-    this.startTournamentMatch(match);
+    this.startTournamentMatch(match, spectating);
   }
 
-  public startTournamentMatch(match: TournamentMatch): void {
+  /**
+   * Show the post-match card and bank the spoils.
+   *
+   * Payout happens here, once, when the card is built - not in the old timer
+   * that ran while the arena was already tearing down, where a dropped frame
+   * or a scene change could skip the reward entirely.
+   */
+  private presentPvpResults(summary: PvpMatchSummary): void {
     if (!this.engine) return;
+    this.pvpResults?.close();
+
+    // A spectator did not fight, so the bout is not theirs to win or lose:
+    // no record entry, no streak break, no purse. They still get the card,
+    // because the scoreboard is the point of watching.
+    const spectating = this.engine.pvpObserver;
+    const settlement = spectating
+      ? {
+          record: loadPvpRecord(),
+          rewards: { base: 0, rounds: 0, mvp: 0, streak: 0, firstWin: 0, total: 0 },
+          title: pvpTitleFor(loadPvpRecord()),
+          newTitle: null as string | null,
+        }
+      : settlePvpMatch(loadPvpRecord(), summary);
+    if (!spectating) savePvpRecord(settlement.record);
+    if (settlement.rewards.total > 0) {
+      this.engine.player.gold += settlement.rewards.total;
+      // Gold is on the save whitelist; without this the purse shown on the
+      // card and the purse in the next session would disagree.
+      this.engine.triggerSave();
+    }
+
+    // The vote is the fighters': a bench spectator neither votes nor counts.
+    const members = (network.currentLobbyState?.members || []).filter(m => m.seat !== 'spectator').length;
+    const canRematch = Boolean(network.room) && members >= 2;
+    const needed = canRematch ? members : 0;
+
+    const localRow = summary.rows.find(row => row.isLocal);
+    const localName = localRow?.name || this.engine.player.name || 'Champion';
+
+    this.pvpResults = new PvpResultsUI(
+      this.container,
+      {
+        summary,
+        record: settlement.record,
+        rewards: settlement.rewards,
+        title: settlement.title,
+        newTitle: settlement.newTitle,
+        localName,
+        spectator: spectating,
+      },
+      (action) => this.handlePvpResultsAction(action),
+      {
+        onVote: () => network.sendPvpRematchVote(),
+      },
+    );
+    this.pvpResults.open();
+    this.pvpResults.setRematchState({ votes: 0, total: needed, needed, started: false });
+    // The lobby snapshot can be a beat stale; the server's headcount is the
+    // one the vote actually has to satisfy.
+    if (canRematch) network.requestPvpRematchState();
+
+    if (spectating) audio.playCrowdCheer(0.7);
+    else if (summary.localWon) audio.playVictory();
+    else audio.playCrowdCheer(0.5);
+  }
+
+  private handlePvpResultsAction(action: PvpResultsAction): void {
+    if (!this.engine) return;
+    this.pvpResults?.close();
+    this.pvpResults = null;
+
+    if (action === 'rematch') {
+      // Kept for completeness; the card casts a vote instead so a lone player
+      // cannot restart a room everyone else has left.
+      network.sendPvpRematchVote();
+      return;
+    }
+
+    if (action === 'lobby') {
+      this.engine.endTournament();
+      network.leaveLobby();
+      // Let the leave round-trip before creating a fresh room; otherwise the
+      // server still sees this socket seated in the old one.
+      window.setTimeout(() => {
+        this.openTournamentLobby();
+      }, 320);
+      return;
+    }
+
+    this.engine.endTournament();
+    network.leaveLobby();
+  }
+
+  public startTournamentMatch(match: TournamentMatch, spectating = false): void {
+    if (!this.engine) return;
+    // A rematch arrives as a second dungeon_start. Drop the previous match's
+    // card and arena state first, or the new round would start behind it.
+    this.pvpResults?.close();
+    this.pvpResults = null;
+    if (this.engine.inTournamentMode) this.engine.endTournament(false);
+    // Set after any teardown: ending the old match clears the bench flag.
+    this.engine.setPvpObserver(spectating);
     network.isPvpSession = true;
     network.isPvpFallback = true;
     this.waveActive = false;
@@ -2175,7 +2364,15 @@ export class SideViewGame {
     this.hud?.setDungeonContextAction(null);
     this.hud?.setWaveInfo(`COLOSSEUM - ${match.config.format.toUpperCase()}`, match.fighters.filter(f => f.team === 'blue').length);
 
+    // The host owns the round simulation; its settled rounds are mirrored to
+    // the server so both sides score from one board and a clock-expired round
+    // (which produces no death packet) still counts.
+    this.engine.onPvpRoundResolved = (record) => {
+      if (network.isHost) network.sendPvpRoundReport(record);
+    };
+
     this.engine.startTournament(match);
+    this.hud?.setPvpMode(true);
     audio.playDungeonBGM();
     this.hud?.showToast(`Tournament Arena: ${match.config.format.toUpperCase()} Match Started!`);
 
@@ -2323,6 +2520,134 @@ export class SideViewGame {
     });
   }
 
+  /**
+   * Spectator controls: drag to pan, pinch or scroll to zoom, and a handful
+   * of keys for desktop. Everything is capture-phase on the window and gated
+   * on the canvas being the target, so a drag can never also count as an
+   * attack click and the HUD keeps its own pointer handling.
+   */
+  private setupSpectatorCameraInput(): void {
+    const canvas = this.canvas;
+    const spectating = () => Boolean(this.engine?.pvpSpectating);
+    const onCanvas = (event: Event) => event.target === canvas;
+
+    window.addEventListener('pointerdown', (event: PointerEvent) => {
+      if (!spectating() || !onCanvas(event)) return;
+      if (event.pointerType === 'mouse' && event.button !== 0) return;
+      this.spectatorPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (this.spectatorPointers.size === 2) this.spectatorPinchDistance = this.spectatorPointerDistance();
+      event.preventDefault();
+      event.stopPropagation();
+    }, { capture: true, passive: false });
+
+    window.addEventListener('pointermove', (event: PointerEvent) => {
+      if (!spectating()) return;
+      const previous = this.spectatorPointers.get(event.pointerId);
+      if (!previous) return;
+      this.spectatorPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+      if (this.spectatorPointers.size >= 2) {
+        const distance = this.spectatorPointerDistance();
+        if (this.spectatorPinchDistance > 0 && distance > 0 && this.engine) {
+          this.engine.setSpectatorZoom(this.engine.spectatorZoom * (distance / this.spectatorPinchDistance));
+        }
+        this.spectatorPinchDistance = distance;
+      } else {
+        const dx = event.clientX - previous.x;
+        if (dx !== 0) this.engine?.panSpectatorCameraBy(dx);
+      }
+      event.preventDefault();
+      event.stopPropagation();
+    }, { capture: true, passive: false });
+
+    // The attack binding listens for clicks, and a drag ends in one. While
+    // spectating the canvas is a camera surface, not a weapon.
+    window.addEventListener('click', (event: MouseEvent) => {
+      if (!spectating() || !onCanvas(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+    }, { capture: true });
+
+    const release = (event: PointerEvent) => {
+      if (!this.spectatorPointers.delete(event.pointerId)) return;
+      if (this.spectatorPointers.size < 2) this.spectatorPinchDistance = 0;
+    };
+    window.addEventListener('pointerup', release);
+    window.addEventListener('pointercancel', release);
+
+    window.addEventListener('wheel', (event: WheelEvent) => {
+      if (!spectating() || !onCanvas(event)) return;
+      this.engine?.nudgeSpectatorZoom(wheelZoomSteps(event.deltaY, event.deltaMode));
+      event.preventDefault();
+    }, { passive: false });
+
+    window.addEventListener('keydown', (event: KeyboardEvent) => {
+      if (!spectating()) return;
+      const target = event.target as HTMLElement | null;
+      if (target && /^(input|textarea|select)$/i.test(target.tagName)) return;
+      switch (event.code) {
+        case 'ArrowLeft':
+        case 'KeyA':
+        case 'ArrowRight':
+        case 'KeyD':
+          this.spectatorKeys.add(event.code);
+          event.preventDefault();
+          break;
+        case 'Equal':
+        case 'NumpadAdd':
+          this.engine?.nudgeSpectatorZoom(1);
+          event.preventDefault();
+          break;
+        case 'Minus':
+        case 'NumpadSubtract':
+          this.engine?.nudgeSpectatorZoom(-1);
+          event.preventDefault();
+          break;
+        case 'KeyP':
+          if (!event.repeat) this.engine?.toggleSpectatorPause();
+          this.syncSpectatorBar();
+          break;
+        case 'KeyF':
+          if (!event.repeat) this.engine?.toggleSpectatorFollow();
+          break;
+        case 'KeyQ':
+          if (!event.repeat) this.engine?.cycleSpectateTarget(-1);
+          break;
+        case 'KeyE':
+          if (!event.repeat) this.engine?.cycleSpectateTarget(1);
+          break;
+      }
+    });
+    window.addEventListener('keyup', (event) => { this.spectatorKeys.delete(event.code); });
+    window.addEventListener('blur', () => this.spectatorKeys.clear());
+  }
+
+  private spectatorPointerDistance(): number {
+    const [a, b] = Array.from(this.spectatorPointers.values());
+    if (!a || !b) return 0;
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+
+  /** Keep the spectator bar in step with the engine once per frame. */
+  private syncSpectatorBar(): void {
+    const engine = this.engine;
+    const bar = this.spectatorBar;
+    if (!engine || !bar) return;
+    if (!engine.pvpSpectating) {
+      bar.close();
+      return;
+    }
+    bar.open();
+    bar.setState({
+      targetName: engine.spectateTargetName(),
+      targetTeam: engine.spectateTargetTeam() || engine.pvpTeam,
+      mode: engine.spectatorMode,
+      zoom: engine.spectatorZoom,
+      canPause: engine.pvpCanPause,
+      paused: engine.pvpPaused,
+    });
+  }
+
   /** Compatibility bridge for the existing HUD while movement is normalized. */
   public get touchMoveDir(): number {
     return this.input.router.moveAxis();
@@ -2406,11 +2731,22 @@ export class SideViewGame {
         // simulation time, otherwise the busiest effects masquerade as fast.
         this.engine.particles.recordFrameTime(rawDt * 1000);
         this.syncRenderResolution();
+        // Held keys move the free spectator camera before the world steps, so
+        // the shot eases from where the player left it.
+        const panAxis =
+          (this.spectatorKeys.has('ArrowRight') || this.spectatorKeys.has('KeyD') ? 1 : 0)
+          - (this.spectatorKeys.has('ArrowLeft') || this.spectatorKeys.has('KeyA') ? 1 : 0);
+        if (panAxis !== 0 && this.engine.pvpSpectating) {
+          this.engine.panSpectatorCamera(panAxis * SPECTATOR_VIEW.keyPanSpeed * dt);
+        }
+
         this.engine.update(dt);
         if (!this.engine.isTownMode && this.runController) this.updateDungeonRun(dt);
         // Smooth network snapshots into render positions once per active
         // frame. Rendering reads these interpolated coordinates directly.
-        network.updateRemotePlayers(dt);
+        // A paused practice bout is frozen, so nothing is interpolated either.
+        if (!this.engine.pvpPaused) network.updateRemotePlayers(dt);
+        this.syncSpectatorBar();
 
         // In Town Mode: update NPC proximity + Portal auto-detection
         if (this.engine.isTownMode && this.townHub) {

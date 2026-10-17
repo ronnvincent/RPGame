@@ -1,6 +1,7 @@
 import { audio } from '../engine/AudioManager';
 import { getGameApiBase } from '../config/RuntimeConfig';
 import { escapeHtml, finiteNumber, installModalFocusTrap } from './UiSafety';
+import { loadPvpRecord } from '../pvp/PvpRecord';
 
 interface Entry {
   rank: number;
@@ -9,6 +10,9 @@ interface Entry {
   power: number;
   className: string | null;
   level: number;
+  wins: number;
+  matches: number;
+  bestStreak: number;
 }
 
 const API_URL = getGameApiBase();
@@ -16,7 +20,9 @@ const STYLE_ID = 'leaderboard-rpg-style';
 
 export class LeaderboardUI {
   private root: HTMLElement | null = null;
-  private sort: 'power' | 'level' = 'power';
+  private sort: 'power' | 'level' | 'pvp' = 'power';
+  /** Local Colosseum record, shown in the "your ..." line of the PvP tab. */
+  private readonly pvpRecord = loadPvpRecord();
   private myPower = 0;
   private myLevel = 1;
   private request: AbortController | null = null;
@@ -46,6 +52,7 @@ export class LeaderboardUI {
         <div class="rpg-tabs lb-tabs" role="tablist" aria-label="Ranking category">
           <button class="rpg-tab lb-tab lb-tab-on" type="button" role="tab" aria-selected="true" data-sort="power">Power</button>
           <button class="rpg-tab lb-tab" type="button" role="tab" aria-selected="false" data-sort="level">Level</button>
+          <button class="rpg-tab lb-tab" type="button" role="tab" aria-selected="false" data-sort="pvp">Colosseum</button>
         </div>
         <div class="lb-mine"><span class="rpg-label" id="lb-mine-label">Your Power</span><strong class="lb-mine-value" id="lb-mine-value">${this.myPower.toLocaleString()}</strong></div>
         <div class="rpg-dialog__body lb-list" id="lb-list" role="list" aria-live="polite" aria-busy="true"><div class="rpg-empty lb-empty">Loading rankings...</div></div>
@@ -56,7 +63,7 @@ export class LeaderboardUI {
     root.querySelector('.lb-close')?.addEventListener('click', () => this.close());
     root.querySelectorAll<HTMLButtonElement>('.lb-tab').forEach(tab => {
       tab.addEventListener('click', () => {
-        const sort = tab.dataset.sort as 'power' | 'level';
+        const sort = tab.dataset.sort as 'power' | 'level' | 'pvp';
         if (!sort || sort === this.sort) return;
         this.sort = sort;
         root.querySelectorAll<HTMLButtonElement>('.lb-tab').forEach(button => {
@@ -66,8 +73,16 @@ export class LeaderboardUI {
         });
         const label = root.querySelector('#lb-mine-label');
         const value = root.querySelector('#lb-mine-value');
-        if (label) label.textContent = sort === 'level' ? 'Your Level' : 'Your Power';
-        if (value) value.textContent = sort === 'level' ? String(this.myLevel) : this.myPower.toLocaleString();
+        if (label) {
+          label.textContent = sort === 'level' ? 'Your Level' : sort === 'pvp' ? 'Your Record' : 'Your Power';
+        }
+        if (value) {
+          value.textContent = sort === 'level'
+            ? String(this.myLevel)
+            : sort === 'pvp'
+              ? `${this.pvpRecord.wins}W - ${this.pvpRecord.losses}L`
+              : this.myPower.toLocaleString();
+        }
         audio.playClick();
         void this.load();
       });
@@ -97,7 +112,9 @@ export class LeaderboardUI {
       list.setAttribute('aria-busy', 'false');
 
       if (!entries.length) {
-        list.innerHTML = '<div class="rpg-empty lb-empty"><div><strong>No ranked players yet.</strong><p>Power is recorded when a game saves.</p></div></div>';
+        list.innerHTML = this.sort === 'pvp'
+          ? '<div class="rpg-empty lb-empty"><div><strong>No Colosseum records yet.</strong><p>Win a bout and your record is saved with the next game save.</p></div></div>'
+          : '<div class="rpg-empty lb-empty"><div><strong>No ranked players yet.</strong><p>Power is recorded when a game saves.</p></div></div>';
         return;
       }
 
@@ -105,10 +122,14 @@ export class LeaderboardUI {
         const mine = entry.shortId === myId;
         const unranked = entry.power <= 0;
         const powerText = unranked ? 'Not recorded' : entry.power.toLocaleString();
-        const figure = this.sort === 'level' ? `Level ${entry.level}` : powerText;
-        const meta = this.sort === 'level'
-          ? `${entry.className || 'Adventurer'} · ${powerText} power`
-          : `${entry.className || 'Adventurer'} · Level ${entry.level}`;
+        const pvpFigure = `${entry.wins}W`;
+        const pvpMeta = `${entry.matches} bouts · best streak ${entry.bestStreak}`;
+        const figure = this.sort === 'pvp' ? pvpFigure : this.sort === 'level' ? `Level ${entry.level}` : powerText;
+        const meta = this.sort === 'pvp'
+          ? `${entry.className || 'Adventurer'} · ${pvpMeta}`
+          : this.sort === 'level'
+            ? `${entry.className || 'Adventurer'} · ${powerText} power`
+            : `${entry.className || 'Adventurer'} · Level ${entry.level}`;
         return `<article class="lb-row${mine ? ' lb-row-me' : ''}${entry.rank <= 3 && !unranked ? ' lb-row-top' : ''}${unranked ? ' lb-row-unranked' : ''}" role="listitem">
           <span class="lb-rank" aria-label="Rank ${entry.rank}">${entry.rank}</span>
           <span class="lb-name">${escapeHtml(entry.name)}${mine ? ' <span class="lb-you">You</span>' : ''}<span class="lb-meta">${escapeHtml(meta)}</span></span>
@@ -134,6 +155,9 @@ export class LeaderboardUI {
         power: Math.max(0, Math.trunc(finiteNumber(source.power))),
         className: typeof source.className === 'string' ? source.className.slice(0, 32) : null,
         level: Math.max(1, Math.trunc(finiteNumber(source.level, 1))),
+        wins: Math.max(0, Math.trunc(finiteNumber(source.wins))),
+        matches: Math.max(0, Math.trunc(finiteNumber(source.matches))),
+        bestStreak: Math.max(0, Math.trunc(finiteNumber(source.bestStreak))),
       };
     });
   }

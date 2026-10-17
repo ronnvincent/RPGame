@@ -93,10 +93,44 @@ import { gameplaySprites } from './GameplaySpriteRenderer';
 import type { RelicDefinition } from '../dungeons/run/RunTypes';
 import { resolveEnemyVisual } from '../maps/EnemyVisualRegistry';
 import {
+  coercePvpRecord,
+  loadPvpRecord,
+  mergePvpRecords,
+  savePvpRecord,
+} from '../pvp/PvpRecord';
+import {
+  ARENA_BOT,
+  createArenaBot,
+  resetArenaBot,
+  stepArenaBot,
+  type ArenaBot,
+} from '../pvp/ArenaBots';
+import {
+  SPECTATOR_VIEW,
+  blendCamera,
+  cameraXForFocus,
+  clampCameraX,
+  clampFocusX,
+  createSpectatorView,
+  focusSpectatorOn,
+  lockSpectatorTarget,
+  nudgeSpectatorZoom as nudgeViewZoom,
+  setSpectatorFollow,
+  setSpectatorZoom,
+  type SpectatorView,
+} from '../pvp/SpectatorCamera';
+import {
   TournamentMatch,
+  buildPvpMatchSummary,
   calculatePvpDamage,
   PVP_DAMAGE_MULTIPLIER,
+  PVP_SUDDEN_DEATH_DAMAGE_MULTIPLIER,
   getNormalizedPvpBaseHp,
+  TOURNAMENT_FORMAT_TEAM_SIZES,
+  type PvpMatchSummary,
+  type TournamentFighter,
+  type TournamentRoundRecord,
+  type TournamentTeam,
 } from '../pvp/TournamentSystem';
 
 interface ActivePlayerBuff {
@@ -331,6 +365,22 @@ type SkillCastProcProfile =
 const ENEMY_ATTACK_ANIM = 0.55;
 
 /**
+ * Pixel-art chrome for the in-match Colosseum scoreboard. These are the same
+ * Kenney RPG UI panels the lobby and the DOM HUD use, so the arena readout
+ * belongs to the same interface instead of a floating web-style card.
+ */
+const PVP_HUD_ASSETS = {
+  // The plain `panel_*` skins carry a clean, unbroken rim, which survives a
+  // nine-slice at strip height. `panelInset_*` has a decorative notch at the
+  // centre of every edge; stretched across a 300px bar it reads as a tear.
+  frame: '/assets/kenney-rpg-ui/panel_brown.png',
+  plaque: '/assets/kenney-rpg-ui/panel_beigeLight.png',
+  redPip: '/assets/kenney-rpg-ui/barRed_horizontalMid.png',
+  bluePip: '/assets/kenney-rpg-ui/barBlue_horizontalBlue.png',
+  emptyPip: '/assets/kenney-rpg-ui/barBack_horizontalMid.png',
+} as const;
+
+/**
  * Combat balance.
  *
  * The fight was one-sided in both directions at once. Skill multipliers run
@@ -429,6 +479,60 @@ export class SideViewEngine {
   private tournamentEndTimer: number | null = null;
   private originalPlayerHpStats: { hp: number; maxHp: number } | null = null;
   public onTournamentEnded?: () => void;
+  /**
+   * The match is over and the arena is about to hand over to the results
+   * screen. Present it with the summary; without a listener the engine falls
+   * back to the old "swing the banner, walk home" behaviour.
+   */
+  public onPvpMatchEnded?: (summary: PvpMatchSummary) => void;
+  /** Host only: mirrors a settled round to the server's scoreboard. */
+  public onPvpRoundResolved?: (record: TournamentRoundRecord) => void;
+  /** Seconds the pre-match VS card is on screen. */
+  private pvpIntroTimer = 0;
+  /** One crowd reaction per round end, not one per frame. */
+  private pvpLastCrowdRound = 0;
+  /** The final whistle only cheers once. */
+  private pvpMatchEndCelebrated = false;
+  /**
+   * The end-of-match handoff runs exactly once. The match sits in `match_end`
+   * until the player picks an option on the card, so without this guard every
+   * frame after the first handoff scheduled another timer - and every timer
+   * would settle the purse again.
+   */
+  private pvpMatchEndHandled = false;
+  /**
+   * Spectator camera. In a team bout a downed player still has a match to
+   * watch; before this the camera stayed on their corpse until the round
+   * ended, which is the least interesting seat in the arena.
+   */
+  private pvpSpectateId: string | null = null;
+  private pvpDirectorTimer = 0;
+  /** Seconds a spectator shot holds before the director cuts again. */
+  private static readonly PVP_DIRECTOR_INTERVAL = 4.2;
+  /**
+   * Free camera while spectating: where it points, how far it is zoomed, and
+   * whether the player has taken the wheel from the auto director.
+   */
+  private spectatorView: SpectatorView = createSpectatorView();
+  /**
+   * A practice bout is a local simulation, so freezing it is honest. A live
+   * match keeps running for everyone else, so the control is disabled there.
+   */
+  private pvpPauseActive = false;
+  /**
+   * The local player is on the bench: they watch the bout instead of fighting
+   * in it. Their seat in the match roster is empty, so every local-player path
+   * (damage, movement, round reset) has to leave them alone.
+   */
+  private pvpObserverFlag = false;
+  /** World pixels per screen pixel, published by render for drag maths. */
+  private viewScale = 1.8;
+  /**
+   * Practice opponents, keyed to match fighters. Empty in every real match:
+   * the server refuses a Colosseum room without a player on each side, so a
+   * bot can only ever exist in an offline practice bout.
+   */
+  private arenaBots: ArenaBot[] = [];
 
   // What you actually did this run. Nothing tracked contribution before, so a
   // finished dungeon said nothing about who carried it - and a co-op run with
@@ -2831,7 +2935,7 @@ export class SideViewEngine {
         if (pvpCalc.triggeredAntiBurst) {
           this.particles.addFloatingText(enemy.x, enemy.y - 30, 'ANTI-BURST ACTIVE!', '#38bdf8', true, 13);
         }
-        return pvpCalc.finalDamage;
+        return Math.max(1, Math.round(pvpCalc.finalDamage * this.pvpDamageScale()));
       }
     }
     const frailty = this.statusMagnitude(enemy, 'frailty');
@@ -3117,6 +3221,13 @@ export class SideViewEngine {
     if (data.maxDungeonCleared) this.player.maxDungeonCleared = data.maxDungeonCleared;
     if (data.inventory) this.player.inventory = data.inventory;
 
+    // The Colosseum record rides in the same save as gold. Merge rather than
+    // replace: a cloud copy written before the last bout must not roll a win
+    // back, and a local copy must not hide wins from another device.
+    if (ps.pvp) {
+      savePvpRecord(mergePvpRecords(loadPvpRecord(), coercePvpRecord(ps.pvp)));
+    }
+
     // Restored slot by slot rather than by replacing the object, so a save
     // written before equipment was persisted still loads and simply leaves the
     // empty slots empty.
@@ -3230,6 +3341,20 @@ export class SideViewEngine {
   }
 
   public update(dt: number) {
+    // A paused practice bout still lets the spectator move the camera: the
+    // world is frozen, not the control of it.
+    if (this.pvpPauseActive) {
+      if (!this.pvpCanPause) {
+        // The bout moved on under the pause - a round settled from a server
+        // result, or the seat was lost. Freezing here would strand the player
+        // on a frozen arena, so the flag releases itself.
+        this.pvpPauseActive = false;
+      } else {
+        this.updateSpectatorCamera(dt);
+        return;
+      }
+    }
+
     this.ensureZoneGeometry();
     // This must precede hit-stop, ultimate freezes, and regeneration. The old
     // order let 1% HP regen turn a lethal 0 into a positive number, skipping
@@ -3449,20 +3574,34 @@ export class SideViewEngine {
     // Clamp Player within arena
     p.x = Math.max(40, Math.min(this.arenaWidth - 40, p.x));
 
-    // Smooth dynamic camera tracking
-    const runLeadFactor = Math.min(1, Math.abs(p.vx) / Math.max(1, this.player.totalSpeed));
-    const targetLead = (Math.abs(p.vx) > 0.5 ? this.cameraLookAheadPx * Math.sign(p.vx) * runLeadFactor : 0);
-    this.cameraLeadOffset += (targetLead - this.cameraLeadOffset) * (1 - Math.exp(-this.cameraLeadRecoverySpeed * dt));
-    const lookAhead = this.cameraLeadOffset;
-    const rawTargetCam = p.x + lookAhead - this.canvasWidth * 0.5;
-    const targetCamX = Math.min(
-      Math.max(0, this.arenaWidth - this.canvasWidth),
-      Math.max(0, rawTargetCam)
-    );
-    const cameraDelta = targetCamX - this.cameraX;
-    const smoothedStep = 1 - Math.exp(-this.cameraFollowSpeed * dt);
-    this.cameraX += cameraDelta * smoothedStep;
-    this.cameraX = Math.max(0, Math.min(this.arenaWidth - this.canvasWidth, this.cameraX));
+    // Smooth dynamic camera tracking.
+    //
+    // Not while spectating: the player-follow camera and the spectator camera
+    // would both write `cameraX` on the same frame and settle at a point
+    // neither asked for - which pinned an observer parked at x=0 to the empty
+    // left end of the arena instead of the fight.
+    if (!this.pvpSpectating) {
+      const runLeadFactor = Math.min(1, Math.abs(p.vx) / Math.max(1, this.player.totalSpeed));
+      const targetLead = (Math.abs(p.vx) > 0.5 ? this.cameraLookAheadPx * Math.sign(p.vx) * runLeadFactor : 0);
+      this.cameraLeadOffset += (targetLead - this.cameraLeadOffset) * (1 - Math.exp(-this.cameraLeadRecoverySpeed * dt));
+      const lookAhead = this.cameraLeadOffset;
+      const rawTargetCam = p.x + lookAhead - this.canvasWidth * 0.5;
+      const targetCamX = Math.min(
+        Math.max(0, this.arenaWidth - this.canvasWidth),
+        Math.max(0, rawTargetCam)
+      );
+      const cameraDelta = targetCamX - this.cameraX;
+      const smoothedStep = 1 - Math.exp(-this.cameraFollowSpeed * dt);
+      this.cameraX += cameraDelta * smoothedStep;
+      this.cameraX = Math.max(0, Math.min(this.arenaWidth - this.canvasWidth, this.cameraX));
+    }
+
+    // A downed fighter follows the surviving teammate. Applied after the
+    // player camera so it wins for the frame, and it only ever engages while
+    // the local player cannot act.
+    if (this.inTournamentMode && this.player.downed) {
+      this.updateSpectatorCamera(dt);
+    }
 
     // 7. Update Enemy AI
     this.updateEnemies(dt);
@@ -3475,9 +3614,13 @@ export class SideViewEngine {
     this.checkProjectileCollisions();
     this.checkSpecialSkillEntities(dt);
 
-    // 10. Sync Player Position over Network (20 times a second)
+    // 10. Sync Player Position over Network (20 times a second).
+    //
+    // A bench spectator has no body in the ring. Broadcasting one would put a
+    // downed sprite at the arena's edge for every fighter to see, and would
+    // give the other spectators a corpse to cycle the camera onto.
     this.playerSyncTimer -= dt;
-    if (this.playerSyncTimer <= 0) {
+    if (this.playerSyncTimer <= 0 && !this.pvpObserverFlag) {
       this.playerSyncTimer = 0.05;
       network.sendPlayerMove(
         this.player,
@@ -4769,6 +4912,10 @@ export class SideViewEngine {
    * loses it, so a rescue costs you position in the middle of a fight.
    */
   public updateRevive(dt: number, holding: boolean) {
+    // Rounds in the arena start and end on their own; a rescue would let a
+    // downed fighter stand back up inside a round the match has already
+    // decided, and it would take the spectator's seat away mid-shot.
+    if (this.inTournamentMode) return;
     const target = this.nearestDownedAlly();
     if (!target || !holding || this.player.downed) {
       this.reviveHold = 0;
@@ -4793,7 +4940,7 @@ export class SideViewEngine {
   /** We were picked up: back on our feet, hurt but standing. */
   public acceptRevive(byName?: string, hpPercent = 0.4) {
     const p = this.player;
-    if (!p.downed) return;
+    if (!p.downed || this.inTournamentMode) return;
     p.downed = false;
     p.downTimer = 0;
     const boundedPercent = Number.isFinite(hpPercent) ? Math.max(0, Math.min(1, hpPercent)) : 0.4;
@@ -4813,6 +4960,15 @@ export class SideViewEngine {
   private tickDowned(dt: number) {
     const p = this.player;
     if (!p.downed) return;
+
+    // A Colosseum bout owns death. Bleeding out is a dungeon rule: nobody is
+    // coming to revive you on a run, so the downed state ends the run. In the
+    // arena the round keeps playing around you - which is exactly the seat the
+    // spectator camera exists for - and the match, not a bleed-out timer,
+    // decides when you get up. Without this guard every PvP death fired
+    // `onRunLost` and threw the player back to town mid-series.
+    if (this.inTournamentMode) return;
+
     p.vx = 0;
     p.animState = 'dead';
     p.downTimer = Math.max(0, (p.downTimer || 0) - dt);
@@ -4942,6 +5098,19 @@ export class SideViewEngine {
     );
   }
 
+  /**
+   * Overtime hits harder.
+   *
+   * Sudden death only means something if the damage curve actually changes;
+   * at the normal PvP damping a 30s window would expire exactly like the
+   * three minutes before it. Both directions scale together - outgoing in
+   * `applyPvpAttackHitToRemotePlayer`, incoming here - so neither side is
+   * secretly favoured.
+   */
+  private pvpDamageScale(): number {
+    return this.tournamentMatch?.suddenDeath ? PVP_SUDDEN_DEATH_DAMAGE_MULTIPLIER : 1;
+  }
+
   private incomingDamageMultiplier(): number {
     // Guardian Sigil's authored guard-capacity becomes bounded passive chip
     // mitigation; parry still remains the full skill-based answer.
@@ -4954,7 +5123,7 @@ export class SideViewEngine {
       if (Math.abs(this.player.x - zone.x) <= zone.radius) multiplier *= 1 - zone.allyMitigation;
     }
     if (this.inTournamentMode) {
-      multiplier *= PVP_DAMAGE_MULTIPLIER;
+      multiplier *= PVP_DAMAGE_MULTIPLIER * this.pvpDamageScale();
       if (this.tournamentMatch) {
         const localFighter = this.tournamentMatch.fighters.find(f => f.isLocal);
         if (localFighter && Date.now() < localFighter.antiBurstUntil) {
@@ -5747,7 +5916,13 @@ export class SideViewEngine {
   public render(ctx: CanvasRenderingContext2D, width: number, height: number) {
     // Dynamic virtual resolution with intelligent zoom scaling
     // Scales pixel sprites up so they are large, clear, and heroic!
-    const zoom = Math.max(1.8, Math.min(4.5, height / 270));
+    const baseZoom = Math.max(1.8, Math.min(4.5, height / 270));
+    // The spectator zoom multiplies the renderer's own pixel scale. It changes
+    // how much of the arena is visible, so the camera clamp (which reads
+    // canvasWidth) follows it on the next frame.
+    const spectatorZoom = this.pvpSpectating ? this.spectatorView.zoom : 1;
+    const zoom = baseZoom * spectatorZoom;
+    this.viewScale = zoom;
     const virtualWidth = width / zoom;
     const virtualHeight = height / zoom;
 
@@ -6010,7 +6185,9 @@ export class SideViewEngine {
       }
     }
 
-    // 4. Render Player
+    // 4. Render Player. A bench spectator has no body in the ring: drawing
+    // the parked local player would put a corpse in the corner of every shot.
+    if (!this.pvpObserverFlag) {
     ctx.save();
     // Stealth translucency & Invulnerability Blink
     if (p.stealthTimer > 0) {
@@ -6056,8 +6233,11 @@ export class SideViewEngine {
     }
 
     ctx.restore();
-    // Render Remote Multiplayer Players
-    if (network.room) {
+    }
+
+    // Render Remote Multiplayer Players. A practice bot lives in the same
+    // table but there is no room, so the gate has to admit it explicitly.
+    if (network.room || this.arenaBots.length > 0) {
       for (const socketId in network.remotePlayers) {
         const remoteP = network.remotePlayers[socketId];
         // Only render remote player if they are in the same environment (Town vs Dungeon)
@@ -6162,7 +6342,14 @@ export class SideViewEngine {
     // Cinematic dim/declaration are screen-space, above the scene and below DOM HUD.
     this.ultimate.draw(ctx, virtualWidth, virtualHeight);
     if (this.tournamentMatch) {
-      this.drawTournamentOverlay(ctx, virtualWidth, virtualHeight);
+      // The arena readout is interface, not scenery. Undo the camera zoom so it
+      // keeps a constant, deliberately small pixel size on every display
+      // instead of doubling with the sprite scale - which is what made it so
+      // oversized on phones, where zoom is pinned at 1.8.
+      ctx.save();
+      ctx.scale(1 / zoom, 1 / zoom);
+      this.drawTournamentOverlay(ctx, width, height);
+      ctx.restore();
     }
     ctx.restore();
   }
@@ -6415,6 +6602,8 @@ export class SideViewEngine {
   public startTournament(match: TournamentMatch): void {
     this.inTournamentMode = true;
     this.tournamentMatch = match;
+    this.syncPracticeBots(match);
+    match.onRoundResolved = (record) => this.onPvpRoundResolved?.(record);
     this.isTownMode = false;
     this.currentDungeonId = (match.config.mapTheme as any) || 'tournament_colosseum';
     this.setBattleTheme(this.currentDungeonId as any);
@@ -6460,49 +6649,415 @@ export class SideViewEngine {
     this.enemies = [];
     this.particles.clearGameplayEntities();
 
+    // The readout's chrome must stay resident: an LRU eviction mid-duel would
+    // otherwise swap the panels for flat fallback rectangles.
+    if (!this.pvpHudAssetsRetained) {
+      sprites.retainPaths(Object.values(PVP_HUD_ASSETS));
+      this.pvpHudAssetsRetained = true;
+    }
+
     // Start match countdown
     this.lastTournamentRound = match.currentRound;
+    this.pvpIntroTimer = 2.8;
+    this.pvpLastCrowdRound = 0;
+    this.pvpMatchEndCelebrated = false;
+    this.pvpMatchEndHandled = false;
+    this.resetSpectatorView();
     match.startMatch();
+    if (this.pvpObserverFlag) {
+      this.markObserverPlayer();
+      // Center the opening shot on the arena, not on an empty spawn corner.
+      this.cameraX = this.arenaWidth > this.canvasWidth
+        ? (this.arenaWidth - this.canvasWidth) * 0.5
+        : 0;
+    }
   }
 
-  public endTournament(): void {
+  /** Set once when a match takes the HUD textures, so they are released once. */
+  private pvpHudAssetsRetained = false;
+
+  /**
+   * Bots appear in the match roster but nowhere else, so they need a remote
+   * entry of their own to be drawn, hit and scored by the same code that
+   * handles a real opponent. The ids are prefixed so network sends can skip
+   * them.
+   */
+  private syncPracticeBots(match: TournamentMatch): void {
+    this.clearPracticeBots();
+    if (!match.fighters.some(f => f.isBot)) return;
+
+    // A practice bout at 2v2 or above needs bodies on the player's own side
+    // too: the lobby only fills the enemy team, which left the local player in
+    // a 1v2 and gave the spectator camera nobody to follow after a death.
+    this.fillPracticeAllies(match);
+
+    let allyIndex = 0;
+    let enemyIndex = 0;
+    this.arenaBots = match.fighters.filter(f => f.isBot).map(fighter => {
+      const x = fighter.team === this.pvpTeam ? 380 - allyIndex++ * 90 : 2950 - enemyIndex++ * 90;
+      return createArenaBot(fighter, x);
+    });
+    for (const bot of this.arenaBots) {
+      network.remotePlayers[bot.id] = this.botRemoteState(bot);
+    }
+  }
+
+  /**
+   * Give the local team its missing fighters in a practice bout.
+   *
+   * These are the same non-player allies the offline arena roster always had;
+   * they exist so a 2v2 practice is a 2v2 and so a downed player has someone
+   * to watch. A real match never reaches this: the server refuses a room
+   * without a player on each side, and only practice builds a bot roster.
+   */
+  private fillPracticeAllies(match: TournamentMatch): void {
+    const teamSize = TOURNAMENT_FORMAT_TEAM_SIZES[match.config.format] || 1;
+    const archetypes = [
+      { name: 'Paladin Roland', class: 'heroknight' },
+      { name: 'Huntress Lyra', class: 'huntress' },
+      { name: 'Priestess Serena', class: 'priestess' },
+    ];
+    let index = match.fighters.filter(f => f.team === this.pvpTeam).length;
+    while (match.fighters.filter(f => f.team === this.pvpTeam).length < teamSize) {
+      const arch = archetypes[(index - 1) % archetypes.length];
+      const hp = getNormalizedPvpBaseHp(arch.class);
+      match.fighters.push({
+        id: `${this.pvpTeam}_bot_${index}`,
+        name: arch.name,
+        team: this.pvpTeam,
+        isLocal: false,
+        isBot: true,
+        className: arch.class,
+        maxHp: hp,
+        currentHp: hp,
+        kills: 0,
+        deaths: 0,
+        damageDealt: 0,
+        damageTaken: 0,
+        isAlive: true,
+        x: 400 - index * 70,
+        y: 0,
+        antiBurstUntil: 0,
+        recentDamageTaken: [],
+        ccCount: 0,
+        lastCcTime: 0,
+        ccImmunityUntil: 0,
+      });
+      index += 1;
+    }
+  }
+
+  /**
+   * The remote entry a bot needs to be drawn and hit by the ordinary player-
+   * attack path.
+   *
+   * Built on demand rather than once: leaving the lobby clears
+   * `network.remotePlayers` when the server's confirmation lands, which can
+   * be a frame after the practice bout has already started. Re-creating a
+   * missing entry keeps the opponent from vanishing mid-match.
+   */
+  private botRemoteState(bot: ArenaBot): RemotePlayerState {
+    return {
+      actorId: bot.id,
+      classId: bot.classId,
+      name: bot.name,
+      x: bot.x,
+      y: 0,
+      facing: bot.facing,
+      isGrounded: true,
+      isAttacking: false,
+      animState: bot.downed ? 'dead' : 'idle',
+      isTownMode: false,
+      team: bot.team,
+      hpPct: bot.downed ? 0 : 100,
+    };
+  }
+
+  private clearPracticeBots(): void {
+    for (const bot of this.arenaBots) {
+      if (network.remotePlayers[bot.id]) delete network.remotePlayers[bot.id];
+    }
+    this.arenaBots = [];
+  }
+
+  private isPracticeBot(id: string): boolean {
+    return this.arenaBots.some(bot => bot.id === id);
+  }
+
+  /**
+   * A bot's remote entry: the thing that draws it and lets the ordinary
+   * player-attack path find it.
+   *
+   * Built on demand rather than once, because leaving the lobby clears
+   * `network.remotePlayers` when the server's confirmation lands - which can
+   * be a frame after the practice bout has already started.
+   */
+  private ensurePracticeBotRemote(bot: ArenaBot, fighter: { currentHp: number; maxHp: number }): RemotePlayerState {
+    let remote = network.remotePlayers[bot.id];
+    if (!remote) {
+      remote = this.botRemoteState(bot);
+      network.remotePlayers[bot.id] = remote;
+    }
+    // The fighter is the single source of truth for a bot's health. Rebuilding
+    // from the spawn value would have healed a wounded bot through the round.
+    remote.hpPct = bot.downed
+      ? 0
+      : Math.max(0, Math.min(100, Math.round((fighter.currentHp / Math.max(1, fighter.maxHp)) * 100)));
+    return remote;
+  }
+
+  private markPracticeBotFallen(bot: ArenaBot, remote: RemotePlayerState): void {
+    bot.downed = true;
+    remote.hpPct = 0;
+    remote.animState = 'dead';
+    remote.isAttacking = false;
+    remote.downed = false;
+  }
+
+  /**
+   * Who a practice bot goes for.
+   *
+   * Enemies come for the player while they are standing and turn on the
+   * surviving ally once the player is down; allies pick the nearest enemy.
+   * Keeping the player as the enemy's first choice keeps a practice bout
+   * about the player rather than about a bot duel happening in the corner.
+   */
+  private practiceBotTarget(
+    attacker: ArenaBot,
+    match: TournamentMatch,
+  ): { kind: 'player'; x: number; hp: number } | { kind: 'bot'; x: number; hp: number; bot: ArenaBot; fighter: TournamentFighter; remote: RemotePlayerState } | null {
+    const nearestBot = (bots: ArenaBot[]) => {
+      let best: ArenaBot | null = null;
+      let bestDistance = Number.POSITIVE_INFINITY;
+      for (const candidate of bots) {
+        if (candidate.id === attacker.id || candidate.downed) continue;
+        const distance = Math.abs(candidate.x - attacker.x);
+        if (distance < bestDistance) {
+          best = candidate;
+          bestDistance = distance;
+        }
+      }
+      return best;
+    };
+
+    const toBotTarget = (bot: ArenaBot) => {
+      const fighter = match.fighters.find(f => f.id === bot.id);
+      if (!fighter || fighter.currentHp <= 0) return null;
+      const remote = this.ensurePracticeBotRemote(bot, fighter);
+      return { kind: 'bot' as const, x: bot.x, hp: fighter.currentHp, bot, fighter, remote };
+    };
+
+    if (attacker.team !== this.pvpTeam) {
+      if (this.player.hp > 0 && !this.player.downed) {
+        return { kind: 'player', x: this.player.x, hp: this.player.hp };
+      }
+      const ally = nearestBot(this.arenaBots.filter(bot => bot.team === this.pvpTeam));
+      return ally ? toBotTarget(ally) : null;
+    }
+
+    const enemy = nearestBot(this.arenaBots.filter(bot => bot.team !== this.pvpTeam));
+    return enemy ? toBotTarget(enemy) : null;
+  }
+
+  /**
+   * Damage between two practice bots.
+   *
+   * There is no socket to relay it through and no server health to reconcile,
+   * so the match record is the authority. The kill feed is fired here, once,
+   * with the real killer; otherwise every death would be credited to the
+   * player by the top-of-loop fallback.
+   */
+  private damagePracticeBot(
+    attacker: ArenaBot,
+    attackerFighter: TournamentFighter,
+    target: { bot: ArenaBot; fighter: TournamentFighter; remote: RemotePlayerState },
+    damage: number,
+  ): void {
+    const amount = Math.max(1, Math.round(damage));
+    target.fighter.currentHp = Math.max(0, target.fighter.currentHp - amount);
+    target.fighter.damageTaken = (target.fighter.damageTaken || 0) + amount;
+    attackerFighter.damageDealt = (attackerFighter.damageDealt || 0) + amount;
+    this.tournamentMatch?.recordTeamDamage(attacker.team, amount);
+    target.remote.hpPct = Math.max(0, Math.min(100, Math.round((target.fighter.currentHp / Math.max(1, target.fighter.maxHp)) * 100)));
+    this.particles.addFloatingText(target.bot.x, this.groundY - 30, `-${amount}`, '#ef4444', false, 14);
+
+    if (target.fighter.currentHp > 0) return;
+    this.markPracticeBotFallen(target.bot, target.remote);
+    this.showPvpKillFeed({
+      downedActorId: target.bot.id,
+      downedName: target.bot.name,
+      downedTeam: target.bot.team,
+      killerActorId: attacker.id,
+      killerName: attacker.name,
+      killerTeam: attacker.team,
+    });
+  }
+
+  /**
+   * Run every practice fighter for one frame.
+   *
+   * Health is read back from the match fighter, so the player's hits land
+   * through the ordinary damage path and a bot dies on the frame its health
+   * reaches zero - no second health bar to drift out of sync.
+   */
+  private updatePracticeBots(dt: number): void {
+    if (this.arenaBots.length === 0) return;
+    const match = this.tournamentMatch;
+    if (!match) return;
+
+    for (const bot of this.arenaBots) {
+      const fighter = match.fighters.find(f => f.id === bot.id);
+      if (!fighter) continue;
+      const remote = this.ensurePracticeBotRemote(bot, fighter);
+
+      if (!fighter.isAlive || fighter.currentHp <= 0) {
+        if (!bot.downed) {
+          // Killed from outside the bot loop: only the player's attacks can
+          // do that, so the credit is unambiguous here.
+          this.markPracticeBotFallen(bot, remote);
+          const localFighter = match.fighters.find(f => f.isLocal);
+          this.showPvpKillFeed({
+            downedActorId: bot.id,
+            downedName: bot.name,
+            downedTeam: bot.team,
+            killerActorId: localFighter?.id,
+            killerName: localFighter?.name || this.player.name,
+            killerTeam: this.pvpTeam,
+          });
+        }
+        continue;
+      }
+
+      const target = this.practiceBotTarget(bot, match);
+      if (!target) {
+        remote.animState = 'idle';
+        remote.isAttacking = false;
+        continue;
+      }
+
+      const step = stepArenaBot(bot, { x: target.x, downed: false, hp: target.hp }, dt);
+      remote.x = bot.x;
+      remote.facing = bot.facing;
+      remote.animState = bot.moving ? 'run' : 'idle';
+      remote.isAttacking = step.attack;
+
+      if (!step.attack) continue;
+      if (target.kind === 'player') {
+        this.receivePvpHit({
+          attackerActorId: bot.id,
+          attackerName: bot.name,
+          attackerTeam: bot.team,
+          damage: step.damage,
+          isCrit: false,
+          hitX: bot.x,
+          hitY: this.groundY - 20,
+        });
+      } else {
+        this.damagePracticeBot(bot, fighter, target, step.damage);
+      }
+    }
+  }
+
+  /**
+   * Leave the arena.
+   *
+   * `notify` is false when a rematch is taking over the same arena: the scene
+   * stays put, only the finished match is discarded, and town must not load.
+   */
+  public endTournament(notify: boolean = true): void {
+    if (this.tournamentEndTimer) {
+      window.clearTimeout(this.tournamentEndTimer);
+      this.tournamentEndTimer = null;
+    }
+    if (this.pvpHudAssetsRetained) {
+      sprites.releasePaths(Object.values(PVP_HUD_ASSETS));
+      this.pvpHudAssetsRetained = false;
+    }
     if (this.originalPlayerHpStats) {
       this.player.maxHp = this.originalPlayerHpStats.maxHp;
       this.player.hp = this.originalPlayerHpStats.hp;
       this.originalPlayerHpStats = null;
     }
+    // Leaving the arena stands everyone back up. Without this a fighter who
+    // was down when the series ended walked into town still downed - and a
+    // bench spectator, who is downed for the whole match by design, never got
+    // up at all.
+    this.player.downed = false;
+    this.player.downTimer = 0;
+    this.player.animState = 'idle';
+    this.clearPracticeBots();
     this.inTournamentMode = false;
     this.tournamentMatch = null;
     this.isTownMode = true;
     this.enemies = [];
     this.particles.clearGameplayEntities();
     this.setBattleTheme('town');
-    this.onTournamentEnded?.();
+    this.pvpIntroTimer = 0;
+    this.pvpLastCrowdRound = 0;
+    this.pvpMatchEndCelebrated = false;
+    this.pvpMatchEndHandled = false;
+    this.pvpObserverFlag = false;
+    this.resetSpectatorView();
+    if (notify) this.onTournamentEnded?.();
   }
 
   private updateTournament(dt: number): void {
     const match = this.tournamentMatch;
     if (!match) return;
 
+    if (this.pvpIntroTimer > 0) this.pvpIntroTimer = Math.max(0, this.pvpIntroTimer - dt);
+
+    // The crowd reacts to a settled round, not to every frame of the banner.
+    if (match.status === 'round_end' && this.pvpLastCrowdRound !== match.currentRound) {
+      this.pvpLastCrowdRound = match.currentRound;
+      const localWonRound = match.roundHistory[match.roundHistory.length - 1]?.winner === this.pvpTeam;
+      audio.playCrowdCheer(localWonRound ? 0.85 : 0.55);
+      if (localWonRound) {
+        this.particles.addScreenFlash('#fef3c7', 0.12, 0.045);
+        this.particles.triggerScreenShake(2.2, 0.16);
+      }
+    }
+
     // Reset fighters and player on new round
     if (this.lastTournamentRound !== match.currentRound) {
       this.lastTournamentRound = match.currentRound;
       const normalizedHp = getNormalizedPvpBaseHp(this.player.characterClass?.id || 'warrior');
-      this.player.hp = normalizedHp;
-      this.player.downed = false;
-      this.player.animState = 'idle';
-      this.player.x = this.pvpTeam === 'blue' ? 1620 : 480;
+      const observing = this.pvpObserverFlag;
+      this.player.hp = observing ? 0 : normalizedHp;
+      this.player.downed = observing;
+      this.player.animState = observing ? 'dead' : 'idle';
+      this.player.x = observing ? 0 : (this.pvpTeam === 'blue' ? 1620 : 480);
       this.player.facing = this.pvpTeam === 'blue' ? -1 : 1;
       this.player.y = this.groundY;
       this.player.vx = 0;
       this.player.vy = 0;
       this.player.isGrounded = true;
       this.player.hasJumpedOnce = false;
+      this.pvpSpectateId = null;
+      this.pvpDirectorTimer = 0;
+      // A pause does not survive the round bell, and the next round starts on
+      // the director's camera (the zoom is a viewing preference and stays).
+      this.pvpPauseActive = false;
+      setSpectatorFollow(this.spectatorView, true);
 
-      const targetCamX = this.canvasWidth > 0
-        ? Math.max(0, Math.min(this.arenaWidth - this.canvasWidth, this.player.x - this.canvasWidth * 0.5))
-        : 400;
-      this.cameraX = targetCamX;
+      for (const bot of this.arenaBots) {
+        resetArenaBot(bot);
+        const remote = network.remotePlayers[bot.id];
+        if (!remote) continue;
+        remote.x = bot.x;
+        remote.facing = bot.facing;
+        remote.animState = 'idle';
+        remote.isAttacking = false;
+        remote.downed = false;
+        remote.hpPct = 100;
+      }
+
+      if (!observing) {
+        const targetCamX = this.canvasWidth > 0
+          ? Math.max(0, Math.min(this.arenaWidth - this.canvasWidth, this.player.x - this.canvasWidth * 0.5))
+          : 400;
+        this.cameraX = targetCamX;
+      }
       this.cameraLeadOffset = 0;
 
       this.enemies = [];
@@ -6534,6 +7089,14 @@ export class SideViewEngine {
       }
     }
 
+    // Practice opponents run BEFORE the match state machine. The state
+    // machine resolves a wipe from the fighters' synced health, so a bot that
+    // dies must record its death (kill feed, animation) on the same frame or
+    // the round settles around an opponent still standing in the feed.
+    if (match.status === 'active') {
+      this.updatePracticeBots(dt);
+    }
+
     // Update match state machine
     match.update(dt);
 
@@ -6553,17 +7116,36 @@ export class SideViewEngine {
 
     // Check if match ended
     if (match.status === 'match_end') {
-      if (!this.tournamentEndTimer) {
+      if (!this.pvpMatchEndCelebrated) {
+        this.pvpMatchEndCelebrated = true;
+        audio.playCrowdCheer(1);
+        if (match.matchWinner === this.pvpTeam) {
+          audio.playVictory();
+          this.particles.addScreenFlash('#fde68a', 0.18, 0.035);
+          this.particles.triggerScreenShake(3, 0.2);
+        }
+      }
+      if (!this.tournamentEndTimer && !this.pvpMatchEndHandled) {
         this.tournamentEndTimer = window.setTimeout(() => {
           this.tournamentEndTimer = null;
-          // Award gold if player's team won
-          if (match.matchWinner === this.pvpTeam) {
+          if (this.pvpMatchEndHandled) return;
+          this.pvpMatchEndHandled = true;
+          const summary = buildPvpMatchSummary(match, this.pvpTeam);
+          if (this.onPvpMatchEnded) {
+            // The results screen owns the ending now: rewards, rematch and the
+            // walk home all happen from there, on the player's terms.
+            this.onPvpMatchEnded(summary);
+            return;
+          }
+          // No results screen registered (a stripped build or a test harness):
+          // keep the old behaviour so the match still ends cleanly.
+          if (summary.localWon) {
             const reward = match.config.format === '1v1' ? 1000 : match.config.format === '2v2' ? 2500 : 5000;
             this.player.gold += reward;
             this.particles.addFloatingText(this.player.x, this.player.y - 45, `+${reward} GOLD VICTORY!`, '#f59e0b', true, 16);
           }
           this.endTournament();
-        }, 3600);
+        }, 1600);
       }
     }
   }
@@ -6575,8 +7157,9 @@ export class SideViewEngine {
     isCrit: boolean,
     skillName?: string
   ): void {
-    let finalDmg = rawDamage * 0.22;
-    if (isCrit) finalDmg = Math.min(finalDmg * 1.5, rawDamage * 0.22 * 1.35);
+    const scale = PVP_DAMAGE_MULTIPLIER * this.pvpDamageScale();
+    let finalDmg = rawDamage * scale;
+    if (isCrit) finalDmg = Math.min(finalDmg * 1.5, rawDamage * scale * 1.35);
     finalDmg = Math.max(1, Math.round(finalDmg));
 
     this.particles.addFloatingText(remoteP.x, remoteP.y + this.groundY - 30, `${isCrit ? 'CRIT! ' : ''}-${finalDmg}`, isCrit ? '#f59e0b' : '#ef4444', isCrit, 16);
@@ -6591,6 +7174,7 @@ export class SideViewEngine {
       ));
       if (remoteFighter) {
         remoteFighter.currentHp = Math.max(0, remoteFighter.currentHp - finalDmg);
+        remoteFighter.damageTaken = (remoteFighter.damageTaken || 0) + finalDmg;
         remoteP.hpPct = Math.max(0, Math.min(100, Math.round((remoteFighter.currentHp / Math.max(1, remoteFighter.maxHp)) * 100)));
       } else if (typeof remoteP.hpPct === 'number') {
         const estLoss = Math.max(3, Math.round((finalDmg / 1500) * 100));
@@ -6598,15 +7182,27 @@ export class SideViewEngine {
       }
     }
 
-    network.sendPvpAttackHit({
-      targetSocketId: socketId,
-      targetActorId: remoteP.actorId || socketId,
-      damage: finalDmg,
-      isCrit,
-      skillName,
-      hitX: remoteP.x,
-      hitY: remoteP.y + this.groundY,
-    });
+    // Credit the damage to whoever dealt it. This is the figure the results
+    // card shows and the one the overtime tiebreak reads.
+    const matchForCredit = this.tournamentMatch;
+    if (matchForCredit) {
+      const localFighter = matchForCredit.fighters.find(f => f.isLocal);
+      if (localFighter) localFighter.damageDealt += finalDmg;
+      if (this.pvpTeam) matchForCredit.recordTeamDamage(this.pvpTeam, finalDmg);
+    }
+
+    // A practice bot has no socket to tell; the local model is the only one.
+    if (!this.isPracticeBot(socketId)) {
+      network.sendPvpAttackHit({
+        targetSocketId: socketId,
+        targetActorId: remoteP.actorId || socketId,
+        damage: finalDmg,
+        isCrit,
+        skillName,
+        hitX: remoteP.x,
+        hitY: remoteP.y + this.groundY,
+      });
+    }
   }
 
   public receivePvpHit(packet: {
@@ -6619,6 +7215,9 @@ export class SideViewEngine {
     hitX: number;
     hitY: number;
   }): void {
+    // The bench is outside the fight: a stray broadcast must not damage or
+    // kill the observer and drag them through the death pipeline again.
+    if (this.pvpObserverFlag) return;
     if (!this.inTournamentMode || this.player.hp <= 0 || this.player.downed) return;
     if (this.player.iframeTimer > 0) return;
 
@@ -6628,6 +7227,23 @@ export class SideViewEngine {
 
     this.player.hp = Math.max(0, this.player.hp - hpDamage);
     this.damageTaken += hpDamage;
+
+    // Team damage for the overtime tiebreak, plus the local fighter's own
+    // "damage taken" row on the results card.
+    if (this.tournamentMatch) {
+      const attackerTeam: TournamentTeam | null = packet.attackerTeam === 'red' || packet.attackerTeam === 'blue'
+        ? packet.attackerTeam
+        : null;
+      if (attackerTeam) this.tournamentMatch.recordTeamDamage(attackerTeam, hpDamage);
+      const localF = this.tournamentMatch.fighters.find(f => f.isLocal);
+      if (localF) localF.damageTaken = (localF.damageTaken || 0) + hpDamage;
+      // A practice bot's hits are simulated on this client and never touch the
+      // network, so nothing else will ever credit its damage on the card.
+      if (this.arenaBots.length > 0) {
+        const attacker = this.tournamentMatch.fighters.find(f => f.id === packet.attackerActorId);
+        if (attacker) attacker.damageDealt = (attacker.damageDealt || 0) + hpDamage;
+      }
+    }
     this.lastHurtAt = performance.now();
     this.player.iframeTimer = 0.22;
 
@@ -6669,6 +7285,20 @@ export class SideViewEngine {
       this.player.animState = 'dead';
       this.player.vx = 0;
       network.sendPvpPlayerDowned(packet.attackerActorId, packet.attackerName);
+      // In a live room the server broadcasts the kill back to everyone. In
+      // practice there is no server, so the bout would end with the player's
+      // death unrecorded and their killer on zero kills.
+      if (this.arenaBots.length > 0 && this.tournamentMatch) {
+        const localF = this.tournamentMatch.fighters.find(f => f.isLocal);
+        this.showPvpKillFeed({
+          downedActorId: localF?.id || 'local',
+          downedName: localF?.name || this.player.name || 'Warrior',
+          downedTeam: this.pvpTeam,
+          killerActorId: packet.attackerActorId,
+          killerName: packet.attackerName,
+          killerTeam: packet.attackerTeam,
+        });
+      }
     }
   }
 
@@ -6680,6 +7310,11 @@ export class SideViewEngine {
     hitX: number;
     hitY: number;
   }): void {
+    // `receivePvpHit` already drew this hit's number, at the local player, with
+    // the defence-adjusted value that was actually subtracted. The relayed
+    // effect carries the attacker's raw figure, so drawing it here stacked a
+    // second -400 over the real -312.
+    if (packet.targetActorId && packet.targetActorId === network.getActorId()) return;
     const x = Number(packet.hitX) || 0;
     const y = Number(packet.hitY) || this.groundY;
     this.particles.addFloatingText(x, y - 25, `-${packet.damage}`, packet.isCrit ? '#fbbf24' : '#ef4444', packet.isCrit, 15);
@@ -6700,7 +7335,278 @@ export class SideViewEngine {
     const killerColor = killerTeam === 'red' ? '#f87171' : '#60a5fa';
     const text = `${killer} downed ${victim}!`;
     this.particles.addFloatingText(this.arenaWidth / 2, this.groundY - 120, text, killerColor, true, 22);
+
+    // Score the bout for the results card. The server broadcasts the feed to
+    // the whole room, so both clients record the same kill.
+    const match = this.tournamentMatch;
+    if (match) {
+      const victimFighter = match.fighters.find(f =>
+        f.id === packet.downedActorId || (Boolean(packet.downedName) && f.name === packet.downedName));
+      if (victimFighter) victimFighter.deaths += 1;
+      const killerFighter = match.fighters.find(f =>
+        (Boolean(packet.killerActorId) && f.id === packet.killerActorId)
+        || (Boolean(packet.killerName) && f.name === packet.killerName));
+      if (killerFighter && killerFighter !== victimFighter) killerFighter.kills += 1;
+    }
+
+    // The stands react: a sharp crowd bark, a white flash, a small shake.
+    audio.playCrowdCheer(0.8);
+    this.particles.addScreenFlash('#ffffff', 0.1, 0.055);
+    this.particles.triggerScreenShake(2.4, 0.16);
     audio.playSlash('heavy', 1.1);
+  }
+
+  /** Living teammates the spectator camera can follow. */
+  private pvpLivingTeammates(): Array<{ id: string; name: string; x: number; hpPct: number }> {
+    const mates: Array<{ id: string; name: string; x: number; hpPct: number }> = [];
+    for (const [id, remote] of Object.entries(network.remotePlayers)) {
+      if (!remote || remote.team !== this.pvpTeam) continue;
+      if (remote.downed) continue;
+      const hpPct = remote.hpPct === undefined ? 1 : remote.hpPct > 1 ? remote.hpPct / 100 : remote.hpPct;
+      if (hpPct <= 0) continue;
+      mates.push({ id, name: remote.name || 'Teammate', x: remote.x, hpPct });
+    }
+    return mates;
+  }
+
+  /** Put the local player on the bench; they watch instead of fighting. */
+  public setPvpObserver(value: boolean): void {
+    this.pvpObserverFlag = Boolean(value);
+    if (this.pvpObserverFlag && this.inTournamentMode) this.markObserverPlayer();
+  }
+
+  public get pvpObserver(): boolean {
+    return this.pvpObserverFlag;
+  }
+
+  /** True while the local player watches the bout instead of fighting it. */
+  public get pvpSpectating(): boolean {
+    if (!this.inTournamentMode) return false;
+    if (this.pvpObserverFlag) {
+      const status = this.tournamentMatch?.status;
+      return status !== 'match_end' && status !== 'idle';
+    }
+    return Boolean(this.player.downed && this.pvpLivingTeammates().length > 0);
+  }
+
+  /** True while a Colosseum bout can be paused (practice is a local sim). */
+  public get pvpCanPause(): boolean {
+    return this.pvpSpectating
+      && !this.pvpObserverFlag
+      && this.arenaBots.length > 0
+      // A settled round or a finished match keeps its own timers running; a
+      // pause there would freeze the handoff with no way to reach the card.
+      && this.tournamentMatch?.status === 'active';
+  }
+
+  /** The benched local player, parked out of the fight for the whole match. */
+  private markObserverPlayer(): void {
+    const p = this.player;
+    p.hp = 0;
+    p.downed = true;
+    p.animState = 'dead';
+    p.vx = 0;
+    p.vy = 0;
+  }
+
+  /** Frozen by the spectator. The world stops; the camera does not. */
+  public get pvpPaused(): boolean {
+    return this.pvpPauseActive;
+  }
+
+  public get spectatorMode(): 'auto' | 'free' {
+    return this.spectatorView.mode;
+  }
+
+  public get spectatorZoom(): number {
+    return this.spectatorView.zoom;
+  }
+
+  /**
+   * Everyone still standing, teammates first.
+   *
+   * A spectator in a real match may look at the enemy too - you are dead, so
+   * there is no information advantage left to protect - and in practice every
+   * fighter in the ring is a bot, so this is also how a solo player watches a
+   * fight they are no longer part of.
+   */
+  private pvpSpectateCandidates(): Array<{ id: string; name: string; x: number; hpPct: number; team: TournamentTeam }> {
+    const candidates: Array<{ id: string; name: string; x: number; hpPct: number; team: TournamentTeam }> = [];
+    for (const [id, remote] of Object.entries(network.remotePlayers)) {
+      if (!remote) continue;
+      if (remote.downed) continue;
+      const hpPct = remote.hpPct === undefined ? 1 : remote.hpPct > 1 ? remote.hpPct / 100 : remote.hpPct;
+      if (hpPct <= 0) continue;
+      const team: TournamentTeam = remote.team === 'blue' ? 'blue' : 'red';
+      candidates.push({ id, name: remote.name || 'Fighter', x: remote.x, hpPct, team });
+    }
+    // Teammates first: the fight you were part of is the one you want to see.
+    return candidates.sort((a, b) => {
+      const aMate = a.team === this.pvpTeam ? 0 : 1;
+      const bMate = b.team === this.pvpTeam ? 0 : 1;
+      return aMate - bMate;
+    });
+  }
+
+  /** The fighter the strip names: the director's pick or the locked target. */
+  private activeSpectateId(): string | null {
+    return this.spectatorView.mode === 'free'
+      ? this.spectatorView.lockedTargetId
+      : this.pvpSpectateId;
+  }
+
+  public spectateTargetName(): string {
+    const id = this.activeSpectateId();
+    if (!id) return '';
+    return network.remotePlayers[id]?.name || '';
+  }
+
+  public spectateTargetTeam(): TournamentTeam | null {
+    const id = this.activeSpectateId();
+    if (!id) return null;
+    const team = network.remotePlayers[id]?.team;
+    return team === 'blue' ? 'blue' : team === 'red' ? 'red' : null;
+  }
+
+  /** Manually advance the camera to the next living fighter on either side. */
+  public cycleSpectateTarget(direction: 1 | -1 = 1): void {
+    const pool = this.pvpSpectateCandidates();
+    if (pool.length === 0) return;
+    const currentId = this.activeSpectateId();
+    const index = pool.findIndex(candidate => candidate.id === currentId);
+    const next = pool[(((index + direction) % pool.length) + pool.length) % pool.length];
+    this.pvpSpectateId = next.id;
+    lockSpectatorTarget(this.spectatorView, next.id);
+    this.spectatorView.focusX = next.x;
+    this.pvpDirectorTimer = SideViewEngine.PVP_DIRECTOR_INTERVAL;
+    audio.playClick();
+  }
+
+  /** Back to the director's cut. */
+  public toggleSpectatorFollow(): void {
+    if (this.spectatorView.mode === 'auto') {
+      // Taking the wheel starts where the director left the camera.
+      focusSpectatorOn(this.spectatorView, this.cameraX + this.canvasWidth * 0.5, this.arenaWidth, this.canvasWidth);
+    } else {
+      setSpectatorFollow(this.spectatorView, true);
+    }
+    audio.playClick();
+  }
+
+  public resetSpectatorView(): void {
+    this.spectatorView = createSpectatorView();
+    this.pvpPauseActive = false;
+    this.pvpSpectateId = null;
+    this.pvpDirectorTimer = 0;
+  }
+
+  /** Zoom by wheel/button steps, keeping the shot centred. */
+  public nudgeSpectatorZoom(steps: number): void {
+    nudgeViewZoom(this.spectatorView, steps);
+  }
+
+  public setSpectatorZoom(zoom: number): void {
+    setSpectatorZoom(this.spectatorView, zoom);
+  }
+
+  /**
+   * Drag the view by a screen-space delta. Pointer movement is in CSS pixels;
+   * the world moves at 1/zoom of that.
+   */
+  public panSpectatorCameraBy(screenDx: number): void {
+    if (!Number.isFinite(screenDx) || screenDx === 0) return;
+    this.beginManualCamera();
+    this.spectatorView.focusX = clampFocusX(
+      this.spectatorView.focusX + screenDx / Math.max(0.1, this.viewScale),
+      this.canvasWidth,
+      this.arenaWidth,
+    );
+  }
+
+  /** Keys pan in world units, at a fixed speed regardless of zoom. */
+  public panSpectatorCamera(worldDx: number): void {
+    if (!Number.isFinite(worldDx) || worldDx === 0) return;
+    this.beginManualCamera();
+    this.spectatorView.focusX = clampFocusX(
+      this.spectatorView.focusX + worldDx,
+      this.canvasWidth,
+      this.arenaWidth,
+    );
+  }
+
+  /**
+   * Freeze or resume a practice bout. Returns the new state, or false when the
+   * match cannot be paused (a live bout keeps running for the other player).
+   */
+  public toggleSpectatorPause(): boolean {
+    if (!this.pvpCanPause) return false;
+    this.pvpPauseActive = !this.pvpPauseActive;
+    audio.playClick();
+    return this.pvpPauseActive;
+  }
+
+  /**
+   * Any manual camera movement releases a locked target, but it starts from
+   * where the camera actually is - not from a stale focus left on the far side
+   * of the arena before a cut.
+   */
+  private beginManualCamera(): void {
+    if (this.spectatorView.mode === 'auto' || this.spectatorView.lockedTargetId) {
+      const centre = this.cameraX + this.canvasWidth * 0.5;
+      this.spectatorView.mode = 'free';
+      this.spectatorView.lockedTargetId = null;
+      this.spectatorView.focusX = clampFocusX(centre, this.canvasWidth, this.arenaWidth);
+    }
+  }
+
+  /**
+   * Spectator camera: the auto director, a locked follow, or a free camera.
+   *
+   * Low health is the one signal every client shares (hpPct rides on the
+   * movement packet), and it is a decent proxy for "where the fight is" -
+   * without trusting either client to report kills or positions it cannot
+   * see. A shot holds for a few seconds before the next cut, so the camera
+   * never strobes between two teammates. The player can take over at any time;
+   * manual input is never fought by the director.
+   */
+  private updateSpectatorCamera(dt: number): void {
+    this.cameraLeadOffset = 0;
+
+    let desired: number;
+    if (this.spectatorView.mode === 'auto') {
+      // An observer has no side, so the director cuts across the whole arena;
+      // a dead fighter still watches their own team.
+      const mates = this.pvpObserverFlag ? this.pvpSpectateCandidates() : this.pvpLivingTeammates();
+      if (mates.length === 0) {
+        this.pvpSpectateId = null;
+        return;
+      }
+      this.pvpDirectorTimer -= dt;
+      const currentStillAlive = mates.some(m => m.id === this.pvpSpectateId);
+      if (!currentStillAlive || this.pvpDirectorTimer <= 0) {
+        const next = mates.reduce((best, mate) => (mate.hpPct < best.hpPct ? mate : best), mates[0]);
+        this.pvpSpectateId = next.id;
+        this.pvpDirectorTimer = SideViewEngine.PVP_DIRECTOR_INTERVAL;
+      }
+      const target = this.pvpSpectateId ? network.remotePlayers[this.pvpSpectateId] : null;
+      if (!target) return;
+      desired = cameraXForFocus(target.x, this.canvasWidth, this.arenaWidth);
+    } else {
+      const lockId = this.spectatorView.lockedTargetId;
+      const locked = lockId ? network.remotePlayers[lockId] : null;
+      if (locked && !locked.downed && (locked.hpPct === undefined || locked.hpPct > 0)) {
+        desired = cameraXForFocus(locked.x, this.canvasWidth, this.arenaWidth);
+        this.pvpSpectateId = lockId;
+      } else {
+        // The followed fighter fell. Stay where they did rather than snapping
+        // somewhere the player did not ask to look.
+        this.spectatorView.lockedTargetId = null;
+        desired = cameraXForFocus(this.spectatorView.focusX, this.canvasWidth, this.arenaWidth);
+      }
+    }
+
+    const rate = this.spectatorView.mode === 'auto' ? SPECTATOR_VIEW.followRate : SPECTATOR_VIEW.freeRate;
+    this.cameraX = clampCameraX(blendCamera(this.cameraX, desired, dt, rate), this.canvasWidth, this.arenaWidth);
   }
 
   public handlePvpMatchResult(packet: {
@@ -6708,97 +7614,517 @@ export class SideViewEngine {
     losingTeam: 'red' | 'blue';
     mvpActorId?: string;
     mvpName?: string;
+    redScore?: number;
+    blueScore?: number;
   }): void {
     if (!this.tournamentMatch) return;
     this.tournamentMatch.matchWinner = packet.winningTeam;
     this.tournamentMatch.status = 'match_end';
+    if (Number.isFinite(Number(packet.redScore))) this.tournamentMatch.redScore = Math.max(0, Math.round(Number(packet.redScore)));
+    if (Number.isFinite(Number(packet.blueScore))) this.tournamentMatch.blueScore = Math.max(0, Math.round(Number(packet.blueScore)));
     const iWon = packet.winningTeam === this.pvpTeam;
     this.tournamentMatch.bannerText = iWon ? 'VICTORY!' : 'DEFEAT!';
     this.tournamentMatch.bannerSubtext = `${packet.winningTeam === 'red' ? 'Crimson' : 'Azure'} team claims arena glory!`;
     this.tournamentMatch.bannerTimer = 4.0;
   }
 
+  /**
+   * Server-authoritative round result.
+   *
+   * A round is simulated locally by both clients, so a dropped death packet
+   * used to leave one side scoring a round the other never saw. The server now
+   * owns the scoreboard (host reports, wipe detection) and echoes every settled
+   * round here; adopting its numbers keeps both screens identical.
+   */
+  public applyPvpRoundResult(packet: {
+    roundNumber?: number;
+    winner?: 'red' | 'blue' | 'draw';
+    redScore?: number;
+    blueScore?: number;
+    isMatchEnd?: boolean;
+  }): void {
+    const match = this.tournamentMatch;
+    if (!match || !this.inTournamentMode) return;
+
+    const redScore = Number(packet?.redScore);
+    const blueScore = Number(packet?.blueScore);
+    if (Number.isFinite(redScore) && redScore >= 0) match.redScore = Math.round(redScore);
+    if (Number.isFinite(blueScore) && blueScore >= 0) match.blueScore = Math.round(blueScore);
+
+    if (packet?.isMatchEnd) {
+      const winningTeam: 'red' | 'blue' = match.redScore >= match.blueScore ? 'red' : 'blue';
+      match.matchWinner = winningTeam;
+      match.status = 'match_end';
+      const iWon = winningTeam === this.pvpTeam;
+      match.bannerText = iWon ? 'CHAMPION OF THE ARENA!' : 'DEFEAT!';
+      match.bannerSubtext = `${winningTeam === 'red' ? 'Crimson' : 'Azure'} team claims match victory!`;
+      match.bannerTimer = 4.0;
+      return;
+    }
+
+    const roundNumber = Number(packet?.roundNumber);
+    const nextRound = Number.isInteger(roundNumber) ? roundNumber + 1 : match.currentRound;
+
+    // A local simulation that reached the winning score while the server is
+    // still playing has to let go of the premature ending, or one client walks
+    // back to town in the middle of a live match.
+    if (match.status === 'match_end') {
+      if (this.tournamentEndTimer) {
+        window.clearTimeout(this.tournamentEndTimer);
+        this.tournamentEndTimer = null;
+      }
+      match.matchWinner = null;
+      match.currentRound = Math.max(match.currentRound, nextRound);
+      match.startRoundCountdown();
+      return;
+    }
+
+    // A client whose simulation missed the round end must not sit in a dead
+    // arena. A client already in its own round-end transition keeps it.
+    if (match.status === 'active' && Number.isInteger(roundNumber) && match.currentRound <= roundNumber) {
+      match.currentRound = nextRound;
+      match.startRoundCountdown();
+    }
+  }
+
+  /**
+   * Draws a pixel panel as a nine-slice.
+   *
+   * The middle strips are sampled from the clean band right beside each
+   * corner, not from the whole edge: these Kenney panels carry a little notch
+   * at the centre of every edge, and stretching that notch across a wide bar
+   * smears it into a torn-looking line. Sampling a short clean run instead
+   * keeps the rim continuous at any width.
+   *
+   * Returns false while the texture is still loading, which lets the caller
+   * paint a flat fallback for a frame.
+   */
+  private drawPixelNineSlice(
+    ctx: CanvasRenderingContext2D,
+    source: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    slice: number,
+    smoothingWasOn: boolean,
+  ): boolean {
+    const image = sprites.getImage(source);
+    if (!image || image.naturalWidth <= 0 || image.naturalHeight <= 0) return false;
+
+    const sw = image.naturalWidth;
+    const sh = image.naturalHeight;
+    const b = Math.max(1, Math.min(Math.round(slice), Math.floor(Math.min(sw, sh) / 3)));
+    const dx = Math.round(x);
+    const dy = Math.round(y);
+    const dw = Math.max(1, Math.round(width));
+    const dh = Math.max(1, Math.round(height));
+
+    ctx.imageSmoothingEnabled = false;
+    if (dw <= b * 2 || dh <= b * 2) {
+      // Too small to slice: one scaled blit still beats stretching a corner.
+      ctx.drawImage(image, dx, dy, dw, dh);
+      ctx.imageSmoothingEnabled = smoothingWasOn;
+      return true;
+    }
+
+    const mw = dw - b * 2;
+    const mh = dh - b * 2;
+    // A clean run of edge/parchment next to each corner - small enough to stay
+    // clear of the centre notch, large enough to carry the rim's shading.
+    const runX = Math.max(1, Math.min(6, sw - b * 2));
+    const runY = Math.max(1, Math.min(6, sh - b * 2));
+
+    // Corners, exact.
+    ctx.drawImage(image, 0, 0, b, b, dx, dy, b, b);
+    ctx.drawImage(image, sw - b, 0, b, b, dx + dw - b, dy, b, b);
+    ctx.drawImage(image, 0, sh - b, b, b, dx, dy + dh - b, b, b);
+    ctx.drawImage(image, sw - b, sh - b, b, b, dx + dw - b, dy + dh - b, b, b);
+    // Edges, stretched from the clean run.
+    ctx.drawImage(image, b, 0, runX, b, dx + b, dy, mw, b);
+    ctx.drawImage(image, b, sh - b, runX, b, dx + b, dy + dh - b, mw, b);
+    ctx.drawImage(image, 0, b, b, runY, dx, dy + b, b, mh);
+    ctx.drawImage(image, sw - b, b, b, runY, dx + dw - b, dy + b, b, mh);
+    // Body, stretched from the centre pixel so the fill stays perfectly flat.
+    ctx.drawImage(image, Math.floor(sw / 2), Math.floor(sh / 2), 1, 1, dx + b, dy + b, mw, mh);
+    ctx.imageSmoothingEnabled = smoothingWasOn;
+    return true;
+  }
+
+  /**
+   * The pre-match VS card: both teams, name by name, over one parchment panel.
+   * Rows are capped at the largest team so a 4v4 still fits on a phone.
+   */
+  private drawPvpVersusCard(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    top: number,
+    smoothingWasOn: boolean,
+  ): void {
+    const match = this.tournamentMatch;
+    if (!match) return;
+
+    const compact = width < 640 || height < 300;
+    const red = match.fighters.filter(f => f.team === 'red');
+    const blue = match.fighters.filter(f => f.team === 'blue');
+    const rows = Math.max(1, Math.min(4, Math.max(red.length, blue.length)));
+    const rowH = compact ? 12 : 14;
+    const padY = compact ? 6 : 8;
+    const padX = compact ? 10 : 14;
+    const headerH = compact ? 13 : 15;
+    const cardW = Math.round(Math.min(width - 16, compact ? 316 : 392));
+    const cardH = Math.round(padY * 2 + headerH + rows * rowH);
+    const cardX = Math.round((width - cardW) / 2);
+    const cardY = Math.round(Math.min(height - cardH - 6, top));
+
+    const fade = Math.min(1, this.pvpIntroTimer / 0.35);
+    ctx.globalAlpha = Math.max(0, fade);
+
+    if (!this.drawPixelNineSlice(ctx, PVP_HUD_ASSETS.plaque, cardX, cardY, cardW, cardH, 10, smoothingWasOn)) {
+      this.drawPanelFallback(ctx, cardX, cardY, cardW, cardH, 'rgba(238, 227, 203, 0.96)', 'rgba(90, 66, 36, 0.75)');
+    }
+
+    const titleSize = compact ? 8 : 9;
+    const nameSize = compact ? 8 : 9;
+    const rowTop = cardY + padY + headerH;
+    const columnW = (cardW - padX * 2) / 2;
+
+    ctx.textAlign = 'center';
+    ctx.font = `800 ${titleSize}px "Outfit", "Cinzel", sans-serif`;
+    ctx.fillStyle = '#8d2318';
+    ctx.fillText('CRIMSON', cardX + padX + columnW / 2, cardY + padY + headerH / 2);
+    ctx.fillStyle = '#1f3f74';
+    ctx.fillText('AZURE', cardX + padX + columnW * 1.5, cardY + padY + headerH / 2);
+
+    // The VS medallion sits between the two rosters.
+    const medal = compact ? 12 : 14;
+    this.drawHudSprite(ctx, PVP_HUD_ASSETS.emptyPip, cardX + cardW / 2 - medal / 2, cardY + padY + 1, medal, medal, smoothingWasOn, '#43301d');
+    ctx.font = `800 ${compact ? 7 : 8}px "Outfit", "Cinzel", sans-serif`;
+    ctx.fillStyle = '#f8ecd6';
+    ctx.fillText('VS', cardX + cardW / 2, cardY + padY + 1 + medal / 2 + 0.5);
+
+    ctx.font = `700 ${nameSize}px "Outfit", "Cinzel", sans-serif`;
+    const drawSide = (list: typeof red, align: 'left' | 'right', colour: string) => {
+      const x = align === 'left' ? cardX + padX : cardX + cardW - padX;
+      ctx.textAlign = align;
+      ctx.fillStyle = colour;
+      for (let i = 0; i < rows; i += 1) {
+        const fighter = list[i];
+        const label = fighter ? this.truncateHudLabel(fighter.name, compact ? 12 : 15) : '—';
+        ctx.fillText(label, x, rowTop + rowH * i + rowH / 2);
+      }
+    };
+    drawSide(red, 'left', '#8d2318');
+    drawSide(blue, 'right', '#1f3f74');
+
+    ctx.globalAlpha = Math.max(0, fade);
+  }
+
+  /** Clip a name to fit a fixed-width column, ellipsis included. */
+  private truncateHudLabel(value: string, maxChars: number): string {
+    const text = (value || '').trim();
+    if (text.length <= maxChars) return text;
+    return `${text.slice(0, Math.max(1, maxChars - 1))}…`;
+  }
+
+  /** One small piece of pack chrome (a round pip or a team tab). */
+  private drawHudSprite(
+    ctx: CanvasRenderingContext2D,
+    source: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    smoothingWasOn: boolean,
+    fallback: string | null,
+  ): void {
+    const image = sprites.getImage(source);
+    const dx = Math.round(x);
+    const dy = Math.round(y);
+    const dw = Math.max(1, Math.round(width));
+    const dh = Math.max(1, Math.round(height));
+    ctx.imageSmoothingEnabled = false;
+    if (image && image.naturalWidth > 0) {
+      ctx.drawImage(image, dx, dy, dw, dh);
+    } else if (fallback) {
+      ctx.fillStyle = fallback;
+      ctx.fillRect(dx, dy, dw, dh);
+    }
+    ctx.imageSmoothingEnabled = smoothingWasOn;
+  }
+
+  /** A flat fill behind a panel, so a missing texture still reads as a panel. */
+  private drawPanelFallback(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    fill: string,
+    stroke: string,
+  ): void {
+    ctx.fillStyle = fill;
+    ctx.fillRect(Math.round(x), Math.round(y), Math.round(width), Math.round(height));
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(Math.round(x) + 0.5, Math.round(y) + 0.5, Math.round(width) - 1, Math.round(height) - 1);
+  }
+
+  /**
+   * The in-match Colosseum readout, drawn in screen pixels.
+   *
+   * The old version was a web-style rounded card with the scores typed as
+   * `[RED] 0` / `0 [BLUE]`, sized in world units, and the camera zoom turned
+   * those 320 x 36 units into roughly two thirds of the viewport - worst on a
+   * phone, where the zoom is pinned at 1.8. Everything here is measured
+   * against the real viewport instead, uses the same Kenney pixel panels the
+   * lobby and the DOM HUD use, and encodes round wins as pips rather than
+   * words. Desktop gets a low wide strip; a landscape phone gets a narrower,
+   * shorter variant so it still clears the corner HUD panels.
+   */
   public drawTournamentOverlay(ctx: CanvasRenderingContext2D, width: number, height: number): void {
     const match = this.tournamentMatch;
     if (!match) return;
 
+    const compact = width < 640 || height < 300;
+    // Below this the DOM wallet and menu spread across the top-right corner
+    // instead of stacking, so the strip moves down under them.
+    const narrow = width < 860;
+    const clamp = (min: number, value: number, max: number) => Math.max(min, Math.min(max, value));
+    // A missing or corrupted field should degrade to "0:00 / best of three",
+    // never to NaN geometry that would paint nothing at all.
+    const finite = (value: number, fallback: number) => (Number.isFinite(value) ? value : fallback);
+
     ctx.save();
-    // 1. Top HUD Scoreboard Bar
-    const barWidth = Math.min(320, width - 20);
-    const barHeight = 36;
-    const barX = Math.round((width - barWidth) / 2);
-    const barY = 12;
+    ctx.textBaseline = 'middle';
+    // Pixel chrome: no inherited blur filter or translucency from the scene.
+    ctx.filter = 'none';
+    ctx.globalAlpha = 1;
+    const smoothingWasOn = ctx.imageSmoothingEnabled;
 
-    ctx.fillStyle = 'rgba(10, 12, 18, 0.88)';
-    ctx.strokeStyle = 'rgba(212, 175, 55, 0.5)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    if (ctx.roundRect) {
-      ctx.roundRect(barX, barY, barWidth, barHeight, 6);
-    } else {
-      ctx.rect(barX, barY, barWidth, barHeight);
+    // ---- Score strip ------------------------------------------------------
+    // Sized against the viewport, not the world: roughly a third of a desktop
+    // window and a little over half of a phone, capped so it never dominates.
+    const barH = Math.round(clamp(22, height * (compact ? 0.078 : 0.074), compact ? 26 : 32));
+    const barW = Math.round(Math.min(
+      width - 12,
+      clamp(compact ? 180 : 232, width * (compact ? 0.44 : 0.34), compact ? 244 : 336),
+    ));
+    const barX = Math.round((width - barW) / 2);
+    // On a narrow landscape phone the menu and the currency pills fill the top
+    // row corner to corner, so the strip drops just below them (the wallet row
+    // ends around y=42) instead of sitting on top of the wallet.
+    const barY = narrow ? 44 : (compact ? 6 : 8);
+    const midY = barY + barH / 2;
+    const edge = Math.max(6, Math.round(barH * 0.42));
+    const gap = Math.max(2, Math.round(barH * 0.14));
+    const scoreSize = Math.round(barH * 0.52);
+    const labelSize = Math.max(6, Math.round(barH * 0.3));
+    const clockSize = Math.max(7, Math.round(barH * 0.38));
+    const roundsToWin = clamp(1, Math.round(finite(match.config?.roundsToWin, 2)), 4);
+    // A slot is the socket a round pip sits in; the pip itself is 2px smaller,
+    // so the pack's grey track reads as a rim around the coloured gem.
+    const slot = Math.max(5, Math.round(barH * 0.27));
+    const slotGap = Math.max(2, Math.round(barH * 0.08));
+    const showLabels = barW >= 210;
+    const contentLeft = barX + edge;
+    const contentRight = barX + barW - edge;
+
+    // A soft drop shadow lifts the strip off bright skies and pale floors.
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+    ctx.shadowBlur = 6;
+    ctx.shadowOffsetY = 2;
+    ctx.fillStyle = '#1a0f07';
+    ctx.fillRect(barX + 2, barY + 2, barW - 4, barH - 2);
+    ctx.restore();
+
+    if (!this.drawPixelNineSlice(ctx, PVP_HUD_ASSETS.frame, barX, barY, barW, barH, 10, smoothingWasOn)) {
+      this.drawPanelFallback(ctx, barX, barY, barW, barH, 'rgba(74, 52, 33, 0.96)', 'rgba(232, 208, 152, 0.6)');
     }
-    ctx.fill();
-    ctx.stroke();
 
-    // Red Score
-    ctx.font = 'bold 13px "Outfit", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#ef4444';
-    ctx.fillText(`[RED] ${match.redScore}`, barX + 16, barY + 23);
-
-    // Center Round & Timer
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#f8fafc';
-    const mins = Math.floor(match.roundTimeRemaining / 60);
-    const secs = Math.floor(match.roundTimeRemaining % 60);
-    const timeStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-    ctx.fillText(`R${match.currentRound} | ${timeStr}`, barX + barWidth / 2, barY + 23);
-
-    // Blue Score
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#3b82f6';
-    ctx.fillText(`${match.blueScore} [BLUE]`, barX + barWidth - 16, barY + 23);
-
-    // 2. Center Banner if active or during countdown
-    if (match.status === 'countdown') {
-      const bannerY = Math.round(height * 0.40);
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.70)';
-      ctx.fillRect(0, bannerY - 36, width, 74);
-
-      ctx.textAlign = 'center';
-      ctx.font = '900 28px "Outfit", sans-serif';
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
-      ctx.lineWidth = 4;
-      const countVal = Math.ceil(match.countdownRemaining);
-      const text = countVal > 0 ? `MATCH STARTS IN ${countVal}...` : 'FIGHT!';
-      ctx.strokeText(text, width / 2, bannerY);
-      ctx.fillStyle = '#fbbf24';
-      ctx.fillText(text, width / 2, bannerY);
-
-      ctx.font = 'bold 12px "Outfit", sans-serif';
-      ctx.fillStyle = '#e2e8f0';
-      ctx.fillText(`ROUND ${match.currentRound} - BEST OF ${match.config.roundsToWin * 2 - 1}`, width / 2, bannerY + 22);
-    } else if (match.bannerTimer > 0 && match.bannerText) {
-      const bannerY = Math.round(height * 0.40);
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
-      ctx.fillRect(0, bannerY - 32, width, 68);
-
-      ctx.textAlign = 'center';
-      ctx.font = '900 24px "Outfit", sans-serif';
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
-      ctx.lineWidth = 4;
-      ctx.strokeText(match.bannerText, width / 2, bannerY);
-      ctx.fillStyle = match.bannerText.includes('RED') ? '#f87171' : match.bannerText.includes('BLUE') ? '#60a5fa' : '#fbbf24';
-      ctx.fillText(match.bannerText, width / 2, bannerY);
-
-      if (match.bannerSubtext) {
-        ctx.font = 'bold 12px "Outfit", sans-serif';
-        ctx.fillStyle = '#e2e8f0';
-        ctx.fillText(match.bannerSubtext, width / 2, bannerY + 22);
+    // Round pips: the pack's grey bar track as the socket, the team's bar tile
+    // as the win. Filled slots read at a glance without spelling out a score.
+    const pipsWidth = roundsToWin * slot + (roundsToWin - 1) * slotGap;
+    const drawPips = (startX: number, score: number, gem: string, gemFallback: string) => {
+      for (let i = 0; i < roundsToWin; i += 1) {
+        const slotX = Math.round(startX + i * (slot + slotGap));
+        this.drawHudSprite(ctx, PVP_HUD_ASSETS.emptyPip, slotX, midY - slot / 2, slot, slot, smoothingWasOn, '#43301d');
+        if (i < score) {
+          const gemSize = Math.max(2, slot - 2);
+          this.drawHudSprite(
+            ctx,
+            gem,
+            slotX + (slot - gemSize) / 2,
+            midY - gemSize / 2,
+            gemSize,
+            gemSize,
+            smoothingWasOn,
+            gemFallback,
+          );
+        }
       }
+    };
+
+    ctx.font = `800 ${scoreSize}px "Outfit", "Cinzel", sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.shadowColor = 'rgba(24, 10, 4, 0.7)';
+    ctx.shadowOffsetY = 1;
+    let left = contentLeft;
+    if (showLabels) {
+      ctx.font = `800 ${labelSize}px "Outfit", "Cinzel", sans-serif`;
+      ctx.fillStyle = '#e8a08d';
+      ctx.fillText('RED', left, midY + 0.5);
+      left += ctx.measureText('RED').width + gap;
+      ctx.font = `800 ${scoreSize}px "Outfit", "Cinzel", sans-serif`;
+    }
+    ctx.fillStyle = '#ffd7cc';
+    const redScoreWidth = ctx.measureText(String(match.redScore)).width;
+    ctx.fillText(String(match.redScore), left, midY + 0.5);
+    drawPips(left + redScoreWidth + gap, match.redScore, PVP_HUD_ASSETS.redPip, '#e07a4e');
+
+    ctx.textAlign = 'right';
+    let right = contentRight;
+    if (showLabels) {
+      ctx.font = `800 ${labelSize}px "Outfit", "Cinzel", sans-serif`;
+      ctx.fillStyle = '#9dbde8';
+      ctx.fillText('BLUE', right, midY + 0.5);
+      right -= ctx.measureText('BLUE').width + gap;
+      ctx.font = `800 ${scoreSize}px "Outfit", "Cinzel", sans-serif`;
+    }
+    ctx.fillStyle = '#d2e6ff';
+    const blueScoreWidth = ctx.measureText(String(match.blueScore)).width;
+    ctx.fillText(String(match.blueScore), right, midY + 0.5);
+    drawPips(right - blueScoreWidth - gap - pipsWidth, match.blueScore, PVP_HUD_ASSETS.bluePip, '#5b93d6');
+    ctx.shadowColor = 'transparent';
+    ctx.shadowOffsetY = 0;
+
+    // Round number and clock, small and quiet between the two sides.
+    const remaining = Math.max(0, finite(match.roundTimeRemaining, 0));
+    const mins = Math.floor(remaining / 60);
+    const secs = Math.floor(remaining % 60);
+    const clock = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+    const overtime = Boolean(match.suddenDeath);
+    const runningOut = overtime || (match.status === 'active' && remaining <= 10);
+    const clockLabel = overtime
+      ? `OT ${Math.ceil(Math.max(0, finite(match.suddenDeathRemaining, 0)))}s`
+      : `R${match.currentRound}  ${clock}`;
+    ctx.textAlign = 'center';
+    ctx.font = `700 ${clockSize}px "Outfit", "Cinzel", sans-serif`;
+    ctx.fillStyle = runningOut ? '#ffb3a1' : '#f8ecd6';
+    ctx.shadowColor = 'rgba(24, 10, 4, 0.7)';
+    ctx.shadowOffsetY = 1;
+    ctx.fillText(clockLabel, barX + barW / 2, midY + 0.5);
+    ctx.shadowColor = 'transparent';
+    ctx.shadowOffsetY = 0;
+
+    // ---- VS card ----------------------------------------------------------
+    // Round one opens with both rosters on screen, so a spectator knows who is
+    // fighting before the first swing. It replaces the countdown plaque for
+    // its short life; two stacked cards said the same thing twice.
+    if (this.pvpIntroTimer > 0 && match.currentRound === 1) {
+      this.drawPvpVersusCard(ctx, width, height, barY + barH + (compact ? 6 : 9), smoothingWasOn);
+      ctx.restore();
+      return;
+    }
+
+    // ---- Round plaque -----------------------------------------------------
+    const countdown = Math.ceil(finite(match.countdownRemaining, 0));
+    const showingCountdown = match.status === 'countdown';
+    const showingBanner = match.bannerTimer > 0 && Boolean(match.bannerText);
+    if (!showingCountdown && !showingBanner) {
+      ctx.restore();
+      return;
+    }
+
+    // Announcer: a round that can decide the series is a match point, and the
+    // plaque should say so before the first swing instead of leaving the
+    // player to count round pips.
+    const oneFromWin = Math.max(match.redScore, match.blueScore) >= roundsToWin - 1
+      && Math.max(match.redScore, match.blueScore) < roundsToWin;
+    const roundTitle = oneFromWin && !match.suddenDeath
+      ? `ROUND ${match.currentRound} · MATCH POINT`
+      : `ROUND ${match.currentRound}`;
+    const title = showingCountdown ? roundTitle : match.bannerText;
+    const subtitle = showingCountdown
+      ? (countdown > 0 ? `STARTS IN ${countdown}` : 'FIGHT!')
+      : (match.bannerSubtext || '');
+    const titleSize = compact ? 12 : 15;
+    const subtitleSize = compact ? 8 : 9;
+    const padY = compact ? 5 : 7;
+    const padX = compact ? 12 : 16;
+
+    ctx.font = `800 ${titleSize}px "Outfit", "Cinzel", sans-serif`;
+    const titleWidth = ctx.measureText(title).width;
+    ctx.font = `700 ${subtitleSize}px "Outfit", "Cinzel", sans-serif`;
+    const subtitleWidth = subtitle ? ctx.measureText(subtitle).width : 0;
+
+    const plaqueW = Math.round(Math.min(width - 20, Math.max(titleWidth, subtitleWidth) + padX * 2));
+    const plaqueH = Math.round(padY * 2 + titleSize + (subtitle ? subtitleSize + 2 : 0));
+    const plaqueX = Math.round((width - plaqueW) / 2);
+    const plaqueY = Math.round(Math.min(
+      height - plaqueH - 6,
+      Math.min(height * 0.32, barY + barH + (compact ? 6 : 9)),
+    ));
+
+    if (!this.drawPixelNineSlice(ctx, PVP_HUD_ASSETS.plaque, plaqueX, plaqueY, plaqueW, plaqueH, 10, smoothingWasOn)) {
+      this.drawPanelFallback(ctx, plaqueX, plaqueY, plaqueW, plaqueH, 'rgba(238, 227, 203, 0.96)', 'rgba(90, 66, 36, 0.75)');
+    }
+
+    // Dark ink on parchment: the plaque is light, so text needs no outline.
+    const redWin = /RED/i.test(title);
+    const blueWin = /BLUE/i.test(title);
+    const defeat = /DEFEAT/i.test(title);
+    ctx.textAlign = 'center';
+    ctx.font = `800 ${titleSize}px "Outfit", "Cinzel", sans-serif`;
+    ctx.fillStyle = redWin || defeat ? '#8d2318' : blueWin ? '#1f3f74' : '#4a2f16';
+    ctx.fillText(title, plaqueX + plaqueW / 2, plaqueY + padY + titleSize / 2);
+
+    if (subtitle) {
+      ctx.font = `700 ${subtitleSize}px "Outfit", "Cinzel", sans-serif`;
+      ctx.fillStyle = '#6b5236';
+      ctx.fillText(
+        subtitle,
+        plaqueX + plaqueW / 2,
+        plaqueY + padY + titleSize + 2 + subtitleSize / 2,
+      );
+    }
+
+    // ---- Spectator strip ---------------------------------------------------
+    // Bottom-centre, clear of the ability dock: a downed player is watching,
+    // and the one thing they need to know is whose eyes they are seeing
+    // through. The director cuts on its own, so there is no control to explain.
+    if (this.pvpSpectating) {
+      const targetName = this.spectateTargetName();
+      const label = targetName ? `SPECTATING  ${targetName}` : 'SPECTATING';
+      const stripH = compact ? 16 : 19;
+      const stripPadding = compact ? 9 : 12;
+      ctx.font = `800 ${compact ? 8 : 9}px "Outfit", "Cinzel", sans-serif`;
+      const stripW = Math.round(Math.min(
+        width - 16,
+        ctx.measureText(label).width + stripPadding * 2 + (compact ? 10 : 12),
+      ));
+      const stripX = Math.round((width - stripW) / 2);
+      const stripY = Math.round(height - stripH - (compact ? 6 : 8));
+
+      if (!this.drawPixelNineSlice(ctx, PVP_HUD_ASSETS.plaque, stripX, stripY, stripW, stripH, 9, smoothingWasOn)) {
+        this.drawPanelFallback(ctx, stripX, stripY, stripW, stripH, 'rgba(20, 12, 6, 0.72)', 'rgba(240, 213, 155, 0.5)');
+      }
+      // The plaque texture is parchment; a dark scrim keeps the strip legible
+      // over the arena without inventing a second frame.
+      ctx.fillStyle = 'rgba(20, 12, 6, 0.34)';
+      ctx.fillRect(stripX + 3, stripY + 3, stripW - 6, stripH - 6);
+
+      const eyeX = stripX + stripPadding * 0.55;
+      this.drawHudSprite(ctx, PVP_HUD_ASSETS.emptyPip, eyeX - stripPadding * 0.55 + 2, stripY + (stripH - 7) / 2, 7, 7, smoothingWasOn, '#ffd76e');
+      ctx.textAlign = 'center';
+      ctx.font = `800 ${compact ? 8 : 9}px "Outfit", "Cinzel", sans-serif`;
+      ctx.fillStyle = '#f8ecd6';
+      ctx.fillText(label, stripX + stripW / 2, stripY + stripH / 2 + 0.5);
     }
 
     ctx.restore();
   }
+
 }
