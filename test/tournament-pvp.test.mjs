@@ -211,6 +211,25 @@ test('tournament match flow manages round wipes, scoring, and champion coronatio
   assert.equal(match.bannerText, 'CHAMPION OF THE ARENA!');
 });
 
+test('a round win is announced as a round, never as the match', () => {
+  const match = new TournamentMatch({ format: '1v1', roundsToWin: 2, roundDurationSec: 90 });
+  match.setupTeams('TestHero', 'warrior', '1v1');
+  match.startMatch();
+  match.update(3.1);
+  match.update(1);
+
+  const blue = match.fighters.find(f => f.team === 'blue');
+  blue.currentHp = 0;
+  blue.isAlive = false;
+  match.update(0.1);
+
+  assert.equal(match.status, 'round_end');
+  assert.match(match.bannerText, /^ROUND 1 - CRIMSON WINS$/);
+  assert.doesNotMatch(match.bannerText, /VICTORY|CHAMPION/);
+  assert.match(match.bannerSubtext, /first to 2 rounds/);
+  assert.equal(match.matchWinner, null);
+});
+
 test('each settled round reports its scoreboard once and never ends the match early', () => {
   const match = new TournamentMatch({ format: '1v1', roundsToWin: 2, roundDurationSec: 90 });
   match.setupTeams('TestHero', 'warrior', '1v1');

@@ -263,6 +263,32 @@ test('killing the bot settles the round, and the second kill hands over the resu
   assert.ok(summary.rows.some(row => row.isBot), 'the bot is on the card, tagged by isBot');
 });
 
+test('a premature match-result packet cannot crown a winner', () => {
+  const { engine, match } = startPractice();
+  // A lagging deploy (or a replayed packet) can still say the match ended at
+  // 1-0. The client must hold the server's own series rule and keep playing.
+  engine.handlePvpMatchResult({ winningTeam: 'red', losingTeam: 'blue', redScore: 1, blueScore: 0 });
+  assert.notEqual(match.status, 'match_end', 'one kill is not a finished match');
+  assert.equal(match.matchWinner, null);
+
+  engine.handlePvpMatchResult({ winningTeam: 'red', losingTeam: 'blue', redScore: 2, blueScore: 0 });
+  assert.equal(match.status, 'match_end', 'the card appears at the series target');
+  assert.equal(match.matchWinner, 'red');
+});
+
+test('an isMatchEnd round packet below the target is treated as a round only', () => {
+  const { engine, match } = startPractice();
+  engine.applyPvpRoundResult({
+    roundNumber: 1,
+    winner: 'red',
+    redScore: 1,
+    blueScore: 0,
+    isMatchEnd: true,
+  });
+  assert.notEqual(match.status, 'match_end', 'the claim is checked against the scoreboard');
+  assert.equal(match.redScore, 1);
+});
+
 test('practice is a local lobby action, and the server still refuses a one-sided room', () => {
   assert.match(lobbySource, /data-action="practice-bots"/);
   assert.match(lobbySource, /private startPracticeMatch\(\): void \{/);

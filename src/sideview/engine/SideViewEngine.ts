@@ -7670,6 +7670,15 @@ export class SideViewEngine {
     blueScore?: number;
   }): void {
     if (!this.tournamentMatch) return;
+    // One death is not a match. The server only declares a winner at
+    // `roundsToWin`, and this check makes the client hold the same line even
+    // if it is talking to an older server (a deploy can lag a tab) or receives
+    // a replayed packet from the opening round.
+    const roundsToWin = Math.max(1, Math.round(Number(this.tournamentMatch.config.roundsToWin) || 2));
+    const redScore = Number(packet.redScore);
+    const blueScore = Number(packet.blueScore);
+    if (!Number.isFinite(redScore) || !Number.isFinite(blueScore)) return;
+    if (Math.max(redScore, blueScore) < roundsToWin) return;
     this.tournamentMatch.matchWinner = packet.winningTeam;
     this.tournamentMatch.status = 'match_end';
     if (Number.isFinite(Number(packet.redScore))) this.tournamentMatch.redScore = Math.max(0, Math.round(Number(packet.redScore)));
@@ -7703,7 +7712,10 @@ export class SideViewEngine {
     if (Number.isFinite(redScore) && redScore >= 0) match.redScore = Math.round(redScore);
     if (Number.isFinite(blueScore) && blueScore >= 0) match.blueScore = Math.round(blueScore);
 
-    if (packet?.isMatchEnd) {
+    // `isMatchEnd` is a claim, not a proof: require the scoreboard to show a
+    // team at the series target before the card is allowed to take over.
+    const roundsToWin = Math.max(1, Math.round(Number(match.config.roundsToWin) || 2));
+    if (packet?.isMatchEnd && Math.max(match.redScore, match.blueScore) >= roundsToWin) {
       const winningTeam: 'red' | 'blue' = match.redScore >= match.blueScore ? 'red' : 'blue';
       match.matchWinner = winningTeam;
       match.status = 'match_end';

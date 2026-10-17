@@ -692,14 +692,17 @@ export class TournamentMatch {
     this.roundHistory.push(record);
     this.onRoundResolved?.(record);
 
+    // A round is not the match. "TEAM RED VICTORY!" after the first kill read
+    // as the end of the bout even while the scoreboard still said 1-0, so the
+    // banner says what was actually won and repeats the series target.
     if (winner === 'red') {
-      this.bannerText = 'TEAM RED VICTORY!';
+      this.bannerText = `ROUND ${this.currentRound} - CRIMSON WINS`;
     } else if (winner === 'blue') {
-      this.bannerText = 'TEAM BLUE VICTORY!';
+      this.bannerText = `ROUND ${this.currentRound} - AZURE WINS`;
     } else {
-      this.bannerText = 'ROUND DRAW!';
+      this.bannerText = `ROUND ${this.currentRound} - DRAW`;
     }
-    this.bannerSubtext = `Score: Red ${this.redScore} - ${this.blueScore} Blue`;
+    this.bannerSubtext = `Match score ${this.redScore}-${this.blueScore} · first to ${this.config.roundsToWin} rounds`;
     this.bannerTimer = 2.5;
 
     // Check if match won. The headline is written from the LOCAL player's

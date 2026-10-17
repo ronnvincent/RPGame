@@ -748,7 +748,10 @@ export class SideViewGame {
         if (isTournament) {
           mod.network.isPvpSession = true;
           this.tournamentLobby?.close();
-          const pvpFmt = (this.tournamentLobby?.currentFormat || roomData?.pvpFormat || mod.network.currentLobbyState?.pvpFormat || '1v1') as any;
+          // The room's format is authoritative. A guest whose lobby modal was
+          // never opened still has the default 1v1 in `currentFormat`, and
+          // preferring it built the whole bout at the wrong team size.
+          const pvpFmt = (roomData?.pvpFormat || mod.network.currentLobbyState?.pvpFormat || this.tournamentLobby?.currentFormat || '1v1') as any;
           const matchTheme = (roomData?.dungeonId === 'tournament_arena' || roomData?.dungeonId === 'tournament_colosseum')
             ? roomData.dungeonId
             : 'tournament_colosseum';
@@ -771,20 +774,8 @@ export class SideViewGame {
           }
           match.setupTeamsFromLobby(members, localActorId, pvpFmt, teams, assignedTeam);
           // The match roster is the one place that knows every side. Copy it
-          // onto the render cache instead of guessing "the opposite colour":
-          // a missing team packet used to turn a teammate into an enemy.
-          for (const fighter of match.fighters) {
-            if (fighter.isLocal) continue;
-            for (const [sid, remote] of Object.entries(mod.network.remotePlayers)) {
-              if (!remote) continue;
-              const matches = sid === fighter.id
-                || remote.actorId === fighter.id
-                || (Boolean(remote.name) && remote.name === fighter.name);
-              if (!matches) continue;
-              remote.team = fighter.team;
-              if (!remote.actorId) remote.actorId = fighter.id;
-            }
-          }
+          // onto the render cache instead of guessing "the opposite colour".
+          this.applyMatchRosterToRemotes(match);
           // The server seats the bench itself; never infer it from missing
           // team data, which a lagging snapshot could also produce.
           const spectating = roomData?.isSpectator === true
@@ -2198,7 +2189,7 @@ export class SideViewGame {
     this.dialogue?.close();
     this.coopLobby?.close();
 
-    const pvpFmt = (extraSyncData?.pvpFormat || this.tournamentLobby?.currentFormat || network.currentLobbyState?.pvpFormat || '1v1') as any;
+    const pvpFmt = (extraSyncData?.pvpFormat || network.currentLobbyState?.pvpFormat || this.tournamentLobby?.currentFormat || '1v1') as any;
     const matchTheme = (extraSyncData?.arenaTheme === 'tournament_arena' || extraSyncData?.dungeonId === 'tournament_arena' || extraSyncData?.theme === 'tournament_arena')
       ? 'tournament_arena'
       : 'tournament_colosseum';
@@ -2228,14 +2219,11 @@ export class SideViewGame {
     this.engine.pvpTeam = assignedTeam;
     match.setupTeamsFromLobby(members as any, localActorId, pvpFmt, teams, assignedTeam);
 
-    for (const sid of Object.keys(network.remotePlayers)) {
-      const r = network.remotePlayers[sid];
-      if (r) {
-        r.team = (teams && r.actorId && teams[r.actorId])
-          || r.team
-          || (r.actorId === localActorId ? assignedTeam : (assignedTeam === 'red' ? 'blue' : 'red'));
-      }
-    }
+    // The fallback path needed the same fix as dungeon_start: a remote whose
+    // actorId had not arrived yet used to inherit the opposite of the local
+    // colour, which painted a teammate as an enemy. Read the sides off the
+    // match roster instead of guessing.
+    this.applyMatchRosterToRemotes(match);
 
     this.startTournamentMatch(match, spectating);
   }
@@ -2331,6 +2319,29 @@ export class SideViewGame {
 
     this.engine.endTournament();
     network.leaveLobby();
+  }
+
+  /**
+   * Copy the match roster's sides onto the render cache.
+   *
+   * `match.fighters` is the only structure that knows every combatant's real
+   * colour: remote entries arrive keyed by socket id, sometimes before their
+   * actorId, and used to be labelled "the opposite of me" as a fallback. That
+   * guess is exactly how a Crimson ally was drawn and damaged as Azure.
+   */
+  private applyMatchRosterToRemotes(match: TournamentMatch): void {
+    for (const fighter of match.fighters) {
+      if (fighter.isLocal) continue;
+      for (const [sid, remote] of Object.entries(network.remotePlayers)) {
+        if (!remote) continue;
+        const matches = sid === fighter.id
+          || remote.actorId === fighter.id
+          || (Boolean(remote.name) && remote.name === fighter.name);
+        if (!matches) continue;
+        remote.team = fighter.team;
+        if (!remote.actorId) remote.actorId = fighter.id;
+      }
+    }
   }
 
   public startTournamentMatch(match: TournamentMatch, spectating = false): void {
