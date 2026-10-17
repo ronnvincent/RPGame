@@ -586,7 +586,12 @@ export class TournamentLobbyUI {
 
     let launchNotice = '';
     if (meSeat === 'spectator') {
-      launchNotice = 'You are on the spectator bench — the bout starts without you.';
+      // On the arena tab the bench is right there, with TAKE A SEAT under it.
+      // Repeating "you are spectating" costs a footer row on a phone and
+      // tells the player what they can already see.
+      launchNotice = this.activeTab === 'arena'
+        ? ''
+        : 'You are on the spectator bench — the bout starts without you.';
     } else if (!hasBothTeams) {
       launchNotice = 'Requires at least 1 warrior on Crimson and 1 on Azure.';
     } else if (!allGuestsReady) {
@@ -617,14 +622,15 @@ export class TournamentLobbyUI {
           <b>${escapeHtml(careerTitle)}</b>
           <span>${escapeHtml(careerLine)} · ${pvpRating(record)} RATING</span>
         </button>
-        <button class="pvp-qr-btn" data-action="open-qr" title="Generate QR Code for Mobile Players">
-          📱 QR CODE
+        <button class="pvp-qr-btn" data-action="open-qr" aria-label="Show the room QR code" title="Generate QR Code for Mobile Players">
+          <span class="pvp-qr-icon" aria-hidden="true">📱</span>
+          <span class="pvp-qr-text">QR CODE</span>
         </button>
-        <div class="pvp-quick-code-badge" title="Share this code for friends to join directly!" data-action="copy-code">
-          <span class="pvp-badge-lbl">ROOM CODE:</span>
+        <button type="button" class="pvp-quick-code-badge" title="Copy the room code" data-action="copy-code" aria-label="Copy room code ${escapeHtml(roomCode)}">
+          <span class="pvp-badge-lbl">ROOM</span>
           <span class="pvp-badge-val">${escapeHtml(roomCode)}</span>
-          <button class="pvp-badge-copy-btn" title="Copy Room Code">📋</button>
-        </div>
+          <span class="pvp-badge-copy-btn" aria-hidden="true">📋</span>
+        </button>
         <button class="pvp-close-btn" aria-label="Close Colosseum" title="Leave or Close">&times;</button>
       </div>
     `;
@@ -645,28 +651,37 @@ export class TournamentLobbyUI {
     modal.appendChild(header);
 
     // 2. Direct Join by Room Code Bar
-    const joinBar = document.createElement('div');
-    joinBar.className = 'pvp-quick-join-bar';
-    joinBar.innerHTML = `
-      <span class="pvp-join-lbl">⚔️ JOIN BY ROOM CODE:</span>
-      <input type="text" class="pvp-join-input" placeholder="ENTER 4-DIGIT CODE (e.g. ${escapeHtml(roomCode)})" maxlength="12" />
-      <button class="pvp-join-code-btn" type="button">JOIN LOBBY</button>
-    `;
+    //
+    // Only when it can actually do something. Inside a room the code is
+    // already in the header, and a dead input is the first thing that turns a
+    // phone screen into noise (and its placeholder was the first thing to get
+    // clipped). The Public Duels tab keeps it, because that is where someone
+    // arrives holding a code for another room.
+    const inRoom = Boolean(this.state?.roomId || network.room);
+    if (!inRoom || this.activeTab === 'public') {
+      const joinBar = document.createElement('div');
+      joinBar.className = 'pvp-quick-join-bar';
+      joinBar.innerHTML = `
+        <span class="pvp-join-lbl">JOIN BY CODE</span>
+        <input type="text" class="pvp-join-input" placeholder="4-DIGIT CODE" aria-label="Room code" maxlength="12" inputmode="numeric" />
+        <button class="pvp-join-code-btn" type="button">JOIN</button>
+      `;
 
-    const joinInput = joinBar.querySelector<HTMLInputElement>('.pvp-join-input');
-    const joinBtn = joinBar.querySelector<HTMLButtonElement>('.pvp-join-code-btn');
+      const joinInput = joinBar.querySelector<HTMLInputElement>('.pvp-join-input');
+      const joinBtn = joinBar.querySelector<HTMLButtonElement>('.pvp-join-code-btn');
 
-    const triggerJoin = () => {
-      if (joinInput && joinInput.value) {
-        this.joinRoomByCode(joinInput.value);
-        joinInput.value = '';
-      }
-    };
-    joinBtn?.addEventListener('click', triggerJoin);
-    joinInput?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') triggerJoin();
-    });
-    modal.appendChild(joinBar);
+      const triggerJoin = () => {
+        if (joinInput && joinInput.value) {
+          this.joinRoomByCode(joinInput.value);
+          joinInput.value = '';
+        }
+      };
+      joinBtn?.addEventListener('click', triggerJoin);
+      joinInput?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') triggerJoin();
+      });
+      modal.appendChild(joinBar);
+    }
 
     // 3. Navigation Tabs (Versus Arena vs Invite Friends vs Public Duels)
     const tabsBar = document.createElement('div');
@@ -708,7 +723,7 @@ export class TournamentLobbyUI {
         { id: '4v4', label: '4v4 GUILD WAR' },
       ];
 
-      let formatHtml = '<div class="pvp-format-buttons">';
+      let formatHtml = '<span class="pvp-format-label">FORMAT</span><div class="pvp-format-buttons" role="group" aria-label="Match format">';
       for (const f of formats) {
         const isSel = this.currentFormat === f.id;
         formatHtml += `
@@ -719,7 +734,7 @@ export class TournamentLobbyUI {
       }
       formatHtml += '</div>';
       if (!iAmHost) {
-        formatHtml += '<span class="pvp-host-only-note">(Host sets match format)</span>';
+        formatHtml += '<span class="pvp-host-only-note">HOST SETS</span>';
       }
       formatBar.innerHTML = formatHtml;
 
@@ -800,13 +815,13 @@ export class TournamentLobbyUI {
       bench.className = 'pvp-spectator-bench';
       bench.innerHTML = `
         <div class="pvp-bench-head">
-          <span class="pvp-bench-title">◉ SPECTATOR BENCH</span>
-          <span class="pvp-bench-sub">${benchMembers.length}/${benchSize} watching · tap a chair to sit, or a name to swap</span>
+          <span class="pvp-bench-title">◉ BENCH</span>
+          <span class="pvp-bench-count">${benchMembers.length}/${benchSize}</span>
         </div>
         <div class="pvp-bench-chairs">
           ${this.renderBenchSlots(benchSlots, myId)}
         </div>
-        ${meSeat === 'spectator' ? '<div class="pvp-bench-note">You are on the bench — tap any team slot to drop back in.</div>' : ''}
+        ${meSeat === 'spectator' ? '<button type="button" class="pvp-bench-note" data-action="take-team-seat">↩ TAKE A SEAT</button>' : ''}
       `;
       stage.insertBefore(bench, stage.firstChild);
 
@@ -829,6 +844,32 @@ export class TournamentLobbyUI {
     }
 
     // 5. Bottom Action Bar
+    //
+    // A spectator already has "TAKE A SEAT" pinned under the bench, right
+    // where their eyes are. Repeating it in the footer gives the phone two
+    // identical primary buttons, so the footer stays quiet on that tab and
+    // only picks the action up elsewhere, where no bench is on screen.
+    const benchHasSeatAction = meSeat === 'spectator' && this.activeTab === 'arena';
+    const footerAction = iAmHost
+      ? `
+        <button class="pvp-btn-start ${canLaunch ? 'ready-to-launch' : 'disabled'}" data-action="start-tournament" ${!canLaunch ? 'disabled' : ''}>
+          <span class="pvp-start-full">⚔️ COMMENCE TOURNAMENT ⚔️</span>
+          <span class="pvp-start-short">⚔️ START</span>
+        </button>
+      `
+      : meSeat === 'spectator'
+        ? (benchHasSeatAction ? '' : `
+          <button class="pvp-btn-ready not-ready" data-action="take-team-seat" title="Leave the bench and take a team seat">
+            👁 TAKE A SEAT
+          </button>
+        `)
+        : `
+          <button class="pvp-btn-ready ${me?.ready ? 'is-ready' : 'not-ready'}" data-action="toggle-ready">
+            ${me?.ready ? '⌛ CANCEL READY' : '⚔️ READY'}
+          </button>
+        `;
+    const showFooterRight = Boolean(launchNotice) || footerAction.trim().length > 0;
+
     const footer = document.createElement('div');
     footer.className = 'pvp-footer';
 
@@ -842,28 +883,12 @@ export class TournamentLobbyUI {
         </button>
       </div>
 
+      ${showFooterRight ? `
       <div class="pvp-footer-right">
-        ${launchNotice ? `<div class="pvp-launch-warning">${escapeHtml(launchNotice)}</div>` : ''}
-        ${
-          iAmHost
-            ? `
-              <button class="pvp-btn-start ${canLaunch ? 'ready-to-launch' : 'disabled'}" data-action="start-tournament" ${!canLaunch ? 'disabled' : ''}>
-                ⚔️ COMMENCE TOURNAMENT ⚔️
-              </button>
-            `
-            : meSeat === 'spectator'
-              ? `
-                <button class="pvp-btn-ready not-ready" data-action="take-team-seat" title="Leave the bench and take a team seat">
-                  👁 WATCHING — TAKE A SEAT
-                </button>
-              `
-              : `
-                <button class="pvp-btn-ready ${me?.ready ? 'is-ready' : 'not-ready'}" data-action="toggle-ready">
-                  ${me?.ready ? '⌛ CANCEL READY' : '⚔️ READY FOR BATTLE'}
-                </button>
-              `
-        }
+        ${launchNotice ? `<div class="pvp-launch-warning" role="status">${escapeHtml(launchNotice)}</div>` : ''}
+        ${footerAction.trim() ? `<div class="pvp-footer-actions">${footerAction}</div>` : ''}
       </div>
+      ` : ''}
     `;
 
     footer.querySelector('[data-action="leave-lobby"]')?.addEventListener('click', () => {
@@ -874,9 +899,6 @@ export class TournamentLobbyUI {
     });
     footer.querySelector('[data-action="toggle-ready"]')?.addEventListener('click', () => {
       this.toggleReady();
-    });
-    footer.querySelector('[data-action="take-team-seat"]')?.addEventListener('click', () => {
-      this.pickSeat(this.localTeam);
     });
     footer.querySelector('[data-action="start-tournament"]')?.addEventListener('click', () => {
       if (canLaunch) this.startTournament();
@@ -1068,6 +1090,13 @@ export class TournamentLobbyUI {
       });
     });
 
+    modal.querySelectorAll<HTMLElement>('[data-action="take-team-seat"]').forEach((el) => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.pickSeat(this.localTeam);
+      });
+    });
+
     modal.querySelectorAll<HTMLElement>('[data-action="open-invite"]').forEach((el) => {
       el.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1238,126 +1267,210 @@ export class TournamentLobbyUI {
     const style = document.createElement('style');
     style.id = STYLE_ID;
     style.textContent = `
+      /* ===================== DESIGN TOKENS =====================
+         One spacing scale, one ink ramp, one touch target. Every row below
+         is built from these, so the screen keeps its rhythm at any size. */
       .tournament-lobby-backdrop {
+        --ink: #f7e7ce;
+        --ink-dim: #c4b5a0;
+        --ink-faint: #94826b;
+        --gold: #ffd770;
+        --line: #5a3d24;
+        --line-strong: #3d2817;
+        --surface: rgba(12, 8, 5, 0.82);
+        --surface-2: rgba(22, 15, 9, 0.9);
+        --sand: #ecdcb8;
+        --sand-deep: #dcc79c;
+        --sand-ink: #2b1a0d;
+        --radius: 6px;
+        --s1: 4px;
+        --s2: 8px;
+        --s3: 12px;
+        --s4: 16px;
+        --tap: 44px;
+
         position: fixed; inset: 0;
-        background: rgba(4, 5, 8, 0.88);
+        background: rgba(4, 5, 8, 0.9);
         display: flex; align-items: center; justify-content: center;
         z-index: 10000;
-        padding: 12px;
+        padding: var(--s3);
         box-sizing: border-box;
       }
+      .tournament-lobby-backdrop *,
+      .tournament-lobby-backdrop *::before,
+      .tournament-lobby-backdrop *::after { box-sizing: border-box; }
 
       .pvp-modal-shell {
         position: relative;
-        width: 1040px; max-width: 98vw;
-        max-height: 96vh;
+        width: min(1040px, 100%);
         max-height: 96dvh;
         background: url('/assets/kenney-rpg-ui/panel_brown.png') repeat;
-        border: 4px solid #3d2817;
+        border: 4px solid var(--line-strong);
         box-shadow: 0 0 40px rgba(0, 0, 0, 0.95), inset 0 0 20px rgba(0, 0, 0, 0.6);
         border-radius: 8px;
         display: flex; flex-direction: column;
-        color: #f7e7ce;
+        color: var(--ink);
         overflow: hidden;
         font-family: 'Outfit', 'Inter', sans-serif;
+        -webkit-tap-highlight-color: transparent;
       }
+      .pvp-modal-shell button { font-family: inherit; touch-action: manipulation; }
 
+      /* ===================== HEADER ===================== */
       .pvp-header {
-        display: flex; justify-content: space-between; align-items: center;
-        padding: 8px 14px;
-        background: rgba(18, 12, 7, 0.7);
-        border-bottom: 2px solid #5a3d24;
-        gap: 8px; flex-shrink: 0;
+        display: flex; align-items: center; gap: var(--s2);
+        padding: var(--s2) var(--s4);
+        background: rgba(18, 12, 7, 0.78);
+        border-bottom: 2px solid var(--line);
+        flex: 0 0 auto;
+        min-width: 0;
       }
-      .pvp-title-cluster { min-width: 0; }
+      .pvp-title-cluster { min-width: 0; flex: 1 1 auto; }
       .pvp-title {
-        margin: 0; font-family: 'Cinzel', Georgia, serif; font-size: clamp(14px, 2.5vw, 20px); font-weight: 900;
-        color: #fce79a; letter-spacing: 1.2px;
+        margin: 0;
+        font-family: 'Cinzel', Georgia, serif;
+        font-size: clamp(15px, 2.1vw, 20px); font-weight: 900;
+        color: #fce79a; letter-spacing: 0.08em; line-height: 1.15;
         text-shadow: 0 2px 4px #000;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       }
-      .pvp-subtitle { font-size: 10.5px; color: #b89f80; margin-top: 1px; font-weight: 600; white-space: nowrap; }
+      .pvp-subtitle {
+        font-size: 10px; color: var(--ink-faint); margin-top: 2px;
+        font-weight: 600; letter-spacing: 0.04em;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
 
-      .pvp-header-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+      .pvp-header-actions { display: flex; align-items: center; gap: var(--s2); flex: 0 0 auto; min-width: 0; }
+
+      .pvp-career-chip {
+        appearance: none;
+        display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
+        padding: 4px 10px;
+        background: rgba(0, 0, 0, 0.4);
+        border: 1px solid #735134; border-radius: 4px;
+        max-width: 190px; min-height: 36px;
+        color: inherit; font: inherit; text-align: right; cursor: pointer;
+      }
+      .pvp-career-chip:hover { border-color: #b8860b; background: rgba(60, 38, 14, 0.55); }
+      .pvp-career-chip:focus-visible { outline: 2px solid #ffe08a; outline-offset: 2px; }
+      .pvp-career-chip b {
+        font-family: 'Cinzel', serif; font-size: 10px; font-weight: 900; color: var(--gold);
+        letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+      }
+      .pvp-career-chip span {
+        font-size: 8.5px; color: var(--ink-dim);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+      }
+
       .pvp-qr-btn {
-        padding: 5px 10px; font-size: 10.5px; font-weight: 900;
+        display: inline-flex; align-items: center; gap: 5px;
+        min-height: 36px; padding: 0 12px;
+        font-size: 10.5px; font-weight: 900; letter-spacing: 0.04em;
         background: url('/assets/kenney-rpg-ui/buttonLong_blue.png') no-repeat center/100% 100%;
         border: 0; color: #fff; cursor: pointer; text-shadow: 0 1px 2px #000;
-        display: flex; align-items: center; gap: 4px; border-radius: 3px;
-        white-space: nowrap;
-        transition: filter 0.15s ease;
+        white-space: nowrap; transition: filter 0.15s ease;
       }
       .pvp-qr-btn:hover { filter: brightness(1.2); }
+      .pvp-qr-icon { font-size: 13px; }
+
+      /* One tap target: the badge itself copies, the clipboard glyph is just
+         a hint. A nested button would have split a 60px control into two
+         focus stops and two toast events. */
       .pvp-quick-code-badge {
-        display: flex; align-items: center; gap: 5px;
-        background: url('/assets/kenney-rpg-ui/panelInset_brown.png') repeat;
-        padding: 4px 10px; border-radius: 4px; cursor: pointer;
-        border: 1px solid #735134;
-        white-space: nowrap;
-        transition: all 0.15s ease;
+        display: inline-flex; align-items: center; gap: 6px;
+        min-height: 36px; padding: 0 10px;
+        background: rgba(0, 0, 0, 0.42);
+        border: 1px solid #735134; border-radius: 4px;
+        color: var(--ink); font-family: inherit;
+        cursor: pointer; white-space: nowrap;
+        transition: border-color 0.15s ease, filter 0.15s ease;
       }
-      .pvp-quick-code-badge:hover { border-color: #ffd770; filter: brightness(1.15); }
-      .pvp-badge-lbl { font-size: 9.5px; font-weight: 800; color: #ffd770; letter-spacing: 0.8px; }
-      .pvp-badge-val { font-size: 12px; font-weight: 900; color: #fff; font-family: monospace; letter-spacing: 1px; }
-      .pvp-badge-copy-btn { background: none; border: 0; color: #ffd770; cursor: pointer; font-size: 11px; padding: 0 2px; }
+      .pvp-quick-code-badge:hover { border-color: var(--gold); filter: brightness(1.15); }
+      .pvp-quick-code-badge:focus-visible { outline: 2px solid #ffe08a; outline-offset: 2px; }
+      .pvp-badge-lbl { font-size: 9px; font-weight: 800; color: var(--gold); letter-spacing: 0.08em; }
+      .pvp-badge-val { font-size: 13px; font-weight: 900; color: #fff; font-family: monospace; letter-spacing: 0.06em; }
+      .pvp-badge-copy-btn { font-size: 12px; line-height: 1; }
 
       .pvp-close-btn {
-        width: 30px; height: 30px;
+        width: 36px; height: 36px; flex: 0 0 auto;
         background: url('/assets/kenney-rpg-ui/buttonSquare_brown.png') no-repeat center/100% 100%;
-        border: 0; color: #fca5a5; font-size: 18px; font-weight: 900;
+        border: 0; color: #fca5a5; font-size: 18px; font-weight: 900; line-height: 1;
         cursor: pointer; display: flex; align-items: center; justify-content: center;
-        flex-shrink: 0;
       }
       .pvp-close-btn:hover { filter: brightness(1.25); color: #fff; }
 
-      /* Direct Quick Join Bar */
+      /* ===================== JOIN BAR ===================== */
       .pvp-quick-join-bar {
-        display: flex; align-items: center; gap: 8px;
-        padding: 5px 14px;
-        background: rgba(10, 7, 4, 0.9);
+        display: flex; align-items: center; gap: var(--s2);
+        padding: var(--s2) var(--s4);
+        background: rgba(10, 7, 4, 0.92);
         border-bottom: 1px solid #4a321c;
-        overflow-x: auto; flex-shrink: 0;
+        flex: 0 0 auto; min-width: 0;
       }
-      .pvp-join-lbl { font-size: 10.5px; font-weight: 900; color: #ffd770; letter-spacing: 0.8px; white-space: nowrap; }
+      .pvp-join-lbl {
+        font-size: 10px; font-weight: 900; color: var(--gold);
+        letter-spacing: 0.08em; white-space: nowrap; flex: 0 0 auto;
+      }
       .pvp-join-input {
-        width: clamp(140px, 24vw, 240px); padding: 4px 8px; font-size: 11px;
+        flex: 1 1 auto; min-width: 0; max-width: 220px; min-height: 34px;
+        padding: 0 10px; font-size: 12px;
         background: rgba(0, 0, 0, 0.6); border: 1px solid #634327; color: #fff;
-        font-family: monospace; text-transform: uppercase; border-radius: 3px;
-        box-sizing: border-box;
+        font-family: monospace; text-transform: uppercase; border-radius: 4px;
       }
-      .pvp-join-input:focus { border-color: #ffd770; outline: none; }
+      .pvp-join-input::placeholder { color: #7d6a52; }
+      .pvp-join-input:focus { border-color: var(--gold); outline: none; }
       .pvp-join-code-btn {
-        padding: 5px 14px; font-size: 11px; font-weight: 900;
+        min-height: 34px; padding: 0 16px; flex: 0 0 auto;
+        font-size: 11px; font-weight: 900;
         background: url('/assets/kenney-rpg-ui/buttonLong_blue.png') no-repeat center/100% 100%;
         border: 0; color: #fff; cursor: pointer; text-shadow: 0 1px 2px #000;
       }
       .pvp-join-code-btn:hover { filter: brightness(1.2); }
 
+      /* ===================== TABS ===================== */
       .pvp-nav-tabs {
-        display: flex; gap: 8px; padding: 8px 18px;
-        background: rgba(10, 7, 4, 0.8);
+        display: flex; gap: var(--s2);
+        padding: var(--s2) var(--s4);
+        background: rgba(10, 7, 4, 0.86);
         border-bottom: 2px solid #4a321c;
+        flex: 0 0 auto;
       }
       .pvp-nav-tab {
-        padding: 8px 18px; font-family: 'Cinzel', serif; font-size: 12px; font-weight: 800;
-        letter-spacing: 0.8px; cursor: pointer; border: 0;
+        flex: 1 1 0; min-width: 0; min-height: 40px;
+        padding: 0 12px;
+        font-family: 'Cinzel', serif; font-size: 11.5px; font-weight: 800;
+        letter-spacing: 0.04em; cursor: pointer; border: 0;
         background: url('/assets/kenney-rpg-ui/buttonLong_brown.png') no-repeat center/100% 100%;
-        color: #d8c29d; transition: all 0.15s ease;
+        color: #d8c29d;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        transition: filter 0.15s ease, color 0.15s ease;
       }
       .pvp-nav-tab:hover { filter: brightness(1.2); color: #fff; }
       .pvp-nav-tab.active {
         background: url('/assets/kenney-rpg-ui/buttonLong_blue.png') no-repeat center/100% 100%;
-        color: #ffffff; text-shadow: 0 1px 3px #000;
+        color: #fff; text-shadow: 0 1px 3px #000;
       }
 
+      /* ===================== FORMAT ROW ===================== */
       .pvp-format-selector {
-        display: flex; justify-content: space-between; align-items: center;
-        padding: 6px 18px; background: rgba(0, 0, 0, 0.35);
+        display: flex; align-items: center; gap: var(--s3);
+        padding: 6px var(--s4);
+        background: rgba(0, 0, 0, 0.38);
         border-bottom: 1px solid rgba(220, 180, 110, 0.2);
+        flex: 0 0 auto; min-width: 0;
       }
-      .pvp-format-buttons { display: flex; gap: 8px; }
+      .pvp-format-label {
+        font-size: 9.5px; font-weight: 900; color: var(--ink-faint);
+        letter-spacing: 0.12em; flex: 0 0 auto;
+      }
+      .pvp-format-buttons {
+        display: flex; gap: 6px; flex: 1 1 auto; min-width: 0;
+        overflow-x: auto; scrollbar-width: none; padding: 2px;
+      }
+      .pvp-format-buttons::-webkit-scrollbar { display: none; }
       .pvp-fmt-btn {
-        padding: 5px 12px; font-size: 11px; font-weight: 800;
+        flex: 0 0 auto; min-height: 34px; padding: 0 12px;
+        font-size: 10.5px; font-weight: 800;
         background: url('/assets/kenney-rpg-ui/buttonSquare_brown.png') no-repeat center/100% 100%;
         border: 0; color: #b89f80; cursor: pointer;
       }
@@ -1365,346 +1478,304 @@ export class TournamentLobbyUI {
         background: url('/assets/kenney-rpg-ui/buttonSquare_beige.png') no-repeat center/100% 100%;
         color: #2b1807; font-weight: 900;
       }
-      .pvp-fmt-btn:disabled { opacity: 0.6; cursor: default; }
-      .pvp-host-only-note { font-size: 10px; color: #e2b153; font-style: italic; }
-
-      .pvp-versus-stage {
-        display: grid; grid-template-columns: 1fr 140px 1fr;
-        padding: 10px 14px; gap: 10px;
-        background: url('/assets/kenney-rpg-ui/panelInset_brown.png') repeat;
-        overflow-y: auto; flex: 1; min-height: 0;
+      .pvp-fmt-btn:disabled { opacity: 0.55; cursor: default; }
+      .pvp-host-only-note {
+        flex: 0 0 auto; font-size: 9px; font-weight: 800; color: #e2b153;
+        letter-spacing: 0.08em; text-transform: uppercase;
       }
 
-      /* The bench is the first row of the stage, above both teams. */
+      /* ===================== STAGE ===================== */
+      .pvp-versus-stage {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(84px, 132px) minmax(0, 1fr);
+        gap: var(--s3);
+        padding: var(--s3) var(--s4);
+        background: rgba(0, 0, 0, 0.22);
+        overflow-y: auto; overflow-x: hidden;
+        flex: 1 1 auto; min-height: 0;
+        align-content: start;
+      }
+      .pvp-versus-stage > * { min-width: 0; }
+
+      /* ===================== BENCH =====================
+         A solid sand strip with real contrast. It used to repeat a 93x94
+         panel texture, whose seams read as a row of mystery buttons. */
       .pvp-spectator-bench {
         grid-column: 1 / -1;
-        position: sticky; top: 0; z-index: 2;
-        display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-        padding: 6px 10px;
-        background: url('/assets/kenney-rpg-ui/panelInset_beige.png') repeat;
-        border: 2px solid #2a1a10; border-radius: 4px;
-        box-shadow: 0 0 0 1px rgba(255, 236, 190, 0.28) inset;
-        image-rendering: pixelated;
+        position: sticky; top: 0; z-index: 3;
+        display: flex; align-items: center; gap: var(--s2);
+        min-width: 0; min-height: 48px;
+        padding: 5px var(--s2);
+        background: linear-gradient(180deg, #f1e2c0 0%, #e3d0a6 100%);
+        border: 2px solid #3a2415; border-radius: var(--radius);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 3px 0 rgba(0, 0, 0, 0.35);
+        color: var(--sand-ink);
       }
-      .pvp-bench-head { display: flex; flex-direction: column; gap: 1px; min-width: 150px; }
+      .pvp-bench-head { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
       .pvp-bench-title {
-        font-family: 'Cinzel', serif; font-weight: 900; font-size: 11px;
-        letter-spacing: 0.06em; color: #3a2415; text-shadow: 0 1px 0 rgba(255, 244, 214, 0.5);
+        font-family: 'Cinzel', serif; font-weight: 900; font-size: 10.5px;
+        letter-spacing: 0.08em; color: #33200f; white-space: nowrap;
       }
-      .pvp-bench-sub { font-size: 8.5px; color: #6b4a2c; }
-      .pvp-bench-chairs { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1; }
+      .pvp-bench-count {
+        font-size: 9.5px; font-weight: 900; color: #f7e7ce;
+        background: #3a2415; border-radius: 10px; padding: 1px 7px;
+        font-variant-numeric: tabular-nums;
+      }
+      .pvp-bench-sub { display: none; }
+      .pvp-bench-chairs {
+        display: flex; align-items: center; gap: 6px;
+        flex: 1 1 auto; min-width: 0;
+        overflow-x: auto; overflow-y: hidden;
+        scrollbar-width: none; padding: 1px;
+      }
+      .pvp-bench-chairs::-webkit-scrollbar { display: none; }
       .pvp-bench-chair {
-        display: inline-flex; align-items: center; gap: 5px;
-        min-height: 30px; padding: 3px 9px 3px 4px;
-        border: 2px solid #3a2415; border-radius: 3px;
-        background: url('/assets/kenney-rpg-ui/buttonSquare_brown.png') repeat;
-        color: #f6e7c8; font-family: 'Outfit', sans-serif; font-size: 9.5px; font-weight: 800;
-        cursor: pointer; image-rendering: pixelated;
+        flex: 0 0 auto;
+        display: inline-flex; align-items: center; gap: 6px;
+        min-height: 36px; padding: 0 10px 0 5px;
+        border: 2px solid #6b4a2c; border-radius: 4px;
+        background: #fbf3e0; color: #2b1a0d;
+        font-size: 11px; font-weight: 800; cursor: pointer;
+        box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+        max-width: 190px;
       }
-      .pvp-bench-chair:hover { filter: brightness(1.18); }
-      .pvp-bench-chair:focus-visible { outline: 2px solid #fbbf24; outline-offset: 2px; }
+      .pvp-bench-chair:hover { filter: brightness(1.05); border-color: #3a2415; }
+      .pvp-bench-chair:focus-visible { outline: 2px solid #b45309; outline-offset: 2px; }
       .pvp-bench-chair.is-open {
-        background: rgba(0, 0, 0, 0.22); border-style: dashed; color: #6b4a2c;
+        background: rgba(255, 255, 255, 0.28); border-style: dashed; color: #5c4026;
       }
-      .pvp-bench-chair.is-me { outline: 2px solid #93c5fd; outline-offset: 1px; }
-      .pvp-bench-plus { font-size: 13px; font-weight: 900; line-height: 1; }
+      .pvp-bench-chair.is-me { border-color: #1d4ed8; box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.25); }
+      .pvp-bench-plus { font-size: 14px; font-weight: 900; line-height: 1; }
       .pvp-bench-avatar {
-        width: 24px; height: 24px; object-fit: contain;
-        image-rendering: pixelated; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
+        width: 26px; height: 26px; object-fit: contain; flex: 0 0 auto;
+        image-rendering: pixelated; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35));
       }
-      .pvp-bench-name { white-space: nowrap; }
-      .pvp-bench-name b { color: #93c5fd; font-size: 8px; }
+      .pvp-bench-name {
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+      }
+      .pvp-bench-name b { color: #1d4ed8; font-size: 9px; }
       .pvp-bench-note {
-        flex-basis: 100%; font-size: 9px; font-weight: 700; color: #7c2d12;
+        flex: 0 0 auto; min-height: 36px; padding: 0 10px;
+        border: 2px solid #7c2d12; border-radius: 4px;
+        background: #fff7e6; color: #7c2d12;
+        font-size: 10px; font-weight: 900; letter-spacing: 0.04em;
+        cursor: pointer; white-space: nowrap;
       }
-      .pvp-fighter-card.is-swappable { cursor: pointer; }
-      .pvp-fighter-card.is-swappable:hover { filter: brightness(1.1); }
-      .pvp-fighter-card.is-swappable:focus-visible { outline: 2px solid #fbbf24; outline-offset: 2px; }
+      .pvp-bench-note:hover { background: #ffe9c7; }
 
-      .pvp-team-col { display: flex; flex-direction: column; gap: 8px; }
+      /* ===================== TEAM COLUMNS ===================== */
+      .pvp-team-col { display: flex; flex-direction: column; gap: var(--s2); min-width: 0; }
       .pvp-team-banner {
-        padding: 6px 12px; border-radius: 4px;
         display: flex; justify-content: space-between; align-items: center;
+        gap: var(--s2); min-height: 34px; padding: 5px 10px;
+        border-radius: 4px;
         font-family: 'Cinzel', serif; font-weight: 900;
       }
       .banner-red {
         background: linear-gradient(90deg, #7f1d1d 0%, #450a0a 100%);
-        border: 1px solid #ef4444; color: #fecaca;
+        border: 1px solid #ef4444; border-left: 4px solid #f87171; color: #fecaca;
       }
       .banner-blue {
         background: linear-gradient(90deg, #1e3a8a 0%, #172554 100%);
-        border: 1px solid #3b82f6; color: #bfdbfe;
+        border: 1px solid #3b82f6; border-left: 4px solid #60a5fa; color: #bfdbfe;
       }
-      .pvp-banner-title { font-size: 13px; letter-spacing: 1px; }
-      .pvp-banner-count { font-size: 10.5px; opacity: 0.85; font-family: 'Outfit', sans-serif; }
+      .pvp-banner-title {
+        font-size: 12px; letter-spacing: 0.06em;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .pvp-banner-count {
+        font-size: 10px; opacity: 0.9; font-family: 'Outfit', sans-serif;
+        font-weight: 700; white-space: nowrap; flex: 0 0 auto;
+      }
 
-      .pvp-slots-container { display: flex; flex-direction: column; gap: 8px; }
+      .pvp-slots-container { display: flex; flex-direction: column; gap: var(--s2); min-width: 0; }
 
-      /* Occupied Fighter Card */
       .pvp-fighter-card {
         display: flex; align-items: center; gap: 10px;
-        padding: 6px 10px; border-radius: 4px; position: relative;
-        background: rgba(15, 10, 8, 0.75); border: 2px solid #5a3d24;
+        min-height: 54px; padding: 6px 10px;
+        border-radius: var(--radius); position: relative;
+        background: var(--surface-2);
+        border: 2px solid var(--line);
+        min-width: 0;
       }
-      .pvp-fighter-card.card-red { border-color: rgba(239, 68, 68, 0.6); }
-      .pvp-fighter-card.card-blue { border-color: rgba(59, 130, 246, 0.6); }
+      .pvp-fighter-card.card-red { border-color: rgba(239, 68, 68, 0.55); }
+      .pvp-fighter-card.card-blue { border-color: rgba(59, 130, 246, 0.55); }
       .pvp-fighter-card.is-me {
-        border-color: #ffd770 !important;
-        box-shadow: 0 0 12px rgba(255, 215, 112, 0.4);
+        border-color: var(--gold) !important;
+        box-shadow: 0 0 0 1px rgba(255, 215, 112, 0.35), 0 0 14px rgba(255, 215, 112, 0.22);
       }
 
       .pvp-fighter-avatar {
-        width: 56px; height: 56px; display: flex; align-items: flex-end; justify-content: center;
-        background: rgba(0, 0, 0, 0.4); border-radius: 4px; overflow: hidden;
+        width: 44px; height: 44px; flex: 0 0 auto;
+        display: flex; align-items: flex-end; justify-content: center;
+        background: rgba(0, 0, 0, 0.45); border-radius: 4px; overflow: hidden;
       }
       .pvp-pedestal-sprite {
-        height: 60px; width: auto; object-fit: cover; object-position: center bottom;
+        height: 48px; width: auto; object-fit: cover; object-position: center bottom;
         image-rendering: pixelated;
       }
       .pvp-pedestal-sprite.facing-left { transform: scaleX(-1); }
 
-      .pvp-fighter-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
-      .pvp-info-row1 { display: flex; align-items: center; gap: 6px; }
-      .pvp-class-icon { width: 20px; height: 20px; image-rendering: pixelated; border-radius: 2px; }
-      .pvp-fighter-name { font-size: 13px; font-weight: 800; color: #fff; }
-      .pvp-you-tag { color: #ffd770; font-size: 9.5px; margin-left: 3px; }
+      .pvp-fighter-info { flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+      .pvp-info-row1 { display: flex; align-items: center; gap: 6px; min-width: 0; }
+      .pvp-class-icon { width: 18px; height: 18px; flex: 0 0 auto; image-rendering: pixelated; border-radius: 2px; }
+      .pvp-fighter-name {
+        font-size: 13px; font-weight: 800; color: #fff; min-width: 0;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .pvp-you-tag { color: var(--gold); font-size: 9.5px; margin-left: 3px; }
 
-      .pvp-badge { padding: 1px 6px; font-size: 8.5px; font-weight: 800; border-radius: 2px; }
+      .pvp-badge {
+        padding: 1px 6px; font-size: 8.5px; font-weight: 800; border-radius: 2px;
+        flex: 0 0 auto; letter-spacing: 0.02em;
+      }
       .badge-host { background: #b45309; color: #fef3c7; border: 1px solid #fde047; }
       .badge-ready { background: #166534; color: #dcfce7; border: 1px solid #4ade80; }
       .badge-wait { background: #3f3f46; color: #d4d4d8; }
       .badge-empty { background: rgba(0, 0, 0, 0.5); border: 1px solid #735134; color: #b89f80; }
 
       .pvp-info-row2 {
-        display: flex; gap: 8px; font-size: 10px; color: #c4b5a0; font-weight: 700;
+        display: flex; flex-wrap: wrap; gap: 8px;
+        font-size: 10px; color: var(--ink-dim); font-weight: 700;
       }
       .pvp-stat-hp { color: #86efac; }
       .pvp-stat-pwr { color: #fde047; }
 
       .pvp-kick-btn {
+        width: 30px; height: 30px; flex: 0 0 auto;
         background: #501010; border: 1px solid #991b1b; color: #fca5a5;
-        width: 22px; height: 22px; cursor: pointer; border-radius: 2px;
-        font-size: 14px; display: flex; align-items: center; justify-content: center;
+        cursor: pointer; border-radius: 3px; font-size: 15px;
+        display: flex; align-items: center; justify-content: center;
       }
       .pvp-kick-btn:hover { background: #b91c1c; color: #fff; }
 
-      /* Empty Slot Styled as Character Dais */
+      /* Empty seat */
       .pvp-empty-slot {
-        background: rgba(10, 8, 6, 0.65);
-        border: 2px dashed rgba(180, 140, 90, 0.4);
+        background: rgba(10, 8, 6, 0.55);
+        border: 2px dashed rgba(180, 140, 90, 0.5);
         cursor: pointer;
-        transition: all 0.15s ease;
+        transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
       }
       .pvp-empty-slot:hover {
         background: rgba(25, 18, 12, 0.8);
-        border-color: #ffd770;
+        border-color: var(--gold);
         box-shadow: 0 0 10px rgba(255, 215, 112, 0.25);
       }
       .pvp-empty-slot.empty-red { border-left: 3px solid #ef4444; }
       .pvp-empty-slot.empty-blue { border-left: 3px solid #3b82f6; }
 
       .pvp-empty-avatar {
-        background: radial-gradient(circle, rgba(255, 215, 112, 0.08) 0%, rgba(0, 0, 0, 0.5) 100%);
-        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        background: radial-gradient(circle, rgba(255, 215, 112, 0.1) 0%, rgba(0, 0, 0, 0.5) 100%);
       }
-      .pvp-avatar-silhouette { font-size: 22px; opacity: 0.65; filter: grayscale(0.5); }
-      .pvp-avatar-sigil { font-size: 10px; color: #ffd770; opacity: 0.7; }
+      .pvp-avatar-silhouette { font-size: 20px; opacity: 0.7; filter: grayscale(0.5); }
+      .pvp-avatar-sigil { display: none; }
 
-      .pvp-empty-role-title { font-size: 12px; font-weight: 800; color: #e2cbb0; letter-spacing: 0.8px; }
-      .pvp-empty-role-sub { font-size: 9.5px; color: #8e7a63; }
+      .pvp-empty-role-title {
+        font-size: 11.5px; font-weight: 800; color: #e2cbb0; letter-spacing: 0.04em;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .pvp-empty-role-sub {
+        font-size: 9.5px; color: #8e7a63;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
 
-      .pvp-empty-action-group { display: flex; gap: 4px; }
+      .pvp-empty-action-group { display: flex; gap: 6px; flex: 0 0 auto; }
       .pvp-slot-claim-btn {
-        padding: 5px 10px; font-size: 10px; font-weight: 900;
+        min-height: 36px; padding: 0 10px;
+        font-size: 10px; font-weight: 900;
         background: url('/assets/kenney-rpg-ui/buttonSquare_brown.png') no-repeat center/100% 100%;
-        border: 0; color: #fce79a; cursor: pointer;
+        border: 0; color: #fce79a; cursor: pointer; white-space: nowrap;
       }
       .pvp-slot-claim-btn:hover { filter: brightness(1.25); }
       .pvp-slot-inv-btn {
-        width: 26px; height: 26px; font-size: 12px; font-weight: 900;
+        width: 36px; height: 36px; flex: 0 0 auto;
+        font-size: 14px; font-weight: 900;
         background: url('/assets/kenney-rpg-ui/buttonSquare_beige.png') no-repeat center/100% 100%;
         border: 0; color: #2b1807; cursor: pointer;
         display: flex; align-items: center; justify-content: center;
       }
       .pvp-slot-inv-btn:hover { filter: brightness(1.2); }
 
+      /* Center column */
       .pvp-center-col {
         display: flex; flex-direction: column; align-items: center; justify-content: center;
-        gap: 12px; text-align: center;
+        gap: var(--s3); text-align: center; min-width: 0;
       }
       .pvp-vs-emblem {
-        width: 52px; height: 52px; border-radius: 50%;
+        width: 46px; height: 46px; border-radius: 50%;
         background: radial-gradient(circle at 35% 35%, #ffd770 0%, #996515 70%, #3d2305 100%);
-        border: 2px solid #fff; font-family: 'Cinzel', serif; font-size: 18px; font-weight: 900;
+        border: 2px solid #fff; font-family: 'Cinzel', serif; font-size: 16px; font-weight: 900;
         color: #fff; text-shadow: 0 2px 4px #000;
         display: flex; align-items: center; justify-content: center;
         box-shadow: 0 0 16px rgba(255, 215, 112, 0.45);
       }
-
       .pvp-switch-team-btn {
-        width: 130px; height: 46px;
+        width: 100%; max-width: 132px; min-height: var(--tap);
         background: url('/assets/kenney-rpg-ui/buttonLong_blue.png') no-repeat center/100% 100%;
         border: 0; color: #fff; cursor: pointer;
         display: flex; flex-direction: column; align-items: center; justify-content: center;
-        text-shadow: 0 1px 2px #000; font-family: 'Outfit', sans-serif;
+        text-shadow: 0 1px 2px #000;
       }
-      .pvp-switch-team-btn span { font-size: 9.5px; opacity: 0.9; }
-      .pvp-switch-team-btn b { font-size: 11.5px; font-weight: 900; }
+      .pvp-switch-team-btn span { font-size: 9px; opacity: 0.9; }
+      .pvp-switch-team-btn b { font-size: 11px; font-weight: 900; }
       .pvp-switch-team-btn:hover:not(:disabled) { filter: brightness(1.2); }
       .pvp-switch-team-btn:disabled { opacity: 0.45; cursor: default; }
-
-      .pvp-career-chip {
-        appearance: none;
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        gap: 1px;
-        padding: 3px 8px;
-        background: rgba(0, 0, 0, 0.35);
-        border: 1px solid #735134;
-        border-radius: 3px;
-        max-width: 190px;
-        color: inherit;
-        font: inherit;
-        text-align: right;
-        cursor: pointer;
-      }
-      .pvp-career-chip:hover { border-color: #b8860b; background: rgba(60, 38, 14, 0.55); }
-      .pvp-career-chip:focus-visible { outline: 2px solid #ffe08a; outline-offset: 2px; }
-      .pvp-career-chip b {
-        font-family: 'Cinzel', serif;
-        font-size: 10px;
-        font-weight: 900;
-        color: #ffd770;
-        letter-spacing: 0.4px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: 100%;
-      }
-      .pvp-career-chip span {
-        font-size: 8.5px;
-        color: #b89f80;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: 100%;
-      }
-
       .pvp-balance-badge {
-        background: rgba(0, 0, 0, 0.55); border: 1px solid #5a3d24;
-        border-radius: 4px; padding: 6px 8px; width: 100%; box-sizing: border-box;
+        background: rgba(0, 0, 0, 0.55); border: 1px solid var(--line);
+        border-radius: 4px; padding: 6px 8px; width: 100%;
         display: flex; flex-direction: column; gap: 2px;
       }
-      .pvp-balance-badge b { font-size: 9px; color: #ffd770; letter-spacing: 0.8px; }
-      .pvp-balance-badge span { font-size: 8.5px; color: #b89f80; }
+      .pvp-balance-badge b { font-size: 9px; color: var(--gold); letter-spacing: 0.06em; }
+      .pvp-balance-badge span { font-size: 8.5px; color: var(--ink-faint); }
 
+      /* ===================== TAB PANELS ===================== */
       .pvp-tab-panel {
-        padding: 16px 20px; overflow-y: auto; max-height: 480px;
-        background: url('/assets/kenney-rpg-ui/panelInset_brown.png') repeat;
+        padding: var(--s4);
+        overflow-y: auto; max-height: 480px;
+        background: rgba(0, 0, 0, 0.22);
+        flex: 1 1 auto; min-height: 0;
       }
-      .pvp-panel-box { display: flex; flex-direction: column; }
+      .pvp-panel-box { display: flex; flex-direction: column; min-width: 0; }
       .pvp-share-code-card {
-        display: flex; justify-content: space-between; align-items: center;
+        display: flex; justify-content: space-between; align-items: center; gap: var(--s3);
+        flex-wrap: wrap;
         padding: 10px 14px; background: rgba(0, 0, 0, 0.6);
-        border: 2px solid #ffd770; border-radius: 4px; margin-bottom: 8px;
+        border: 2px solid var(--gold); border-radius: var(--radius); margin-bottom: var(--s2);
       }
-      .pvp-share-code-left { display: flex; align-items: center; gap: 8px; }
-      .pvp-share-lbl { font-size: 11px; font-weight: 900; color: #ffd770; }
-      .pvp-share-val { font-size: 18px; font-weight: 900; color: #fff; font-family: monospace; letter-spacing: 2px; }
-      .pvp-share-code-btns { display: flex; gap: 6px; }
+      .pvp-share-code-left { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; min-width: 0; }
+      .pvp-share-lbl { font-size: 10px; font-weight: 900; color: var(--gold); letter-spacing: 0.04em; }
+      .pvp-share-val { font-size: 18px; font-weight: 900; color: #fff; font-family: monospace; letter-spacing: 0.1em; }
+      .pvp-share-code-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+      .pvp-share-qr-btn, .pvp-share-copy-btn {
+        min-height: 38px; padding: 0 14px;
+        font-size: 10.5px; font-weight: 900;
+        border: 0; cursor: pointer; text-shadow: 0 1px 2px #000;
+      }
       .pvp-share-qr-btn {
-        padding: 6px 12px; font-size: 11px; font-weight: 900;
         background: url('/assets/kenney-rpg-ui/buttonLong_brown.png') no-repeat center/100% 100%;
-        border: 0; color: #ffd770; cursor: pointer; text-shadow: 0 1px 2px #000;
+        color: var(--gold);
       }
-      .pvp-share-qr-btn:hover { filter: brightness(1.2); color: #fff; }
       .pvp-share-copy-btn {
-        padding: 6px 14px; font-size: 11px; font-weight: 900;
         background: url('/assets/kenney-rpg-ui/buttonLong_blue.png') no-repeat center/100% 100%;
-        border: 0; color: #fff; cursor: pointer; text-shadow: 0 1px 2px #000;
+        color: #fff;
       }
-      .pvp-share-copy-btn:hover { filter: brightness(1.2); }
-
-      /* QR Code Modal Styles */
-      .pvp-qr-modal-backdrop {
-        position: absolute; inset: 0;
-        background: rgba(0, 0, 0, 0.85);
-        display: flex; align-items: center; justify-content: center;
-        z-index: 200; backdrop-filter: blur(2px);
-      }
-      .pvp-qr-modal-card {
-        width: 380px; max-width: 90vw;
-        background: url('/assets/kenney-rpg-ui/panel_brown.png') repeat;
-        border: 4px solid #3d2817; border-radius: 8px;
-        box-shadow: 0 0 40px rgba(0, 0, 0, 0.95), inset 0 0 20px rgba(0, 0, 0, 0.6);
-        padding: 16px 20px; color: #f7e7ce;
-        display: flex; flex-direction: column; align-items: center; text-align: center;
-        box-sizing: border-box;
-      }
-      .pvp-qr-modal-header {
-        width: 100%; display: flex; justify-content: space-between; align-items: center;
-        margin-bottom: 12px; border-bottom: 1px solid #5a3d24; padding-bottom: 8px;
-      }
-      .pvp-qr-modal-title {
-        margin: 0; font-family: 'Cinzel', serif; font-size: 15px; font-weight: 900;
-        color: #ffd770; letter-spacing: 1px;
-      }
-      .pvp-qr-close-btn {
-        background: url('/assets/kenney-rpg-ui/buttonSquare_brown.png') no-repeat center/100% 100%;
-        border: 0; width: 28px; height: 28px; color: #fca5a5; font-size: 18px; font-weight: 900;
-        cursor: pointer; display: flex; align-items: center; justify-content: center;
-      }
-      .pvp-qr-close-btn:hover { filter: brightness(1.25); color: #fff; }
-      .pvp-qr-modal-body {
-        width: 100%; display: flex; flex-direction: column; align-items: center;
-      }
-      .pvp-qr-svg-wrapper {
-        background: #fdf6e2; padding: 12px; border-radius: 6px;
-        border: 3px solid #3d240f; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-        margin-bottom: 10px; display: flex; align-items: center; justify-content: center;
-      }
-      .pvp-qr-svg-wrapper svg {
-        width: 180px; height: 180px; display: block;
-      }
-      .pvp-qr-code-display {
-        display: flex; align-items: center; gap: 8px;
-        background: url('/assets/kenney-rpg-ui/panelInset_brown.png') repeat;
-        padding: 5px 14px; border-radius: 4px; border: 1px solid #735134;
-        margin-bottom: 8px;
-      }
-      .pvp-qr-code-lbl { font-size: 11px; font-weight: 800; color: #ffd770; }
-      .pvp-qr-code-val { font-size: 16px; font-weight: 900; color: #fff; font-family: monospace; letter-spacing: 1.5px; }
-      .pvp-qr-instructions {
-        font-size: 11px; color: #c4b5a0; margin: 4px 0 10px; line-height: 1.4;
-      }
-      .pvp-qr-link-row {
-        width: 100%; display: flex; gap: 6px;
-      }
-      .pvp-qr-link-input {
-        flex: 1; padding: 6px 8px; font-size: 10.5px;
-        background: rgba(0, 0, 0, 0.6); border: 1px solid #5a3d24; color: #fff;
-        font-family: monospace; border-radius: 3px;
-      }
-      .pvp-qr-copy-link-btn {
-        padding: 6px 12px; font-size: 10.5px; font-weight: 900;
-        background: url('/assets/kenney-rpg-ui/buttonLong_blue.png') no-repeat center/100% 100%;
-        border: 0; color: #fff; cursor: pointer; white-space: nowrap;
-      }
-      .pvp-qr-copy-link-btn:hover { filter: brightness(1.2); }
+      .pvp-share-qr-btn:hover, .pvp-share-copy-btn:hover { filter: brightness(1.2); }
 
       .pvp-panel-title {
-        margin: 0 0 8px; font-family: 'Cinzel', serif; font-size: 13px; font-weight: 900;
-        color: #ffd770; letter-spacing: 1px;
+        margin: 0 0 var(--s2);
+        font-family: 'Cinzel', serif; font-size: 12px; font-weight: 900;
+        color: var(--gold); letter-spacing: 0.06em;
       }
-      .pvp-direct-invite-bar { display: flex; gap: 8px; margin-bottom: 8px; }
+      .pvp-direct-invite-bar { display: flex; gap: var(--s2); margin-bottom: var(--s2); flex-wrap: wrap; }
       .pvp-id-input {
-        flex: 1; max-width: 280px; padding: 8px 12px; font-size: 12px;
-        background: rgba(0, 0, 0, 0.6); border: 1px solid #5a3d24; color: #fff;
+        flex: 1 1 180px; min-width: 0; min-height: 40px; padding: 0 12px;
+        font-size: 12px;
+        background: rgba(0, 0, 0, 0.6); border: 1px solid var(--line); color: #fff;
         font-family: monospace; text-transform: uppercase; border-radius: 4px;
       }
       .pvp-send-id-btn {
-        padding: 8px 16px; font-weight: 900; font-size: 11px;
+        min-height: 40px; padding: 0 16px;
+        font-weight: 900; font-size: 11px;
         background: url('/assets/kenney-rpg-ui/buttonLong_blue.png') no-repeat center/100% 100%;
         border: 0; color: #fff; cursor: pointer;
       }
@@ -1712,147 +1783,344 @@ export class TournamentLobbyUI {
 
       .pvp-friends-container, .pvp-lobbies-container { display: flex; flex-direction: column; gap: 6px; }
       .pvp-friend-card, .pvp-lobby-card {
-        display: flex; justify-content: space-between; align-items: center;
-        padding: 8px 12px; background: rgba(0, 0, 0, 0.45); border: 1px solid #5a3d24;
-        border-radius: 4px;
+        display: flex; justify-content: space-between; align-items: center; gap: var(--s2);
+        padding: 8px 12px; background: rgba(0, 0, 0, 0.45);
+        border: 1px solid var(--line); border-radius: 4px; min-width: 0;
       }
-      .pvp-friend-name, .pvp-lobby-host { font-size: 13px; font-weight: 800; color: #fff; }
-      .pvp-friend-meta, .pvp-lobby-meta { font-size: 10.5px; color: #b89f80; margin-top: 1px; }
+      .pvp-friend-info, .pvp-lobby-info { min-width: 0; }
+      .pvp-friend-name, .pvp-lobby-host { font-size: 12.5px; font-weight: 800; color: #fff; }
+      .pvp-friend-meta, .pvp-lobby-meta { font-size: 10px; color: var(--ink-faint); margin-top: 2px; }
       .pvp-invite-btn, .pvp-join-duel-btn {
-        padding: 6px 16px; font-size: 11px; font-weight: 900;
+        min-height: 38px; padding: 0 16px; flex: 0 0 auto;
+        font-size: 10.5px; font-weight: 900;
         background: url('/assets/kenney-rpg-ui/buttonLong_blue.png') no-repeat center/100% 100%;
         border: 0; color: #fff; cursor: pointer;
       }
       .pvp-invite-btn:hover, .pvp-join-duel-btn:hover { filter: brightness(1.2); }
-      .pvp-empty-list { font-size: 11.5px; color: #94826b; font-style: italic; padding: 12px 0; }
+      .pvp-empty-list { font-size: 11.5px; color: var(--ink-faint); font-style: italic; padding: 12px 0; }
 
+      /* ===================== FOOTER ===================== */
       .pvp-footer {
-        display: flex; justify-content: space-between; align-items: center;
-        padding: 10px 18px; background: rgba(18, 12, 7, 0.85);
-        border-top: 3px solid #5a3d24;
+        display: flex; align-items: center; justify-content: space-between;
+        gap: var(--s3);
+        padding: var(--s2) var(--s4);
+        background: rgba(18, 12, 7, 0.9);
+        border-top: 3px solid var(--line);
+        flex: 0 0 auto; min-width: 0;
       }
-      .pvp-footer-left { display: flex; gap: 8px; }
+      .pvp-footer-left { display: flex; gap: var(--s2); flex: 0 0 auto; min-width: 0; }
+      .pvp-btn-leave, .pvp-btn-practice {
+        min-height: 40px; padding: 0 14px;
+        font-size: 10.5px; font-weight: 800; letter-spacing: 0.02em;
+        border: 0; cursor: pointer; white-space: nowrap;
+      }
       .pvp-btn-leave {
-        padding: 8px 16px; font-size: 11px; font-weight: 800;
         background: url('/assets/kenney-rpg-ui/buttonLong_brown.png') no-repeat center/100% 100%;
-        border: 0; color: #e2cbb0; cursor: pointer;
+        color: #e2cbb0;
       }
-      .pvp-btn-leave:hover { filter: brightness(1.2); color: #fff; }
-
-      /* Practice is a local bout, not a room action: same chrome, quieter. */
       .pvp-btn-practice {
-        padding: 8px 14px; font-size: 10.5px; font-weight: 800;
         background: url('/assets/kenney-rpg-ui/buttonLong_grey.png') no-repeat center/100% 100%;
-        border: 0; color: #e6dcc9; cursor: pointer;
-        letter-spacing: 0.3px;
+        color: #e6dcc9;
       }
-      .pvp-btn-practice:hover { filter: brightness(1.2); color: #fff; }
+      .pvp-btn-leave:hover, .pvp-btn-practice:hover { filter: brightness(1.2); color: #fff; }
 
-      .pvp-footer-right { display: flex; align-items: center; gap: 12px; }
-      .pvp-launch-warning { font-size: 11px; color: #fbbf24; font-weight: 700; }
+      .pvp-footer-right {
+        display: flex; align-items: center; justify-content: flex-end; gap: var(--s3);
+        flex: 1 1 auto; min-width: 0;
+      }
+      .pvp-launch-warning {
+        font-size: 10.5px; color: #fbbf24; font-weight: 700; line-height: 1.35;
+        text-align: right; min-width: 0;
+      }
+      .pvp-footer-actions { display: flex; gap: var(--s2); flex: 0 0 auto; }
 
-      .pvp-btn-ready {
-        width: 180px; height: 42px;
+      .pvp-btn-ready, .pvp-btn-start {
+        min-height: var(--tap); padding: 0 20px;
         background: url('/assets/kenney-rpg-ui/buttonLong_blue.png') no-repeat center/100% 100%;
-        border: 0; color: #fff; font-size: 12px; font-weight: 900; cursor: pointer;
-        text-shadow: 0 1px 2px #000;
+        border: 0; color: #fff; font-size: 11.5px; font-weight: 900;
+        cursor: pointer; text-shadow: 0 1px 2px #000; white-space: nowrap;
       }
       .pvp-btn-ready.is-ready {
         background: url('/assets/kenney-rpg-ui/buttonLong_brown.png') no-repeat center/100% 100%;
         color: #86efac;
       }
-
-      .pvp-btn-start {
-        width: 220px; height: 44px;
-        background: url('/assets/kenney-rpg-ui/buttonLong_blue.png') no-repeat center/100% 100%;
-        border: 0; color: #fff; font-family: 'Cinzel', serif; font-size: 13px; font-weight: 900;
-        cursor: pointer; text-shadow: 0 2px 4px #000;
-      }
+      .pvp-btn-start { font-family: 'Cinzel', serif; min-width: 210px; }
+      .pvp-start-short { display: none; }
       .pvp-btn-start.ready-to-launch {
         filter: drop-shadow(0 0 10px #ffd770) brightness(1.15);
-        animation: pvpPulse 1.2s infinite alternate;
+        animation: pvpPulse 1.6s ease-in-out infinite alternate;
       }
       .pvp-btn-start.disabled, .pvp-btn-start:disabled {
-        opacity: 0.45; cursor: default; filter: grayscale(0.8);
+        opacity: 0.5; cursor: default; filter: grayscale(0.8);
       }
       @keyframes pvpPulse {
-        from { transform: scale(1); filter: drop-shadow(0 0 6px #ffd770); }
-        to { transform: scale(1.02); filter: drop-shadow(0 0 16px #ffd770); }
+        from { filter: drop-shadow(0 0 4px #ffd770); }
+        to { filter: drop-shadow(0 0 14px #ffd770); }
       }
 
       .pvp-toast {
-        position: absolute; bottom: 58px; left: 50%; transform: translateX(-50%) translateY(-8px);
+        position: absolute; bottom: 64px; left: 50%;
+        transform: translateX(-50%) translateY(-8px);
         background: url('/assets/kenney-rpg-ui/panel_brown.png') repeat;
-        border: 2px solid #ffd770; color: #fff; padding: 6px 16px; border-radius: 4px;
+        border: 2px solid var(--gold); color: #fff;
+        padding: 8px 16px; border-radius: 4px;
         font-size: 11px; font-weight: 800; opacity: 0; pointer-events: none;
-        transition: all 0.2s ease; z-index: 50; box-shadow: 0 4px 12px rgba(0,0,0,0.8);
+        transition: opacity 0.2s ease, transform 0.2s ease;
+        z-index: 50; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.8);
+        max-width: calc(100% - 24px); text-align: center;
       }
 
-      /* Responsive: Mobile Landscape & Short Viewports (height <= 560px) */
-      @media (max-height: 560px) {
-        .pvp-modal-shell { max-height: 98vh; max-height: 98dvh; width: 98vw; }
-        .pvp-header { padding: 4px 10px; }
-        .pvp-title { font-size: 13.5px; }
+      /* ===================== QR MODAL ===================== */
+      .pvp-qr-modal-backdrop {
+        position: absolute; inset: 0;
+        background: rgba(0, 0, 0, 0.88);
+        display: flex; align-items: center; justify-content: center;
+        z-index: 200; padding: var(--s3); backdrop-filter: blur(2px);
+      }
+      .pvp-qr-modal-card {
+        width: min(380px, 100%);
+        background: url('/assets/kenney-rpg-ui/panel_brown.png') repeat;
+        border: 4px solid var(--line-strong); border-radius: 8px;
+        box-shadow: 0 0 40px rgba(0, 0, 0, 0.95), inset 0 0 20px rgba(0, 0, 0, 0.6);
+        padding: 16px 20px; color: var(--ink);
+        display: flex; flex-direction: column; align-items: center; text-align: center;
+        max-height: 100%; overflow-y: auto;
+      }
+      .pvp-qr-modal-header {
+        width: 100%; display: flex; justify-content: space-between; align-items: center;
+        margin-bottom: 12px; border-bottom: 1px solid var(--line); padding-bottom: 8px;
+      }
+      .pvp-qr-modal-title {
+        margin: 0; font-family: 'Cinzel', serif; font-size: 15px; font-weight: 900;
+        color: var(--gold); letter-spacing: 0.06em;
+      }
+      .pvp-qr-close-btn {
+        background: url('/assets/kenney-rpg-ui/buttonSquare_brown.png') no-repeat center/100% 100%;
+        border: 0; width: 36px; height: 36px; color: #fca5a5; font-size: 18px; font-weight: 900;
+        cursor: pointer; display: flex; align-items: center; justify-content: center;
+      }
+      .pvp-qr-close-btn:hover { filter: brightness(1.25); color: #fff; }
+      .pvp-qr-modal-body { width: 100%; display: flex; flex-direction: column; align-items: center; }
+      .pvp-qr-svg-wrapper {
+        background: #fdf6e2; padding: 12px; border-radius: 6px;
+        border: 3px solid #3d240f; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        margin-bottom: 10px; display: flex; align-items: center; justify-content: center;
+      }
+      .pvp-qr-svg-wrapper svg { width: min(180px, 42vw); height: auto; display: block; }
+      .pvp-qr-code-display {
+        display: flex; align-items: center; gap: 8px;
+        background: rgba(0, 0, 0, 0.4);
+        padding: 5px 14px; border-radius: 4px; border: 1px solid #735134;
+        margin-bottom: 8px;
+      }
+      .pvp-qr-code-lbl { font-size: 10px; font-weight: 800; color: var(--gold); }
+      .pvp-qr-code-val { font-size: 16px; font-weight: 900; color: #fff; font-family: monospace; letter-spacing: 0.1em; }
+      .pvp-qr-instructions { font-size: 10.5px; color: var(--ink-dim); margin: 4px 0 10px; line-height: 1.45; }
+      .pvp-qr-link-row { width: 100%; display: flex; gap: 6px; }
+      .pvp-qr-link-input {
+        flex: 1 1 auto; min-width: 0; min-height: 38px; padding: 0 8px;
+        font-size: 10.5px;
+        background: rgba(0, 0, 0, 0.6); border: 1px solid var(--line); color: #fff;
+        font-family: monospace; border-radius: 4px;
+      }
+      .pvp-qr-copy-link-btn {
+        min-height: 38px; padding: 0 12px;
+        font-size: 10px; font-weight: 900;
+        background: url('/assets/kenney-rpg-ui/buttonLong_blue.png') no-repeat center/100% 100%;
+        border: 0; color: #fff; cursor: pointer; white-space: nowrap;
+      }
+      .pvp-qr-copy-link-btn:hover { filter: brightness(1.2); }
+
+      /* ===================== RESPONSIVE =====================
+         Tablets and small laptops: the career chip is the first thing to go,
+         because the room code and the close button are the two controls a
+         player needs before anything else. */
+      @media (max-width: 900px) {
         .pvp-subtitle { display: none; }
-        .pvp-qr-btn { padding: 3px 8px; font-size: 9.5px; }
-        .pvp-quick-code-badge { padding: 3px 8px; }
-        .pvp-badge-lbl { font-size: 8.5px; }
-        .pvp-badge-val { font-size: 11px; }
-        .pvp-close-btn { width: 24px; height: 24px; font-size: 15px; }
-        .pvp-quick-join-bar { padding: 3px 10px; gap: 5px; }
-        .pvp-join-lbl { font-size: 9px; }
-        .pvp-join-input { padding: 2px 6px; font-size: 9.5px; width: 130px; }
-        .pvp-join-code-btn { padding: 2px 8px; font-size: 9px; }
-        .pvp-nav-tabs { padding: 3px 10px; gap: 4px; }
-        .pvp-nav-tab { padding: 3px 10px; font-size: 9.5px; }
-        .pvp-format-selector { padding: 2px 10px; }
-        .pvp-fmt-btn { padding: 2px 8px; font-size: 9px; }
-        .pvp-versus-stage { padding: 6px 8px; gap: 6px; grid-template-columns: 1fr 105px 1fr; }
-        .pvp-spectator-bench { gap: 6px; padding: 4px 6px; }
-        .pvp-bench-head { min-width: 0; flex: 1 1 100%; flex-direction: row; gap: 6px; align-items: baseline; }
-        .pvp-bench-title { font-size: 9.5px; }
-        .pvp-bench-sub { font-size: 7.5px; }
-        .pvp-bench-chair { min-height: 26px; font-size: 8.5px; padding: 2px 6px 2px 3px; }
-        .pvp-bench-avatar { width: 20px; height: 20px; }
-        .pvp-team-banner { padding: 3px 6px; }
-        .pvp-banner-title { font-size: 11px; }
-        .pvp-banner-count { font-size: 8.5px; }
-        .pvp-slots-container { gap: 4px; }
-        .pvp-fighter-card { padding: 3px 6px; gap: 6px; }
+        .pvp-career-chip { display: none; }
+        .pvp-versus-stage { grid-template-columns: minmax(0, 1fr) minmax(76px, 104px) minmax(0, 1fr); gap: var(--s2); }
+        .pvp-btn-start { min-width: 170px; }
+      }
+
+      /* Phones, portrait: full-bleed, two columns, primary action full width. */
+      @media (max-width: 720px) {
+        .tournament-lobby-backdrop { padding: 0; }
+        .pvp-modal-shell {
+          width: 100%; max-width: 100%;
+          height: 100dvh; max-height: 100dvh;
+          border-radius: 0; border-width: 0;
+        }
+        .pvp-header { padding: var(--s2) var(--s3); gap: 6px; }
+        .pvp-title { font-size: 13.5px; letter-spacing: 0.05em; }
+        .pvp-header-actions { gap: 6px; }
+        .pvp-qr-btn { min-height: 40px; width: 40px; padding: 0; justify-content: center; }
+        .pvp-qr-text { display: none; }
+        .pvp-quick-code-badge { min-height: 40px; padding: 0 8px; }
+        .pvp-badge-lbl { display: none; }
+        .pvp-close-btn { width: 40px; height: 40px; }
+
+        .pvp-quick-join-bar { padding: 6px var(--s3); }
+        .pvp-join-input { min-height: 40px; }
+        .pvp-join-code-btn { min-height: 40px; padding: 0 14px; }
+
+        .pvp-nav-tabs { padding: 6px var(--s3); gap: 6px; }
+        .pvp-nav-tab { min-height: 40px; padding: 0 8px; font-size: 10px; }
+
+        .pvp-format-selector { padding: 6px var(--s3); gap: var(--s2); }
+        /* The four chips say what they are; the word FORMAT was eating the
+           ~45px that lets 4v4 GUILD WAR stay on screen instead of scrolling. */
+        .pvp-format-label { display: none; }
+        .pvp-fmt-btn { min-height: 38px; font-size: 10px; }
+
+        .pvp-versus-stage {
+          padding: var(--s2) var(--s3);
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+          grid-template-areas: "bench bench" "center center" "red blue";
+          gap: var(--s2);
+        }
+        .pvp-spectator-bench { grid-area: bench; position: static; }
+        .pvp-center-col { grid-area: center; flex-direction: row; justify-content: center; gap: var(--s2); }
+        .pvp-col-red { grid-area: red; }
+        .pvp-col-blue { grid-area: blue; }
+        .pvp-vs-emblem { width: 34px; height: 34px; font-size: 12px; flex: 0 0 auto; }
+        .pvp-switch-team-btn { max-width: none; flex: 1 1 auto; min-height: 40px; }
+        .pvp-balance-badge { display: none; }
+
+        .pvp-team-banner { padding: 4px 8px; min-height: 32px; gap: 6px; }
+        .pvp-banner-title { font-size: 10.5px; }
+        .pvp-banner-count { font-size: 9px; }
+        .pvp-fighter-card { padding: 5px 7px; gap: 7px; min-height: 50px; }
         .pvp-fighter-avatar { width: 38px; height: 38px; }
-        .pvp-pedestal-sprite { height: 40px; }
-        .pvp-fighter-name { font-size: 11px; }
+        .pvp-pedestal-sprite { height: 42px; }
+        .pvp-fighter-name { font-size: 12px; }
         .pvp-class-icon { width: 16px; height: 16px; }
-        .pvp-info-row2 { font-size: 8px; gap: 4px; }
-        .pvp-empty-role-title { font-size: 10px; }
-        .pvp-empty-role-sub { font-size: 8px; }
-        .pvp-avatar-silhouette { font-size: 16px; }
-        .pvp-slot-claim-btn { padding: 3px 6px; font-size: 8.5px; }
-        .pvp-slot-inv-btn { width: 22px; height: 22px; font-size: 10px; }
-        .pvp-center-col { gap: 4px; }
-        .pvp-vs-emblem { width: 34px; height: 34px; font-size: 12px; }
-        .pvp-switch-team-btn { width: 90px; height: 30px; }
-        .pvp-switch-team-btn span { font-size: 7.5px; }
+        .pvp-info-row2 { font-size: 9.5px; gap: 5px; }
+        .pvp-stat-pwr { display: none; }
+        .pvp-badge { font-size: 8.5px; padding: 1px 4px; }
+        .pvp-empty-role-title { font-size: 10.5px; }
+        .pvp-empty-role-sub { display: none; }
+        .pvp-empty-action-group { flex-direction: column; gap: 4px; }
+        .pvp-slot-claim-btn { min-height: 32px; padding: 0 8px; font-size: 9.5px; }
+        /* Inviting lives in the Invite tab; on a two-column phone the seat
+           needs every pixel for the name and the claim action. */
+        .pvp-slot-inv-btn { display: none; }
+
+        .pvp-bench-title { font-size: 10px; }
+        .pvp-bench-chair { min-height: 40px; }
+        .pvp-bench-note { min-height: 40px; }
+
+        .pvp-tab-panel { padding: var(--s3); }
+        .pvp-share-code-card { padding: 8px 10px; }
+        .pvp-share-val { font-size: 16px; }
+
+        /* Primary action full width, status above it, secondary row below. */
+        .pvp-footer {
+          flex-direction: column-reverse; align-items: stretch;
+          gap: 6px; padding: 6px var(--s3) calc(6px + env(safe-area-inset-bottom, 0px));
+        }
+        .pvp-footer-right { flex-direction: column; align-items: stretch; gap: 6px; width: 100%; }
+        .pvp-launch-warning { text-align: center; font-size: 10px; order: -1; }
+        .pvp-footer-actions, .pvp-footer-actions .pvp-btn-ready,
+        .pvp-footer-actions .pvp-btn-start { width: 100%; }
+        .pvp-btn-start, .pvp-btn-ready { min-width: 0; min-height: 46px; font-size: 11.5px; }
+        .pvp-footer-left { width: 100%; }
+        .pvp-btn-leave, .pvp-btn-practice { flex: 1 1 0; min-height: 40px; padding: 0 8px; font-size: 9.5px; }
+      }
+
+      /* Phones, landscape and any short screen: the whole modal must fit the
+         height, so every fixed row is measured and the roster gets the rest. */
+      @media (max-height: 560px) {
+        .tournament-lobby-backdrop { padding: 0; }
+        .pvp-modal-shell {
+          width: 100%; max-width: 100%;
+          height: 100dvh; max-height: 100dvh;
+          border-radius: 0; border-width: 0;
+        }
+        .pvp-header { padding: 4px 10px; gap: 8px; }
+        .pvp-title { font-size: 12.5px; }
+        .pvp-qr-btn { min-height: 32px; padding: 0 9px; font-size: 9.5px; }
+        .pvp-quick-code-badge { min-height: 32px; padding: 0 8px; }
+        .pvp-badge-lbl { font-size: 8.5px; }
+        .pvp-badge-val { font-size: 11.5px; }
+        .pvp-close-btn { width: 32px; height: 32px; font-size: 15px; }
+
+        .pvp-quick-join-bar { padding: 3px 10px; gap: 6px; }
+        .pvp-join-lbl { font-size: 9px; }
+        .pvp-join-input { min-height: 28px; font-size: 10.5px; width: 130px; flex: 0 0 auto; }
+        .pvp-join-code-btn { min-height: 28px; padding: 0 10px; font-size: 9.5px; }
+
+        .pvp-nav-tabs { padding: 3px 10px; gap: 6px; }
+        .pvp-nav-tab { min-height: 30px; font-size: 9.5px; padding: 0 8px; }
+
+        .pvp-format-selector { padding: 3px 10px; gap: 8px; }
+        .pvp-fmt-btn { min-height: 28px; font-size: 9.5px; padding: 0 9px; }
+        .pvp-host-only-note { font-size: 8.5px; }
+
+        .pvp-versus-stage {
+          grid-template-columns: minmax(0, 1fr) minmax(64px, 88px) minmax(0, 1fr);
+          grid-template-areas: none;
+          padding: 6px 10px; gap: 6px;
+        }
+        /* The bench keeps the full width: without this reset the grid-area
+           shorthand above drops the base 1 / -1 span and the bench lands in
+           the first column, shoving Crimson down a row. */
+        .pvp-spectator-bench { grid-area: auto; grid-column: 1 / -1; position: sticky; top: 0; min-height: 40px; padding: 3px 6px; gap: 6px; }
+        .pvp-center-col { grid-area: auto; flex-direction: column; gap: 6px; }
+        .pvp-col-red, .pvp-col-blue { grid-area: auto; }
+        .pvp-bench-title { font-size: 9px; }
+        .pvp-bench-count { font-size: 9px; padding: 1px 5px; }
+        .pvp-bench-chair { min-height: 30px; padding: 0 7px 0 3px; font-size: 9.5px; max-width: 140px; }
+        .pvp-bench-avatar { width: 20px; height: 20px; }
+        .pvp-bench-plus { font-size: 12px; }
+        .pvp-bench-note { min-height: 30px; font-size: 9px; padding: 0 7px; }
+
+        .pvp-team-banner { min-height: 26px; padding: 2px 7px; }
+        .pvp-banner-title { font-size: 10px; }
+        .pvp-banner-count { font-size: 8.5px; }
+        .pvp-slots-container { gap: 5px; }
+        .pvp-fighter-card { min-height: 44px; padding: 3px 7px; gap: 6px; }
+        .pvp-fighter-avatar { width: 34px; height: 34px; }
+        .pvp-pedestal-sprite { height: 36px; }
+        .pvp-fighter-name { font-size: 11px; }
+        .pvp-class-icon { width: 14px; height: 14px; }
+        .pvp-info-row2 { font-size: 8.5px; gap: 5px; }
+        .pvp-kick-btn { width: 24px; height: 24px; font-size: 12px; }
+        .pvp-empty-role-title { font-size: 9.5px; }
+        .pvp-empty-role-sub { display: none; }
+        .pvp-slot-claim-btn { min-height: 28px; font-size: 8.5px; padding: 0 7px; }
+        .pvp-slot-inv-btn { width: 28px; height: 28px; font-size: 11px; }
+        .pvp-vs-emblem { width: 32px; height: 32px; font-size: 11px; }
+        .pvp-switch-team-btn { max-width: 88px; min-height: 34px; }
+        .pvp-switch-team-btn span { font-size: 8.5px; }
         .pvp-switch-team-btn b { font-size: 9px; }
         .pvp-balance-badge { display: none; }
-        .pvp-footer { padding: 4px 10px; }
-        .pvp-btn-leave { padding: 4px 10px; font-size: 9.5px; }
-        .pvp-btn-ready, .pvp-btn-start { width: 135px; height: 32px; font-size: 10px; }
-        .pvp-launch-warning { font-size: 9px; }
+
+        .pvp-footer {
+          flex-direction: row; align-items: center;
+          padding: 4px 10px calc(4px + env(safe-area-inset-bottom, 0px));
+          gap: 8px;
+        }
+        .pvp-footer-left { flex: 0 0 auto; gap: 6px; }
+        .pvp-btn-leave, .pvp-btn-practice { min-height: 34px; padding: 0 10px; font-size: 9px; }
+        .pvp-footer-right { flex-direction: row; align-items: center; gap: 8px; width: auto; flex: 1 1 auto; }
+        .pvp-launch-warning { order: 0; flex: 1 1 auto; font-size: 9px; text-align: center; }
+        .pvp-footer-actions { flex: 0 0 auto; }
+        .pvp-footer-actions .pvp-btn-ready, .pvp-footer-actions .pvp-btn-start { width: auto; }
+        .pvp-btn-ready, .pvp-btn-start { min-height: 36px; font-size: 9.5px; padding: 0 14px; }
+        .pvp-btn-start { min-width: 150px; }
+        .pvp-start-full { display: none; }
+        .pvp-start-short { display: inline; }
       }
 
-      /* Responsive: Mobile Portrait & Narrow Width (width <= 720px) */
-      @media (max-width: 720px) {
-        .pvp-header { flex-wrap: wrap; }
-        .pvp-header-actions { width: 100%; justify-content: space-between; }
-        /* The room code and the QR button are the two things needed to invite;
-           a career chip is the first thing to go when the row runs out. */
-        .pvp-career-chip { display: none; }
-        .pvp-versus-stage { grid-template-columns: 1fr; gap: 8px; }
-        .pvp-center-col { flex-direction: row; justify-content: center; gap: 8px; }
-        .pvp-balance-badge { display: none; }
+      @media (prefers-reduced-motion: reduce) {
+        .pvp-modal-shell *, .pvp-modal-shell *::before, .pvp-modal-shell *::after {
+          animation-duration: 0.001ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.001ms !important;
+        }
       }
-    `;
+    
+`;
     document.head.appendChild(style);
   }
 }

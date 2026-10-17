@@ -361,7 +361,7 @@ test('the lobby shows the Colosseum record and the arena says who dropped', () =
   );
   assert.match(lobbySource, /const record = loadPvpRecord\(\);/);
   assert.match(lobbySource, /pvp-career-chip/);
-  assert.match(lobbySource, /@media \(max-width: 720px\) \{[\s\S]{0,300}\.pvp-career-chip \{ display: none; \}/,
+  assert.match(lobbySource, /@media \(max-width: (?:900|720)px\) \{[\s\S]{0,400}\.pvp-career-chip \{ display: none; \}/,
     'the chip is the first thing to go on a phone header');
   assert.match(networkSource, /onPvpPeerDroppedCb\?\.\(dropped\?\.name/,
     'the name is read before the remote state is deleted');
