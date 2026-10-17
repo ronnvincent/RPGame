@@ -61,7 +61,20 @@
     "test:survive-speed": "node test/survive-and-speed-balance.test.mjs",
     "test:post-boss": "node --test test/post-boss-safety.test.mjs",
     "test:team-lives": "node --test test/global-team-lives.test.mjs",
-    "test:tournament": "node --test test/tournament-pvp.test.mjs"
+    "test:tournament": "node --test test/tournament-pvp.test.mjs",
+    "test:pvp-lobby": "node test/pvp-lobby-ready.test.mjs",
+    "test:pvp-scoring": "node test/pvp-scoring.test.mjs",
+    "test:pvp-scoreboard": "node test/pvp-scoreboard-ui.test.mjs",
+    "test:pvp-practice": "node --test test/pvp-practice.test.mjs",
+    "test:pvp-damage": "node test/pvp-damage.test.mjs",
+    "test:pvp-career": "node --test test/pvp-career.test.mjs",
+    "test:pvp-spectator": "node --test test/pvp-spectator.test.mjs",
+    "test:pvp-seats": "node test/pvp-lobby-seats.test.mjs",
+    "test:pvp-seats-ui": "node --test test/pvp-lobby-seats-ui.test.mjs test/pvp-lobby-mobile-ui.test.mjs test/pvp-results-spectator-ui.test.mjs",
+    "test:pvp-lobby-mobile": "node --test test/pvp-lobby-mobile-ui.test.mjs",
+    "test:pvp-results": "node --test test/pvp-results.test.mjs",
+    "test:pvp-rematch": "node test/pvp-rematch.test.mjs",
+    "test:pvp-leaderboard": "node test/pvp-leaderboard.test.mjs"
   },
   "keywords": [],
   "author": "",
@@ -70,6 +83,7 @@
   "devDependencies": {
     "@canvasengine/compiler": "2.2.0",
     "@vitejs/plugin-vue": "^6.0.8",
+    "linkedom": "^0.18.13",
     "path-browserify": "^1.0.1",
     "vite": "^8.2.1"
   },

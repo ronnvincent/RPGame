@@ -2,6 +2,7 @@ import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { PlayerState } from './SideViewEngine';
 import { ItemData } from '../items/ItemDatabase';
 import { getGameApiBase } from '../config/RuntimeConfig';
+import { loadPvpRecord } from '../pvp/PvpRecord';
 
 interface RpgSaveDB extends DBSchema {
   saveData: {
@@ -54,6 +55,11 @@ export class SaveManager {
         equipment: playerState.equipment,
         skillLevels: playerState.skillLevels,
         skillPoints: playerState.skillPoints,
+        // The Colosseum record is small and lives in localStorage, but a
+        // browser wipe or a new device used to reset a career to zero. The
+        // cloud save is where gold already survives; the record belongs there
+        // beside it, and the PvP leaderboard reads it from this field.
+        pvp: loadPvpRecord(),
         // Written into the save as well as into its own column. The column can
         // only ever hold what the newest client sent; the save is what every
         // client has always written, so a figure kept here can be read back for

@@ -399,5 +399,27 @@ export class AudioManager {
   public playCoin() {
     this.playSFX('/assets/audio/sfx/magicdrop.ogg', 0.2);
   }
+
+  /**
+   * Arena crowd.
+   *
+   * The Colosseum is supposed to sound like a Colosseum, and a recorded crowd
+   * is the one thing the combat mix cannot synthesise. Intensity picks the
+   * take: a full roar for a match-winning moment, a shorter bark for a kill.
+   * The source files are already in the audio pack, so this costs no new asset.
+   */
+  public playCrowdCheer(intensity: number = 1) {
+    if (!this.soundEnabled) return;
+    const level = Math.max(0.2, Math.min(1, intensity));
+    const maxDuration = level > 0.9 ? 2.2 : level > 0.6 ? 1.4 : 0.9;
+    const pitch = 1.08 - level * 0.12;
+    this.playSFX('/assets/audio/sfx/cheer-crowd.ogg', 0.1 + level * 0.12, pitch, maxDuration);
+  }
+
+  /** A shorter, brighter reaction for a round swing. */
+  public playCrowdGasp() {
+    if (!this.soundEnabled) return;
+    this.playSFX('/assets/audio/sfx/cheer.ogg', 0.12, 1.12, 0.8);
+  }
 }
 export const audio = new AudioManager();

@@ -456,23 +456,46 @@ app.post('/api/save', authenticateRequest, async (req, res) => {
  */
 app.get('/api/leaderboard', async (req, res) => {
   const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 25));
-  // Two boards, one endpoint: the rows are identical and only the ordering
-  // differs, so splitting them would duplicate everything for one ORDER BY.
+  // Three boards, one endpoint: the rows are nearly identical and only the
+  // ordering (and the figure shown) differs.
   const byLevel = req.query.sort === 'level';
+  const byPvp = req.query.sort === 'pvp';
 
   if (!HAS_DB) {
     // Same rule as the SQL: the save is the source of truth for level and class.
     const levelOf = (u) => Number(u.save_data?.playerState?.level) || u.power_level || 1;
     const powerOf = (u) => u.power || Number(u.save_data?.playerState?.power) || 0;
     const classOf = (u) => u.save_data?.playerState?.characterClass?.name || u.power_class || null;
+    const pvpOf = (u) => {
+      const p = u.save_data?.playerState?.pvp || {};
+      return {
+        wins: Math.max(0, Number(p.wins) || 0),
+        matches: Math.max(0, Number(p.matches) || 0),
+        bestStreak: Math.max(0, Number(p.bestStreak) || 0),
+      };
+    };
 
-    const rows = [...memUsers.values()]
-      .filter((u) => Boolean(u.save_data))
-      .sort((a, b) => byLevel
-        ? levelOf(b) - levelOf(a) || powerOf(b) - powerOf(a)
-        : powerOf(b) - powerOf(a) || levelOf(b) - levelOf(a))
+    let pool = [...memUsers.values()].filter((u) => Boolean(u.save_data));
+    if (byPvp) pool = pool.filter((u) => pvpOf(u).matches > 0);
+
+    const rows = pool
+      .sort((a, b) => byPvp
+        ? pvpOf(b).wins - pvpOf(a).wins
+          || pvpOf(b).bestStreak - pvpOf(a).bestStreak
+          || pvpOf(b).matches - pvpOf(a).matches
+        : byLevel
+          ? levelOf(b) - levelOf(a) || powerOf(b) - powerOf(a)
+          : powerOf(b) - powerOf(a) || levelOf(b) - levelOf(a))
       .slice(0, limit)
-      .map((u, i) => ({ rank: i + 1, name: u.username, shortId: u.short_id, power: powerOf(u), className: classOf(u), level: levelOf(u) }));
+      .map((u, i) => ({
+        rank: i + 1,
+        name: u.username,
+        shortId: u.short_id,
+        power: powerOf(u),
+        className: classOf(u),
+        level: levelOf(u),
+        ...pvpOf(u),
+      }));
     return res.json({ success: true, entries: rows });
   }
 
@@ -490,19 +513,27 @@ app.get('/api/leaderboard', async (req, res) => {
       short_id,
       COALESCE(NULLIF(power, 0), NULLIF(save_data->'playerState'->>'power', '')::int, 0) AS power,
       COALESCE(save_data->'playerState'->'characterClass'->>'name', power_class) AS power_class,
-      COALESCE(NULLIF(save_data->'playerState'->>'level', '')::int, NULLIF(power_level, 0), 1) AS power_level
+      COALESCE(NULLIF(save_data->'playerState'->>'level', '')::int, NULLIF(power_level, 0), 1) AS power_level,
+      COALESCE(NULLIF(save_data->'playerState'->'pvp'->>'wins', '')::int, 0) AS pvp_wins,
+      COALESCE(NULLIF(save_data->'playerState'->'pvp'->>'matches', '')::int, 0) AS pvp_matches,
+      COALESCE(NULLIF(save_data->'playerState'->'pvp'->>'bestStreak', '')::int, 0) AS pvp_best_streak
     `;
 
     const result = await pool.query(
-      byLevel
-        // Anyone with a save has a level worth ranking, whether or not they
-        // have opened the game since power existed.
-        ? `SELECT ${columns} FROM users WHERE save_data IS NOT NULL ORDER BY power_level DESC, power DESC LIMIT $1`
-        // Everyone with a save appears, ranked by power, with those who have
-        // not opened the game since power existed sorted last. Filtering them
-        // out entirely is what made a populated game look empty - showing them
-        // with no figure at least says what is actually true about them.
-        : `SELECT ${columns} FROM users WHERE save_data IS NOT NULL ORDER BY power DESC, power_level DESC LIMIT $1`,
+      byPvp
+        // Only fighters appear: a board of zeros says nothing about anyone.
+        ? `SELECT ${columns} FROM users WHERE save_data IS NOT NULL
+             AND COALESCE(NULLIF(save_data->'playerState'->'pvp'->>'matches', '')::int, 0) > 0
+             ORDER BY pvp_wins DESC, pvp_best_streak DESC, pvp_matches DESC LIMIT $1`
+        : byLevel
+          // Anyone with a save has a level worth ranking, whether or not they
+          // have opened the game since power existed.
+          ? `SELECT ${columns} FROM users WHERE save_data IS NOT NULL ORDER BY power_level DESC, power DESC LIMIT $1`
+          // Everyone with a save appears, ranked by power, with those who have
+          // not opened the game since power existed sorted last. Filtering them
+          // out entirely is what made a populated game look empty - showing them
+          // with no figure at least says what is actually true about them.
+          : `SELECT ${columns} FROM users WHERE save_data IS NOT NULL ORDER BY power DESC, power_level DESC LIMIT $1`,
       [limit]
     );
     res.json({
@@ -510,6 +541,7 @@ app.get('/api/leaderboard', async (req, res) => {
       entries: result.rows.map((r, i) => ({
         rank: i + 1, name: r.username, shortId: r.short_id,
         power: r.power, className: r.power_class, level: r.power_level,
+        wins: r.pvp_wins, matches: r.pvp_matches, bestStreak: r.pvp_best_streak,
       })),
     });
   } catch (err) {
@@ -658,12 +690,196 @@ function generateShortRoomCode(proposedCode) {
  * Full lobby snapshot. This is the single payload the lobby UI renders from -
  * slots, readiness, who the host is, and which dungeon is queued.
  */
+
+// ----------------- PVP SEATS -----------------
+// The Colosseum lobby is a set of seats, not a queue. Every member owns one
+// seat: a numbered position on Crimson, on Azure, or on the spectator bench
+// that sits above both teams. A player may take any free seat, and picking an
+// occupied one swaps the two players rather than refusing - the lobby is meant
+// to be rearranged by the people in it.
+const PVP_SPECTATOR_SEAT = 'spectator';
+
+function pvpTeamSize(room) {
+  return room && room.pvpFormat === '4v4' ? 4
+    : room && room.pvpFormat === '3v3' ? 3
+      : room && room.pvpFormat === '2v2' ? 2
+        : 1;
+}
+
+function pvpMaxPlayers(room) {
+  return pvpTeamSize(room) * 2;
+}
+
+function isPvpSpectator(room, actorId) {
+  return Boolean(room && room.pvpSpectators && room.pvpSpectators[actorId]);
+}
+
+/** Which seat a member holds: a team id, or the bench. */
+function pvpSeatOf(room, actorId) {
+  if (isPvpSpectator(room, actorId)) return PVP_SPECTATOR_SEAT;
+  return (room && room.pvpTeams && room.pvpTeams[actorId]) || 'red';
+}
+
+/**
+ * How many bench chairs exist.
+ *
+ * Always room for two, never fewer than a team, and enough to hold everyone a
+ * format change has just displaced from a team seat. A shrinking format must
+ * not make players disappear from the lobby.
+ */
+function pvpBenchSize(room) {
+  const seated = room && Array.isArray(room.members) ? room.members.length : 0;
+  return Math.max(2, pvpTeamSize(room), seated - pvpTeamSize(room) * 2);
+}
+
+function pvpSeatCapacity(room, seat) {
+  return seat === PVP_SPECTATOR_SEAT ? pvpBenchSize(room) : pvpTeamSize(room);
+}
+
+function pvpSeatOccupants(room, seat) {
+  if (!room || !Array.isArray(room.members)) return [];
+  return room.members.filter(id => pvpSeatOf(room, id) === seat);
+}
+
+function pvpSetSeat(room, actorId, seat) {
+  if (!room.pvpTeams) room.pvpTeams = {};
+  if (!room.pvpSpectators) room.pvpSpectators = {};
+  if (seat === PVP_SPECTATOR_SEAT) {
+    room.pvpSpectators[actorId] = true;
+    delete room.pvpTeams[actorId];
+  } else {
+    delete room.pvpSpectators[actorId];
+    room.pvpTeams[actorId] = seat === 'blue' ? 'blue' : 'red';
+  }
+}
+
+function pvpFirstFreeSeat(room, seat) {
+  const used = new Set();
+  for (const id of pvpSeatOccupants(room, seat)) {
+    const slot = room.pvpSlots && room.pvpSlots[id];
+    if (Number.isInteger(slot)) used.add(slot);
+  }
+  for (let i = 0; i < pvpSeatCapacity(room, seat); i++) {
+    if (!used.has(i)) return i;
+  }
+  return -1;
+}
+
+/**
+ * Give every member exactly one valid seat.
+ *
+ * Runs before every lobby snapshot. Members who joined before slots existed,
+ * whose team was never recorded, or whose format shrank under them are folded
+ * into the first free chair instead of vanishing from the grid.
+ */
+function ensurePvpSeats(room) {
+  if (!room || !room.isPvp || !Array.isArray(room.members)) return;
+  if (!room.pvpTeams) room.pvpTeams = {};
+  if (!room.pvpSlots) room.pvpSlots = {};
+  if (!room.pvpSpectators) room.pvpSpectators = {};
+
+  const memberSet = new Set(room.members);
+  for (const map of [room.pvpTeams, room.pvpSlots, room.pvpSpectators]) {
+    for (const key of Object.keys(map)) {
+      if (!memberSet.has(key)) delete map[key];
+    }
+  }
+
+  // A member with no recorded side joins the smaller one; that is the same
+  // balance rule the join path uses.
+  for (const id of room.members) {
+    if (isPvpSpectator(room, id) || room.pvpTeams[id]) continue;
+    const red = pvpSeatOccupants(room, 'red').filter(x => x !== id).length;
+    const blue = pvpSeatOccupants(room, 'blue').filter(x => x !== id).length;
+    room.pvpTeams[id] = blue < red ? 'blue' : 'red';
+  }
+
+  for (const seat of ['red', 'blue', PVP_SPECTATOR_SEAT]) {
+    const occupants = pvpSeatOccupants(room, seat);
+    const capacity = pvpSeatCapacity(room, seat);
+    const used = new Set();
+    const waiting = [];
+
+    for (const id of occupants) {
+      const slot = room.pvpSlots[id];
+      if (Number.isInteger(slot) && slot >= 0 && slot < capacity && !used.has(slot)) {
+        used.add(slot);
+      } else {
+        waiting.push(id);
+      }
+    }
+    for (const id of waiting) {
+      let slot = 0;
+      while (used.has(slot) && slot < capacity) slot += 1;
+      if (slot >= capacity) {
+        // No room in this seat: overflow to the bench, which always has space.
+        if (seat !== PVP_SPECTATOR_SEAT) {
+          pvpSetSeat(room, id, PVP_SPECTATOR_SEAT);
+          const benchUsed = new Set(pvpSeatOccupants(room, PVP_SPECTATOR_SEAT)
+            .map(other => room.pvpSlots[other])
+            .filter(value => Number.isInteger(value)));
+          let benchSlot = 0;
+          while (benchUsed.has(benchSlot) && benchSlot < pvpBenchSize(room)) benchSlot += 1;
+          room.pvpSlots[id] = benchSlot;
+        }
+        continue;
+      }
+      room.pvpSlots[id] = slot;
+      used.add(slot);
+    }
+  }
+}
+
+/**
+ * Move a member to a seat, swapping with whoever is already sitting there.
+ * Returns an error string when the seat cannot be reached at all.
+ */
+function pvpTakeSeat(room, actorId, seat, slot) {
+  if (!room || !room.members.includes(actorId)) return 'You are not in this lobby.';
+  ensurePvpSeats(room);
+  const targetSeat = seat === PVP_SPECTATOR_SEAT ? PVP_SPECTATOR_SEAT : seat === 'blue' ? 'blue' : 'red';
+  const capacity = pvpSeatCapacity(room, targetSeat);
+
+  let targetSlot = Number.isInteger(slot) ? slot : -1;
+  if (targetSlot < 0 || targetSlot >= capacity) {
+    targetSlot = pvpFirstFreeSeat(room, targetSeat);
+  }
+  if (targetSlot < 0) {
+    return targetSeat === PVP_SPECTATOR_SEAT
+      ? 'The spectator bench is full.'
+      : `${targetSeat === 'red' ? 'Crimson' : 'Azure'} has no open seat.`;
+  }
+
+  const mySeat = pvpSeatOf(room, actorId);
+  const mySlot = room.pvpSlots[actorId];
+  const occupant = room.members.find(id =>
+    id !== actorId && pvpSeatOf(room, id) === targetSeat && room.pvpSlots[id] === targetSlot);
+  const freeInTarget = pvpSeatOccupants(room, targetSeat).filter(id => id !== actorId).length < capacity;
+
+  if (!occupant && !freeInTarget && mySeat !== targetSeat) {
+    return `${targetSeat === 'red' ? 'Crimson' : 'Azure'} is full.`;
+  }
+
+  if (occupant) {
+    // Swap: the other player inherits exactly where we were sitting.
+    pvpSetSeat(room, occupant, mySeat);
+    room.pvpSlots[occupant] = Number.isInteger(mySlot) ? mySlot : pvpFirstFreeSeat(room, mySeat);
+  }
+
+  pvpSetSeat(room, actorId, targetSeat);
+  room.pvpSlots[actorId] = targetSlot;
+
+  // A swap can leave a team short and the bench long; normalise so every
+  // member is still in a real chair.
+  ensurePvpSeats(room);
+  return null;
+}
+
 function buildLobbyState(roomId) {
   const room = rooms[roomId];
   if (!room) return null;
-  const maxCap = room.isPvp
-    ? (room.pvpFormat === '4v4' ? 8 : room.pvpFormat === '3v3' ? 6 : room.pvpFormat === '2v2' ? 4 : 2)
-    : MAX_PARTY;
+  const maxCap = room.isPvp ? pvpMaxPlayers(room) : MAX_PARTY;
+  if (room.isPvp) ensurePvpSeats(room);
   return {
     roomId,
     roomCode: room.code || roomId,
@@ -673,6 +889,8 @@ function buildLobbyState(roomId) {
     isPvp: Boolean(room.isPvp),
     pvpFormat: room.pvpFormat || '1v1',
     pvpTeams: room.pvpTeams || {},
+    pvpSeats: room.pvpSlots || {},
+    pvpBenchSize: room.isPvp ? pvpBenchSize(room) : 0,
     members: room.members.map(actorId => {
       const rec = playersByActor[actorId] || {};
       return {
@@ -686,7 +904,13 @@ function buildLobbyState(roomId) {
         classId: rec.classId || null,
         level: rec.level || 1,
         power: rec.power || 0,
-        team: (room.pvpTeams && room.pvpTeams[actorId]) || 'red',
+        // A bench seat is not a colour. Reporting 'red' for a spectator made
+        // every client-side fallback put the watcher in a fighting slot.
+        team: room.isPvp
+          ? (pvpSeatOf(room, actorId) === PVP_SPECTATOR_SEAT ? undefined : pvpSeatOf(room, actorId))
+          : ((room.pvpTeams && room.pvpTeams[actorId]) || 'red'),
+        seat: room.isPvp ? pvpSeatOf(room, actorId) : ((room.pvpTeams && room.pvpTeams[actorId]) || 'red'),
+        slot: room.isPvp && room.pvpSlots ? room.pvpSlots[actorId] : undefined,
         ready: actorId === room.hostActorId ? true : !!room.ready[actorId],
         isHost: actorId === room.hostActorId,
         online: !!rec.socketId
@@ -702,6 +926,86 @@ function broadcastLobby(roomId) {
     const sid = socketIdForActor(actorId);
     if (sid) io.to(sid).emit('lobby_state', state);
   }
+}
+
+// ----------------- PVP SCORING -----------------
+// A Colosseum match is best-of-three, exactly like the client's
+// TournamentMatch. The server used to treat the first team wipe as the end of
+// the whole match, so one death in round 1 sent everyone home with the series
+// at 1-0. Round wins are now tracked here, and only a team reaching
+// `roundsToWin` ends the match.
+const PVP_DEFAULT_ROUNDS_TO_WIN = 2;
+// A settled round clears the downed set; a duplicate downed packet from the
+// same death would otherwise re-fill it and score the round twice. A real
+// death cannot happen again for at least the round-end banner plus countdown,
+// so a short cooldown rejects only replayed packets.
+const PVP_ROUND_SETTLE_COOLDOWN_MS = 3000;
+
+function pvpRoomState(room) {
+  if (!room.pvpScore || !Number.isInteger(room.pvpScore.red) || !Number.isInteger(room.pvpScore.blue)) {
+    room.pvpScore = { red: 0, blue: 0 };
+  }
+  if (!Number.isInteger(room.pvpRound) || room.pvpRound < 1) room.pvpRound = 1;
+  if (!Number.isInteger(room.roundsToWin) || room.roundsToWin < 1) {
+    room.roundsToWin = PVP_DEFAULT_ROUNDS_TO_WIN;
+  }
+  if (!(room.downedPlayers instanceof Set)) room.downedPlayers = new Set();
+  return room;
+}
+
+function pvpTeamOf(room, actorId) {
+  // A spectator has no team. Returning the host/blue fallback would put them
+  // on a side for wipe detection, and a bench player who can never be downed
+  // would make that team impossible to wipe.
+  if (isPvpSpectator(room, actorId)) return null;
+  return (room.pvpTeams && room.pvpTeams[actorId]) || (actorId === room.hostActorId ? 'red' : 'blue');
+}
+
+/** Members who are actually fighting: the rematch vote's electorate. */
+function pvpFighters(room) {
+  return room && Array.isArray(room.members)
+    ? room.members.filter(id => !isPvpSpectator(room, id))
+    : [];
+}
+
+function settlePvpRound(roomId, winner, reason, meta = {}) {
+  const room = rooms[roomId];
+  if (!room || !room.isPvp) return null;
+  pvpRoomState(room);
+
+  const roundNumber = room.pvpRound;
+  room.pvpRound = roundNumber + 1;
+  if (winner === 'red' || winner === 'blue') room.pvpScore[winner] += 1;
+  room.downedPlayers = new Set();
+  room.pvpSettledAt = Date.now();
+
+  const matchEnded = room.pvpScore.red >= room.roundsToWin || room.pvpScore.blue >= room.roundsToWin;
+  const payload = {
+    roundNumber,
+    winner,
+    reason,
+    redScore: room.pvpScore.red,
+    blueScore: room.pvpScore.blue,
+    roundsToWin: room.roundsToWin,
+    isMatchEnd: matchEnded,
+  };
+  io.to(roomId).emit('pvp_round_result', payload);
+
+  if (matchEnded) {
+    const winningTeam = room.pvpScore.red >= room.roundsToWin ? 'red' : 'blue';
+    io.to(roomId).emit('pvp_match_result', {
+      winningTeam,
+      losingTeam: winningTeam === 'red' ? 'blue' : 'red',
+      redScore: room.pvpScore.red,
+      blueScore: room.pvpScore.blue,
+      mvpActorId: meta.mvpActorId || null,
+      mvpName: meta.mvpName || null,
+    });
+    console.log(`[PVP] match ${roomId} ended ${room.pvpScore.red}-${room.pvpScore.blue} for ${winningTeam}`);
+  } else {
+    console.log(`[PVP] round ${roundNumber} of ${roomId} won by ${winner} (${room.pvpScore.red}-${room.pvpScore.blue})`);
+  }
+  return payload;
 }
 
 // ----------------- FRIENDS -----------------
@@ -886,12 +1190,106 @@ function applyProfile(p, data) {
   if (Number.isFinite(data.power)) p.power = Math.min(2_000_000_000, Math.max(0, Math.round(data.power)));
 }
 
+/**
+ * Put a Colosseum room back to its pre-match state.
+ *
+ * Shared by the first launch and the rematch, because a second match that
+ * inherits the previous score is not a match - it is a continuation, and the
+ * client draws its round pips straight from this board.
+ */
+function resetPvpMatchState(room) {
+  pvpRoomState(room);
+  room.pvpScore = { red: 0, blue: 0 };
+  room.pvpRound = 1;
+  room.roundsToWin = PVP_DEFAULT_ROUNDS_TO_WIN;
+  room.downedPlayers = new Set();
+  room.pvpSettledAt = 0;
+  room.rematchVotes = new Set();
+}
+
+/** Everyone in the room is sent into the arena, with the same roster. */
+function emitRoomDungeonStart(roomId) {
+  const room = rooms[roomId];
+  if (!room) return false;
+  room.started = true;
+  room.rematchVotes = new Set();
+  room.members.forEach(actorId => {
+    const member = playersByActor[actorId];
+    if (!member) return;
+    member.sceneId = room.dungeonId;
+    member.isTownMode = false;
+  });
+  const state = buildLobbyState(roomId);
+  const roster = state ? state.members.filter(m => m.seat !== PVP_SPECTATOR_SEAT) : [];
+  room.members.forEach(actorId => {
+    const sid = socketIdForActor(actorId);
+    if (!sid) return;
+    const spectating = isPvpSpectator(room, actorId);
+    io.to(sid).emit('dungeon_start', {
+      roomId,
+      dungeonId: room.dungeonId,
+      isPvp: Boolean(room.isPvp),
+      pvpFormat: room.pvpFormat || '1v1',
+      pvpTeams: room.pvpTeams || {},
+      players: roster,
+      // The bench watches the bout; it is never deployed onto a team.
+      isSpectator: spectating,
+      isHost: actorId === room.hostActorId,
+    });
+  });
+  return true;
+}
+
+function roomPvpTeamCounts(room) {
+  let red = 0;
+  let blue = 0;
+  for (const id of room.members) {
+    // A spectator is not a fighter: counting them would let a bench player
+    // stand in for an empty team and start a match nobody is in.
+    if (isPvpSpectator(room, id)) continue;
+    if ((room.pvpTeams && room.pvpTeams[id]) === 'blue') blue++;
+    else red++;
+  }
+  return { red, blue };
+}
+
+function broadcastPvpRematchState(roomId) {
+  const room = rooms[roomId];
+  if (!room || !room.isPvp) return;
+  const voters = pvpFighters(room);
+  const votes = room.rematchVotes instanceof Set
+    ? voters.filter(id => room.rematchVotes.has(id)).length
+    : 0;
+  io.to(roomId).emit('pvp_rematch_state', {
+    votes,
+    total: voters.length,
+    needed: voters.length,
+    started: false,
+  });
+}
+
+/**
+ * Start the next bout in the same room. Validated like a first launch, but the
+ * vote already stands in for the ready-up handshake.
+ */
+function startPvpRematch(roomId) {
+  const room = rooms[roomId];
+  if (!room || !room.isPvp) return false;
+  if (room.members.length < 2) return false;
+  const { red, blue } = roomPvpTeamCounts(room);
+  if (red < 1 || blue < 1) return false;
+  resetPvpMatchState(room);
+  room.started = false;
+  return emitRoomDungeonStart(roomId);
+}
+
 function removeMemberFromRoom(actorId, roomId) {
   const room = rooms[roomId];
   if (!room) return;
 
   room.members = room.members.filter(id => id !== actorId);
   if (room.ready) delete room.ready[actorId];
+  if (room.rematchVotes instanceof Set) room.rematchVotes.delete(actorId);
 
   const rec = playersByActor[actorId];
   if (rec) {
@@ -916,6 +1314,21 @@ function removeMemberFromRoom(actorId, roomId) {
   }
   broadcastRoles(roomId);
   broadcastLobby(roomId);
+
+  // A rematch vote that was one short can become unanimous when the hold-out
+  // leaves. Without this the room would sit on the card until the host quit.
+  if (room.isPvp && room.started && room.rematchVotes instanceof Set && room.rematchVotes.size > 0) {
+    const voters = pvpFighters(room);
+    const unanimous = voters.length >= 2 && voters.every(id => room.rematchVotes.has(id));
+    if (unanimous) {
+      if (!startPvpRematch(roomId)) {
+        room.rematchVotes.clear();
+        broadcastPvpRematchState(roomId);
+      }
+    } else {
+      broadcastPvpRematchState(roomId);
+    }
+  }
 }
 
 function socketToken(socket) {
@@ -946,6 +1359,7 @@ const RATE_LIMITS = {
   quick_join: [6, 5_000],
   lobby_ready: [12, 5_000],
   lobby_start: [5, 5_000],
+  pvp_rematch_vote: [6, 5_000],
   kick_member: [6, 5_000],
   profile_update: [20, 5_000],
   player_move: [40, 1000],
@@ -1707,6 +2121,7 @@ io.on('connection', (socket) => {
     if (!p || !p.room) return;
     const room = rooms[p.room];
     if (!room || room.started) return;
+    if (p.actorId === room.hostActorId) return;
     room.ready[p.actorId] = !!data.ready;
     broadcastLobby(p.room);
   });
@@ -1725,55 +2140,70 @@ io.on('connection', (socket) => {
       socket.emit('lobby_error', { msg: 'Only the party leader can start.' });
       return;
     }
-    if (!room.isPvp) {
-      const notReady = room.members.filter(actorId => actorId !== room.hostActorId && !room.ready[actorId]);
-      if (notReady.length > 0) {
-        socket.emit('lobby_error', { msg: 'Not everyone is ready yet.' });
-        return;
-      }
+    // Ready-up is the challengers' handshake, so it is enforced for the
+    // Colosseum too. This used to be skipped for PvP and every member was
+    // force-marked ready, which let the host launch while the newcomer was
+    // still reading the room code.
+    const notReady = room.members.filter(actorId =>
+      actorId !== room.hostActorId && !isPvpSpectator(room, actorId) && !room.ready[actorId]);
+    if (notReady.length > 0) {
+      socket.emit('lobby_error', { msg: 'Waiting for every challenger to ready up.' });
+      return;
     }
 
     if (room.isPvp) {
-      room.members.forEach(mid => {
-        if (!room.ready) room.ready = {};
-        room.ready[mid] = true;
-      });
-      let redCount = 0;
-      let blueCount = 0;
-      for (const mid of room.members) {
-        if ((room.pvpTeams && room.pvpTeams[mid]) === 'blue') blueCount++;
-        else redCount++;
-      }
-      if (redCount < 1 || blueCount < 1) {
+      const { red, blue } = roomPvpTeamCounts(room);
+      if (red < 1 || blue < 1) {
         socket.emit('lobby_error', { msg: 'Colosseum battles require at least 1 player on Crimson (Red) and 1 on Azure (Blue)!' });
         return;
       }
-      room.downedPlayers = new Set();
+      // Fresh scoreboard for this match. Rounds are settled server-side so a
+      // single wipe cannot end a best-of-three.
+      resetPvpMatchState(room);
     }
 
-    room.started = true;
-    room.members.forEach(actorId => {
-      const member = playersByActor[actorId];
-      if (!member) return;
-      member.sceneId = room.dungeonId;
-      member.isTownMode = false;
-    });
-    const roster = buildLobbyState(p.room).members;
-    room.members.forEach(actorId => {
-      const sid = socketIdForActor(actorId);
-      if (sid) {
-        io.to(sid).emit('dungeon_start', {
-          roomId: p.room,
-          dungeonId: room.dungeonId,
-          isPvp: Boolean(room.isPvp),
-          pvpFormat: room.pvpFormat || '1v1',
-          pvpTeams: room.pvpTeams || {},
-          players: roster,
-          isHost: actorId === room.hostActorId
-        });
-      }
-    });
+    emitRoomDungeonStart(p.room);
     console.log(`[LOBBY] ${p.name} started ${p.room} with ${room.members.length} player(s)`);
+  });
+
+  // Rematch after a finished Colosseum bout. One vote per member; the room
+  // relaunches by itself the moment everyone has voted, using the same
+  // dungeon_start path as a first launch so clients need no special case.
+  socket.on('pvp_rematch_vote', () => {
+    const p = players[socket.id];
+    if (!p || !p.room) return;
+    const room = rooms[p.room];
+    if (!room || !room.isPvp || !room.started) return;
+    if (!room.members.includes(p.actorId)) return;
+
+    if (!(room.rematchVotes instanceof Set)) room.rematchVotes = new Set();
+    const already = room.rematchVotes.has(p.actorId);
+    room.rematchVotes.add(p.actorId);
+    if (!already) broadcastPvpRematchState(p.room);
+
+    const voters = pvpFighters(room);
+    const unanimous = voters.length >= 2 && voters.every(id => room.rematchVotes.has(id));
+    if (!unanimous) return;
+    if (!startPvpRematch(p.room)) {
+      room.rematchVotes.clear();
+      socket.emit('lobby_error', { msg: 'A rematch needs at least one fighter on each team.' });
+      broadcastPvpRematchState(p.room);
+    }
+  });
+
+  // The results card asks for the current tally when it opens, so it shows the
+  // room's real headcount instead of whatever the last lobby snapshot said.
+  socket.on('pvp_rematch_status', () => {
+    const p = players[socket.id];
+    if (!p || !p.room) return;
+    const room = rooms[p.room];
+    if (!room || !room.isPvp) return;
+    socket.emit('pvp_rematch_state', {
+      votes: room.rematchVotes instanceof Set ? room.rematchVotes.size : 0,
+      total: room.members.length,
+      needed: room.members.length,
+      started: false,
+    });
   });
 
   // Deliberate exit. Without this a partied player has no way back to solo.
@@ -1931,23 +2361,40 @@ io.on('connection', (socket) => {
     // with lobby_start once everyone has readied up.
     if (!alreadyMember) {
       room.members.push(p.actorId);
+      // A newcomer always arrives un-ready. The host's launch gate reads this
+      // map, so carrying a stale `true` over from an earlier seat would skip
+      // the ready-up the challenger was just asked for.
+      if (room.ready) delete room.ready[p.actorId];
       if (room.isPvp) {
+        // Seating is per chair, never per head-count. The old counter treated
+        // a bench spectator as a Crimson fighter (they have no team entry),
+        // and it never checked that the chair it picked was free. A newcomer
+        // could then land on top of somebody - or, worse, be folded onto a
+        // side that already had a full roster.
         if (!room.pvpTeams) room.pvpTeams = {};
-        const maxPerTeam = room.pvpFormat === '4v4' ? 4 : room.pvpFormat === '3v3' ? 3 : room.pvpFormat === '2v2' ? 2 : 1;
-        let redCount = 0;
-        let blueCount = 0;
-        for (const mid of room.members) {
-          if (mid === p.actorId) continue;
-          if (room.pvpTeams[mid] === 'blue') blueCount++;
-          else redCount++;
+        if (!room.pvpSlots) room.pvpSlots = {};
+        if (!room.pvpSpectators) room.pvpSpectators = {};
+        // Park the newcomer on the bench first. Until they have a seat,
+        // pvpSeatOf() would default them to Crimson and every head-count
+        // (including the "is this team full?" check) would be one too high.
+        pvpSetSeat(room, p.actorId, PVP_SPECTATOR_SEAT);
+        room.pvpSlots[p.actorId] = Math.max(0, pvpFirstFreeSeat(room, PVP_SPECTATOR_SEAT));
+        ensurePvpSeats(room);
+
+        const redSlots = pvpSeatOccupants(room, 'red').length;
+        const blueSlots = pvpSeatOccupants(room, 'blue').length;
+        const redSeat = pvpFirstFreeSeat(room, 'red');
+        const blueSeat = pvpFirstFreeSeat(room, 'blue');
+        const preferRed = redSeat >= 0 && (blueSeat < 0 || redSlots <= blueSlots);
+        if (preferRed) {
+          pvpSetSeat(room, p.actorId, 'red');
+          room.pvpSlots[p.actorId] = redSeat;
+        } else if (blueSeat >= 0) {
+          pvpSetSeat(room, p.actorId, 'blue');
+          room.pvpSlots[p.actorId] = blueSeat;
         }
-        if (blueCount < redCount && blueCount < maxPerTeam) {
-          room.pvpTeams[p.actorId] = 'blue';
-        } else if (redCount < maxPerTeam) {
-          room.pvpTeams[p.actorId] = 'red';
-        } else {
-          room.pvpTeams[p.actorId] = 'blue';
-        }
+        // Both sides are full: the bench seat assigned above is final. The
+        // people already seated - including the watchers - keep their chairs.
       }
     }
     p.room = targetRoomId;
@@ -1959,7 +2406,45 @@ io.on('connection', (socket) => {
     broadcastLobby(targetRoomId);
   });
 
-  // Switch PvP Team (Mobile Legends style Red vs Blue)
+  // Take a Colosseum seat: a team position, or a chair on the spectator bench.
+  //
+  // Free will is the point. Any free seat is claimable, and picking a seat
+  // somebody else holds swaps the two players - including the bench - instead
+  // of refusing. The old handler only knew teams, so tapping the second or
+  // third slot in your own team did nothing and everyone ended up wherever
+  // the server had appended them.
+  socket.on('pvp_pick_seat', (data = {}) => {
+    const p = players[socket.id];
+    if (!p || !p.room) return;
+    const room = rooms[p.room];
+    if (!room || !room.isPvp || room.started) return;
+
+    const seat = data.seat === PVP_SPECTATOR_SEAT ? PVP_SPECTATOR_SEAT
+      : data.seat === 'blue' ? 'blue'
+        : data.seat === 'red' ? 'red' : null;
+    if (!seat) return;
+    const slot = Number.isInteger(data.slot) ? data.slot : undefined;
+
+    const before = new Map(room.members.map(id => [id, pvpSeatOf(room, id)]));
+    const error = pvpTakeSeat(room, p.actorId, seat, slot);
+    if (error) {
+      socket.emit('lobby_error', { msg: error });
+      return;
+    }
+    console.log(`[PVP] ${p.name} took ${seat}${Number.isInteger(data.slot) ? ' #' + data.slot : ''} in ${p.room}`);
+
+    // Only a side change invalidates readiness. Re-ordering chairs inside
+    // your own team is exactly the freedom this lobby is for, and making the
+    // room re-ready over a chair swap would punish using it.
+    for (const id of room.members) {
+      if (id === room.hostActorId) continue;
+      if (pvpSeatOf(room, id) !== before.get(id)) room.ready[id] = false;
+    }
+    broadcastLobby(p.room);
+  });
+
+  // Switch PvP Team (Mobile Legends style Red vs Blue). Kept as the label the
+  // switch button uses; it now lands on the first free seat of that side.
   socket.on('pvp_switch_team', (data = {}) => {
     const p = players[socket.id];
     if (!p || !p.room) return;
@@ -1967,25 +2452,16 @@ io.on('connection', (socket) => {
     if (!room || !room.isPvp || room.started) return;
 
     const targetTeam = data.targetTeam === 'blue' ? 'blue' : 'red';
-    const currentTeam = (room.pvpTeams && room.pvpTeams[p.actorId]) || 'red';
+    const currentTeam = pvpSeatOf(room, p.actorId);
     if (targetTeam === currentTeam) return;
 
-    const maxPerTeam = room.pvpFormat === '4v4' ? 4 : room.pvpFormat === '3v3' ? 3 : room.pvpFormat === '2v2' ? 2 : 1;
-    let targetCount = 0;
-    for (const mid of room.members) {
-      if (mid === p.actorId) continue;
-      if (((room.pvpTeams && room.pvpTeams[mid]) || 'red') === targetTeam) {
-        targetCount++;
-      }
-    }
-    if (targetCount >= maxPerTeam) {
-      socket.emit('lobby_error', { msg: `${targetTeam === 'red' ? 'Crimson (Red)' : 'Azure (Blue)'} team is full!` });
+    const error = pvpTakeSeat(room, p.actorId, targetTeam, undefined);
+    if (error) {
+      socket.emit('lobby_error', { msg: error });
       return;
     }
-
-    if (!room.pvpTeams) room.pvpTeams = {};
-    room.pvpTeams[p.actorId] = targetTeam;
     console.log(`[PVP] ${p.name} switched to team ${targetTeam} in ${p.room}`);
+    if (p.actorId !== room.hostActorId) room.ready[p.actorId] = false;
     broadcastLobby(p.room);
   });
 
@@ -2013,8 +2489,10 @@ io.on('connection', (socket) => {
     const room = rooms[p.room];
     if (!room) return;
     if (room.dungeonId === 'tournament_colosseum') room.isPvp = true;
-    if (!room.started) room.started = true;
-    if (!room.isPvp) return;
+    // Combat only exists after the host's lobby_start. A stray hit packet used
+    // to flip `started` on for the staging room, which then rejected every
+    // later joiner and closed the lobby for everyone already seated.
+    if (!room.isPvp || !room.started) return;
     if (!safeId(data.targetActorId) && !safeId(data.targetSocketId)) return;
 
     const targetPlayer = (data.targetSocketId && players[data.targetSocketId])
@@ -2022,9 +2500,15 @@ io.on('connection', (socket) => {
     if (!targetPlayer || targetPlayer.room !== p.room) return;
 
     const targetActorId = targetPlayer.actorId;
-    const attackerTeam = (room.pvpTeams && room.pvpTeams[p.actorId]) || (p.actorId === room.hostActorId ? 'red' : 'blue');
-    const targetTeam = (room.pvpTeams && room.pvpTeams[targetActorId]) || (targetActorId === room.hostActorId ? 'red' : 'blue');
-    if (attackerTeam === targetTeam && room.members.length > 2) return; // Strict No Friendly Fire (allow 1v1 edge case)
+    // The seat is the only truth. A bench spectator has no team at all, and a
+    // missing entry used to be guessed as "red for the host, blue otherwise",
+    // which let the wrong colour count as an enemy.
+    const attackerTeam = pvpTeamOf(room, p.actorId);
+    const targetTeam = pvpTeamOf(room, targetActorId);
+    if (!attackerTeam || !targetTeam) return;
+    // No friendly fire, including the old 1v1 exception. Two players on the
+    // same colour are allies no matter how many people are in the room.
+    if (attackerTeam === targetTeam) return;
 
     const dmg = Math.max(1, Math.min(999999, Math.round(Number(data.damage) || 1)));
     const targetSid = targetPlayer.socketId || socketIdForActor(targetActorId);
@@ -2042,8 +2526,12 @@ io.on('connection', (socket) => {
       });
     }
 
-    // Broadcast visual effect to spectators & other combatants in the arena
-    socket.to(p.room).emit('pvp_hit_effect', {
+    // Broadcast visual effect to spectators & other combatants in the arena.
+    // The target is excluded: it already applied the authoritative hit (with
+    // its own defence and shield), so echoing the raw number at it painted a
+    // second, larger damage number over the first one.
+    const effect = socket.to(p.room);
+    (targetSid ? effect.except(targetSid) : effect).emit('pvp_hit_effect', {
       attackerActorId: p.actorId,
       targetActorId,
       damage: dmg,
@@ -2060,14 +2548,18 @@ io.on('connection', (socket) => {
     const room = rooms[p.room];
     if (!room) return;
     if (room.dungeonId === 'tournament_colosseum') room.isPvp = true;
-    if (!room.started) room.started = true;
-    if (!room.isPvp) return;
+    if (!room.isPvp || !room.started) return;
 
-    if (!room.downedPlayers) room.downedPlayers = new Set();
-    room.downedPlayers.add(p.actorId);
-
-    const downedTeam = (room.pvpTeams && room.pvpTeams[p.actorId]) || 'red';
+    pvpRoomState(room);
+    const downedTeam = pvpTeamOf(room, p.actorId);
+    // Only a fighter can fall. A bench spectator has no team; without this
+    // guard their (empty) team matched every other spectator and a stray
+    // packet could settle a round nobody fought.
+    if (!downedTeam) return;
     const killerTeam = downedTeam === 'red' ? 'blue' : 'red';
+
+    // Replays of the death that just ended a round must not score it twice.
+    if (Date.now() - (room.pvpSettledAt || 0) < PVP_ROUND_SETTLE_COOLDOWN_MS) return;
 
     io.to(p.room).emit('pvp_kill_feed', {
       downedActorId: p.actorId,
@@ -2077,17 +2569,54 @@ io.on('connection', (socket) => {
       killerName: data.killerName || 'The Colosseum',
       killerTeam,
     });
+    room.downedPlayers.add(p.actorId);
 
-    const teamMembers = room.members.filter(mid => ((room.pvpTeams && room.pvpTeams[mid]) || 'red') === downedTeam);
+    const teamMembers = room.members.filter(mid => pvpTeamOf(room, mid) === downedTeam);
     const allDowned = teamMembers.length > 0 && teamMembers.every(mid => room.downedPlayers.has(mid));
-    if (allDowned) {
-      io.to(p.room).emit('pvp_match_result', {
-        winningTeam: killerTeam,
-        losingTeam: downedTeam,
-        mvpActorId: data.killerActorId || p.actorId,
-        mvpName: data.killerName || p.name,
-      });
+    if (!allDowned) return;
+
+    // A team wipe ends the ROUND. The match only ends once a team reaches
+    // `roundsToWin`; previously this emitted pvp_match_result immediately,
+    // which threw everyone back to town after the first kill of a best-of-three.
+    settlePvpRound(p.room, killerTeam, 'wipe', {
+      mvpActorId: data.killerActorId || p.actorId,
+      mvpName: data.killerName || p.name,
+    });
+  });
+
+  // Host-reported round result. Team wipes are already settled by the server
+  // above, so this exists for rounds that end on the clock: the host owns the
+  // round simulation, and its scoreboard is mirrored here for every client.
+  socket.on('pvp_round_report', (data = {}) => {
+    const p = players[socket.id];
+    if (!p || !p.room) return;
+    const room = rooms[p.room];
+    if (!room || !room.isPvp || !room.started) return;
+    if (p.actorId !== room.hostActorId) return;
+    if (!['red', 'blue', 'draw'].includes(data.winner)) return;
+    if (!Number.isInteger(data.roundNumber) || data.roundNumber < 1 || data.roundNumber > 10000) return;
+    const reason = ['wipe', 'health_lead', 'sudden_death'].includes(data.reason) ? data.reason : 'health_lead';
+
+    pvpRoomState(room);
+    // Only the round in play may be settled. A report that arrives after the
+    // server already resolved this round (a wipe, or a duplicate report) is a
+    // replay of an old result and must not award another point.
+    if (data.roundNumber !== room.pvpRound) return;
+
+    // A wipe is verified against the deaths the server itself saw. A host
+    // whose local model mistook a stale health bar for a kill cannot award a
+    // round; the real pvp_player_downed packets settle it instead.
+    if (reason === 'wipe') {
+      const losingTeam = data.winner === 'red' ? 'blue' : data.winner === 'blue' ? 'red' : null;
+      if (!losingTeam) return;
+      const losingMembers = room.members.filter(mid => pvpTeamOf(room, mid) === losingTeam);
+      if (!losingMembers.length || !losingMembers.every(mid => room.downedPlayers.has(mid))) return;
     }
+
+    settlePvpRound(p.room, data.winner, reason, {
+      mvpActorId: data.mvpActorId,
+      mvpName: data.mvpName,
+    });
   });
 
   // A client that just (re)joined asks the host for a complete state snapshot.
@@ -2130,6 +2659,18 @@ io.on('connection', (socket) => {
     const requesterId = data.requesterId;
     const requester = requesterId && players[requesterId];
     if (!requester || requester.room !== p.room || requester.actorId === p.actorId) return;
+    // A snapshot is how a (re)joining guest learns whether it is walking into
+    // a live match. PvP rooms therefore stamp the server's own room state:
+    // the host's client cannot make a staging lobby look like a running match,
+    // and a genuine reconnect still arrives labelled as one.
+    const pvpMeta = room.isPvp
+      ? {
+          ...(room.started && data.isPvpMatch === true ? { isPvpMatch: true, tournamentMode: true } : {}),
+          arenaTheme: room.dungeonId,
+          pvpTeams: room.pvpTeams || {},
+          pvpFormat: room.pvpFormat || '1v1',
+        }
+      : {};
     io.to(requesterId).emit('full_sync', {
       protocolVersion: RUN_SYNC_PROTOCOL_VERSION,
       requesterId,
@@ -2139,6 +2680,7 @@ io.on('connection', (socket) => {
       enemies: data.enemies,
       ...(runState ? { runState } : {}),
       ...(encounterSnapshot ? { encounterSnapshot } : {}),
+      ...pvpMeta,
     });
   });
 
@@ -2399,6 +2941,23 @@ io.on('connection', (socket) => {
     const p = players[socket.id];
     const lineId = typeof data.lineId === 'string' ? data.lineId.slice(0, 16) : '';
     if (!p || !p.room || !/^[a-z]+$/.test(lineId)) return;
+    const room = rooms[p.room];
+
+    // In a live Colosseum bout the quick-chat wheel is a team channel. The
+    // enemy reading "regroup" or "careful" as it is typed turns a tactical
+    // callout into a warning for the other side.
+    if (room && room.isPvp && room.started) {
+      const team = pvpTeamOf(room, p.actorId);
+      for (const memberId of room.members) {
+        if (pvpTeamOf(room, memberId) !== team) continue;
+        const sid = socketIdForActor(memberId);
+        if (sid && sid !== socket.id) {
+          io.to(sid).emit('remote_party_chat', { socketId: socket.id, lineId, team });
+        }
+      }
+      return;
+    }
+
     socket.to(p.room).emit('remote_party_chat', { socketId: socket.id, lineId });
   });
 
@@ -2452,6 +3011,9 @@ io.on('connection', (socket) => {
     socket.to(p.room).emit('remote_player_move', {
       socketId: socket.id,
       actorId: p.actorId,
+      // Movement relayed from a co-op room also carries a team, so clients
+      // need the room's own mode to tell a duel from a dungeon crawl.
+      isPvp: Boolean(room.isPvp),
       team: (room.pvpTeams && room.pvpTeams[p.actorId]) || (p.actorId === room.hostActorId ? 'red' : 'blue'),
       classId,
       name: p.name,

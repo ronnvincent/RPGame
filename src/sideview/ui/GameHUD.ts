@@ -497,6 +497,18 @@ export class GameHUD {
         touch-action: manipulation;
       }
 
+      /* Colosseum: the bout owns the frame. These widgets describe dungeon runs
+         and a town economy; leaving them up over a duel is chrome with
+         nothing to say. Health, mana, skills and the ally rail stay. */
+      .hud-pvp .mini-quest-tracker,
+      .hud-pvp #team-lives-badge,
+      .hud-pvp .currency-stack,
+      .hud-pvp .start-run-top-btn,
+      .hud-pvp .dungeon-run-status,
+      .hud-pvp #dungeon-wave-banner .wave-mobs-left {
+        display: none !important;
+      }
+
       /* Top Left: Player Status with Authentic Kenney Sprite Frame */
       .hud-top-left {
         position: absolute;
@@ -512,7 +524,7 @@ export class GameHUD {
 
       .player-status-panel {
         position: relative;
-        /* Clean minimalist pixel-art dark obsidian panel with crisp gold rim */
+  /* Clean minimalist pixel-art dark obsidian panel with crisp gold rim */
         background: rgba(14, 16, 22, 0.94);
         border: 1px solid rgba(212, 175, 55, 0.45);
         border-radius: 4px;
@@ -4831,6 +4843,20 @@ export class GameHUD {
     this.patchDungeonContextAction();
   }
 
+  /**
+   * Colosseum layout.
+   *
+   * A duel runs on one screen with its own clock and scoreboard, so the
+   * dungeon furniture - quest tracker, run relic rail, team lives, wave
+   * counter and the currency wallet - is describing a mode the player is not
+   * in. Hiding it during the bout gives the arena the whole frame and leaves
+   * the combat HUD (health, mana, skills, ally rail) untouched.
+   */
+  public setPvpMode(active: boolean): void {
+    this.container.classList.toggle('hud-pvp', active);
+    if (active) this.closePanels();
+  }
+
   public showToast(message: string) {
     const toast = this.hudNode('hud-toast-banner');
     if (!toast) return;
@@ -5115,11 +5141,15 @@ export class GameHUD {
     } else if (this.engine.inTournamentMode && waveTitle && waveMobs) {
       const match = this.engine.tournamentMatch;
       const format = match ? match.config.format.toUpperCase() : 'PVP';
-      const round = match ? `Round ${match.currentRound} / ${match.config.roundsToWin * 2 - 1}` : 'Match';
-      waveTitle.textContent = `COLOSSEUM - ${format} (${round})`;
+      // The round and the clock are on the arena scoreboard over the canvas;
+      // repeating them here is what made the top of the screen read as two
+      // competing notifications.
+      waveTitle.textContent = `COLOSSEUM - ${format} BEST OF ${match ? match.config.roundsToWin * 2 - 1 : 3}`;
       const aliveGladiators = this.engine.enemies.filter(e => !e.isDead).length;
-      const scoreStr = match ? `[RED] ${match.redScore} - ${match.blueScore} [BLUE] | ` : '';
-      waveMobs.textContent = `${scoreStr}Gladiators: ${aliveGladiators}`;
+      // The round score lives on the arena scoreboard drawn over the canvas;
+      // repeating it here in a second, differently-styled strip is what made
+      // the top of the screen look like two competing notifications.
+      waveMobs.textContent = `Gladiators standing: ${aliveGladiators}`;
     }
 
     const leaveBtn = this.hudNode('leave-dungeon-btn');
@@ -5696,7 +5726,9 @@ export class GameHUD {
     const overlay = this.container.querySelector('#downed-overlay') as HTMLElement;
     if (!overlay || !this.engine) return;
     const p = this.engine.player;
-    if (!p.downed) {
+    // A spectator is not waiting to be rescued: the bleed-out overlay belongs
+    // to a PvE run, and showing it over the arena would hide the fight.
+    if (!p.downed || this.engine.pvpSpectating || this.engine.pvpObserver) {
       overlay.classList.remove('is-down');
       return;
     }

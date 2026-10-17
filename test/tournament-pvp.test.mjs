@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   TournamentMatch,
   calculatePvpDamage,
   applyPvpCrowdControl,
   getNormalizedPvpBaseHp,
   PVP_DAMAGE_MULTIPLIER,
+  PVP_ROUND_DURATION_SEC,
   PVP_MAX_CC_DURATION_SEC,
   TOURNAMENT_FORMAT_TEAM_SIZES,
 } from '../src/sideview/pvp/TournamentSystem.ts';
@@ -24,6 +26,42 @@ test('tournament team sizes match formats (1v1, 2v2, 3v3, 4v4)', () => {
     const blue = match.fighters.filter(f => f.team === 'blue');
     assert.equal(red.length, TOURNAMENT_FORMAT_TEAM_SIZES[fmt]);
     assert.equal(blue.length, TOURNAMENT_FORMAT_TEAM_SIZES[fmt]);
+  }
+});
+
+test('a round lasts three minutes, and every new round gets the full clock back', () => {
+  assert.equal(PVP_ROUND_DURATION_SEC, 180, 'a Colosseum round is 3 minutes, not 90 seconds');
+
+  const match = new TournamentMatch({ format: '1v1' });
+  assert.equal(match.config.roundDurationSec, PVP_ROUND_DURATION_SEC,
+    'the default match config must take the shared round length');
+  assert.equal(match.roundTimeRemaining, PVP_ROUND_DURATION_SEC);
+
+  match.setupTeams('TestHero', 'warrior', '1v1');
+  match.startMatch();
+  match.update(3.1);
+  match.roundTimeRemaining = 12;
+  match.startRoundCountdown();
+  assert.equal(match.roundTimeRemaining, PVP_ROUND_DURATION_SEC,
+    'round 2 must not inherit the previous round\'s clock');
+
+  // An explicit override is still honoured - the constant is the default, not
+  // a straitjacket for tests or custom modes.
+  const speedy = new TournamentMatch({ format: '1v1', roundDurationSec: 45 });
+  assert.equal(speedy.roundTimeRemaining, 45);
+});
+
+test('the game creates matches with the shared three-minute round length', () => {
+  const gameSource = readFileSync(
+    new URL('../src/sideview/SideViewGame.ts', import.meta.url),
+    'utf8',
+  );
+  const calls = gameSource.match(/new TournamentMatch\(\{[\s\S]{0,220}?\}\)/g) || [];
+  assert.equal(calls.length, 2, 'lobby launch and direct start both build a match');
+  for (const call of calls) {
+    assert.match(call, /roundDurationSec: PVP_ROUND_DURATION_SEC/,
+      'hard-coding 90 again is how the two entry points drift apart');
+    assert.doesNotMatch(call, /roundDurationSec: 90\b/);
   }
 });
 
@@ -138,9 +176,10 @@ test('tournament match flow manages round wipes, scoring, and champion coronatio
   assert.equal(match.redScore, 0);
   assert.equal(match.blueScore, 0);
 
-  // Countdown elapses
+  // Countdown elapses, then the round runs past its opening grace window.
   match.update(3.1);
   assert.equal(match.status, 'active');
+  match.update(1);
 
   // Blue player wiped
   const blue = match.fighters.find(f => f.team === 'blue');
@@ -158,6 +197,7 @@ test('tournament match flow manages round wipes, scoring, and champion coronatio
   match.startRoundCountdown();
   match.update(3.1);
   assert.equal(match.status, 'active');
+  match.update(1);
 
   // Blue wiped again in Round 2
   const blue2 = match.fighters.find(f => f.team === 'blue');
@@ -169,6 +209,66 @@ test('tournament match flow manages round wipes, scoring, and champion coronatio
   assert.equal(match.redScore, 2);
   assert.equal(match.matchWinner, 'red');
   assert.equal(match.bannerText, 'CHAMPION OF THE ARENA!');
+});
+
+test('a round win is announced as a round, never as the match', () => {
+  const match = new TournamentMatch({ format: '1v1', roundsToWin: 2, roundDurationSec: 90 });
+  match.setupTeams('TestHero', 'warrior', '1v1');
+  match.startMatch();
+  match.update(3.1);
+  match.update(1);
+
+  const blue = match.fighters.find(f => f.team === 'blue');
+  blue.currentHp = 0;
+  blue.isAlive = false;
+  match.update(0.1);
+
+  assert.equal(match.status, 'round_end');
+  assert.match(match.bannerText, /^ROUND 1 - CRIMSON WINS$/);
+  assert.doesNotMatch(match.bannerText, /VICTORY|CHAMPION/);
+  assert.match(match.bannerSubtext, /first to 2 rounds/);
+  assert.equal(match.matchWinner, null);
+});
+
+test('each settled round reports its scoreboard once and never ends the match early', () => {
+  const match = new TournamentMatch({ format: '1v1', roundsToWin: 2, roundDurationSec: 90 });
+  match.setupTeams('TestHero', 'warrior', '1v1');
+  const reported = [];
+  match.onRoundResolved = record => reported.push({ ...record });
+  match.startMatch();
+  match.update(3.1);
+  match.update(1); // clear the opening wipe grace
+
+  const blue = match.fighters.find(f => f.team === 'blue');
+  blue.currentHp = 0;
+  blue.isAlive = false;
+  match.update(0.1);
+
+  assert.equal(reported.length, 1, 'one round settles once');
+  assert.equal(reported[0].winner, 'red');
+  assert.equal(reported[0].reason, 'wipe');
+  assert.equal(reported[0].redScore, 1);
+  assert.equal(reported[0].blueScore, 0);
+  assert.equal(match.status, 'round_end', 'a wipe ends the round, not the match');
+  assert.equal(match.matchWinner, null);
+
+  // A clock-expired round reaches the same hook. Red is left healthier, so
+  // the health lead settles round 2 and the series.
+  match.currentRound = 2;
+  match.startRoundCountdown();
+  match.update(3.1);
+  match.update(1);
+  const blue2 = match.fighters.find(f => f.team === 'blue');
+  blue2.currentHp = Math.round(blue2.maxHp * 0.2);
+  match.roundTimeRemaining = 0;
+  match.update(0.1);
+  assert.equal(reported.length, 2);
+  assert.equal(reported[1].roundNumber, 2);
+  assert.equal(reported[1].reason, 'health_lead');
+  assert.equal(reported[1].winner, 'red');
+  assert.equal(reported[1].redScore, 2);
+  assert.equal(match.status, 'match_end');
+  assert.equal(match.matchWinner, 'red');
 });
 
 test('tournament_arena map is registered with 7 Gothicvania parallax layers and proper grounding', () => {
