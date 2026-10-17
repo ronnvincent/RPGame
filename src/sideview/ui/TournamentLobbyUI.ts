@@ -129,6 +129,9 @@ export class TournamentLobbyUI {
       if (network.isHost && state.members && state.members.length > 1) {
         network.broadcastPvpHandshake('tournament_colosseum', this.currentFormat, 'lobby');
       }
+      if (!network.isHost && network.room) {
+        network.sendReady(true);
+      }
       if (state.started) {
         this.close();
       } else {
@@ -417,6 +420,7 @@ export class TournamentLobbyUI {
 
   private startTournament(): void {
     audio.playLevelUp();
+    network.sendReady(true);
     network.broadcastPvpHandshake('tournament_colosseum', this.currentFormat, 'match');
     network.startMatch();
   }

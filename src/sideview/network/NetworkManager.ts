@@ -403,6 +403,7 @@ export class NetworkManager {
   private onPvpKillFeedCb: ((data: any) => void) | null = null;
   private onPvpMatchResultCb: ((data: any) => void) | null = null;
   private onPvpHandshakeCb: ((data: { theme: string; format: string; phase: 'lobby' | 'match' }) => void) | null = null;
+  private processedPvpHits: Set<string> = new Set();
   private cachedLobbies: Map<string, any> = new Map();
 
   constructor() {
@@ -697,6 +698,63 @@ export class NetworkManager {
         this.onPvpHandshakeCb?.({ theme, format, phase });
         return;
       }
+
+      // Intercept PVP combat relay fallback
+      if (data?.kind === 'downed' && typeof data?.itemName === 'string' && data.itemName.startsWith('PVPHIT:')) {
+        const parts = data.itemName.split(':');
+        const isCrit = parts[1] === '1';
+        const skillName = parts[2] !== 'hit' ? parts[2] : undefined;
+        const hitId = parts[3] || '';
+        const damage = typeof data.amount === 'number' ? data.amount : 1;
+        const mySid = this.socket?.id;
+
+        if (hitId && this.processedPvpHits.has(hitId)) return;
+        if (hitId) {
+          this.processedPvpHits.add(hitId);
+          setTimeout(() => this.processedPvpHits.delete(hitId), 6000);
+        }
+
+        const isForMe = data.targetSocketId ? data.targetSocketId === mySid : true;
+        if (isForMe) {
+          this.onPvpHitReceivedCb?.({
+            attackerActorId: data.socketId,
+            attackerName: data.casterName || 'Opponent',
+            attackerTeam: 'opp',
+            damage,
+            isCrit,
+            skillName,
+            hitX: 0,
+            hitY: 0,
+            hitId,
+          });
+        } else {
+          this.onPvpHitEffectCb?.({
+            attackerActorId: data.socketId,
+            targetActorId: data.targetSocketId || '',
+            damage,
+            isCrit,
+            hitX: 0,
+            hitY: 0,
+          });
+        }
+        return;
+      }
+
+      if (data?.kind === 'downed' && typeof data?.itemName === 'string' && data.itemName.startsWith('PVPDOWNED:')) {
+        const parts = data.itemName.split(':');
+        const killerActorId = parts[1] || undefined;
+        const killerName = parts[2] || undefined;
+        this.onPvpKillFeedCb?.({
+          downedActorId: data.socketId,
+          downedName: data.casterName || 'Warrior',
+          downedTeam: 'red',
+          killerActorId,
+          killerName,
+          killerTeam: 'blue',
+        });
+        return;
+      }
+
       this.onPartySupportCb?.(data);
     });
 
@@ -739,6 +797,12 @@ export class NetworkManager {
     });
 
     this.socket.on('pvp_hit_received', (data) => {
+      const hitId = data?.hitId;
+      if (hitId && this.processedPvpHits.has(hitId)) return;
+      if (hitId) {
+        this.processedPvpHits.add(hitId);
+        setTimeout(() => this.processedPvpHits.delete(hitId), 6000);
+      }
       this.onPvpHitReceivedCb?.(data);
     });
 
@@ -1145,6 +1209,7 @@ export class NetworkManager {
   }
 
   public sendPvpAttackHit(payload: {
+    targetSocketId?: string;
     targetActorId: string;
     damage: number;
     isCrit?: boolean;
@@ -1152,11 +1217,32 @@ export class NetworkManager {
     hitX: number;
     hitY: number;
   }) {
-    this.socket?.emit('pvp_attack_hit', payload);
+    const hitId = `hit_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+    this.processedPvpHits.add(hitId);
+    setTimeout(() => this.processedPvpHits.delete(hitId), 6000);
+
+    // Primary: direct pvp_attack_hit
+    this.socket?.emit('pvp_attack_hit', { ...payload, hitId });
+
+    // Fallback: guaranteed party_support broadcast on any server version
+    if (this.room) {
+      this.socket?.emit('party_support', {
+        kind: 'downed',
+        amount: Math.max(1, Math.min(100000, Math.round(payload.damage))),
+        targetSocketId: payload.targetSocketId,
+        itemName: `PVPHIT:${payload.isCrit ? 1 : 0}:${(payload.skillName || 'hit').slice(0, 16)}:${hitId}`,
+      });
+    }
   }
 
   public sendPvpPlayerDowned(killerActorId?: string, killerName?: string) {
     this.socket?.emit('pvp_player_downed', { killerActorId, killerName });
+    if (this.room) {
+      this.socket?.emit('party_support', {
+        kind: 'downed',
+        itemName: `PVPDOWNED:${(killerActorId || '').slice(0, 24)}:${(killerName || '').slice(0, 24)}`,
+      });
+    }
   }
 
   public onPvpLobbyList(cb: (lobbies: any[]) => void) {

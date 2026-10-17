@@ -6114,7 +6114,10 @@ export class SideViewEngine {
 
         // Overhead HP bar in PvP
         if (isPvp) {
-          const rHpPct = typeof remoteP.hpPct === 'number' ? Math.max(0, Math.min(1, remoteP.hpPct)) : (remoteP.downed ? 0 : 1);
+          const normHp = typeof remoteP.hpPct === 'number'
+            ? (remoteP.hpPct > 1 ? remoteP.hpPct / 100 : remoteP.hpPct)
+            : (remoteP.downed ? 0 : 1);
+          const rHpPct = Math.max(0, Math.min(1, normHp));
           const barW = 44;
           const barH = 5;
           const barX = remoteP.x - barW / 2;
@@ -6524,7 +6527,10 @@ export class SideViewEngine {
       if (remote) {
         fighter.x = remote.x;
         fighter.isAlive = !remote.downed && (remote.hpPct === undefined || remote.hpPct > 0);
-        fighter.currentHp = remote.hpPct !== undefined ? Math.round(remote.hpPct * fighter.maxHp) : (remote.downed ? 0 : fighter.maxHp);
+        const normPct = remote.hpPct !== undefined
+          ? (remote.hpPct > 1 ? remote.hpPct / 100 : remote.hpPct)
+          : (remote.downed ? 0 : 1);
+        fighter.currentHp = Math.round(Math.max(0, Math.min(1, normPct)) * fighter.maxHp);
       }
     }
 
@@ -6577,7 +6583,23 @@ export class SideViewEngine {
     this.particles.playVfx('hit_spark', remoteP.x, remoteP.y + this.groundY - 15, { facing: this.player.facing });
     audio.playHit(isCrit);
 
+    // Optimistic local update on remote fighter so attacker immediately sees HP bar drop
+    if (this.tournamentMatch) {
+      const match = this.tournamentMatch;
+      const remoteFighter = match.fighters.find(f => !f.isLocal && (
+        f.id === socketId || f.id === remoteP.actorId || (Boolean(f.name) && f.name === remoteP.name)
+      ));
+      if (remoteFighter) {
+        remoteFighter.currentHp = Math.max(0, remoteFighter.currentHp - finalDmg);
+        remoteP.hpPct = Math.max(0, Math.min(100, Math.round((remoteFighter.currentHp / Math.max(1, remoteFighter.maxHp)) * 100)));
+      } else if (typeof remoteP.hpPct === 'number') {
+        const estLoss = Math.max(3, Math.round((finalDmg / 1500) * 100));
+        remoteP.hpPct = Math.max(0, remoteP.hpPct - estLoss);
+      }
+    }
+
     network.sendPvpAttackHit({
+      targetSocketId: socketId,
       targetActorId: remoteP.actorId || socketId,
       damage: finalDmg,
       isCrit,
@@ -6608,6 +6630,24 @@ export class SideViewEngine {
     this.damageTaken += hpDamage;
     this.lastHurtAt = performance.now();
     this.player.iframeTimer = 0.22;
+
+    // Immediately sync local tournament fighter record and broadcast movement with updated hpPct
+    if (this.tournamentMatch) {
+      const localF = this.tournamentMatch.fighters.find(f => f.isLocal);
+      if (localF) {
+        localF.currentHp = this.player.hp;
+        localF.isAlive = this.player.hp > 0 && !this.player.downed;
+      }
+    }
+    network.sendPlayerMove(
+      this.player,
+      this.groundY,
+      false,
+      this.isTownMode,
+      this.networkSceneId,
+      this.inTournamentMode,
+      this.pvpTeam
+    );
 
     audio.playHit(packet.isCrit);
     this.particles.triggerScreenShake(packet.isCrit ? 4 : 2, 0.2);

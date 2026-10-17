@@ -1725,13 +1725,19 @@ io.on('connection', (socket) => {
       socket.emit('lobby_error', { msg: 'Only the party leader can start.' });
       return;
     }
-    const notReady = room.members.filter(actorId => actorId !== room.hostActorId && !room.ready[actorId]);
-    if (notReady.length > 0) {
-      socket.emit('lobby_error', { msg: 'Not everyone is ready yet.' });
-      return;
+    if (!room.isPvp) {
+      const notReady = room.members.filter(actorId => actorId !== room.hostActorId && !room.ready[actorId]);
+      if (notReady.length > 0) {
+        socket.emit('lobby_error', { msg: 'Not everyone is ready yet.' });
+        return;
+      }
     }
 
     if (room.isPvp) {
+      room.members.forEach(mid => {
+        if (!room.ready) room.ready = {};
+        room.ready[mid] = true;
+      });
       let redCount = 0;
       let blueCount = 0;
       for (const mid of room.members) {
@@ -2005,16 +2011,20 @@ io.on('connection', (socket) => {
     const p = players[socket.id];
     if (!p || !p.room) return;
     const room = rooms[p.room];
-    if (!room || !room.isPvp || !room.started) return;
-    if (!safeId(data.targetActorId)) return;
+    if (!room) return;
+    if (room.dungeonId === 'tournament_colosseum') room.isPvp = true;
+    if (!room.started) room.started = true;
+    if (!room.isPvp) return;
+    if (!safeId(data.targetActorId) && !safeId(data.targetSocketId)) return;
 
-    const targetPlayer = playersByActor[data.targetActorId] || players[data.targetActorId];
+    const targetPlayer = (data.targetSocketId && players[data.targetSocketId])
+      || (safeId(data.targetActorId) && (playersByActor[data.targetActorId] || players[data.targetActorId]));
     if (!targetPlayer || targetPlayer.room !== p.room) return;
 
     const targetActorId = targetPlayer.actorId;
     const attackerTeam = (room.pvpTeams && room.pvpTeams[p.actorId]) || (p.actorId === room.hostActorId ? 'red' : 'blue');
     const targetTeam = (room.pvpTeams && room.pvpTeams[targetActorId]) || (targetActorId === room.hostActorId ? 'red' : 'blue');
-    if (attackerTeam === targetTeam) return; // Strict No Friendly Fire
+    if (attackerTeam === targetTeam && room.members.length > 2) return; // Strict No Friendly Fire (allow 1v1 edge case)
 
     const dmg = Math.max(1, Math.min(999999, Math.round(Number(data.damage) || 1)));
     const targetSid = targetPlayer.socketId || socketIdForActor(targetActorId);
@@ -2028,6 +2038,7 @@ io.on('connection', (socket) => {
         skillName: typeof data.skillName === 'string' ? data.skillName.slice(0, 32) : undefined,
         hitX: Number(data.hitX) || 0,
         hitY: Number(data.hitY) || 0,
+        hitId: typeof data.hitId === 'string' ? data.hitId.slice(0, 48) : undefined,
       });
     }
 
@@ -2047,7 +2058,10 @@ io.on('connection', (socket) => {
     const p = players[socket.id];
     if (!p || !p.room) return;
     const room = rooms[p.room];
-    if (!room || !room.isPvp || !room.started) return;
+    if (!room) return;
+    if (room.dungeonId === 'tournament_colosseum') room.isPvp = true;
+    if (!room.started) room.started = true;
+    if (!room.isPvp) return;
 
     if (!room.downedPlayers) room.downedPlayers = new Set();
     room.downedPlayers.add(p.actorId);
