@@ -826,9 +826,6 @@ export class TournamentLobbyUI {
       stage.insertBefore(bench, stage.firstChild);
 
       modal.appendChild(stage);
-
-      // Bind slot interactions
-      this.bindSlotActions(modal);
     } else if (this.activeTab === 'invite') {
       const invitePanel = document.createElement('div');
       invitePanel.className = 'pvp-tab-panel';
@@ -905,6 +902,11 @@ export class TournamentLobbyUI {
     });
 
     modal.appendChild(footer);
+
+    // Bind slot interactions once the whole panel exists: the footer's seat
+    // button is rendered after the stage, so binding before it left the
+    // Invite and Public tabs with a TAKE A SEAT button that did nothing.
+    this.bindSlotActions(modal);
 
     // Toast element
     const toast = document.createElement('div');

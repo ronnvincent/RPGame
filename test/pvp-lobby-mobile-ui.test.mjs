@@ -273,3 +273,38 @@ test('a benched player gets an action, not a paragraph over the banner', () => {
     .filter(button => /TAKE A SEAT/.test(button.textContent));
   assert.equal(seatButtons.length, 1, 'the bench owns the seat action on its own tab');
 });
+
+test('a benched player can leave the bench from a tab with no stage', () => {
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const ui = new TournamentLobbyUI(host, {
+    player: { name: 'Me', characterClass: { id: 'warrior' }, level: 7, power: 100 },
+  }, () => {});
+  ui.currentFormat = '2v2';
+  ui.activeTab = 'invite';
+  ui.overlay = document.createElement('div');
+  ui.state = {
+    roomId: 'room-mobile',
+    roomCode: '8639',
+    dungeonId: 'tournament_colosseum',
+    maxPlayers: 4,
+    started: false,
+    isPvp: true,
+    pvpFormat: '2v2',
+    pvpTeams: { mate: 'red' },
+    pvpSeats: { mate: 0 },
+    pvpBenchSize: 2,
+    members: [member('me', 'spectator', 0), member('mate', 'red', 0)],
+  };
+  // A benched *guest*: the host's footer belongs to the launch button.
+  const wasHost = network.isHost;
+  network.isHost = false;
+  ui.render();
+  network.isHost = wasHost;
+  const button = ui.overlay.querySelector('.pvp-footer-actions [data-action="take-team-seat"]');
+  assert.ok(button, 'the footer carries the way back when the bench is not on screen');
+  const picked = [];
+  ui.pickSeat = (seat) => picked.push(seat);
+  button.dispatchEvent(new window.Event('click', { bubbles: true }));
+  assert.equal(picked.length, 1, 'and the button is actually wired');
+});
